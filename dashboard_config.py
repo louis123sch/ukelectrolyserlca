@@ -76,7 +76,7 @@ TECH_COUNT    = 1
 
 # Optional validation: compare cheap result with exact temp-activity result.
 VALIDATE_CHEAP_METHOD = False
-VALIDATION_N          = 2
+VALIDATION_N          = 0
 
 # =============================================================================
 # Wind + grid electrolyser run options (wind_power notebook)
