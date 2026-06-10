@@ -89,6 +89,13 @@ RUN_WIND_GRID_LCA = True
 
 WIND_LCA_MODE     = "both"                    # "blended", "switching", or "both"
 
+# LCA method for the wind/grid run — same idea as METHOD_MODE for the grid:
+#   "exact" builds a temporary activity per slice and runs a full Brightway LCA.
+#   "cheap" decomposes each electrolyser tech once (fixed non-electricity score
+#           + direct electricity kWh) and combines it linearly with one-off wind
+#           and closed-form grid electricity scores. Much faster, ~identical.
+WIND_METHOD_MODE  = "cheap"                   # "exact" or "cheap"
+
 # Renewables.ninja site/turbine settings
 WIND_LAT                    = 51.7320
 WIND_LON                    = -0.3711
@@ -130,7 +137,7 @@ WIND_OUTPUT_DIR_SWITCHING  = "hybrid_wind_grid_lca_outputs"
 # tech_lca_foreground.ipynb defines FOREGROUND_TEMPLATES + FOREGROUND_BIOSPHERE.
 #
 # Print the ecoinvent candidate lists for every foreground component.
-SHOW_FOREGROUND_ECOINVENT_CANDIDATES = False
+SHOW_FOREGROUND_ECOINVENT_CANDIDATES = True
 
 # =============================================================================
 # Derived settings — do not normally edit below this line
@@ -141,6 +148,8 @@ if GRID_TIME_MODE not in ("single", "range", "year_average"):
     raise ValueError("GRID_TIME_MODE must be 'single', 'range' or 'year_average'")
 if WIND_LCA_MODE not in ("blended", "switching", "both"):
     raise ValueError("WIND_LCA_MODE must be 'blended', 'switching', or 'both'")
+if WIND_METHOD_MODE not in ("exact", "cheap"):
+    raise ValueError("WIND_METHOD_MODE must be 'exact' or 'cheap'")
 
 if not isinstance(ELECTROLYSER_TECHS, (list, tuple)) or len(ELECTROLYSER_TECHS) == 0:
     raise ValueError("ELECTROLYSER_TECHS must be a non-empty list, e.g. ['PEM operation'].")
@@ -173,6 +182,7 @@ def print_dashboard():
     print("Run grid scenario LCA:  ", RUN_GRID_SCENARIO_LCA)
     print("Run wind/grid LCA:      ", RUN_WIND_GRID_LCA)
     print("Grid method:            ", METHOD_MODE, "| loss factor:", MARKET_LOSS_FACTOR)
+    print("Wind/grid method:       ", WIND_METHOD_MODE)
     print("Selected grid techs:    ", SELECTED_LCA_TECHS)
     print("Wind/grid mode:         ", WIND_LCA_MODE,
           "(blended + switching)" if WIND_LCA_MODE == "both" else "",
