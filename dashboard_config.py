@@ -44,10 +44,10 @@ CSV_PATH = "df_fuel_ckan.csv"
 # =============================================================================
 RUN_GRID_SCENARIO_LCA = True
 
-GRID_TIME_MODE        = "year_average"                  # "single", "range" or "year_average"
+GRID_TIME_MODE        = "range"                  # "single", "range" or "year_average"
 GRID_SINGLE_DATETIME  = "2023-07-15 12:00:00"
 GRID_RANGE_START      = "2023-01-15 00:00:00"
-GRID_RANGE_END        = "2023-01-16 00:00:00"    # inclusive
+GRID_RANGE_END        = "2024-01-15 00:00:00"    # inclusive
 
 # "year_average" mode: pick one whole year and run the LCA on 12 wind-based
 # representative days (per season: the average-wind day, the top-10% wind day
