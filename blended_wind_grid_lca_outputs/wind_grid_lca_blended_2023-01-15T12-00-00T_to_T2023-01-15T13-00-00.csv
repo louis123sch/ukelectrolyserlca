@@ -1,0 +1,4 @@
+datetime,lca_mode,electrolyser_tech,scenario,wind_power_kw,grid_carbon_intensity_gco2_per_kwh,electricity_source,gwp100_kgco2e_per_kg_h2,error
+2023-01-15 12:00:00,blended,PEM operation,PEM operation (blended),633.391,80.0,wind,,TypeError: select_candidate_activities() missing 1 required positional argument: 'candidate_index_dict'
+2023-01-15 12:30:00,blended,PEM operation,PEM operation (blended),633.391,87.0,wind,,TypeError: select_candidate_activities() missing 1 required positional argument: 'candidate_index_dict'
+2023-01-15 13:00:00,blended,PEM operation,PEM operation (blended),549.725,92.0,wind,,TypeError: select_candidate_activities() missing 1 required positional argument: 'candidate_index_dict'
