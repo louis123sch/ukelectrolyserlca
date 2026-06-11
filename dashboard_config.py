@@ -44,16 +44,16 @@ CSV_PATH = "df_fuel_ckan.csv"
 # =============================================================================
 RUN_GRID_SCENARIO_LCA = True
 
-GRID_TIME_MODE        = "range"                  # "single", "range" or "year_average"
+GRID_TIME_MODE        = "year_average"                  # "single", "range" or "year_average"
 GRID_SINGLE_DATETIME  = "2023-07-15 12:00:00"
-GRID_RANGE_START      = "2023-01-15 00:00:00"
-GRID_RANGE_END        = "2024-01-15 00:00:00"    # inclusive
+GRID_RANGE_START      = "2025-01-01 00:00:00"
+GRID_RANGE_END        = "2025-12-29 00:00:00"    # inclusive
 
 # "year_average" mode: pick one whole year and run the LCA on 12 wind-based
 # representative days (per season: the average-wind day, the top-10% wind day
 # and the bottom-10% wind day). Each representative day is collapsed into a
 # single energy-weighted daily-average grid mix, so a year => 12 results.
-GRID_YEAR             = 2023                     # year used by "year_average" mode
+GRID_YEAR             = 2025                     # year used by "year_average" mode
 GRID_REP_DECILE       = 0.10                     # top/bottom fraction for rep days
 GRID_WIND_COLS        = ["WIND", "WIND_EMB"]     # columns summed as "wind"
 
@@ -71,7 +71,7 @@ TECH_ORDER_DEFAULT = [
     "SOEC operation",
     "MP-E",
 ]
-TECH_SELECTED = ["AE operation"]  # e.g. ["SMR", "AE operation"]
+TECH_SELECTED = ["PEM operation"]  # e.g. ["SMR", "AE operation"]
 TECH_COUNT    = 1
 
 # Optional validation: compare cheap result with exact temp-activity result.
@@ -114,7 +114,7 @@ USE_GETPASS               = True
 # Renewables.ninja API token.
 # Paste your token here (from https://www.renewables.ninja/profile).
 # Leave empty to be prompted interactively when the wind notebook runs.
-NINJA_API_TOKEN           = "207fde0e349d26fd66edc58ae996083834ec9f9b"
+NINJA_API_TOKEN           = "75dc7f57e0cb6260173f2791f86ef06bc7ee750a"
 
 # Selected background wind process for the foreground wind electricity process.
 WIND_BACKGROUND_QUERY = "electricity production, wind, 1-3MW turbine, onshore GB"
