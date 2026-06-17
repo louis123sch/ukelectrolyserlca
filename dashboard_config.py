@@ -35,16 +35,44 @@ RUN_BUILD_FOREGROUND_DATABASE = True
 RUN_REFERENCE_LCA = False
 
 # =============================================================================
-# CSV input (National Grid ESO half-hourly fuel mix)
+# Grid data source selector
 # =============================================================================
+# Choose which custom-grid notebook is the active source for grid mix data:
+#   "csv"        -> run 4.custom_grid.ipynb using CSV_PATH
+#   "carbon_api" -> run 4.1.custom_grid_carbon_intensity_api.ipynb using
+#                   the NESO/Carbon Intensity API generation mix
+# Aliases also accepted in the validation block below: "4" = "csv" and
+# "4.1" = "carbon_api".
+GRID_DATA_SOURCE = "carbon_api"
+
+# CSV input used by 4.custom_grid.ipynb.
 CSV_PATH = "df_fuel_ckan.csv"
+
+# Carbon Intensity API input used by 4.1.custom_grid_carbon_intensity_api.ipynb.
+CARBON_API_BASE = "https://api.carbonintensity.org.uk"
+# "regional_auto" maps WIND_LAT / WIND_LON to the nearest Carbon Intensity
+# region. "national" uses the GB national mix.
+CARBON_API_SCOPE = "regional_auto"              # "regional_auto" or "national"
+CARBON_API_REGION_ID_OVERRIDE = None            # e.g. 13 for London; None = auto
+CARBON_API_LOCAL_TZ = "Europe/London"
+CARBON_API_MAX_DAYS_PER_REQUEST = 13            # keep below the 14-day endpoint limit
+CARBON_API_REQUEST_SLEEP_S = 0.05
+CARBON_API_TIMEOUT_S = 45
+CARBON_API_USE_CACHE = True
+CARBON_API_CACHE_DIR = "carbon_intensity_api_cache"
+CARBON_API_WIND_EMB_SHARE = 0.0
+CARBON_API_DEFAULT_IMPORT_SPLIT = {
+    "IMPORTS_FR": 1/3,
+    "IMPORTS_IE": 1/3,
+    "IMPORTS_NL": 1/3,
+}
 
 # =============================================================================
 # Grid scenario run options (custom_grid notebook)
 # =============================================================================
 RUN_GRID_SCENARIO_LCA = True
 
-GRID_TIME_MODE        = "year_average"           # "single", "range" or "year_average"
+GRID_TIME_MODE        = "range"           # "single", "range" or "year_average"
 GRID_SINGLE_DATETIME  = "2023-07-15 12:00:00"
 GRID_RANGE_START      = "2025-01-01 00:00:00"
 GRID_RANGE_END        = "2025-12-29 00:00:00"    # inclusive
@@ -136,10 +164,10 @@ PRICE_RANGE_END        = GRID_RANGE_END
 PRICE_GRID_CSV_PATH    = CSV_PATH
 
 # Elexon BMRS Market Index Data for half-hourly wholesale electricity price.
-# N2EXMIDP is the main provider; APXMIDP is retained as a fallback.
+# APXMIDP is the default provider; N2EXMIDP is retained as a sensitivity/fallback.
 ELEXON_API_BASE = "https://data.elexon.co.uk/bmrs/api/v1"
-ELEXON_MARKET_INDEX_PROVIDER = "N2EXMIDP"
-ELEXON_MARKET_INDEX_FALLBACK_PROVIDER = "APXMIDP"
+ELEXON_MARKET_INDEX_PROVIDER = "APXMIDP"
+ELEXON_MARKET_INDEX_FALLBACK_PROVIDER = "N2EXMIDP"
 ELEXON_CHUNK_DAYS = 7
 ELEXON_REQUEST_SLEEP_S = 0.15
 ELEXON_TIMEOUT_S = 60
@@ -245,10 +273,38 @@ def wind_annual_cost_per_mw(case=None):
 # =============================================================================
 # Derived settings — do not normally edit below this line
 # =============================================================================
+_GRID_DATA_SOURCE_ALIASES = {
+    "4": "csv",
+    "4.0": "csv",
+    "csv": "csv",
+    "file": "csv",
+    "4.1": "carbon_api",
+    "carbon_api": "carbon_api",
+    "carbon_intensity_api": "carbon_api",
+    "api": "carbon_api",
+}
+_grid_source_key = str(GRID_DATA_SOURCE).strip().lower()
+if _grid_source_key not in _GRID_DATA_SOURCE_ALIASES:
+    raise ValueError(
+        "GRID_DATA_SOURCE must be one of 'csv', 'carbon_api', '4', or '4.1'."
+    )
+GRID_DATA_SOURCE = _GRID_DATA_SOURCE_ALIASES[_grid_source_key]
+GRID_NOTEBOOK = "4.custom_grid.ipynb" if GRID_DATA_SOURCE == "csv" else "4.1.custom_grid_carbon_intensity_api.ipynb"
+GRID_OUTPUT_GLOBS = (
+    ["custom_grid_lca_csv_*.csv", "custom_grid_lca_exact_*.csv", "custom_grid_lca_cheap_*.csv"]
+    if GRID_DATA_SOURCE == "csv"
+    else ["custom_grid_lca_carbon_api_*.csv"]
+)
+GRID_OUTPUT_GLOB = GRID_OUTPUT_GLOBS[0]
+
 if METHOD_MODE not in ("exact", "cheap"):
     raise ValueError("METHOD_MODE must be 'exact' or 'cheap'")
 if GRID_TIME_MODE not in ("single", "range", "year_average"):
     raise ValueError("GRID_TIME_MODE must be 'single', 'range' or 'year_average'")
+if CARBON_API_SCOPE not in ("regional_auto", "national"):
+    raise ValueError("CARBON_API_SCOPE must be 'regional_auto' or 'national'")
+if not (0.0 <= float(CARBON_API_WIND_EMB_SHARE) <= 1.0):
+    raise ValueError("CARBON_API_WIND_EMB_SHARE must be between 0 and 1")
 if WIND_LCA_MODE not in ("blended", "switching", "both"):
     raise ValueError("WIND_LCA_MODE must be 'blended', 'switching', or 'both'")
 if WIND_METHOD_MODE not in ("exact", "cheap"):
@@ -290,9 +346,13 @@ def print_dashboard():
     print("Build foreground DB:    ", RUN_BUILD_FOREGROUND_DATABASE)
     print("Run reference LCA:      ", RUN_REFERENCE_LCA)
     print("Run grid scenario LCA:  ", RUN_GRID_SCENARIO_LCA)
+    print("Grid data source:       ", GRID_DATA_SOURCE, "| notebook:", GRID_NOTEBOOK)
     print("Run wind/grid LCA:      ", RUN_WIND_GRID_LCA)
     print("Run price data:         ", RUN_PRICE_DATA)
     print("Grid method:            ", METHOD_MODE, "| loss factor:", MARKET_LOSS_FACTOR)
+    print("Grid output pattern:    ", ", ".join(GRID_OUTPUT_GLOBS))
+    if GRID_DATA_SOURCE == "carbon_api":
+        print("Carbon API scope:       ", CARBON_API_SCOPE, "| cache:", CARBON_API_USE_CACHE)
     print("Wind/grid method:       ", WIND_METHOD_MODE)
     print("Selected grid techs:    ", SELECTED_LCA_TECHS)
     print("Wind/grid mode:         ", WIND_LCA_MODE,

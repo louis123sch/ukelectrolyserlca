@@ -1,0 +1,13 @@
+datetime,lca_mode,electrolyser_tech,scenario,wind_power_kw,grid_carbon_intensity_gco2_per_kwh,electricity_source,wind_fraction,grid_fraction,wind_used_kw,grid_topup_kw,surplus_wind_kw,wind_above_minimum,gwp100_kgco2e_per_kg_h2,electricity_exchanges_swapped,direct_electricity_kwh_per_kg_h2,wind_electricity_kwh_per_kg_h2,grid_electricity_kwh_per_kg_h2,temporary_grid_activity_code,minimum_required_wind_kw
+2025-01-19 12:00:00,switching,AE operation,AE operation (switching),122.826,286.8541666666667,wind,1.0,0.0,,,,True,1.1794634260185761,1,,,,,100.0
+2025-02-21 12:00:00,switching,AE operation,AE operation (switching),948.082,90.60416666666667,wind,1.0,0.0,,,,True,1.1794634260185761,1,,,,,100.0
+2025-03-03 12:00:00,switching,AE operation,AE operation (switching),21.632,215.83333333333334,grid,0.0,1.0,,,,False,17.80712422373728,1,,,,,100.0
+2025-03-15 12:00:00,switching,AE operation,AE operation (switching),425.043,142.375,wind,1.0,0.0,,,,True,1.1794634260185761,1,,,,,100.0
+2025-04-16 12:00:00,switching,AE operation,AE operation (switching),850.619,78.5625,wind,1.0,0.0,,,,True,1.1794634260185761,1,,,,,100.0
+2025-07-10 12:00:00,switching,AE operation,AE operation (switching),59.23,149.20833333333334,grid,0.0,1.0,,,,False,14.550646751424868,1,,,,,100.0
+2025-08-29 12:00:00,switching,AE operation,AE operation (switching),199.243,103.41666666666667,wind,1.0,0.0,,,,True,1.1794634260185761,1,,,,,100.0
+2025-08-31 12:00:00,switching,AE operation,AE operation (switching),725.046,40.979166666666664,wind,1.0,0.0,,,,True,1.1794634260185761,1,,,,,100.0
+2025-09-24 12:00:00,switching,AE operation,AE operation (switching),447.032,153.58333333333334,wind,1.0,0.0,,,,True,1.1794634260185761,1,,,,,100.0
+2025-10-12 12:00:00,switching,AE operation,AE operation (switching),69.534,230.625,grid,0.0,1.0,,,,False,19.532713984123294,1,,,,,100.0
+2025-11-29 12:00:00,switching,AE operation,AE operation (switching),568.457,58.458333333333336,wind,1.0,0.0,,,,True,1.1794634260185761,1,,,,,100.0
+2025-12-05 12:00:00,switching,AE operation,AE operation (switching),428.64,176.8125,wind,1.0,0.0,,,,True,1.1794634260185761,1,,,,,100.0
