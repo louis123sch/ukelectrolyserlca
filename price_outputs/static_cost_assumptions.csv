@@ -1,0 +1,15 @@
+asset,parameter,unit,low,central,high,source,notes,selected_case,selected_value
+onshore_wind,predevelopment_capex,GBP_per_kW,36.0,81.0,199.0,DESNZ/Arup 2024 onshore wind and solar PV cost report,Pre-development expenditure; real 2023 prices.,central,81.0
+onshore_wind,construction_capex,GBP_per_kW,963.0,1204.0,1603.0,DESNZ/Arup 2024 onshore wind and solar PV cost report,Capital costs during construction; real 2023 prices.,central,1204.0
+onshore_wind,infrastructure_capex,GBP_per_kW,242.0,303.0,403.0,DESNZ/Arup 2024 onshore wind and solar PV cost report,"Grid connection, substations and associated infrastructure; real 2023 prices.",central,303.0
+onshore_wind,total_capex,GBP_per_kW,1241.0,1588.0,2205.0,DESNZ/Arup 2024 onshore wind and solar PV cost report,Pre-development + construction + infrastructure; real 2023 prices.,central,1588.0
+onshore_wind,om,kGBP_per_MW_year,14.8,19.5,22.8,DESNZ/Arup 2024 onshore wind and solar PV cost report,O&M costs; real 2023 prices.,central,19.5
+onshore_wind,insurance,kGBP_per_MW_year,2.2,3.6,4.4,DESNZ/Arup 2024 onshore wind and solar PV cost report,Insurance costs; real 2023 prices.,central,3.6
+onshore_wind,connection_and_uos,kGBP_per_MW_year,0.4,17.0,45.3,DESNZ/Arup 2024 onshore wind and solar PV cost report,Connection and Use of System charges; real 2023 prices.,central,17.0
+onshore_wind,total_opex,kGBP_per_MW_year,17.4,40.1,72.4,DESNZ/Arup 2024 onshore wind and solar PV cost report,O&M + insurance + connection/UoS; real 2023 prices.,central,40.1
+onshore_wind,net_load_factor,fraction,0.33,0.381,0.413,DESNZ/Arup 2024 onshore wind and solar PV cost report,Full-life average net load factor.,central,0.381
+onshore_wind,operating_lifetime,years,25.0,35.0,40.0,DESNZ/Arup 2024 onshore wind and solar PV cost report,Expected operating lifetime.,central,35.0
+onshore_wind,hurdle_rate,fraction,0.058,0.058,0.058,DESNZ/Arup 2024 onshore wind and solar PV cost report,Pre-tax real hurdle rate used in the report.,central,0.058
+battery,battery_capex,GBP_per_MWh,,,,user_config_required,Set BATTERY_CAPEX_GBP_PER_MWH in dashboard_config.py once a source is chosen.,central,
+battery,battery_fixed_opex_pct_capex,fraction_of_capex_per_year,,,,user_config_required,Set BATTERY_FIXED_OPEX_PCT_CAPEX in dashboard_config.py once a source is chosen.,central,
+battery,battery_lifetime,years,,,,user_config_required,Set BATTERY_LIFETIME_YEARS in dashboard_config.py once a source is chosen.,central,
