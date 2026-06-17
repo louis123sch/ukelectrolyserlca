@@ -1,0 +1,58 @@
+{
+  "PRICE_TIME_MODE": "range",
+  "PRICE_SINGLE_DATETIME": "2023-07-15 12:00:00",
+  "PRICE_RANGE_START": "2025-01-01 00:00:00",
+  "PRICE_RANGE_END": "2025-12-29 00:00:00",
+  "PRICE_GRID_CSV_PATH": "df_fuel_ckan.csv",
+  "ELEXON_API_BASE": "https://data.elexon.co.uk/bmrs/api/v1",
+  "ELEXON_MARKET_INDEX_PROVIDER": "APXMIDP",
+  "ELEXON_MARKET_INDEX_FALLBACK_PROVIDER": "N2EXMIDP",
+  "ELECTRICITY_DELIVERED_UPLIFT_GBP_PER_MWH": 0.0,
+  "NESO_ELECTROLYSER_RESOURCE_ID": "88cfa584-db79-4573-a0c0-c14086257f8f",
+  "USE_ELECTROLYSER_PROXY_IF_NESO_EMPTY": true,
+  "PROXY_ELECTROLYSER_BUILD_YEAR": 2025,
+  "PROXY_ELECTROLYSER_CAPEX_GBP_PER_KWE": {
+    "Alkaline": {
+      "low": 700,
+      "central": 1200,
+      "high": 1700
+    },
+    "PEM": {
+      "low": 850,
+      "central": 1450,
+      "high": 2100
+    },
+    "SOEC": {
+      "low": 1500,
+      "central": 2500,
+      "high": 3500
+    }
+  },
+  "PROXY_ELECTROLYSER_EFFICIENCY_PCT": {
+    "Alkaline": 70.0,
+    "PEM": 67.0,
+    "SOEC": 80.0
+  },
+  "PROXY_ELECTROLYSER_FIXED_OPEX_PCT_CAPEX": {
+    "Alkaline": 0.03,
+    "PEM": 0.04,
+    "SOEC": 0.04
+  },
+  "PROXY_ELECTROLYSER_LIFETIME_YEARS": {
+    "Alkaline": 20,
+    "PEM": 20,
+    "SOEC": 20
+  },
+  "COST_CASE": "central",
+  "WIND_COST_CASE": "central",
+  "outputs": {
+    "raw_price_path": "price_outputs/elexon_market_index_raw_2025-01-01_00-00-00_->_2025-12-29_00-00-00.csv",
+    "clean_price_path": "price_outputs/elexon_market_index_clean_2025-01-01_00-00-00_->_2025-12-29_00-00-00.csv",
+    "price_timeslices_path": "price_outputs/price_timeslices_2025-01-01_00-00-00_->_2025-12-29_00-00-00.csv",
+    "static_costs_path": "price_outputs/static_cost_assumptions.csv",
+    "wind_annual_costs_path": "price_outputs/wind_annual_costs_per_MW.csv",
+    "neso_raw_path": "price_outputs/neso_electrolyser_costs_raw.csv",
+    "neso_clean_path": "price_outputs/neso_electrolyser_costs_clean.csv",
+    "electrolyser_clean_path": "price_outputs/electrolyser_costs_clean.csv"
+  }
+}
