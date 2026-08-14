@@ -14,6 +14,7 @@ module only edits config text, runs a subprocess, and collects results.
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 import sys
@@ -110,11 +111,15 @@ def _extract_notebook_log(nb_path: Path, max_chars: int = 20000) -> str:
     return text
 
 
-def run_lca(overrides: dict, timeout_s: int = 1800) -> RunResult:
+def run_lca(overrides: dict, secrets: dict | None = None, timeout_s: int = 1800) -> RunResult:
     """Apply ``overrides`` to dashboard_config.py and execute the adaptive dashboard notebook.
 
     ``overrides`` maps dashboard_config.py variable names to their new values,
     e.g. {"GRID_TIME_MODE": "single", "TECH_SELECTED": ["PEM operation"]}.
+
+    ``secrets`` (e.g. {"RENEWABLES_NINJA_TOKEN": token}) are passed as
+    subprocess environment variables instead — dashboard_config.py is a
+    tracked file, so a token must never be written into it on disk.
     """
     RUNS_DIR.mkdir(exist_ok=True)
 
@@ -144,6 +149,8 @@ def run_lca(overrides: dict, timeout_s: int = 1800) -> RunResult:
         str(REPO_DIR / RUNNER_NOTEBOOK),
     ]
 
+    env = {**os.environ, **(secrets or {})}
+
     try:
         proc = subprocess.run(
             cmd,
@@ -151,6 +158,7 @@ def run_lca(overrides: dict, timeout_s: int = 1800) -> RunResult:
             capture_output=True,
             text=True,
             timeout=timeout_s + 60,
+            env=env,
         )
     except subprocess.TimeoutExpired as exc:
         return RunResult(

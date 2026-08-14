@@ -164,14 +164,15 @@ with elec_col:
 
 st.subheader("Renewables.ninja API token")
 ninja_token = st.text_input(
-    "Token (leave blank to use NINJA_API_TOKEN / RENEWABLES_NINJA_TOKEN already configured)",
+    "Token (leave blank to use a RENEWABLES_NINJA_TOKEN already set in your environment)",
     type="password",
     disabled=run_grid_only,
+    help="Passed to the run as an environment variable only — never written to dashboard_config.py.",
 )
-if not run_grid_only and not (ninja_token or cfg.NINJA_API_TOKEN or os.getenv("RENEWABLES_NINJA_TOKEN")):
+if not run_grid_only and not (ninja_token or os.getenv("RENEWABLES_NINJA_TOKEN")):
     st.warning(
-        "No Renewables.ninja token found anywhere (form, dashboard_config.py, or "
-        "RENEWABLES_NINJA_TOKEN env var). The wind fetch will fail without one."
+        "No Renewables.ninja token found (form, or RENEWABLES_NINJA_TOKEN env var). "
+        "The wind fetch will fail without one."
     )
 
 st.subheader("Time period")
@@ -212,8 +213,13 @@ st.header("3. Run")
 overrides = {
     "RUN_FOREGROUND_NOTEBOOK_FROM_DASHBOARD": False,
     "RUN_PRICE_NOTEBOOK_FROM_DASHBOARD": False,
-    "RUN_GRID_NOTEBOOK_FROM_DASHBOARD": run_grid_only,
-    "RUN_GRID_SCENARIO_LCA": run_grid_only,
+    # The grid notebook always has to run when GRID_DATA_SOURCE="carbon_api":
+    # the wind notebook gets its Carbon-Intensity-API rows from
+    # DASHBOARD_GRID_RUN_ROWS, which 4.1 only sets once RUN_GRID_SCENARIO_LCA
+    # lets it run to completion — so "Wind + grid" still needs this step even
+    # though its own grid-only CSV output isn't what the user asked for.
+    "RUN_GRID_NOTEBOOK_FROM_DASHBOARD": True,
+    "RUN_GRID_SCENARIO_LCA": True,
     "RUN_WIND_NOTEBOOK_FROM_DASHBOARD": not run_grid_only,
     "RUN_WIND_GRID_LCA": not run_grid_only,
     "WIND_LCA_MODE": wind_mode or cfg.WIND_LCA_MODE,
@@ -238,15 +244,15 @@ overrides = {
     "GRID_YEAR": int(year),
     "USE_GETPASS": False,
 }
-if ninja_token:
-    overrides["NINJA_API_TOKEN"] = ninja_token
+# Never written to dashboard_config.py — passed to the subprocess as an env var instead.
+secrets = {"RENEWABLES_NINJA_TOKEN": ninja_token} if ninja_token else {}
 
 with st.expander("Show dashboard_config.py overrides this run will apply"):
-    st.json({k: v for k, v in overrides.items() if k != "NINJA_API_TOKEN"})
+    st.json(overrides)
 
 if st.button("Run LCA", type="primary"):
     with st.spinner("Patching dashboard_config.py and running the pipeline — this can take a while…"):
-        result = run_lca(overrides)
+        result = run_lca(overrides, secrets=secrets)
 
     if not result.success:
         st.error("Run failed.")
