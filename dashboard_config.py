@@ -100,6 +100,13 @@ TECH_ORDER_DEFAULT = [
 TECH_SELECTED = ["PEM operation"]
 TECH_COUNT    = 1
 
+# Optional per-label source override: {label: (database_name, activity_code)}.
+# Lets a technology label point at an activity outside FOREGROUND_DB — e.g. a
+# process the AI-LCA foreground extractor wrote into its own database. Leave
+# empty to use the built-in H2_CODES/ELECTROLYSER_CODES lookup as before.
+# Populated by the Streamlit Setup-LCA page; safe to leave {} in notebook use.
+TECH_SOURCE_OVERRIDES = {}
+
 VALIDATE_CHEAP_METHOD = False
 VALIDATION_N          = 0
 
@@ -270,15 +277,20 @@ if not isinstance(ELECTROLYSER_TECHS, (list, tuple)) or len(ELECTROLYSER_TECHS) 
     raise ValueError("ELECTROLYSER_TECHS must be a non-empty list, e.g. ['PEM operation'].")
 ELECTROLYSER_TECHS = list(ELECTROLYSER_TECHS)
 _valid_electrolysers = ("AE operation", "PEM operation", "SOEC operation")
-_bad = [t for t in ELECTROLYSER_TECHS if t not in _valid_electrolysers]
+_bad = [t for t in ELECTROLYSER_TECHS if t not in _valid_electrolysers and t not in TECH_SOURCE_OVERRIDES]
 if _bad:
-    raise ValueError(f"Invalid ELECTROLYSER_TECHS {_bad}. Must be subset of {list(_valid_electrolysers)}.")
+    raise ValueError(
+        f"Invalid ELECTROLYSER_TECHS {_bad}. Must be one of {list(_valid_electrolysers)}, "
+        "or a label present in TECH_SOURCE_OVERRIDES."
+    )
 
 MARKET_LOSS_FACTOR = (1.0 + MARKET_LOSS_SHARE) if APPLY_LOSSES else 1.0
 MIN_WIND_POWER_KW  = ELECTROLYSER_CAPACITY_KW * MIN_LOAD_FRACTION
 
 if TECH_SELECTED:
-    SELECTED_LCA_TECHS = [t for t in TECH_SELECTED if t in TECH_ORDER_DEFAULT]
+    SELECTED_LCA_TECHS = [
+        t for t in TECH_SELECTED if t in TECH_ORDER_DEFAULT or t in TECH_SOURCE_OVERRIDES
+    ]
 else:
     SELECTED_LCA_TECHS = TECH_ORDER_DEFAULT[: max(1, int(TECH_COUNT))]
 

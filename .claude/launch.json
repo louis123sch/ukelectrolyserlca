@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "streamlit-app",
+      "runtimeExecutable": "/opt/miniconda3/envs/brightway/bin/streamlit",
+      "runtimeArgs": ["run", "Home.py", "--server.headless", "true"],
+      "port": 8501
+    }
+  ]
+}

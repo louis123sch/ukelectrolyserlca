@@ -211,6 +211,83 @@ def refresh_foreground():
 
 
 # =============================================================================
+# Generic foreground discovery — lets the app work with any foreground
+# database in the project (the built-in "hydrogen foreground" plus anything
+# written by the AI-LCA extractor), not just the hardcoded H2_CODES map.
+# =============================================================================
+def list_foreground_databases():
+    """Every database in the current project except ecoinvent/biosphere sources.
+
+    These are candidate "foreground" databases: the built-in ``hydrogen
+    foreground`` plus any database the AI-LCA paper extractor has written.
+    """
+    skip_markers = ("biosphere",) + tuple(s.lower() for s in [cfg.SYSTEM_MODEL, "ecoinvent"])
+    names = []
+    for name in bd.databases:
+        low = str(name).lower()
+        if any(marker in low for marker in skip_markers):
+            continue
+        names.append(str(name))
+    return sorted(names)
+
+
+def list_process_activities(db_name):
+    """List process-type activities in ``db_name`` as plain dicts for UI display.
+
+    Each row is annotated with ``has_electricity_input`` (from
+    :func:`is_any_electricity_exchange`) so callers can flag which processes
+    the grid/wind pipelines can actually swap electricity for.
+    """
+    db = bd.Database(db_name)
+    rows = []
+    for act in db:
+        # bw2data 4.x tags ordinary activities "process" or "processwithreferenceproduct"
+        # depending on how they were created; internal helper artifacts this app
+        # creates itself (temp electricity-mix/wind-source activities) are left
+        # untyped (type is None), so excluding None filters those out here.
+        act_type = str(act.get("type") or "").lower()
+        if "process" not in act_type:
+            continue
+        try:
+            has_elec = any(is_any_electricity_exchange(exc) for exc in act.technosphere())
+        except Exception:
+            has_elec = False
+        rows.append({
+            "database": db_name,
+            "code": act["code"],
+            "name": act.get("name", ""),
+            "reference_product": act.get("reference product", ""),
+            "unit": act.get("unit", ""),
+            "has_electricity_input": has_elec,
+        })
+    return sorted(rows, key=lambda r: r["name"])
+
+
+def resolve_tech_activity(label, tech_source_overrides=None, foreground_db=None):
+    """Resolve a technology label to a Brightway activity.
+
+    Priority: an explicit ``(database, code)`` entry in
+    ``tech_source_overrides`` (e.g. one built from the Setup-LCA page's
+    foreground picker), then the built-in ``H2_CODES``/``ELECTROLYSER_CODES``
+    lookup in ``foreground_db`` (defaults to ``cfg.FOREGROUND_DB``), which
+    preserves every existing notebook's default behaviour unchanged.
+    """
+    overrides = tech_source_overrides or {}
+    if label in overrides:
+        db_name, code = overrides[label]
+        return bd.get_activity((db_name, code))
+
+    foreground_db = foreground_db or cfg.FOREGROUND_DB
+    code = H2_CODES.get(label) or ELECTROLYSER_CODES.get(label)
+    if code is None:
+        raise ValueError(
+            f"Unknown technology label {label!r}. Pass it via tech_source_overrides "
+            "as {{label: (database_name, code)}}, or add it to H2_CODES/ELECTROLYSER_CODES."
+        )
+    return bd.get_activity((foreground_db, code))
+
+
+# =============================================================================
 # CSV loading and timeslice selection
 # =============================================================================
 def resolve_csv_path(csv_path=None):
