@@ -67,3 +67,40 @@ resolve technologies through `H.resolve_tech_activity()` instead of a direct
 (`is_any_electricity_exchange`, `run_lca_with_custom_elec`) was already
 generic across any foreground activity — the overrides just let a label point
 at one outside the default database.
+
+## Paper reader notebooks (`1.*`)
+
+A notebook-native alternative to the Add Foreground Streamlit page, for
+running the extraction yourself cell by cell instead of through a UI:
+
+- **[1.paper_ingest_and_extract.ipynb](1.paper_ingest_and_extract.ipynb)** —
+  loads the source document/text and runs the two-pass LLM extraction (the
+  only notebook here that calls OpenAI). Prints the classified/locked process
+  structure and extracted flows, with their `process_id`/`flow_id` values.
+- **[1.1.paper_process_review.ipynb](1.1.paper_process_review.ipynb)** —
+  applies `PROCESS_REVIEW` (include/rename/merge/re-parent).
+- **[1.2.paper_inventory_review.ipynb](1.2.paper_inventory_review.ipynb)** —
+  applies `INVENTORY_REVIEW` (include/amount/unit/direction/notes per flow).
+- **[1.3.paper_brightway_matching.ipynb](1.3.paper_brightway_matching.ipynb)** —
+  searches Brightway for each flow and picks a candidate via
+  `SEARCH_CANDIDATE_INDEX`, mirroring `GRID_CANDIDATE_INDEX`'s pattern; prints
+  every candidate list so a bad auto-match (e.g. full-text search returning an
+  unrelated activity) is visible before it reaches the writer.
+- **[1.4.paper_write_foreground.ipynb](1.4.paper_write_foreground.ipynb)** —
+  validates the write plan and, only once `CONFIRM_WRITE_FOREGROUND = True`,
+  writes `NEW_FOREGROUND_DB_NAME` — then that database is immediately
+  selectable from `1.3.paper_brightway_matching`-review-tested foreground
+  processes, either via `H.list_process_activities(...)` in a notebook or the
+  Setup LCA page's foreground picker.
+
+All settings — source material, `RUN_LABEL`, the three review-override dicts
+above, and the write confirmation gate — live in
+[ai_lca_config.py](ai_lca_config.py), following the exact same "edit once,
+save, re-run the notebook" contract as `dashboard_config.py`. Each notebook
+persists its output under `ai_lca_outputs/<RUN_LABEL>/` (gitignored) so the
+next notebook — or a later re-run — can pick up where the last one left off
+without repeating the OpenAI call.
+
+Both interfaces call the same `ai_lca` library (`ai-lca-starter/src/ai_lca`,
+including a `notebook_helpers` module written for this notebook workflow), so
+review edits behave identically regardless of which one you use.

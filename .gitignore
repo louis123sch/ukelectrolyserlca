@@ -3,6 +3,7 @@ __pycache__/
 .ipynb_checkpoints/
 .streamlit/secrets.toml
 _streamlit_runs/
+ai_lca_outputs/
 .env
 
 # Streamlit agent skills — environment-specific symlinks installed on first run
