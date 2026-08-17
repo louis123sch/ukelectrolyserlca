@@ -17,6 +17,8 @@ import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import ai_lca_config as cfg  # noqa: E402  (loads .env, resolves BRIGHTWAY_PROJECT)
+import dashboard_config as dcfg  # noqa: E402  (FOREGROUND_DB — scratch space for a dry-run LCA)
+import lca_helpers as H  # noqa: E402  (find_methods, for "Run LCA" method search)
 
 from ai_lca.brightway_search import (
     list_biosphere_databases,
@@ -24,7 +26,7 @@ from ai_lca.brightway_search import (
     normalize_search_query,
     search_candidates,
 )
-from ai_lca.brightway_writer import build_write_plan, write_foreground_database
+from ai_lca.brightway_writer import build_write_plan, run_dry_lca, write_foreground_database
 from ai_lca.documents import combine_document_evidence
 from ai_lca.export import (
     candidate_structure_to_dataframe,
@@ -32,6 +34,7 @@ from ai_lca.export import (
     extraction_to_dataframe,
     normalize_inventory_review,
     process_structure_to_dataframe,
+    reported_results_to_dataframe,
     review_bundle_to_json,
 )
 from ai_lca.geography import ecoinvent_location_hints, parse_flow_location_hint
@@ -232,7 +235,16 @@ if "extraction" in st.session_state:
         st.write(f"**System boundary:** {context.system_boundary}")
     if context.temporal_context:
         st.write(f"**Temporal context:** {context.temporal_context}")
+    if context.impact_assessment_method:
+        st.write(f"**Impact assessment method (as stated in source):** {context.impact_assessment_method}")
     st.write(extraction.source_summary)
+
+    if extraction.reported_results:
+        with st.expander(f"Source's own reported result(s) ({len(extraction.reported_results)})", expanded=True):
+            st.dataframe(reported_results_to_dataframe(extraction), width="stretch", hide_index=True)
+            st.caption(
+                "Used later, after Brightway matching, to sanity-check a recreation against the source's own numbers."
+            )
 
     if extraction.candidate_activities:
         with st.expander("Why process-like activities were retained or rejected", expanded=False):
@@ -662,7 +674,6 @@ if "candidates" in st.session_state and "inventory_df" in st.session_state:
         mime="application/json",
     )
 
-    st.subheader("3. Create reviewed Brightway foreground database")
     plan = build_write_plan(extraction, inv_df, mapping_df)
     if plan.ready:
         st.success(
@@ -678,6 +689,123 @@ if "candidates" in st.session_state and "inventory_df" in st.session_state:
             for blocker in plan.blockers:
                 st.write(f"• {blocker}")
 
+    # =========================================================================
+    # 3. Run LCA — recreate the source's own result with its own method, before
+    # anything is written. Nothing here persists: run_dry_lca builds temporary
+    # activities in the existing built-in foreground database purely as scratch
+    # space, scores them, and deletes them again.
+    # =========================================================================
+    st.subheader("3. Run LCA (source's method)")
+    st.caption(
+        "Scores the reviewed foreground exactly as currently mapped, using the source's own impact "
+        "assessment method where possible, so you can sanity-check the recreation against its reported "
+        "result(s) above before harmonizing or extracting anything."
+    )
+    default_method_query = context.impact_assessment_method or ""
+    method_query = st.text_input(
+        "Search for the impact assessment method",
+        value=default_method_query,
+        help="Defaults to whatever method the source stated it used, if any. Edit to search for a different one.",
+    )
+    method_candidates = H.find_methods(method_query, limit=10) if method_query.strip() else []
+    chosen_method = None
+    if method_query.strip() and not method_candidates:
+        st.caption(f"No Brightway method matches {method_query!r} — try fewer/different words.")
+    elif method_candidates:
+        method_labels = [" | ".join(m) for m in method_candidates]
+        chosen_method_label = st.selectbox("Matched Brightway method", method_labels, index=0)
+        chosen_method = method_candidates[method_labels.index(chosen_method_label)]
+
+    if st.button("Run LCA", disabled=not (plan.ready and chosen_method and project_name)):
+        with st.spinner("Building the reviewed foreground temporarily and scoring it…"):
+            try:
+                scores = run_dry_lca(
+                    project_name=project_name,
+                    scratch_database_name=dcfg.FOREGROUND_DB,
+                    extraction=extraction,
+                    inventory_df=inv_df,
+                    mapping_df=mapping_df,
+                    method=chosen_method,
+                )
+                st.session_state["dry_run_scores"] = scores
+                st.session_state["dry_run_method"] = chosen_method
+            except Exception as exc:
+                st.session_state.pop("dry_run_scores", None)
+                st.error(f"Run LCA failed: {exc}")
+
+    dry_run_scores = st.session_state.get("dry_run_scores")
+    if dry_run_scores:
+        st.write(f"**Recreated result(s)** — method: {' | '.join(st.session_state['dry_run_method'])}")
+        process_names = {p.process_id: p.name for p in extraction.processes}
+        score_cols = st.columns(max(1, len(dry_run_scores)))
+        for col, (process_id, score) in zip(score_cols, dry_run_scores.items()):
+            col.metric(process_names.get(process_id, process_id), f"{score:.4g}")
+        if extraction.reported_results:
+            st.write("**Source's own reported result(s), for comparison:**")
+            st.dataframe(reported_results_to_dataframe(extraction), width="stretch", hide_index=True)
+        else:
+            st.caption("No source-reported baseline result was extracted to compare against.")
+
+    # =========================================================================
+    # Harmonization — adapt the paper's own background choices to your study
+    # (most commonly geography) before the final extract. Re-searching mutates
+    # the same st.session_state["candidates"] the "Review Brightway mappings"
+    # section above reads, so its picks update there — scroll up to review or
+    # override individual flows after using this.
+    # =========================================================================
+    st.subheader("Harmonization")
+    st.caption(
+        "Adjust the matched background processes for your own study before extracting — most commonly, "
+        "re-targeting the source's operational geography to yours. Re-searching keeps your current picks "
+        "as a fallback candidate; review/override individual flows in 'Review Brightway mappings' above."
+    )
+    harmonize_col1, harmonize_col2 = st.columns([3, 1])
+    with harmonize_col1:
+        target_location = st.text_input(
+            "Target location (ecoinvent-style code, e.g. GB, DE, RER, GLO)",
+            value="",
+        )
+    with harmonize_col2:
+        st.write("")
+        do_harmonize = st.button("Re-target all mapped flows", disabled=not target_location.strip())
+
+    if do_harmonize:
+        updated, failed = 0, 0
+        for flow_id, current_candidates in list(st.session_state.get("candidates", {}).items()):
+            if not current_candidates or "foreground_link" in current_candidates[0] or "error" in current_candidates[0]:
+                continue
+            search_db_for_flow = st.session_state.get("candidate_dbs", {}).get(flow_id)
+            query = st.session_state.get("candidate_queries", {}).get(flow_id, "")
+            if not search_db_for_flow or not query:
+                continue
+            try:
+                new_hints = list(dict.fromkeys(
+                    [target_location.strip(), *st.session_state.get("candidate_flow_hints", {}).get(flow_id, [])]
+                ))
+                new_candidates = search_candidates(
+                    project_name=project_name,
+                    database_name=search_db_for_flow,
+                    query=_strip_unit_suffix(query, ""),
+                    preferred_locations=new_hints,
+                    limit=candidate_limit,
+                )
+                st.session_state["candidates"][flow_id] = new_candidates
+                st.session_state["candidate_flow_hints"][flow_id] = new_hints
+                updated += 1
+            except Exception:
+                failed += 1
+        st.success(
+            f"Re-targeted {updated} flow(s) toward location {target_location.strip()!r}"
+            + (f" ({failed} failed)." if failed else ".")
+            + " Scroll up to 'Review Brightway mappings' to review or override the updated picks."
+        )
+        st.rerun()
+
+    st.subheader("4. Extract into your LCA setup")
+    st.caption(
+        "Writes the reviewed, mapped and (optionally) harmonized foreground into Brightway — from there it's "
+        "immediately selectable on the Setup LCA page."
+    )
     foreground_db_name = st.text_input(
         "New foreground database name",
         value=cfg.NEW_FOREGROUND_DB_NAME,
@@ -687,7 +815,8 @@ if "candidates" in st.session_state and "inventory_df" in st.session_state:
         "I have reviewed the process structure, amounts/units and selected Brightway mappings."
     )
     if st.button(
-        "Create Brightway foreground database",
+        "Extract",
+        type="primary",
         disabled=not (plan.ready and project_name and foreground_db_name.strip() and confirm_write),
     ):
         try:
@@ -700,7 +829,7 @@ if "candidates" in st.session_state and "inventory_df" in st.session_state:
             )
             st.success(
                 f"Created {report['database']}: {report['processes_created']} activities and "
-                f"{report['exchanges_created']} inventory exchanges."
+                f"{report['exchanges_created']} inventory exchanges. Now selectable on the Setup LCA page."
             )
             for warning in report["warnings"]:
                 st.info(warning)

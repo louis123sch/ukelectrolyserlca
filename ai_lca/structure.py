@@ -84,4 +84,5 @@ def lock_foreground_interpretation(
         assumptions_or_warnings=list(dict.fromkeys(warnings)),
         candidate_activities=list(by_id.values()),
         processes=processes,
+        reported_results=interpretation.reported_results,
     )

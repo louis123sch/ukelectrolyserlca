@@ -1502,3 +1502,29 @@ def run_monte_carlo_non_electricity(activity, uncertain_rows, n_iterations, meth
             tmp.delete()
         except Exception:
             pass
+
+
+# =============================================================================
+# LCIA method search — for matching a paper's stated method (free text, e.g.
+# "IPCC 2021 GWP100") to a real Brightway method tuple.
+# =============================================================================
+def find_methods(query, limit=10):
+    """Keyword-search bd.methods, best match first.
+
+    Every query word must appear somewhere in the method tuple for it to be
+    considered at all; among those, shorter total tuple text (fewer extra
+    sub-category qualifiers like "land use" or "no LT") ranks higher, so a
+    plain "climate change" / "GWP100" match outranks a narrower sub-indicator
+    that happens to contain the same words.
+    """
+    words = [w.lower() for w in str(query).split() if w]
+    if not words:
+        return []
+    scored = []
+    for m in bd.methods:
+        text = " ".join(str(x) for x in m).lower()
+        if not all(w in text for w in words):
+            continue
+        scored.append((sum(text.count(w) for w in words), -len(text), m))
+    scored.sort(reverse=True)
+    return [m for _, _, m in scored[:limit]]

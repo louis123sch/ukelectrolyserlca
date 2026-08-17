@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import math
 import re
+import uuid
 from dataclasses import dataclass, field
 
+import bw2calc as bc
 import bw2data as bd
 import pandas as pd
 
@@ -373,3 +375,87 @@ def write_foreground_database(
         "paper_geography": paper_geography or None,
         "warnings": plan.warnings,
     }
+
+
+def run_dry_lca(
+    *,
+    project_name: str,
+    scratch_database_name: str,
+    extraction: InventoryExtraction,
+    inventory_df: pd.DataFrame,
+    mapping_df: pd.DataFrame | None,
+    method: tuple,
+) -> dict[str, float]:
+    """Score the reviewed-but-not-yet-written foreground with ``method``, then clean up.
+
+    Builds every reviewed process as temporary activities inside
+    ``scratch_database_name`` — an *existing* database used purely as scratch
+    space (typically the project's built-in foreground database), never the new
+    database the eventual real write will create — computes an LCIA score per
+    process, deletes the temporary activities again, and returns
+    ``{process_id: score}``. Nothing from this call persists. Lets "Run LCA" on
+    the Add Foreground page compare a recreation directly against a paper's own
+    reported result before anything is permanently written —
+    ``write_foreground_database`` does the real, permanent write later, once
+    reviewed/harmonized.
+    """
+    project_name = project_name.strip()
+    scratch_database_name = scratch_database_name.strip()
+    if not project_name:
+        raise ValueError("Brightway project name is required")
+    if not scratch_database_name:
+        raise ValueError("Scratch database name is required")
+
+    plan = build_write_plan(extraction, inventory_df, mapping_df)
+    if not plan.ready:
+        raise ValueError("Cannot run a dry-run LCA:\n- " + "\n- ".join(plan.blockers))
+
+    bd.projects.set_current(project_name)
+    if scratch_database_name not in bd.databases:
+        raise ValueError(f"Scratch database {scratch_database_name!r} does not exist in this project.")
+    _preflight_background_targets(plan)
+
+    fg_database = bd.Database(scratch_database_name)
+    temp_prefix = f"_dryrun_{uuid.uuid4().hex[:8]}"
+    created: dict[str, object] = {}
+    try:
+        for process in extraction.processes:
+            kwargs = {
+                "code": f"{temp_prefix}_{_safe_code(process.process_id)}",
+                "name": f"[DRY RUN] {process.name}",
+                "unit": process.reference_unit,
+                "type": "process",
+            }
+            if process.reference_product:
+                kwargs["reference product"] = process.reference_product
+            activity = fg_database.new_activity(**kwargs)
+            activity.save()
+            activity.new_exchange(input=activity.key, amount=1.0, type="production").save()
+            created[process.process_id] = activity
+
+        for exchange in plan.exchanges:
+            source = created[exchange["process_id"]]
+            if exchange["exchange_type"] == "technosphere_foreground":
+                target = created[exchange["target_process_id"]]
+                source.new_exchange(input=target.key, amount=exchange["amount"], type="technosphere").save()
+            else:
+                target_key = (exchange["target_database"], exchange["target_code"])
+                source.new_exchange(
+                    input=target_key, amount=exchange["amount"],
+                    type="biosphere" if exchange["exchange_type"] == "biosphere" else "technosphere",
+                ).save()
+
+        scores: dict[str, float] = {}
+        for process_id, activity in created.items():
+            fu, data_objs, _ = bd.prepare_lca_inputs({activity: 1.0}, method=method)
+            lca = bc.LCA(demand=fu, data_objs=data_objs)
+            lca.lci()
+            lca.lcia()
+            scores[process_id] = float(lca.score)
+        return scores
+    finally:
+        for activity in created.values():
+            try:
+                activity.delete()
+            except Exception:
+                pass

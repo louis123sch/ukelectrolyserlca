@@ -109,6 +109,33 @@ double-count it. Each iteration re-solves the full ecoinvent LCI, so it's
 slow (~3-4s/iteration on typical hardware) — the iteration slider defaults
 low (50) with a live time estimate.
 
+### Recreating and harmonizing a paper's own result
+
+The Add Foreground page's full pipeline, in order:
+
+1. **Interpret paper and extract foreground** — now also pulls the source's
+   stated impact assessment method (`study_context.impact_assessment_method`,
+   e.g. "IPCC 2021 GWP100") and any result(s) it reports for itself (most
+   often its baseline scenario), shown as **Source's own reported result(s)**.
+2. **Search Brightway candidates** — matches every flow to a real ecoinvent
+   node, same as before (per-flow search/re-search, candidate selection).
+3. **Run LCA (source's method)** — before anything is written, scores the
+   reviewed-and-mapped foreground with a Brightway method matched from the
+   extracted method text (`H.find_methods()` in `lca_helpers.py`, editable),
+   using `run_dry_lca()` in `ai_lca/brightway_writer.py`: builds temporary
+   activities in the built-in foreground database purely as scratch space,
+   scores them, deletes them again — nothing persists. The recreated score
+   sits right next to the source's own reported result for comparison.
+   **Harmonization** — once you've sanity-checked the recreation, adjust the
+   matched background processes for your own study (most commonly
+   re-targeting the source's operational geography to yours): set a target
+   location and re-search every mapped flow with it promoted first. Existing
+   picks stay as the fallback; review/override individual flows in "Review
+   Brightway mappings" above.
+4. **Extract into your LCA setup** — the actual permanent write (was
+   previously the last, unlabelled step) — immediately selectable on Setup
+   LCA once done.
+
 ## Paper reader notebooks (`1.*`)
 
 A notebook-native alternative to the Add Foreground Streamlit page, for

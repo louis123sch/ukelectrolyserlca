@@ -168,6 +168,20 @@ def process_structure_to_dataframe(extraction: InventoryExtraction) -> pd.DataFr
     return pd.DataFrame(rows)
 
 
+def reported_results_to_dataframe(extraction: InventoryExtraction) -> pd.DataFrame:
+    """The source's own reported numeric result(s), for comparison against a recreated LCA."""
+    rows = []
+    for result in extraction.reported_results:
+        rows.append({
+            "scenario_name": result.scenario_name,
+            "value": result.value,
+            "unit": result.unit,
+            "impact_category": result.impact_category,
+            "evidence_text": result.evidence.evidence_text,
+        })
+    return pd.DataFrame(rows)
+
+
 def candidate_structure_to_dataframe(extraction: InventoryExtraction) -> pd.DataFrame:
     rows = []
     locked = {process.process_id for process in extraction.processes}

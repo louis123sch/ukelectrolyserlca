@@ -42,7 +42,9 @@ Rules:
 11. Use concise source-derived candidate identifiers. If the study uses stable acronyms/short labels, use them consistently. Do not embed capacities, functional-unit text, or explanatory parentheticals in IDs/names.
 12. Include short evidence snippets and a brief evidence-grounded rationale for every candidate. Populate document/page/paragraph/table only from explicit provenance markers.
 13. Record ambiguity or possible double counting in assumptions_or_warnings.
-14. This is a proposal for human review, not an approved LCA model.
+14. If the source explicitly states which LCIA method/impact category it used (e.g. "IPCC 2021 GWP100", "ReCiPe 2016 Midpoint (H)", "CML-IA baseline", "the GWP100 characterisation factors of IPCC AR6"), record it verbatim in study_context.impact_assessment_method. Leave it null if the source never names a specific method — do not guess one from the impact category alone (e.g. "kg CO2eq" alone does not imply a specific method).
+15. If the source reports its own numeric result(s) for a scenario (most importantly its baseline/reference case, but also any other named scenario it quantifies), record each as a reported_results entry: scenario_name (the source's own label, e.g. "baseline"), value, unit, impact_category, and evidence quoting the reported figure. Only extract a value the source explicitly states as a result/finding — never a value found only in a raw LCI table row, and never a value you computed or derived yourself.
+16. This is a proposal for human review, not an approved LCA model.
 """
 
 
@@ -311,6 +313,7 @@ def extract_inventory_from_text(
         candidate_activities=structure.candidate_activities,
         processes=structure.processes,
         flows=message.parsed.flows,
+        reported_results=structure.reported_results,
         provenance=build_extraction_provenance(model=chosen_model, source_mode=source_mode),
     )
 

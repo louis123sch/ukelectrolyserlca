@@ -65,7 +65,30 @@ class StudyContext(BaseModel):
     )
     system_boundary: str | None = None
     temporal_context: str | None = None
+    impact_assessment_method: str | None = Field(
+        default=None,
+        description=(
+            "The LCIA method/impact category the source explicitly says it used, e.g. "
+            "'IPCC 2021 GWP100', 'ReCiPe 2016 Midpoint (H)', 'CML-IA baseline'. Null if not stated."
+        ),
+    )
     evidence: list[SourceEvidence] = Field(default_factory=list)
+
+
+class ReportedResult(BaseModel):
+    """One numeric result the source itself reports for a scenario, used to sanity-check a recreation."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    scenario_name: str = Field(
+        description="The source's own label for this scenario, e.g. 'baseline', 'reference case', 'Scenario A'."
+    )
+    value: float
+    unit: str
+    impact_category: str = Field(
+        description="What this value measures, e.g. 'GWP100', 'climate change', 'global warming potential'."
+    )
+    evidence: SourceEvidence
 
 
 class ProcessCandidate(BaseModel):
@@ -119,6 +142,10 @@ class ForegroundInterpretation(BaseModel):
     study_context: StudyContext = Field(default_factory=StudyContext)
     assumptions_or_warnings: list[str] = Field(default_factory=list)
     candidates: list[ProcessCandidate] = Field(default_factory=list)
+    reported_results: list[ReportedResult] = Field(
+        default_factory=list,
+        description="The source's own numerically reported result(s), e.g. for its baseline/reference scenario.",
+    )
 
 
 class ForegroundProcess(BaseModel):
@@ -167,6 +194,7 @@ class ForegroundStructure(BaseModel):
     assumptions_or_warnings: list[str] = Field(default_factory=list)
     candidate_activities: list[ProcessCandidate] = Field(default_factory=list)
     processes: list[ForegroundProcess] = Field(default_factory=list)
+    reported_results: list[ReportedResult] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_process_hierarchy(self) -> "ForegroundStructure":
@@ -270,6 +298,7 @@ class InventoryExtraction(BaseModel):
     candidate_activities: list[ProcessCandidate] = Field(default_factory=list)
     processes: list[ForegroundProcess] = Field(default_factory=list)
     flows: list[InventoryFlow] = Field(default_factory=list)
+    reported_results: list[ReportedResult] = Field(default_factory=list)
     provenance: ExtractionProvenance | None = None
 
     @model_validator(mode="after")
