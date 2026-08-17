@@ -24,6 +24,7 @@ from pathlib import Path
 REPO_DIR = Path(__file__).resolve().parent.parent
 CONFIG_PATH = REPO_DIR / "dashboard_config.py"
 RUNS_DIR = REPO_DIR / "_streamlit_runs"
+PLOTS_DIR = RUNS_DIR / "plots"
 RUNNER_NOTEBOOK = "2.dashboard_lca_adaptive.ipynb"
 
 OUTPUT_DIRS = [
@@ -87,6 +88,7 @@ class RunResult:
     new_files: list[Path] = field(default_factory=list)
     executed_notebook: Path | None = None
     config_backup: Path | None = None
+    plots: list[tuple[str, Path]] = field(default_factory=list)
 
 
 def _extract_notebook_log(nb_path: Path, max_chars: int = 20000) -> str:
@@ -109,6 +111,65 @@ def _extract_notebook_log(nb_path: Path, max_chars: int = 20000) -> str:
     if len(text) > max_chars:
         text = text[-max_chars:]
     return text
+
+
+def _caption_from_stream_text(text: str) -> str:
+    """Pick the title line out of accumulated stream text, skipping warnings/tracebacks.
+
+    Notebook 2 prints a title before each plt.show(); matplotlib/pandas also
+    write deprecation warnings (file-path-prefixed) to the same stream, so the
+    literal last line before an image is often a warning, not the title.
+    """
+    candidates = [
+        line.strip() for line in text.splitlines()
+        if line.strip()
+        and not line.startswith((" ", "\t"))  # warning tracebacks print the offending code indented
+        and "Warning" not in line
+        and ".py:" not in line
+        and not set(line.strip()) <= {"=", "-"}
+    ]
+    return candidates[0] if candidates else ""
+
+
+def _extract_notebook_images(nb_path: Path) -> list[tuple[str, bytes]]:
+    """Pull every PNG figure notebook 2's plotting cells produced, with a caption."""
+    import base64
+    import json
+
+    nb = json.loads(nb_path.read_text())
+    images: list[tuple[str, bytes]] = []
+    for cell in nb.get("cells", []):
+        if cell.get("cell_type") != "code":
+            continue
+        pending_text = ""
+        for out in cell.get("outputs", []):
+            if out.get("output_type") == "stream":
+                pending_text += "".join(out.get("text", []))
+            elif out.get("output_type") == "display_data" and "image/png" in out.get("data", {}):
+                caption = _caption_from_stream_text(pending_text) or f"Figure {len(images) + 1}"
+                images.append((caption, base64.b64decode(out["data"]["image/png"])))
+                pending_text = ""
+    return images
+
+
+def _save_plots(nb_path: Path, plots_dir: Path) -> list[tuple[str, Path]]:
+    """Save every figure from the executed notebook to plots_dir, replacing any previous run's."""
+    import json
+    import shutil
+
+    if plots_dir.exists():
+        shutil.rmtree(plots_dir)
+    plots_dir.mkdir(parents=True)
+
+    saved = []
+    captions = {}
+    for i, (caption, png_bytes) in enumerate(_extract_notebook_images(nb_path)):
+        filename = f"{i:02d}.png"
+        (plots_dir / filename).write_bytes(png_bytes)
+        captions[filename] = caption
+        saved.append((caption, plots_dir / filename))
+    (plots_dir / "captions.json").write_text(json.dumps(captions, indent=2))
+    return saved
 
 
 def run_lca(overrides: dict, secrets: dict | None = None, timeout_s: int = 1800) -> RunResult:
@@ -150,6 +211,11 @@ def run_lca(overrides: dict, secrets: dict | None = None, timeout_s: int = 1800)
     ]
 
     env = {**os.environ, **(secrets or {})}
+    # Force the inline backend so figures are always captured as PNG outputs
+    # regardless of what MPLBACKEND (if any) this process inherited — e.g.
+    # a plain "Agg" backend renders plt.show() a no-op and silently produces
+    # zero images, which is otherwise very easy to hit by accident.
+    env["MPLBACKEND"] = "module://matplotlib_inline.backend_inline"
 
     try:
         proc = subprocess.run(
@@ -178,10 +244,29 @@ def run_lca(overrides: dict, secrets: dict | None = None, timeout_s: int = 1800)
         )
 
     log_text = _extract_notebook_log(executed_path)
+    plots = _save_plots(executed_path, PLOTS_DIR)
     return RunResult(
         success=True,
         log_text=log_text,
         new_files=new_files,
         executed_notebook=executed_path,
         config_backup=backup_path,
+        plots=plots,
     )
+
+
+def latest_plots() -> list[tuple[str, Path]]:
+    """Plots saved by the most recent successful run_lca() call, without running anything.
+
+    Home.py uses this for an at-a-glance view of the last run.
+    """
+    import json
+
+    if not PLOTS_DIR.exists():
+        return []
+    captions_path = PLOTS_DIR / "captions.json"
+    captions = json.loads(captions_path.read_text()) if captions_path.exists() else {}
+    return [
+        (captions.get(p.name, f"Figure {p.stem}"), p)
+        for p in sorted(PLOTS_DIR.glob("*.png"))
+    ]

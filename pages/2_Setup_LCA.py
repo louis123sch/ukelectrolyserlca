@@ -265,6 +265,17 @@ if st.button("Run LCA", type="primary"):
         with st.expander("Run log"):
             st.code(result.log_text[-8000:])
 
+        if result.plots:
+            st.subheader("Plots")
+            st.caption("Every figure 2.dashboard_lca_adaptive.ipynb produced for this run.")
+            cols = st.columns(2)
+            for i, (caption, path) in enumerate(result.plots):
+                with cols[i % 2]:
+                    st.image(str(path), caption=caption, width="stretch")
+        else:
+            st.info("Run completed but no plots were generated — the selected time window may be too "
+                     "short for a chart, or no result rows were produced.")
+
         if not result.new_files:
             st.info("Run finished but no new/updated result files were detected.")
         for f in result.new_files:

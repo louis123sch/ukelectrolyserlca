@@ -14,6 +14,7 @@ import streamlit as st
 
 import dashboard_config as cfg
 import lca_helpers as H
+from backend.runner import latest_plots
 
 st.set_page_config(page_title="UK Electrolyser LCA", layout="wide")
 st.title("UK Electrolyser LCA")
@@ -93,3 +94,11 @@ for col, (label, folder, pattern) in zip(result_cols, result_specs):
             st.dataframe(df.head(5), width="stretch", hide_index=True)
         except Exception as exc:
             st.warning(f"Could not read {latest.name}: {exc}")
+
+plots = latest_plots()
+if plots:
+    with st.expander(f"Plots from the last run ({len(plots)} figure(s))"):
+        cols = st.columns(2)
+        for i, (caption, path) in enumerate(plots):
+            with cols[i % 2]:
+                st.image(str(path), caption=caption, width="stretch")
