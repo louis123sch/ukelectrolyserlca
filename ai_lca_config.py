@@ -48,7 +48,12 @@ load_dotenv()
 # =============================================================================
 # OpenAI / extraction settings
 # =============================================================================
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5-mini")
+# Fixed, not read from an environment variable — ai_lca.llm.DEFAULT_MODEL /
+# DEFAULT_REASONING_EFFORT is the single source of truth for model + reasoning
+# level, imported here so the sidebar can display what's actually being used.
+from ai_lca.llm import DEFAULT_MODEL as OPENAI_MODEL  # noqa: E402
+from ai_lca.llm import DEFAULT_REASONING_EFFORT  # noqa: E402
+
 EXTRA_INSTRUCTIONS = ""   # optional study-specific disambiguation for the LLM
 
 # =============================================================================
@@ -142,7 +147,8 @@ def print_config():
         print("Source documents:       ", SOURCE_DOCUMENT_PATHS or "(none set)")
     else:
         print("Source text:            ", f"{len(SOURCE_TEXT)} character(s)")
-    print("OpenAI model:           ", OPENAI_MODEL,
+    print("OpenAI model:           ", OPENAI_MODEL, "| reasoning effort:", DEFAULT_REASONING_EFFORT,
+          "(fixed in ai_lca/llm.py, not from .env)",
           "| key set:", bool(os.getenv("OPENAI_API_KEY")) and os.getenv("OPENAI_API_KEY") != "replace_me")
     print("Brightway project:      ", BRIGHTWAY_PROJECT)
     print("Technosphere database:  ", TECHNOSPHERE_DATABASE or "(auto)")

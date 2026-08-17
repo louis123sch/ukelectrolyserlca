@@ -97,7 +97,9 @@ with st.sidebar:
     st.caption(f"Extractor {extractor_version()} | commit {(git_sha() or 'unknown')[:10]}")
     model = cfg.OPENAI_MODEL
     project_name = cfg.BRIGHTWAY_PROJECT
-    st.caption(f"OpenAI model: {model} · Brightway project: {project_name}")
+    st.caption(
+        f"OpenAI model: {model} (reasoning: {cfg.DEFAULT_REASONING_EFFORT}) · Brightway project: {project_name}"
+    )
     candidate_limit = st.slider("Candidates per flow", 3, 20, cfg.CANDIDATE_LIMIT)
 
     database_name = ""

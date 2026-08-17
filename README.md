@@ -28,15 +28,23 @@ required to run it.
 Requires the `brightway` conda environment (already has bw2data/bw2io/bw2calc,
 streamlit, pandas, jupyter, openai, and the rest of `ai_lca`'s dependencies).
 
-Copy `.env.example` to `.env` and fill in a real `OPENAI_API_KEY` — needed by
+Create a `.env` file (gitignored) with a real `OPENAI_API_KEY` — needed by
 the Add Foreground page and by `1.paper_ingest_and_extract.ipynb` (the only
-places that call the LLM).
+places that call the LLM):
+
+```
+OPENAI_API_KEY=sk-...
+```
 
 ```bash
-cp .env.example .env   # then edit .env with your OpenAI key
 conda activate brightway
 streamlit run Home.py
 ```
+
+The model and reasoning level aren't configured via `.env` — they're fixed
+in `ai_lca/llm.py` (`DEFAULT_MODEL`, `DEFAULT_REASONING_EFFORT`), a single
+source of truth every extraction call reads, instead of each call site
+falling back to its own environment-variable default.
 
 ### How "Run LCA" works
 

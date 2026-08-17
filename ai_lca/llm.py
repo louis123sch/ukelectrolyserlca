@@ -12,6 +12,15 @@ from .models import FlowExtraction, ForegroundInterpretation, ForegroundStructur
 from .runtime import build_extraction_provenance
 from .structure import lock_foreground_interpretation
 
+# Fixed here, deliberately not read from an environment variable — a single,
+# non-competing source of truth for "which model / how hard should it think"
+# across every extraction pass (structure, flows, visual transcription).
+# gpt-5 is the flagship of the family already used throughout this codebase
+# (gpt-5-mini was the old default); "max" is the top of the SDK's
+# reasoning_effort scale (none/minimal/low/medium/high/xhigh/max).
+DEFAULT_MODEL = "gpt-5"
+DEFAULT_REASONING_EFFORT = "max"
+
 
 STRUCTURE_SYSTEM_PROMPT = """You are assisting with life-cycle inventory (LCI) construction from a supplied paper or technical document.
 This first pass is PROCESS INTERPRETATION, not inventory completion.
@@ -134,7 +143,7 @@ def transcribe_visual_evidence(
     """Convert visual document evidence into provenance-tagged machine-readable text."""
     if not assets:
         return "", []
-    chosen_model = model or os.getenv("OPENAI_VISION_MODEL") or os.getenv("OPENAI_MODEL", "gpt-5-mini")
+    chosen_model = model or DEFAULT_MODEL
     blocks: list[str] = []
     warnings: list[str] = []
     client = _client(api_key)
@@ -169,6 +178,7 @@ def transcribe_visual_evidence(
 
         completion = client.beta.chat.completions.parse(
             model=chosen_model,
+            reasoning_effort=DEFAULT_REASONING_EFFORT,
             messages=[
                 {"role": "system", "content": VISUAL_SYSTEM_PROMPT},
                 {"role": "user", "content": content},
@@ -228,7 +238,7 @@ def identify_foreground_structure(
     if not text:
         raise ValueError("No source text supplied")
 
-    chosen_model = model or os.getenv("OPENAI_MODEL", "gpt-5-mini")
+    chosen_model = model or DEFAULT_MODEL
     user_prompt = (
         "Identify and classify process-like entities, study context, and source-supported reference products/units. "
         "Do not directly decide downstream Brightway mappings.\n\n"
@@ -239,6 +249,7 @@ def identify_foreground_structure(
 
     completion = _client(api_key).beta.chat.completions.parse(
         model=chosen_model,
+        reasoning_effort=DEFAULT_REASONING_EFFORT,
         messages=[
             {"role": "system", "content": STRUCTURE_SYSTEM_PROMPT},
             {"role": "user", "content": user_prompt},
@@ -268,7 +279,7 @@ def extract_inventory_from_text(
     if not text:
         raise ValueError("No source text supplied")
 
-    chosen_model = model or os.getenv("OPENAI_MODEL", "gpt-5-mini")
+    chosen_model = model or DEFAULT_MODEL
     structure = identify_foreground_structure(
         text,
         model=chosen_model,
@@ -287,6 +298,7 @@ def extract_inventory_from_text(
 
     completion = _client(api_key).beta.chat.completions.parse(
         model=chosen_model,
+        reasoning_effort=DEFAULT_REASONING_EFFORT,
         messages=[
             {"role": "system", "content": FLOW_SYSTEM_PROMPT},
             {"role": "user", "content": user_prompt},
