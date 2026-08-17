@@ -50,7 +50,13 @@ executes `2.dashboard_lca_adaptive.ipynb` via `jupyter nbconvert`, the same
 notebook the manual workflow uses. This keeps all of the actual LCA science —
 the Carbon Intensity API client, wind dispatch logic, Brightway calls — in
 the tested notebooks and `lca_helpers.py`; the Streamlit layer only edits
-config text, runs the subprocess, and displays the resulting CSVs.
+config text, runs the subprocess, and displays the resulting CSVs and plots.
+
+Because notebook 2's plotting cells run as part of that same execution, the
+figures they produce are extracted from the executed notebook and saved to
+`_streamlit_runs/plots/` (gitignored) — shown on the Setup LCA page right
+after a run, and as a "latest run" section on Home so they're still visible
+on a later visit without re-running anything.
 
 Because it's a shared local config file, only run one LCA at a time.
 
