@@ -81,6 +81,16 @@ def summarize_extraction(extraction: InventoryExtraction) -> None:
     for pid, count in sorted(flow_counts.items()):
         print(f"  {pid:<10} {names.get(pid, '?'):<50} {count:>3} flow(s)")
 
+    uncertain_flows = [f for f in extraction.flows if f.uncertainty_lower is not None]
+    print()
+    if uncertain_flows:
+        print(f"{len(uncertain_flows)} flow(s) with a stated uncertainty range (usable for Monte Carlo later):")
+        for f in uncertain_flows:
+            print(f"  {f.process_id:<10} {f.name:<40} {f.uncertainty_lower} - {f.amount} - {f.uncertainty_upper} {f.unit or ''}")
+    else:
+        print("No flows had a stated uncertainty range — fill in uncertainty_lower/uncertainty_upper "
+              "in 1.2.paper_inventory_review.ipynb's INVENTORY_REVIEW if you want Monte Carlo on this process.")
+
     if extraction.assumptions_or_warnings:
         print()
         print(f"{len(extraction.assumptions_or_warnings)} assumption(s)/warning(s) recorded during extraction:")
@@ -125,6 +135,7 @@ def process_review_dataframe(extraction: InventoryExtraction, overrides: dict) -
 _INVENTORY_EDITABLE_FIELDS = {
     "include", "amount", "unit", "direction", "notes", "name",
     "linked_process_id", "component_or_stage", "basis", "background_process_hint",
+    "uncertainty_lower", "uncertainty_upper",
 }
 
 

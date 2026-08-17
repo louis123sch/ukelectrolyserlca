@@ -79,6 +79,36 @@ resolve technologies through `H.resolve_tech_activity()` instead of a direct
 generic across any foreground activity — the overrides just let a label point
 at one outside the default database.
 
+### Uncertainty and Monte Carlo
+
+A flow's amount can carry a triangular-distribution range (lower/mode/upper),
+sourced two ways:
+
+- **Add Foreground page** — the extraction prompt looks for a source-stated
+  range for a flow (an asset-lifespan range, an explicit +/- tolerance, a
+  min-max table column) and pre-fills `uncertainty_lower`/`uncertainty_upper`
+  columns in the inventory review table, alongside `amount` as the mode. Edit
+  or add ranges by hand there too.
+- **Setup LCA page, section 3** — an optional, per-run Monte Carlo table for
+  the *selected* foreground process's own non-electricity exchanges (default
+  5 empty rows, add more freely). Pre-filled automatically when the process
+  already has a stored range from Add Foreground.
+
+Either path ends up calling `write_foreground_database()`, which sets a real
+Brightway/stats_arrays triangular distribution (`uncertainty type = 5`) on
+the matching exchange — the *canonical* place Brightway expects uncertainty,
+so it works from any Brightway tooling, not just this app. Setup LCA's "Run
+LCA" then runs `bc.LCA(..., use_distributions=True)` for N iterations
+(`H.run_monte_carlo_non_electricity` in `lca_helpers.py`) and shows a
+histogram + mean/P5/P50/P95/std next to the deterministic result.
+
+Electricity exchanges are always excluded from Monte Carlo — the grid/wind
+pipelines already model electricity's own real-world variability from live
+data, so adding a second independent uncertainty source there would
+double-count it. Each iteration re-solves the full ecoinvent LCI, so it's
+slow (~3-4s/iteration on typical hardware) — the iteration slider defaults
+low (50) with a live time estimate.
+
 ## Paper reader notebooks (`1.*`)
 
 A notebook-native alternative to the Add Foreground Streamlit page, for

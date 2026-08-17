@@ -66,6 +66,36 @@ def _safe_code(process_id: str) -> str:
     return code or "foreground-process"
 
 
+def _uncertainty_bounds(row, amount: float, warnings: list[str], flow_id: int, flow_name: str) -> dict | None:
+    """Parse+validate a triangular-uncertainty range on this row, else None (deterministic).
+
+    Returns {"minimum": ..., "maximum": ..., "loc": amount} for a Brightway/stats_arrays
+    TriangularUncertainty exchange, or None if no range was given or it doesn't validate.
+    Invalid ranges are recorded as non-blocking warnings — the exchange still writes with
+    its plain deterministic amount.
+    """
+    lower = _amount(row.get("uncertainty_lower"))
+    upper = _amount(row.get("uncertainty_upper"))
+    if lower is None and upper is None:
+        return None
+    if lower is None or upper is None:
+        warnings.append(
+            f"Flow {flow_id} ({flow_name}) has only one of uncertainty_lower/uncertainty_upper set; "
+            "ignoring — both are required for a triangular distribution."
+        )
+        return None
+    if not (lower < upper):
+        warnings.append(f"Flow {flow_id} ({flow_name}) has uncertainty_lower >= uncertainty_upper; ignoring.")
+        return None
+    if not (lower <= amount <= upper):
+        warnings.append(
+            f"Flow {flow_id} ({flow_name}) amount {amount} is outside its stated uncertainty range "
+            f"[{lower}, {upper}]; ignoring the uncertainty range."
+        )
+        return None
+    return {"minimum": lower, "maximum": upper, "loc": amount}
+
+
 def build_write_plan(
     extraction: InventoryExtraction,
     inventory_df: pd.DataFrame,
@@ -158,6 +188,7 @@ def build_write_plan(
                     "unit": unit,
                     "exchange_type": "technosphere_foreground",
                     "target_process_id": linked_process_id,
+                    "uncertainty": _uncertainty_bounds(row, amount, warnings, flow_id, flow_name),
                 }
             )
             continue
@@ -196,6 +227,7 @@ def build_write_plan(
                 "target_database": target_database,
                 "target_code": target_code,
                 "target_name": _text(mapping.get("name")),
+                "uncertainty": _uncertainty_bounds(row, amount, warnings, flow_id, flow_name),
             }
         )
 
@@ -302,18 +334,28 @@ def write_foreground_database(
             source = created[exchange["process_id"]]
             if exchange["exchange_type"] == "technosphere_foreground":
                 target = created[exchange["target_process_id"]]
-                source.new_exchange(
+                new_exc = source.new_exchange(
                     input=target.key,
                     amount=exchange["amount"],
                     type="technosphere",
-                ).save()
+                )
             else:
                 target_key = (exchange["target_database"], exchange["target_code"])
-                source.new_exchange(
+                new_exc = source.new_exchange(
                     input=target_key,
                     amount=exchange["amount"],
                     type="biosphere" if exchange["exchange_type"] == "biosphere" else "technosphere",
-                ).save()
+                )
+            uncertainty = exchange.get("uncertainty")
+            if uncertainty:
+                # stats_arrays TriangularUncertainty (id 5) -- native Brightway uncertainty,
+                # so bw2calc's own Monte Carlo (LCA(..., use_distributions=True)) can use it
+                # directly, from either interface (Setup LCA or a notebook).
+                new_exc["uncertainty type"] = 5
+                new_exc["minimum"] = uncertainty["minimum"]
+                new_exc["maximum"] = uncertainty["maximum"]
+                new_exc["loc"] = uncertainty["loc"]
+            new_exc.save()
     except Exception:
         # Never leave a silently partial database after a failed write.
         try:
@@ -326,6 +368,7 @@ def write_foreground_database(
         "database": database_name,
         "processes_created": len(created),
         "exchanges_created": len(plan.exchanges),
+        "exchanges_with_uncertainty": sum(1 for e in plan.exchanges if e.get("uncertainty")),
         "brightway_location": brightway_location,
         "paper_geography": paper_geography or None,
         "warnings": plan.warnings,

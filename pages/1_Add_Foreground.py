@@ -346,6 +346,18 @@ if "extraction" in st.session_state:
                     "instead of the plain flow name when present. Edit or clear it if it looks wrong."
                 ),
             ),
+            "uncertainty_lower": st.column_config.NumberColumn(
+                "Uncertainty: lower",
+                help=(
+                    "Lower bound of a triangular distribution on Amount, only when the source states a range "
+                    "(e.g. an asset-lifespan range). Leave blank for a plain point value. Set together with "
+                    "Uncertainty: upper — used by the Monte Carlo analysis on the Setup LCA page."
+                ),
+            ),
+            "uncertainty_upper": st.column_config.NumberColumn(
+                "Uncertainty: upper",
+                help="Upper bound matching Uncertainty: lower. Amount itself is the distribution's best estimate.",
+            ),
             "document": st.column_config.TextColumn("Document", disabled=True),
             "page": st.column_config.NumberColumn("Page", disabled=True),
             "paragraph": st.column_config.NumberColumn("Paragraph", disabled=True),

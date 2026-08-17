@@ -219,6 +219,19 @@ class InventoryFlow(BaseModel):
             "constructed or inferred from the plain-language flow name alone."
         ),
     )
+    uncertainty_lower: float | None = Field(
+        default=None,
+        description=(
+            "Lower bound for a triangular uncertainty distribution on `amount` (same unit as `amount`), only "
+            "when the source states or clearly quantifies a range for this flow (e.g. an asset-lifespan range, "
+            "an explicit +/- tolerance, a min-max table column). `amount` itself is used as the distribution's "
+            "best-estimate/mode. Null when no such range is stated; never inferred from general knowledge."
+        ),
+    )
+    uncertainty_upper: float | None = Field(
+        default=None,
+        description="Upper bound matching uncertainty_lower. Both must be set together, or both left null.",
+    )
     notes: str | None = None
     evidence: SourceEvidence
 

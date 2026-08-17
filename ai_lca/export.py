@@ -19,6 +19,8 @@ _REVIEWED_FIELDS = (
     "component_or_stage",
     "basis",
     "background_process_hint",
+    "uncertainty_lower",
+    "uncertainty_upper",
     "notes",
 )
 
@@ -88,6 +90,8 @@ def extraction_to_dataframe(extraction: InventoryExtraction) -> pd.DataFrame:
                 "component_or_stage": flow.component_or_stage,
                 "basis": flow.basis,
                 "background_process_hint": flow.background_process_hint,
+                "uncertainty_lower": flow.uncertainty_lower,
+                "uncertainty_upper": flow.uncertainty_upper,
                 "document": flow.evidence.document,
                 "page": flow.evidence.page,
                 "paragraph": flow.evidence.paragraph,

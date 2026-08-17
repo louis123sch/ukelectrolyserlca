@@ -1393,3 +1393,112 @@ def create_ninja_session(token=None):
         f"Source: {token_source}; token length: {len(token)}"
     )
     return session
+
+
+# =============================================================================
+# Monte Carlo uncertainty analysis (non-electricity foreground exchanges)
+# =============================================================================
+# Uncertainty is scoped to a technology's own non-electricity exchanges (materials,
+# infrastructure, direct emissions, ...), never the electricity exchange itself —
+# the grid/wind pipelines already model electricity's own real-world variability via
+# the Carbon Intensity API / Renewables.ninja timeseries, so mixing a second,
+# independent uncertainty source onto the same exchange would double-count it.
+# Deterministic base score + electricity contribution stay exactly as computed by
+# the grid/wind notebooks; Monte Carlo only perturbs the non-electricity remainder.
+def list_activity_exchanges(activity):
+    """Non-production, non-electricity exchanges of ``activity``, for an uncertainty picker.
+
+    Flags exchanges that already carry a Brightway/stats_arrays triangular
+    distribution (uncertainty type 5) — e.g. written by the Add Foreground
+    page/notebook 1 from a paper-stated range — so the UI can pre-fill from it.
+    """
+    rows = []
+    for exc in activity.exchanges():
+        if exc["type"] == "production" or is_any_electricity_exchange(exc):
+            continue
+        inp = exc.input
+        rows.append({
+            "name": inp.get("name", ""),
+            "amount": float(exc["amount"]),
+            "unit": exc.get("unit") or inp.get("unit", ""),
+            "exchange_type": exc["type"],
+            "has_uncertainty": exc.get("uncertainty type") == 5,
+            "uncertainty_lower": exc.get("minimum"),
+            "uncertainty_upper": exc.get("maximum"),
+        })
+    return rows
+
+
+def run_monte_carlo_non_electricity(activity, uncertain_rows, n_iterations, method_=None,
+                                     fg_database=None, seed=None):
+    """Monte Carlo over ``activity``'s non-electricity exchanges using triangular uncertainty.
+
+    ``uncertain_rows``: list of ``{"name": <exchange input name to match>, "lower": float,
+    "mode": float, "upper": float}``. Rows whose name doesn't match any non-electricity
+    exchange on ``activity`` are ignored. Matched exchanges use ``mode`` as their amount
+    (overriding the activity's own value, so the table is the single source of truth for
+    a run) with a stats_arrays TriangularUncertainty (type 5) distribution attached;
+    unmatched exchanges keep their real deterministic amount.
+
+    Uses Brightway's native Monte Carlo (``bc.LCA(..., use_distributions=True)``) — the
+    same mechanism a written foreground activity's own stored uncertainty already works
+    with, so behaviour is identical whether the range came from a paper extraction or was
+    typed directly into the Setup LCA page.
+
+    Returns ``(deterministic_non_electricity_score, samples)`` where ``samples`` is an
+    ``(n_iterations,)`` numpy array. ``deterministic_non_electricity_score`` uses every
+    row's ``mode`` with no randomness — callers combine it with the activity's already-
+    computed electricity contribution to get a full deterministic anchor for the samples.
+    """
+    import numpy as np
+
+    method_ = method_ or method
+    fg_database = fg_database or fg_db
+    by_name = {
+        r["name"]: r for r in uncertain_rows
+        if r.get("name") and r.get("lower") is not None and r.get("mode") is not None and r.get("upper") is not None
+    }
+
+    tmp = _new_temp_activity("mc", activity, fg_database)
+    try:
+        for exc in activity.exchanges():
+            if exc["type"] == "production":
+                tmp.new_exchange(input=tmp, amount=exc["amount"], type="production").save()
+                continue
+            if is_any_electricity_exchange(exc):
+                continue
+            spec = by_name.get(exc.input.get("name", ""))
+            amount = float(spec["mode"]) if spec else exc["amount"]
+            new_exc = tmp.new_exchange(
+                input=exc.input, amount=amount, type=exc["type"],
+                unit=exc.get("unit", ""), comment=exc.get("comment", ""),
+            )
+            if spec:
+                new_exc["uncertainty type"] = 5
+                new_exc["minimum"] = float(spec["lower"])
+                new_exc["maximum"] = float(spec["upper"])
+                new_exc["loc"] = amount
+            new_exc.save()
+
+        deterministic_score = run_lca_score(tmp, method_, amount=1.0)
+
+        if not by_name:
+            return deterministic_score, np.full(n_iterations, deterministic_score)
+
+        fu, data_objs, _ = bd.prepare_lca_inputs({tmp: 1.0}, method=method_)
+        mc_kwargs = {"demand": fu, "data_objs": data_objs, "use_distributions": True}
+        if seed is not None:
+            mc_kwargs["seed_override"] = seed
+        lca = bc.LCA(**mc_kwargs)
+        lca.lci()
+        lca.lcia()
+        samples = np.empty(n_iterations)
+        for i in range(n_iterations):
+            next(lca)
+            samples[i] = lca.score
+        return deterministic_score, samples
+    finally:
+        try:
+            tmp.delete()
+        except Exception:
+            pass

@@ -14,6 +14,7 @@ import os
 import sys
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import streamlit as st
 
@@ -206,9 +207,79 @@ else:
     st.caption("Runs 12 wind-based representative days for the year (average/top-10%/bottom-10% wind per season).")
 
 # =============================================================================
-# 3. Run
+# 3. Uncertainty (optional Monte Carlo)
 # =============================================================================
-st.header("3. Run")
+st.header("3. Uncertainty (optional)")
+
+mc_enabled = st.checkbox(
+    "Enable Monte Carlo uncertainty analysis",
+    value=False,
+    help=(
+        "Runs extra LCA evaluations after the main run, varying the selected process's own "
+        "non-electricity exchanges (materials, infrastructure, ...) using triangular "
+        "distributions. Electricity is excluded — the grid/wind data already models its own "
+        "real-world variability, so adding a second independent source there would double-count it."
+    ),
+)
+
+uncertainty_rows: list[dict] = []
+n_iterations = 1000
+if mc_enabled:
+    try:
+        mc_activity_preview = H.resolve_tech_activity(tech_label, tech_overrides)
+        exch_rows = H.list_activity_exchanges(mc_activity_preview)
+    except Exception as exc:
+        st.error(f"Could not load exchanges for the selected process: {exc}")
+        exch_rows = []
+
+    exch_options = [r["name"] for r in exch_rows]
+    prefilled = [r for r in exch_rows if r["has_uncertainty"]]
+    if prefilled:
+        st.caption(
+            f"Pre-filled from {len(prefilled)} exchange(s) with an uncertainty range already recorded "
+            "on this process (e.g. extracted from a paper on the Add Foreground page). Edit or add rows below."
+        )
+        template_df = pd.DataFrame([
+            {"flow_name": r["name"], "lower": r["uncertainty_lower"], "mode": r["amount"], "upper": r["uncertainty_upper"]}
+            for r in prefilled
+        ])
+    else:
+        st.caption("No stored uncertainty found for this process — fill in the template below if needed.")
+        template_df = pd.DataFrame([{"flow_name": None, "lower": None, "mode": None, "upper": None} for _ in range(5)])
+
+    uncertainty_editor_df = st.data_editor(
+        template_df,
+        num_rows="dynamic",
+        width="stretch",
+        column_config={
+            "flow_name": st.column_config.SelectboxColumn(
+                "Flow", options=exch_options,
+                help="One of this process's own non-electricity exchanges.",
+            ),
+            "lower": st.column_config.NumberColumn("Lower bound", format="%.6g"),
+            "mode": st.column_config.NumberColumn("Best estimate (mode)", format="%.6g"),
+            "upper": st.column_config.NumberColumn("Upper bound", format="%.6g"),
+        },
+        key="uncertainty_editor",
+    )
+    n_iterations = st.slider("Monte Carlo iterations", 20, 1000, 50, step=10,
+                              help="Each iteration re-solves the full LCI against all of ecoinvent — "
+                                   "roughly 3-4s/iteration on typical hardware, so start low.")
+    st.caption(f"Estimated time: ~{n_iterations * 3.5 / 60:.1f}-{n_iterations * 4.5 / 60:.1f} minutes "
+               f"at ~3.5-4.5s/iteration.")
+
+    uncertainty_rows = [
+        {"name": r["flow_name"], "lower": r["lower"], "mode": r["mode"], "upper": r["upper"]}
+        for r in uncertainty_editor_df.to_dict("records")
+        if r.get("flow_name") and r.get("lower") is not None and r.get("mode") is not None and r.get("upper") is not None
+    ]
+    if not uncertainty_rows:
+        st.info("No complete uncertainty row (flow + lower + mode + upper) yet — Monte Carlo will be skipped on run.")
+
+# =============================================================================
+# 4. Run
+# =============================================================================
+st.header("4. Run")
 
 overrides = {
     "RUN_FOREGROUND_NOTEBOOK_FROM_DASHBOARD": False,
@@ -278,6 +349,7 @@ if st.button("Run LCA", type="primary"):
 
         if not result.new_files:
             st.info("Run finished but no new/updated result files were detected.")
+        base_total = None
         for f in result.new_files:
             st.subheader(f.name)
             try:
@@ -298,4 +370,45 @@ if st.button("Run LCA", type="primary"):
             elif gwp_col and len(df) >= 1:
                 st.metric(f"{gwp_col} (kg CO2eq/kg H2)", f"{df[gwp_col].iloc[0]:.4f}")
 
+            if gwp_col and base_total is None:
+                base_total = float(df[gwp_col].mean())
+
         st.caption(f"Executed notebook saved to {result.executed_notebook}")
+
+        if mc_enabled:
+            st.subheader("Monte Carlo results")
+            if not uncertainty_rows:
+                st.info("Monte Carlo was enabled but no complete uncertainty row (flow + lower + mode + "
+                        "upper) was provided, so it was skipped.")
+            elif base_total is None:
+                st.warning("Could not find this run's deterministic GWP result to anchor Monte Carlo to.")
+            else:
+                with st.spinner(f"Running {n_iterations} Monte Carlo iterations…"):
+                    try:
+                        mc_activity = H.resolve_tech_activity(tech_label, tech_overrides)
+                        det_non_electricity, samples = H.run_monte_carlo_non_electricity(
+                            mc_activity, uncertainty_rows, n_iterations,
+                        )
+                        mc_totals = base_total - det_non_electricity + samples
+                    except Exception as exc:
+                        st.error(f"Monte Carlo run failed: {exc}")
+                        mc_totals = None
+
+                if mc_totals is not None:
+                    hist_df = pd.DataFrame({"score": mc_totals})
+                    hist_df["bin"] = pd.cut(hist_df["score"], bins=30)
+                    counts = hist_df.groupby("bin", observed=True).size()
+                    counts.index = counts.index.map(lambda iv: round(iv.mid, 4))
+                    st.bar_chart(counts)
+
+                    stat_cols = st.columns(5)
+                    stat_cols[0].metric("Mean", f"{mc_totals.mean():.4f}")
+                    stat_cols[1].metric("P5", f"{np.percentile(mc_totals, 5):.4f}")
+                    stat_cols[2].metric("P50 (median)", f"{np.percentile(mc_totals, 50):.4f}")
+                    stat_cols[3].metric("P95", f"{np.percentile(mc_totals, 95):.4f}")
+                    stat_cols[4].metric("Std dev", f"{mc_totals.std():.4f}")
+                    st.caption(
+                        f"{n_iterations} iteration(s), anchored to this run's deterministic total "
+                        f"{base_total:.4f} (varied {len(uncertainty_rows)} non-electricity exchange(s); "
+                        f"their deterministic contribution at the mode was {det_non_electricity:.4f})."
+                    )
