@@ -29,31 +29,21 @@ Intended workflow:
        1.4.paper_write_foreground.ipynb to create NEW_FOREGROUND_DB_NAME.
 
 This file only ever holds settings and edit instructions — never an OpenAI or
-Renewables.ninja key. Put those in ai-lca-starter's own .env.
+Renewables.ninja key. Put those in this repo's own .env (see .env.example).
 """
 
 from __future__ import annotations
 
 import os
-import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
 
-# =============================================================================
-# Locate the ai-lca-starter package (sibling repo) — same approach as
-# pages/1_Add_Foreground.py, so these notebooks and the Streamlit page always
-# resolve the same library code.
-# =============================================================================
-AI_LCA_STARTER_DIR = Path(
-    os.getenv("AI_LCA_STARTER_DIR", Path(__file__).resolve().parent.parent / "ai-lca-starter")
-)
-_src_dir = str(AI_LCA_STARTER_DIR / "src")
-if AI_LCA_STARTER_DIR.exists() and _src_dir not in sys.path:
-    sys.path.insert(0, _src_dir)
-
-load_dotenv(AI_LCA_STARTER_DIR / ".env")
-load_dotenv()  # allow a local .env in this repo to override
+# The ai_lca package (paper-extraction library: LLM prompts, document
+# ingestion, Brightway search/writer) is vendored in ./ai_lca — no sibling
+# repo or sys.path setup needed; it's an ordinary local package next to
+# dashboard_config.py/lca_helpers.py.
+load_dotenv()
 
 # =============================================================================
 # OpenAI / extraction settings
@@ -79,9 +69,8 @@ RUN_LABEL = "my_paper"             # short slug; outputs go to OUTPUT_DIR/RUN_LA
 OUTPUT_DIR = "ai_lca_outputs"
 
 # =============================================================================
-# Brightway project / matching — deliberately read from dashboard_config.py,
-# not from ai-lca-starter's own .env/BRIGHTWAY_PROJECT (which may be unset or
-# still the .env.example placeholder). This is the actual single source of
+# Brightway project / matching — deliberately read from dashboard_config.py
+# rather than a separate env var, since that's the actual single source of
 # truth: anything written here needs to land in the same project
 # dashboard_config.py / lca_helpers.H.resolve_tech_activity read from.
 # =============================================================================

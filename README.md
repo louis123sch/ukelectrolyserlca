@@ -9,26 +9,31 @@ ecoinvent foreground model.
 A multipage app wraps the notebooks in a UI:
 
 - **Home** — Brightway project status and latest run results.
-- **1 Add Foreground** — embeds the sibling [ai-lca-starter](../ai-lca-starter)
-  paper-to-Brightway extractor, so a paper/datasheet can be turned into a
-  reviewed foreground process without leaving the app. It defaults the
-  extractor's Brightway project to this project's (`hydrogen-smr`), so
+- **1 Add Foreground** — a paper-to-Brightway extractor, so a paper/datasheet
+  can be turned into a reviewed foreground process without leaving the app.
+  It defaults its Brightway project to this project's (`hydrogen-smr`), so
   anything it writes is immediately visible on page 2.
 - **2 Setup LCA** — pick any foreground process (the six built-in
   electrolysis/H2 techs, or anything written by page 1), configure the
   background scenario (grid region, wind farm, running strategy, time
   period), and run it.
 
+This repo is standalone: the paper extractor (`ai_lca/`, vendored from the
+[ai-lca-starter](https://github.com/louis123sch/ai-lca-starter) project)
+ships in this repo, not a sibling clone — nothing outside this directory is
+required to run it.
+
 ### Setup
 
 Requires the `brightway` conda environment (already has bw2data/bw2io/bw2calc,
-streamlit, pandas, jupyter, and the ai-lca-starter dependencies).
+streamlit, pandas, jupyter, openai, and the rest of `ai_lca`'s dependencies).
 
-`ai-lca-starter` must be cloned as a sibling directory (`../ai-lca-starter`
-relative to this repo), with its own `.env` containing `OPENAI_API_KEY` —
-see that repo's README. Set `AI_LCA_STARTER_DIR` to override the location.
+Copy `.env.example` to `.env` and fill in a real `OPENAI_API_KEY` — needed by
+the Add Foreground page and by `1.paper_ingest_and_extract.ipynb` (the only
+places that call the LLM).
 
 ```bash
+cp .env.example .env   # then edit .env with your OpenAI key
 conda activate brightway
 streamlit run Home.py
 ```
@@ -101,6 +106,6 @@ persists its output under `ai_lca_outputs/<RUN_LABEL>/` (gitignored) so the
 next notebook — or a later re-run — can pick up where the last one left off
 without repeating the OpenAI call.
 
-Both interfaces call the same `ai_lca` library (`ai-lca-starter/src/ai_lca`,
-including a `notebook_helpers` module written for this notebook workflow), so
-review edits behave identically regardless of which one you use.
+Both interfaces call the same vendored `ai_lca` library (`./ai_lca`, including
+a `notebook_helpers` module written for this notebook workflow), so review
+edits behave identically regardless of which one you use.

@@ -1,7 +1,7 @@
 """Home — project status and latest results.
 
 Entry point for the multipage app:
-  1. Add Foreground  — paper/document → reviewed Brightway foreground database (ai-lca-starter).
+  1. Add Foreground  — paper/document → reviewed Brightway foreground database.
   2. Setup LCA       — pick a foreground process, configure the grid/wind background, run it.
 """
 
