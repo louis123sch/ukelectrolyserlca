@@ -20,13 +20,19 @@ def _resolve_process_review(
     dict[str, str],
     set[str],
     list[str],
+    dict[str, pd.Series],
 ]:
     original = {process.process_id: process for process in extraction.processes}
-    rows = {
-        _clean_text(row.get("process_id")): row
-        for _, row in review_df.iterrows()
-        if _clean_text(row.get("process_id")) in original
-    }
+    rows: dict[str, pd.Series] = {}
+    new_rows: dict[str, pd.Series] = {}
+    for _, row in review_df.iterrows():
+        process_id = _clean_text(row.get("process_id"))
+        if not process_id:
+            continue  # newly inserted row with no name typed yet -- nothing to resolve
+        if process_id in original:
+            rows[process_id] = row
+        else:
+            new_rows[process_id] = row
 
     retained_ids: set[str] = set()
     merge_requests: dict[str, str] = {}
@@ -35,7 +41,9 @@ def _resolve_process_review(
     for process_id in original:
         row = rows.get(process_id)
         if row is None:
-            retained_ids.add(process_id)
+            # Deleted outright via the editor's own row controls (not just unchecked) --
+            # same outcome as unchecking "Keep": the process and its flows are dropped.
+            warnings.append(f"Human review deleted foreground process {process_id!r}.")
             continue
         include = bool(row.get("include", True))
         merge_into = _clean_text(row.get("merge_into"))
@@ -46,15 +54,29 @@ def _resolve_process_review(
         elif include:
             retained_ids.add(process_id)
 
+    for process_id, row in new_rows.items():
+        # Human-added process: retained unless explicitly merged into another one.
+        # Not gated on "Keep" -- an unwanted just-added row is removed via the editor's
+        # own delete-row control, not this checkbox (whose default for a brand-new row
+        # isn't a reliable signal of intent).
+        merge_into = _clean_text(row.get("merge_into"))
+        if merge_into:
+            merge_requests[process_id] = merge_into
+        else:
+            retained_ids.add(process_id)
+
+    all_rows = {**rows, **new_rows}
+    known_ids = set(original) | set(new_rows)
+
     valid_merges: dict[str, str] = {}
     for source_id, target_id in merge_requests.items():
-        if target_id not in original:
+        if target_id not in known_ids:
             warnings.append(
                 f"Human review requested merge {source_id!r} -> unknown process {target_id!r}; merge ignored."
             )
             retained_ids.add(source_id)
             continue
-        target_row = rows.get(target_id)
+        target_row = all_rows.get(target_id)
         target_included = True if target_row is None else bool(target_row.get("include", True))
         target_merges_again = target_id in merge_requests
         if not target_included or target_merges_again:
@@ -67,7 +89,7 @@ def _resolve_process_review(
         retained_ids.add(target_id)
 
     process_id_map: dict[str, str | None] = {}
-    for process_id in original:
+    for process_id in known_ids:
         if process_id in valid_merges:
             process_id_map[process_id] = valid_merges[process_id]
         elif process_id in retained_ids:
@@ -75,7 +97,7 @@ def _resolve_process_review(
         else:
             process_id_map[process_id] = None
 
-    return rows, process_id_map, valid_merges, retained_ids, warnings
+    return all_rows, process_id_map, valid_merges, retained_ids, warnings, new_rows
 
 
 def process_review_id_map(
@@ -83,7 +105,7 @@ def process_review_id_map(
     review_df: pd.DataFrame,
 ) -> dict[str, str | None]:
     """Return the deterministic original-process -> reviewed-process mapping."""
-    _, process_id_map, _, _, _ = _resolve_process_review(extraction, review_df)
+    _, process_id_map, _, _, _, _ = _resolve_process_review(extraction, review_df)
     return process_id_map
 
 
@@ -126,7 +148,7 @@ def apply_process_review(
     target process. Removing a process without a merge removes its attached flows.
     """
     original = {process.process_id: process for process in extraction.processes}
-    rows, process_id_map, valid_merges, retained_ids, warnings = _resolve_process_review(
+    rows, process_id_map, valid_merges, retained_ids, warnings, new_rows = _resolve_process_review(
         extraction,
         review_df,
     )
@@ -160,6 +182,33 @@ def apply_process_review(
             )
         )
 
+    for process_id, row in new_rows.items():
+        if process_id_map.get(process_id) != process_id:
+            continue  # merged into another process before it was ever created
+
+        parent = _clean_text(row.get("parent")) or None
+        if parent:
+            parent = process_id_map.get(parent)
+        if parent == process_id:
+            parent = None
+        if parent and parent not in retained_ids:
+            parent = None
+
+        reviewed_processes.append(
+            ForegroundProcess(
+                process_id=process_id,
+                name=_clean_text(row.get("process")) or process_id,
+                parent_process_id=parent,
+                role="interconnected_foreground_process" if parent else "assessed_product_system",
+                stage="unknown",
+                reference_product=_clean_text(row.get("reference_product")) or None,
+                reference_unit=_clean_text(row.get("reference_unit")) or None,
+                description=None,
+                classification_rationale="Added manually by reviewer; not AI-proposed.",
+                evidence=[],
+            )
+        )
+
     reviewed_flows = []
     for flow in extraction.flows:
         mapped_process = process_id_map.get(flow.process_id)
@@ -181,11 +230,14 @@ def apply_process_review(
         merge_text = ", ".join(f"{src}->{dst}" for src, dst in sorted(valid_merges.items()))
         warnings.append(f"Human-reviewed foreground process merges applied: {merge_text}.")
 
-    removed = sorted(pid for pid, mapped in process_id_map.items() if mapped is None)
+    removed = sorted(pid for pid in original if process_id_map.get(pid) is None)
     if removed:
         warnings.append(
             "Human review removed foreground process(es) and their attached flows: " + ", ".join(removed)
         )
+    added = sorted(pid for pid in new_rows if process_id_map.get(pid) == pid)
+    if added:
+        warnings.append("Human review added foreground process(es): " + ", ".join(added))
 
     return extraction.model_copy(
         update={

@@ -18,8 +18,8 @@ from .structure import lock_foreground_interpretation
 # gpt-5 is the flagship of the family already used throughout this codebase
 # (gpt-5-mini was the old default); "max" is the top of the SDK's
 # reasoning_effort scale (none/minimal/low/medium/high/xhigh/max).
-DEFAULT_MODEL = "gpt-5"
-DEFAULT_REASONING_EFFORT = "max"
+DEFAULT_MODEL = "gpt-5.6-sol"
+DEFAULT_REASONING_EFFORT = "xhigh"
 
 
 STRUCTURE_SYSTEM_PROMPT = """You are assisting with life-cycle inventory (LCI) construction from a supplied paper or technical document.
@@ -62,8 +62,8 @@ A first-pass foreground process structure has already been identified and locked
 
 Rules:
 1. Every flow must be attached to one supplied process ID. Never create a new process ID or implicit subprocess.
-2. Extract only flows that the source indicates are part of the MODELED foreground LCI. Do not extract catalysts, solvents, materials, operating conditions, or technology options merely because they appear in descriptive prose. Prefer explicit LCI tables and inventory-analysis sections.
-3. Explicit component lists, BoP/stack tables, component tables, numbered inventory lists, supplementary tables, and transcribed visual tables are valid source evidence. Attach their listed components as foreground input flows to the appropriate locked process. Do not promote components into subprocesses.
+2. Extract only flows that the source indicates are part of the MODELED foreground LCI. Do not extract catalysts, solvents, materials, equipment/component names, operating conditions, or technology options merely because they appear in descriptive prose. Prefer explicit LCI tables and inventory-analysis sections.
+3. Explicit component lists, BoP/stack tables, component tables, numbered inventory lists, supplementary tables, and transcribed visual tables are valid source evidence ONLY when the list itself has a quantitative inventory role — a quantity/mass/count/energy value stated for at least some of its items, or explicit framing as an inventory/BOM/stack composition. Attach their listed components as foreground input flows to the appropriate locked process; do not promote components into subprocesses. A bare descriptive sentence or clause that merely names what equipment/components a system "includes", "consists of", or "comprises" — with NO quantity, unit, count, or mass stated for ANY item in that same list — is system-boundary/scope description, not an inventory table. Do not expand such a list into separate foreground flows; note it in assumptions_or_warnings instead. Example of what NOT to do: source text "Equipment: chillers, cooling towers, pumps, backup generators, and IT hardware" has no quantity attached to any item, so it must NOT become five separate input flows named "chillers", "cooling towers", etc. If the source elsewhere gives specific quantities for related items (e.g. a materials table stating "480,000 kg reinforcing steel"), extract those from THAT quantified table under its own stated names — do not launder an unquantified equipment-list name into a flow just because a quantified table exists elsewhere. When genuinely unsure whether a list is quantitative, omit it rather than inventing a flow with no source-supported quantitative context.
 4. Preserve printed component/flow names and word order in `name` rather than canonicalising them into ecoinvent-style wording. If multiple source locations use variants, prefer one source-supported name and record ambiguity in notes/warnings. Use `background_process_hint` (rule 16) for an explicit technical identifier; never fold that wording into `name` itself.
 5. Never invent an amount, unit, material, process, functional unit, voltage level, market type, production route, document, page, table, or paragraph.
 6. If the paper says only 'electricity', extract 'electricity'. Do not turn it into 'medium-voltage electricity', 'market for electricity', or another background dataset name unless the source states that detail.
@@ -78,20 +78,21 @@ Rules:
 15. Record ambiguity, missing denominators, allocation issues, unclear units, or possible double counting in assumptions_or_warnings.
 16. A supplied document may include a separate technical process-database export alongside the main paper text — for example an LCA-software "upstream tree"/contribution list, process network table, or similar SimaPro/OpenLCA/GaBi-style output — giving a verbatim background-database identifier for the same material, energy, transport or service, typically formatted like 'activity name | reference product | system model, type - location'. When such an identifier is explicitly printed and clearly corresponds to the flow you are extracting, copy it EXACTLY into background_process_hint. Never construct, canonicalise, paraphrase, translate units within, or guess this identifier. Leave background_process_hint null when no explicit technical identifier is printed for that exact flow, or when the correspondence between the plain-language flow and the technical export entry is ambiguous; note real ambiguity in assumptions_or_warnings instead of guessing.
 17. When the source states or clearly quantifies a range for a flow's amount — an asset-lifespan range ("stack lifespan of 60,000-100,000 operating hours, typically 80,000"), an explicit +/- tolerance ("efficiency 65% +/- 5%"), a stated min/max, or a min-max-typical table column — populate uncertainty_lower and uncertainty_upper with that range, in the same unit as `amount`. `amount` itself stays the stated best-estimate/typical/nominal value (the distribution's mode); only fill uncertainty_lower/upper when the source supports a mode WITHIN that range. Leave both null for an ordinary point-valued flow. Never derive a range from general engineering knowledge, an assumed +/-X% when the source doesn't state one, or from natural process variability alone — only from a range the source itself states or tabulates for this flow.
+18. Never create a flow that merely restates the process's own functional unit, reference product, or product/service description (e.g. "provides X service capacity", "delivers Y over its operating life", a paraphrase of the study's stated functional unit). That belongs in the already-captured process-level functional_unit/reference_product fields from the locked structure, not as a separate output exchange.
 
 Protected extraction invariants:
-- explicit component lists are valid inventory evidence;
+- explicit component lists are valid inventory evidence when they carry a quantitative inventory role (rule 3);
 - listed components remain foreground input flows, not background subprocesses;
 - do not reclassify such tabulated components as background subprocesses;
-- it is better to retain an explicit listed inventory item with amount=null than to invent or omit a quantity.
+- it is better to retain an explicit listed inventory item with amount=null than to invent or omit a quantity -- but this applies to items from a genuinely quantitative table (rule 3), not to names lifted from purely descriptive prose.
 
 EXHAUSTIVE INVENTORY-LIST COMPLETENESS CHECK:
-- Before finalising the flow list, scan the entire supplied source again specifically for explicit inventory lists: table rows, numbered or bulleted component lists, BoP/stack component groups, supplementary inventory tables, and transcribed visual tables.
+- Before finalising the flow list, scan the entire supplied source again specifically for explicit inventory lists: table rows, numbered or bulleted component lists, BoP/stack component groups, supplementary inventory tables, and transcribed visual tables -- each with a quantitative inventory role per rule 3, not a bare descriptive equipment/component-naming sentence.
 - For each locked process, compare every distinct listed inventory item against the flows you are about to return. If a listed modeled item is missing, add it before finalising.
 - This completeness check applies equally to the main paper, supplementary material, and transcribed visual evidence. Do not stop after extracting a representative subset from a long list.
-- When an explicit list contains many items, extract EVERY distinct source-supported item belonging to the modeled foreground inventory, even if no amount is stated. Use amount=null when the source gives no amount.
+- When an explicit quantitative list contains many items, extract EVERY distinct source-supported item belonging to the modeled foreground inventory, even if no amount is stated for that particular item. Use amount=null when the source gives no amount.
 - Preserve each listed item's printed name and word order. Do not replace it with a synonym or a more convenient canonical name.
-- Do not use this completeness check to add descriptive prose, background dataset detail, or unsupported items. It is only an exhaustive audit of explicit source-supported inventory lists against the already locked foreground processes.
+- Do not use this completeness check to add descriptive prose, background dataset detail, unquantified equipment/component-naming sentences, or other unsupported items. It is only an exhaustive audit of explicit source-supported QUANTITATIVE inventory lists against the already locked foreground processes.
 """
 
 

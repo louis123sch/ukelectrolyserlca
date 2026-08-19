@@ -19,6 +19,7 @@ PROJECT_NAME      = "hydrogen-smr"
 ECOINVENT_VERSION = "3.9.1"
 SYSTEM_MODEL      = "apos"                       # "apos", "cutoff", "consequential", ...
 FOREGROUND_DB     = "hydrogen foreground"
+DC_FOREGROUND_DB  = "data centre foreground"  # separate DB for non-hydrogen foregrounds (e.g. notebook 3's Zhang et al. data centre process)
 
 # Set True only if you need to import ecoinvent into the active Brightway project.
 RUN_IMPORT_ECOINVENT = False
@@ -36,10 +37,10 @@ RUN_REFERENCE_LCA = False
 # These control what 2.dashboard_lca_adaptive.ipynb runs when you Run All.
 # Set RUN_FOREGROUND_NOTEBOOK_FROM_DASHBOARD=True only on first setup or after
 # changing foreground inventories, because it can be slower than the other steps.
-RUN_FOREGROUND_NOTEBOOK_FROM_DASHBOARD = True
-RUN_GRID_NOTEBOOK_FROM_DASHBOARD       = True
-RUN_WIND_NOTEBOOK_FROM_DASHBOARD       = True
-RUN_PRICE_NOTEBOOK_FROM_DASHBOARD      = True
+RUN_FOREGROUND_NOTEBOOK_FROM_DASHBOARD = False
+RUN_GRID_NOTEBOOK_FROM_DASHBOARD = True
+RUN_WIND_NOTEBOOK_FROM_DASHBOARD = True
+RUN_PRICE_NOTEBOOK_FROM_DASHBOARD = False
 
 # =============================================================================
 # Grid data source selector
@@ -72,10 +73,10 @@ CARBON_API_WIND_EMB_SHARE = 0.0
 # =============================================================================
 RUN_GRID_SCENARIO_LCA = True
 
-GRID_TIME_MODE        = "range"           # "single", "range" or "year_average"
-GRID_SINGLE_DATETIME  = "2023-07-15 12:00:00"
-GRID_RANGE_START      = "2025-01-01 00:00:00"
-GRID_RANGE_END        = "2025-12-29 00:00:00"    # inclusive
+GRID_TIME_MODE = 'range'
+GRID_SINGLE_DATETIME = '2023-07-15 12:00:00'
+GRID_RANGE_START = '2025-01-01 00:00:00'
+GRID_RANGE_END = '2025-02-28 00:00:00'
 
 # "year_average" mode: pick one whole year and run the LCA on 12 wind-based
 # representative days (per season: average-wind day, top-10% wind day and
@@ -97,7 +98,7 @@ TECH_ORDER_DEFAULT = [
     "SOEC operation",
     "MP-E",
 ]
-TECH_SELECTED = ["PEM operation"]
+TECH_SELECTED = ['Alkaline electrolyser, Hermesmann']
 TECH_COUNT    = 1
 
 # Optional per-label source override: {label: (database_name, activity_code)}.
@@ -105,7 +106,7 @@ TECH_COUNT    = 1
 # process the AI-LCA foreground extractor wrote into its own database. Leave
 # empty to use the built-in H2_CODES/ELECTROLYSER_CODES lookup as before.
 # Populated by the Streamlit Setup-LCA page; safe to leave {} in notebook use.
-TECH_SOURCE_OVERRIDES = {}
+TECH_SOURCE_OVERRIDES = {'Alkaline electrolyser, Hermesmann': ('hydrogen foreground', 'ae_hermesmann_1unit')}
 
 VALIDATE_CHEAP_METHOD = False
 VALIDATION_N          = 0
@@ -114,7 +115,7 @@ VALIDATION_N          = 0
 # Wind + grid electrolyser run options (wind_power notebook)
 # =============================================================================
 RUN_WIND_GRID_LCA = True
-WIND_LCA_MODE     = "both"                       # "blended", "switching", or "both"
+WIND_LCA_MODE = 'blended'
 WIND_METHOD_MODE  = "cheap"                      # "exact" or "cheap"
 
 # Renewables.ninja site/turbine settings
@@ -126,11 +127,11 @@ NINJA_HUB_HEIGHT_M          = 80
 WIND_INSTALLED_CAPACITY_KW  = 1000.0
 
 # Electrolyser operating rule — list any subset of available techs.
-ELECTROLYSER_TECHS        = ["AE operation"]      # ["PEM operation", "AE operation", "SOEC operation"]
+ELECTROLYSER_TECHS = ['Alkaline electrolyser, Hermesmann']
 ELECTROLYSER_CAPACITY_KW  = 1000.0
 MIN_LOAD_FRACTION         = 0.10
 WIND_TO_HALFHOUR_METHOD   = "ffill"              # "ffill" or "linear"
-USE_GETPASS               = True
+USE_GETPASS = False
 
 # Renewables.ninja API token. Leave empty to be prompted interactively.
 NINJA_API_TOKEN           = ""

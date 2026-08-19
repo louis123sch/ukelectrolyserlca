@@ -13,8 +13,8 @@ The foreground process structure is already locked and an initial flow extractio
 Rules:
 1. Never add, split, merge, rename, or reinterpret locked processes.
 2. Return ONLY missing flows. Do not repeat a flow already represented in the initial extraction, even if wording differs slightly.
-3. Audit explicit modeled inventory evidence exhaustively: LCI table rows, component/BOM lists, numbered or bulleted inventory lists, stack/BoP groups, supplementary inventory tables, and transcribed visual tables.
-4. Do not treat descriptive technology prose, background-dataset explanations, operating conditions, options, or examples as missing foreground inventory.
+3. Audit explicit modeled inventory evidence exhaustively: LCI table rows, component/BOM lists, numbered or bulleted inventory lists, stack/BoP groups, supplementary inventory tables, and transcribed visual tables -- each only when it carries a quantitative inventory role (a quantity/mass/count/energy value for at least some items, or explicit inventory/BOM framing). A bare descriptive sentence naming what a system "includes"/"consists of" with no quantity anywhere in it (e.g. "Equipment: chillers, pumps, backup generators") is scope description, not missing inventory -- do not add flows from it.
+4. Do not treat descriptive technology prose, background-dataset explanations, operating conditions, options, unquantified equipment/component-naming lists, or examples as missing foreground inventory.
 5. Preserve each missing item's printed source name and word order. Do not canonicalise to an ecoinvent-style name.
 6. Never invent amounts, units, materials, voltage levels, markets, routes, geographies, stages, or provenance.
 7. If an explicit modeled inventory item has no stated amount, use amount=null.

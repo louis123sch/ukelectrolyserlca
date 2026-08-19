@@ -2,10 +2,37 @@ from __future__ import annotations
 
 import json
 import math
+import re
 
 import pandas as pd
 
-from .models import InventoryExtraction
+from .models import InventoryExtraction, InventoryFlow
+
+
+_DIGIT_RE = re.compile(r"\d")
+
+
+def _unquantified_flag(flow: InventoryFlow) -> str:
+    """Return a short warning if a flow looks like descriptive prose rather than a
+    quantified inventory item, else "".
+
+    Purely a UI safety net on top of the extraction prompt: defaults such flows to
+    excluded in the review table so a human consciously re-includes them, instead of
+    e.g. every bare name in a "the system includes chillers, pumps, ..." scope
+    sentence silently flowing into Brightway search looking like real LCI data.
+    """
+    if flow.amount is not None:
+        return ""
+    if flow.background_process_hint:
+        return ""  # an explicit background-process export entry backs this one
+    if flow.linked_process_id:
+        return ""  # explicit foreground-to-foreground link, not a background search
+    evidence_text = flow.evidence.evidence_text or ""
+    if not _DIGIT_RE.search(evidence_text):
+        return "No amount, and no quantity anywhere in the evidence -- looks like descriptive text, not a modeled exchange. Verify before mapping."
+    if flow.direction == "output":
+        return "Output with no amount or mapping hint -- check this isn't just restating the functional unit/reference product."
+    return ""
 
 
 _REVIEWED_FIELDS = (
@@ -75,11 +102,13 @@ def extraction_to_dataframe(extraction: InventoryExtraction) -> pd.DataFrame:
     rows = []
     process_names = {p.process_id: p.name for p in extraction.processes}
     for i, flow in enumerate(extraction.flows):
+        flag_reason = _unquantified_flag(flow)
         rows.append(
             {
-                "include": True,
+                "include": not flag_reason,
                 "flow_id": i,
                 "review_status": "ai_proposed",
+                "review_flag": flag_reason,
                 "process_id": flow.process_id,
                 "process_name": process_names.get(flow.process_id, ""),
                 "name": flow.name,
@@ -166,6 +195,55 @@ def process_structure_to_dataframe(extraction: InventoryExtraction) -> pd.DataFr
             }
         )
     return pd.DataFrame(rows)
+
+
+def _slugify_process_id(name: str) -> str:
+    slug = re.sub(r"[^A-Za-z0-9]+", "_", (name or "").strip()).strip("_").upper()
+    return slug or "PROCESS"
+
+
+def _process_id_text(value) -> str:
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return ""
+    text = str(value).strip()
+    return "" if text.lower() == "nan" else text
+
+
+def normalize_process_review(df: pd.DataFrame, *, extraction: InventoryExtraction) -> pd.DataFrame:
+    """Assign a stable, unique process_id to any human-added row from the dynamic editor.
+
+    Mirrors ensure_flow_ids: runs immediately after the process st.data_editor so a newly
+    inserted row gets a permanent id before "Apply process review" -- or a later rerun --
+    sees it again. A row with no process name typed yet is left with a blank id.
+    """
+    result = df.copy()
+    used: set[str] = {process.process_id for process in extraction.processes}
+    for raw in result.get("process_id", pd.Series(dtype=object)).tolist():
+        existing = _process_id_text(raw)
+        if existing:
+            used.add(existing)
+
+    new_ids: list[str] = []
+    for _, row in result.iterrows():
+        existing = _process_id_text(row.get("process_id"))
+        if existing:
+            new_ids.append(existing)
+            continue
+        name = str(row.get("process") or "").strip()
+        if not name:
+            new_ids.append("")
+            continue
+        base = _slugify_process_id(name)
+        candidate = base
+        n = 2
+        while candidate in used:
+            candidate = f"{base}_{n}"
+            n += 1
+        used.add(candidate)
+        new_ids.append(candidate)
+
+    result["process_id"] = new_ids
+    return result
 
 
 def reported_results_to_dataframe(extraction: InventoryExtraction) -> pd.DataFrame:

@@ -33,6 +33,7 @@ from ai_lca.export import (
     dataframe_to_json,
     extraction_to_dataframe,
     normalize_inventory_review,
+    normalize_process_review,
     process_structure_to_dataframe,
     reported_results_to_dataframe,
     review_bundle_to_json,
@@ -261,14 +262,23 @@ if "extraction" in st.session_state:
             )
 
     st.subheader("Review foreground process structure")
+    st.caption(
+        "Use the table's own row controls to add a process the AI missed or delete one it shouldn't "
+        "have proposed. A new row needs a process name — its ID is assigned automatically once typed."
+    )
     process_ids = [p.process_id for p in st.session_state["original_extraction"].processes]
     reviewed_process_df = st.data_editor(
         st.session_state["process_review_df"],
         width="stretch",
         hide_index=True,
+        num_rows="dynamic",
         column_config={
             "include": st.column_config.CheckboxColumn("Keep"),
-            "process_id": st.column_config.TextColumn("Process ID", disabled=True),
+            "process_id": st.column_config.TextColumn(
+                "Process ID",
+                disabled=True,
+                help="Assigned automatically. For a new row, type a process name first.",
+            ),
             "process": st.column_config.TextColumn("Process name"),
             "merge_into": st.column_config.SelectboxColumn(
                 "Merge into",
@@ -285,6 +295,7 @@ if "extraction" in st.session_state:
         },
         key="process_editor",
     )
+    reviewed_process_df = normalize_process_review(reviewed_process_df, extraction=st.session_state["extraction"])
     st.session_state["process_review_df"] = reviewed_process_df
 
     if st.button("Apply process review"):
@@ -322,8 +333,9 @@ if "extraction" in st.session_state:
 
     extraction = st.session_state["extraction"]
     st.caption(
-        "You can rename, remove, re-parent or merge AI-proposed processes before any Brightway matching. "
-        "The original role classifications and evidence remain in the extraction audit trail."
+        "You can add, rename, remove, re-parent or merge processes before any Brightway matching. "
+        "The original role classifications and evidence remain in the extraction audit trail; "
+        "manually added processes are labelled as reviewer-added rather than AI-proposed."
     )
 
     if extraction.assumptions_or_warnings:
@@ -342,6 +354,17 @@ if "extraction" in st.session_state:
             "include": st.column_config.CheckboxColumn("Include"),
             "flow_id": st.column_config.NumberColumn("Flow ID", disabled=True),
             "review_status": st.column_config.TextColumn("Review status", disabled=True),
+            "review_flag": st.column_config.TextColumn(
+                "⚠ Check before mapping",
+                disabled=True,
+                width="medium",
+                help=(
+                    "Automatic check, not an AI judgement: flagged when a flow has no amount, no Brightway hint, "
+                    "and no quantity anywhere in its evidence -- often descriptive prose (e.g. an equipment list) "
+                    "rather than a real modeled exchange. Starts unchecked in Include; verify against the source "
+                    "and re-check Include yourself if it's genuinely part of the inventory."
+                ),
+            ),
             "process_id": st.column_config.SelectboxColumn("Process ID", options=current_process_ids),
             "process_name": st.column_config.TextColumn("Process", disabled=True),
             "direction": st.column_config.SelectboxColumn(
@@ -389,6 +412,12 @@ if "extraction" in st.session_state:
     st.caption(
         "Source evidence is read-only. Rows are labelled AI proposed, human edited, or user added; the untouched AI extraction is preserved separately."
     )
+    flagged = edited_df[edited_df["review_flag"].astype(str).str.len() > 0] if "review_flag" in edited_df else edited_df.iloc[0:0]
+    if not flagged.empty:
+        st.warning(
+            f"{len(flagged)} row(s) look like descriptive text rather than modeled flows and start unchecked in "
+            "Include — see the '⚠ Check before mapping' column. Verify against the source before re-including them."
+        )
 
     dl1, dl2, dl3 = st.columns(3)
     with dl1:
