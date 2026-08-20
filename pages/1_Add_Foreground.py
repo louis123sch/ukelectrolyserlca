@@ -3,8 +3,8 @@
 Streamlit front-end for the vendored ai_lca library (./ai_lca) — standalone
 within this repo, no sibling project required. Configuration (OpenAI model,
 Brightway project, candidate limit) comes from ai_lca_config.py, the same
-file the 1.x notebook sequence reads, so both interfaces agree on where
-things get written.
+file the 1.x notebook sequence (paper_reading_notebooks/) reads, so both
+interfaces agree on where things get written.
 """
 
 from __future__ import annotations

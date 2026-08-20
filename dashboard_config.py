@@ -5,7 +5,7 @@ MASTER DASHBOARD — single source of truth for the split notebooks.
 
 The intended entry point is now:
 
-    2.dashboard_lca_adaptive.ipynb
+    1.dashboard_lca_adaptive.ipynb
 
 Edit this file once, save it, restart the notebook kernel, then run the adaptive
 notebook. It will call the selected grid notebook, wind notebook and price
@@ -19,7 +19,7 @@ PROJECT_NAME      = "hydrogen-smr"
 ECOINVENT_VERSION = "3.9.1"
 SYSTEM_MODEL      = "apos"                       # "apos", "cutoff", "consequential", ...
 FOREGROUND_DB     = "hydrogen foreground"
-DC_FOREGROUND_DB  = "data centre foreground"  # separate DB for non-hydrogen foregrounds (e.g. notebook 3's Zhang et al. data centre process)
+DC_FOREGROUND_DB  = "data centre foreground"  # separate DB for non-hydrogen foregrounds (e.g. notebook 2's Zhang et al. data centre process)
 
 # Set True only if you need to import ecoinvent into the active Brightway project.
 RUN_IMPORT_ECOINVENT = False
@@ -34,7 +34,7 @@ RUN_REFERENCE_LCA = False
 # =============================================================================
 # Adaptive-dashboard orchestration
 # =============================================================================
-# These control what 2.dashboard_lca_adaptive.ipynb runs when you Run All.
+# These control what 1.dashboard_lca_adaptive.ipynb runs when you Run All.
 # Set RUN_FOREGROUND_NOTEBOOK_FROM_DASHBOARD=True only on first setup or after
 # changing foreground inventories, because it can be slower than the other steps.
 RUN_FOREGROUND_NOTEBOOK_FROM_DASHBOARD = False
@@ -45,17 +45,18 @@ RUN_PRICE_NOTEBOOK_FROM_DASHBOARD = False
 # =============================================================================
 # Grid data source selector
 # =============================================================================
-# "csv"        / "4"   = old 4.custom_grid.ipynb using df_fuel_ckan.csv
-# "carbon_api" / "4.1" = new 4.1.custom_grid_carbon_intensity_api.ipynb
+# "csv"        / "3"   = old 3.custom_grid.ipynb using df_fuel_ckan.csv
+# "carbon_api" / "3.1" = new 3.1.custom_grid_carbon_intensity_api.ipynb
+# ("4"/"4.1" also still accepted — the pre-renumbering shorthand.)
 GRID_DATA_SOURCE = "carbon_api"
 
 # CSV input for the old National Grid ESO half-hourly fuel mix workflow.
 CSV_PATH = "df_fuel_ckan.csv"
 
-# Carbon Intensity API input settings for 4.1.
+# Carbon Intensity API input settings for 3.1.
 CARBON_API_BASE = "https://api.carbonintensity.org.uk"
 CARBON_API_SCOPE = "regional_auto"          # "regional_auto" or "national"
-CARBON_API_REGION_ID_OVERRIDE = None        # e.g. 13 for London; leave None for auto from WIND_LAT/WIND_LON
+CARBON_API_REGION_ID_OVERRIDE = None
 CARBON_API_LOCAL_TZ = "Europe/London"
 CARBON_API_MAX_DAYS_PER_REQUEST = 13
 CARBON_API_REQUEST_SLEEP_S = 0.05
@@ -81,11 +82,11 @@ GRID_RANGE_END = '2025-02-28 00:00:00'
 # "year_average" mode: pick one whole year and run the LCA on 12 wind-based
 # representative days (per season: average-wind day, top-10% wind day and
 # bottom-10% wind day). Each representative day is collapsed into one daily row.
-GRID_YEAR             = 2025
+GRID_YEAR = 2025
 GRID_REP_DECILE       = 0.10
 GRID_WIND_COLS        = ["WIND", "WIND_EMB"]
 
-METHOD_MODE           = "cheap"                  # "exact" or "cheap"
+METHOD_MODE = 'cheap'
 APPLY_LOSSES          = True
 MARKET_LOSS_SHARE     = 0.031642692177
 
@@ -98,7 +99,7 @@ TECH_ORDER_DEFAULT = [
     "SOEC operation",
     "MP-E",
 ]
-TECH_SELECTED = ['Alkaline electrolyser, Hermesmann']
+TECH_SELECTED = ['Data centre facility, hyperscale, Virginia (Zhang et al. 2025)']
 TECH_COUNT    = 1
 
 # Optional per-label source override: {label: (database_name, activity_code)}.
@@ -106,7 +107,7 @@ TECH_COUNT    = 1
 # process the AI-LCA foreground extractor wrote into its own database. Leave
 # empty to use the built-in H2_CODES/ELECTROLYSER_CODES lookup as before.
 # Populated by the Streamlit Setup-LCA page; safe to leave {} in notebook use.
-TECH_SOURCE_OVERRIDES = {'Alkaline electrolyser, Hermesmann': ('hydrogen foreground', 'ae_hermesmann_1unit')}
+TECH_SOURCE_OVERRIDES = {'Data centre facility, hyperscale, Virginia (Zhang et al. 2025)': ('data centre foreground', 'dc_zhang_virginia_baseline_25y')}
 
 VALIDATE_CHEAP_METHOD = False
 VALIDATION_N          = 0
@@ -116,20 +117,20 @@ VALIDATION_N          = 0
 # =============================================================================
 RUN_WIND_GRID_LCA = True
 WIND_LCA_MODE = 'blended'
-WIND_METHOD_MODE  = "cheap"                      # "exact" or "cheap"
+WIND_METHOD_MODE = 'cheap'
 
 # Renewables.ninja site/turbine settings
-WIND_LAT                    = 51.7320
-WIND_LON                    = -0.3711
+WIND_LAT = 51.732
+WIND_LON = -0.3711
 NINJA_DATASET               = "merra2"
-NINJA_TURBINE               = "Vestas V90 2000"
-NINJA_HUB_HEIGHT_M          = 80
-WIND_INSTALLED_CAPACITY_KW  = 1000.0
+NINJA_TURBINE = 'Vestas V90 2000'
+NINJA_HUB_HEIGHT_M = 80.0
+WIND_INSTALLED_CAPACITY_KW = 1000.0
 
 # Electrolyser operating rule — list any subset of available techs.
-ELECTROLYSER_TECHS = ['Alkaline electrolyser, Hermesmann']
-ELECTROLYSER_CAPACITY_KW  = 1000.0
-MIN_LOAD_FRACTION         = 0.10
+ELECTROLYSER_TECHS = ['Data centre facility, hyperscale, Virginia (Zhang et al. 2025)']
+ELECTROLYSER_CAPACITY_KW = 1000.0
+MIN_LOAD_FRACTION = 0.1
 WIND_TO_HALFHOUR_METHOD   = "ffill"              # "ffill" or "linear"
 USE_GETPASS = False
 
@@ -140,7 +141,21 @@ WIND_BACKGROUND_QUERY = "electricity production, wind, 1-3MW turbine, onshore GB
 WIND_BACKGROUND_INDEX = 0
 
 # =============================================================================
-# Price data run options (6.prices notebook)
+# Wind + grid data centre run options (4.1.datacentre_wind_power notebook)
+# =============================================================================
+# Reuses the same wind installation (WIND_LAT/WIND_LON/turbine settings above)
+# and the same GRID_TIME_MODE/GRID_RANGE_START/GRID_RANGE_END "timescale of
+# choice" as the electrolyser notebook — only the demand side (data centre's
+# average operational power draw, computed from its own foreground activity)
+# and the LCA mode/method are kept separate, so re-running one notebook never
+# has to touch the other's settings.
+RUN_DC_WIND_GRID_LCA = True
+DC_WIND_LCA_MODE     = 'blended'   # 'blended', 'switching', or 'both'
+DC_WIND_METHOD_MODE  = "cheap"     # cheap-method only is supported (see notebook 4.1) — thousands of slices
+DC_MIN_LOAD_FRACTION = MIN_LOAD_FRACTION  # reuse the electrolyser's 10% default; override here if wanted
+
+# =============================================================================
+# Price data run options (5.prices notebook)
 # =============================================================================
 RUN_PRICE_DATA = True
 PRICE_OUTPUT_DIR = "price_outputs"
@@ -220,20 +235,21 @@ SHOW_GRID_ECOINVENT_CANDIDATES = False
 def normalise_grid_data_source(value=None):
     raw = str(value or GRID_DATA_SOURCE).strip().lower()
     aliases = {
-        "4": "csv", "old": "csv", "ckan": "csv", "eso_csv": "csv", "csv": "csv",
-        "4.1": "carbon_api", "api": "carbon_api", "carbon": "carbon_api",
+        "3": "csv", "4": "csv", "old": "csv", "ckan": "csv", "eso_csv": "csv", "csv": "csv",
+        "3.1": "carbon_api", "4.1": "carbon_api", "api": "carbon_api", "carbon": "carbon_api",
         "carbon_api": "carbon_api", "carbon_intensity_api": "carbon_api",
     }
     if raw not in aliases:
         raise ValueError(
-            f"Invalid GRID_DATA_SOURCE {value!r}. Use 'csv'/'4' or 'carbon_api'/'4.1'."
+            f"Invalid GRID_DATA_SOURCE {value!r}. Use 'csv'/'3' or 'carbon_api'/'3.1' "
+            "('4'/'4.1' also still accepted)."
         )
     return aliases[raw]
 
 GRID_SOURCE_NORMALIZED = normalise_grid_data_source(GRID_DATA_SOURCE)
 GRID_NOTEBOOK_BY_SOURCE = {
-    "csv": "4.custom_grid.ipynb",
-    "carbon_api": "4.1.custom_grid_carbon_intensity_api.ipynb",
+    "csv": "3.custom_grid.ipynb",
+    "carbon_api": "3.1.custom_grid_carbon_intensity_api.ipynb",
 }
 SELECTED_GRID_NOTEBOOK = GRID_NOTEBOOK_BY_SOURCE[GRID_SOURCE_NORMALIZED]
 
@@ -267,6 +283,10 @@ if WIND_LCA_MODE not in ("blended", "switching", "both"):
     raise ValueError("WIND_LCA_MODE must be 'blended', 'switching', or 'both'")
 if WIND_METHOD_MODE not in ("exact", "cheap"):
     raise ValueError("WIND_METHOD_MODE must be 'exact' or 'cheap'")
+if DC_WIND_LCA_MODE not in ("blended", "switching", "both"):
+    raise ValueError("DC_WIND_LCA_MODE must be 'blended', 'switching', or 'both'")
+if DC_WIND_METHOD_MODE != "cheap":
+    raise ValueError("DC_WIND_METHOD_MODE must be 'cheap' — 'exact' isn't supported by notebook 4.1.")
 if PRICE_TIME_MODE not in ("single", "range", "year_average"):
     raise ValueError("PRICE_TIME_MODE must be 'single', 'range' or 'year_average'")
 if COST_CASE not in ("low", "central", "high"):

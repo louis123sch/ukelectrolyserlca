@@ -89,7 +89,7 @@ def summarize_extraction(extraction: InventoryExtraction) -> None:
             print(f"  {f.process_id:<10} {f.name:<40} {f.uncertainty_lower} - {f.amount} - {f.uncertainty_upper} {f.unit or ''}")
     else:
         print("No flows had a stated uncertainty range — fill in uncertainty_lower/uncertainty_upper "
-              "in 1.2.paper_inventory_review.ipynb's INVENTORY_REVIEW if you want Monte Carlo on this process.")
+              "in paper_reading_notebooks/1.2.paper_inventory_review.ipynb's INVENTORY_REVIEW if you want Monte Carlo on this process.")
 
     if extraction.assumptions_or_warnings:
         print()

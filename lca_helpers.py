@@ -1251,8 +1251,17 @@ def build_wind_electricity_activity(wind_background_activity, fg_database=None):
     return wind_act
 
 
-def align_wind_to_grid_timeslices(wind_df, grid_rows, method="ffill"):
-    """Align hourly wind power onto half-hour grid rows; compute blended + switching cols."""
+def align_wind_to_grid_timeslices(wind_df, grid_rows, method="ffill",
+                                   demand_kw=None, min_wind_power_kw=None):
+    """Align hourly wind power onto half-hour grid rows; compute blended + switching cols.
+
+    ``demand_kw``/``min_wind_power_kw`` default to the electrolyser's
+    ``cfg.ELECTROLYSER_CAPACITY_KW``/``cfg.MIN_WIND_POWER_KW`` so existing
+    callers are unaffected; pass explicit values to align a different
+    constant demand (e.g. a data centre's average operational power draw).
+    """
+    demand_kw = cfg.ELECTROLYSER_CAPACITY_KW if demand_kw is None else float(demand_kw)
+    min_wind_power_kw = cfg.MIN_WIND_POWER_KW if min_wind_power_kw is None else float(min_wind_power_kw)
     target_index = pd.DatetimeIndex(pd.to_datetime(grid_rows["DATETIME"]))
     wind = wind_df["wind_power_kw"].copy()
     wind.index = pd.DatetimeIndex(pd.to_datetime(wind.index))
@@ -1270,7 +1279,7 @@ def align_wind_to_grid_timeslices(wind_df, grid_rows, method="ffill"):
     out = grid_rows.copy()
     out["wind_power_kw"]         = aligned.to_numpy()
     out["wind_power_mw"]         = out["wind_power_kw"] / 1000.0
-    out["electrolyser_power_kw"] = cfg.ELECTROLYSER_CAPACITY_KW
+    out["electrolyser_power_kw"] = demand_kw
 
     if out["wind_power_kw"].isna().any():
         missing = out[out["wind_power_kw"].isna()][["DATETIME"]]
@@ -1280,17 +1289,17 @@ def align_wind_to_grid_timeslices(wind_df, grid_rows, method="ffill"):
             f"Missing rows:\n{missing.to_string(index=False)}"
         )
 
-    out["wind_fraction"]    = (out["wind_power_kw"] / cfg.ELECTROLYSER_CAPACITY_KW).clip(0, 1)
+    out["wind_fraction"]    = (out["wind_power_kw"] / demand_kw).clip(0, 1)
     out["grid_fraction"]    = 1.0 - out["wind_fraction"]
-    out["wind_used_kw"]     = out["wind_fraction"] * cfg.ELECTROLYSER_CAPACITY_KW
-    out["grid_topup_kw"]    = out["grid_fraction"] * cfg.ELECTROLYSER_CAPACITY_KW
-    out["surplus_wind_kw"]  = (out["wind_power_kw"] - cfg.ELECTROLYSER_CAPACITY_KW).clip(lower=0)
+    out["wind_used_kw"]     = out["wind_fraction"] * demand_kw
+    out["grid_topup_kw"]    = out["grid_fraction"] * demand_kw
+    out["surplus_wind_kw"]  = (out["wind_power_kw"] - demand_kw).clip(lower=0)
 
     if not np.allclose(out["wind_fraction"] + out["grid_fraction"], 1.0):
         raise ValueError("Wind and grid fractions do not sum to 1 for every slice.")
 
-    out["minimum_required_wind_kw"] = cfg.MIN_WIND_POWER_KW
-    out["wind_above_minimum"]       = out["wind_power_kw"] >= cfg.MIN_WIND_POWER_KW
+    out["minimum_required_wind_kw"] = min_wind_power_kw
+    out["wind_above_minimum"]       = out["wind_power_kw"] >= min_wind_power_kw
     out["electricity_source"]       = np.where(out["wind_above_minimum"], "wind", "grid")
     return out
 

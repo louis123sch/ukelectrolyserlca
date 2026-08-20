@@ -15,18 +15,18 @@ the six built-in techs.
 
 Intended workflow:
     1. Edit SOURCE_MODE/SOURCE_TEXT/SOURCE_DOCUMENT_PATHS and RUN_LABEL below.
-    2. Run 1.paper_ingest_and_extract.ipynb top to bottom — this is the only
+    2. Run paper_reading_notebooks/1.paper_ingest_and_extract.ipynb top to bottom — this is the only
        notebook that calls the LLM. It prints every process_id/flow_id it
        created.
     3. Come back here and fill in PROCESS_REVIEW using the process_id values
-       just printed, save, then run 1.1.paper_process_review.ipynb.
+       just printed, save, then run paper_reading_notebooks/1.1.paper_process_review.ipynb.
     4. Fill in INVENTORY_REVIEW using the flow_id values 1.1 printed, save,
-       then run 1.2.paper_inventory_review.ipynb.
-    5. Run 1.3.paper_brightway_matching.ipynb, inspect the printed candidate
+       then run paper_reading_notebooks/1.2.paper_inventory_review.ipynb.
+    5. Run paper_reading_notebooks/1.3.paper_brightway_matching.ipynb, inspect the printed candidate
        lists, adjust SEARCH_CANDIDATE_INDEX / SEARCH_QUERY_OVERRIDE and re-run
        as needed.
     6. Set CONFIRM_WRITE_FOREGROUND = True and run
-       1.4.paper_write_foreground.ipynb to create NEW_FOREGROUND_DB_NAME.
+       paper_reading_notebooks/1.4.paper_write_foreground.ipynb to create NEW_FOREGROUND_DB_NAME.
 
 This file only ever holds settings and edit instructions — never an OpenAI or
 Renewables.ninja key. Put those in this repo's own .env (see .env.example).
@@ -123,7 +123,7 @@ SEARCH_QUERY_OVERRIDE: dict[int, str] = {
 # Foreground database write
 # =============================================================================
 NEW_FOREGROUND_DB_NAME = f"ai_lca_{RUN_LABEL}"
-# Safety gate: 1.4.paper_write_foreground.ipynb refuses to write unless this
+# Safety gate: paper_reading_notebooks/1.4.paper_write_foreground.ipynb refuses to write unless this
 # is explicitly True, even if the write plan is otherwise ready.
 CONFIRM_WRITE_FOREGROUND = False
 

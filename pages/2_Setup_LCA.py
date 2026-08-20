@@ -4,7 +4,7 @@ Foreground processes come from any non-ecoinvent/biosphere database in the
 Brightway project: the built-in six electrolysis/H2 techs in "hydrogen
 foreground", plus anything the Add Foreground page (page 1) has written.
 Running this page patches dashboard_config.py with the chosen settings and
-executes 2.dashboard_lca_adaptive.ipynb — the same pipeline the notebooks use.
+executes 1.dashboard_lca_adaptive.ipynb — the same pipeline the notebooks use.
 """
 
 from __future__ import annotations
@@ -275,7 +275,7 @@ if last_run is not None:
 
         if result.plots:
             st.subheader("Plots")
-            st.caption("Every figure 2.dashboard_lca_adaptive.ipynb produced for this run.")
+            st.caption("Every figure 1.dashboard_lca_adaptive.ipynb produced for this run.")
             cols = st.columns(2)
             for i, (caption, path) in enumerate(result.plots):
                 with cols[i % 2]:

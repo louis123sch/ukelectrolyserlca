@@ -29,7 +29,7 @@ Requires the `brightway` conda environment (already has bw2data/bw2io/bw2calc,
 streamlit, pandas, jupyter, openai, and the rest of `ai_lca`'s dependencies).
 
 Create a `.env` file (gitignored) with a real `OPENAI_API_KEY` — needed by
-the Add Foreground page and by `1.paper_ingest_and_extract.ipynb` (the only
+the Add Foreground page and by `paper_reading_notebooks/1.paper_ingest_and_extract.ipynb` (the only
 places that call the LLM):
 
 ```
@@ -54,7 +54,7 @@ it, restart the kernel, then run." The Setup LCA page follows that same
 contract: it patches the relevant variables in the on-disk
 `dashboard_config.py` (backing up the previous version to
 `_streamlit_runs/dashboard_config.before_last_run.py`, gitignored) and then
-executes `2.dashboard_lca_adaptive.ipynb` via `jupyter nbconvert`, the same
+executes `1.dashboard_lca_adaptive.ipynb` via `jupyter nbconvert`, the same
 notebook the manual workflow uses. This keeps all of the actual LCA science —
 the Carbon Intensity API client, wind dispatch logic, Brightway calls — in
 the tested notebooks and `lca_helpers.py`; the Streamlit layer only edits
@@ -144,25 +144,30 @@ The Add Foreground page's full pipeline, in order:
    previously the last, unlabelled step) — immediately selectable on Setup
    LCA once done.
 
-## Paper reader notebooks (`1.*`)
+## Paper reader notebooks (`paper_reading_notebooks/1.*`)
 
 A notebook-native alternative to the Add Foreground Streamlit page, for
-running the extraction yourself cell by cell instead of through a UI:
+running the extraction yourself cell by cell instead of through a UI. These
+live in their own [paper_reading_notebooks/](paper_reading_notebooks/)
+subfolder, separate from the numbered LCA pipeline notebooks below — each
+still opens and runs standalone (a bootstrap cell at the top locates the
+project root and chdirs there, so `ai_lca_config`/`ai_lca` imports and every
+relative path work exactly as before the move):
 
-- **[1.paper_ingest_and_extract.ipynb](1.paper_ingest_and_extract.ipynb)** —
+- **[paper_reading_notebooks/1.paper_ingest_and_extract.ipynb](paper_reading_notebooks/1.paper_ingest_and_extract.ipynb)** —
   loads the source document/text and runs the two-pass LLM extraction (the
   only notebook here that calls OpenAI). Prints the classified/locked process
   structure and extracted flows, with their `process_id`/`flow_id` values.
-- **[1.1.paper_process_review.ipynb](1.1.paper_process_review.ipynb)** —
+- **[paper_reading_notebooks/1.1.paper_process_review.ipynb](paper_reading_notebooks/1.1.paper_process_review.ipynb)** —
   applies `PROCESS_REVIEW` (include/rename/merge/re-parent).
-- **[1.2.paper_inventory_review.ipynb](1.2.paper_inventory_review.ipynb)** —
+- **[paper_reading_notebooks/1.2.paper_inventory_review.ipynb](paper_reading_notebooks/1.2.paper_inventory_review.ipynb)** —
   applies `INVENTORY_REVIEW` (include/amount/unit/direction/notes per flow).
-- **[1.3.paper_brightway_matching.ipynb](1.3.paper_brightway_matching.ipynb)** —
+- **[paper_reading_notebooks/1.3.paper_brightway_matching.ipynb](paper_reading_notebooks/1.3.paper_brightway_matching.ipynb)** —
   searches Brightway for each flow and picks a candidate via
   `SEARCH_CANDIDATE_INDEX`, mirroring `GRID_CANDIDATE_INDEX`'s pattern; prints
   every candidate list so a bad auto-match (e.g. full-text search returning an
   unrelated activity) is visible before it reaches the writer.
-- **[1.4.paper_write_foreground.ipynb](1.4.paper_write_foreground.ipynb)** —
+- **[paper_reading_notebooks/1.4.paper_write_foreground.ipynb](paper_reading_notebooks/1.4.paper_write_foreground.ipynb)** —
   validates the write plan and, only once `CONFIRM_WRITE_FOREGROUND = True`,
   writes `NEW_FOREGROUND_DB_NAME` — then that database is immediately
   selectable from `1.3.paper_brightway_matching`-review-tested foreground
@@ -180,3 +185,23 @@ without repeating the OpenAI call.
 Both interfaces call the same vendored `ai_lca` library (`./ai_lca`, including
 a `notebook_helpers` module written for this notebook workflow), so review
 edits behave identically regardless of which one you use.
+
+## LCA pipeline notebooks (numbered `1`–`5` at the project root)
+
+Renumbered after the paper-reader notebooks moved out to their own
+subfolder, so the root-level sequence runs `1` through `5` with no gap:
+
+| Notebook | Role |
+| --- | --- |
+| `1.dashboard_lca_adaptive.ipynb` | entry point — orchestrates and plots |
+| `1.dashboard_lca.ipynb` | earlier, non-adaptive orchestration notebook |
+| `2.tech_lca_foreground.ipynb` | builds the foreground database |
+| `3.custom_grid.ipynb` / `3.1.custom_grid_carbon_intensity_api.ipynb` | grid LCA (CSV vs. live Carbon Intensity API) |
+| `4.wind_power.ipynb` / `4.1.datacentre_wind_power.ipynb` | wind/grid electrolyser and data-centre LCA |
+| `5.prices.ipynb` | electricity prices and techno-economic cost inputs |
+
+`dashboard_config.GRID_DATA_SOURCE` accepts the new `'3'`/`'3.1'` shorthand
+(the old `'4'`/`'4.1'` values from before the renumbering still work too).
+`a.dashboard_lca.ipynb` is an untracked-by-number, pre-existing snapshot of
+an earlier `dashboard_lca` revision kept as a manual backup — it wasn't part
+of the renumbering.

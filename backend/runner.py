@@ -5,7 +5,7 @@ notebook — its own docstring says as much ("Edit this file once, save it,
 restart the notebook kernel, then run"). The Setup-LCA Streamlit page follows
 that same contract instead of inventing a second one: it patches the on-disk
 dashboard_config.py with the values chosen in the form, then runs the same
-2.dashboard_lca_adaptive.ipynb notebook every manual workflow already uses.
+1.dashboard_lca_adaptive.ipynb notebook every manual workflow already uses.
 
 This keeps 100% of the actual LCA science (Carbon Intensity API client, wind
 dispatch logic, Brightway calls) in the tested notebooks/lca_helpers.py — this
@@ -25,7 +25,7 @@ REPO_DIR = Path(__file__).resolve().parent.parent
 CONFIG_PATH = REPO_DIR / "dashboard_config.py"
 RUNS_DIR = REPO_DIR / "_streamlit_runs"
 PLOTS_DIR = RUNS_DIR / "plots"
-RUNNER_NOTEBOOK = "2.dashboard_lca_adaptive.ipynb"
+RUNNER_NOTEBOOK = "1.dashboard_lca_adaptive.ipynb"
 
 OUTPUT_DIRS = [
     "custom_grid_lca_outputs",
