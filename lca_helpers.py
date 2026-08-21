@@ -1366,6 +1366,14 @@ def create_ninja_session(token=None):
             token = cfg_token.strip()
             token_source = "dashboard_config"
         else:
+            # Load this repo's .env (gitignored) so the token can live there
+            # rather than in the tracked dashboard_config.py.
+            try:
+                from dotenv import load_dotenv
+                from pathlib import Path
+                load_dotenv(Path(__file__).with_name(".env"))
+            except Exception:
+                pass
             token = os.getenv("RENEWABLES_NINJA_TOKEN")
             token_source = "environment"
 

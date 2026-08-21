@@ -20,6 +20,7 @@ ECOINVENT_VERSION = "3.9.1"
 SYSTEM_MODEL      = "apos"                       # "apos", "cutoff", "consequential", ...
 FOREGROUND_DB     = "hydrogen foreground"
 DC_FOREGROUND_DB  = "data centre foreground"  # separate DB for non-hydrogen foregrounds (e.g. notebook 2's Zhang et al. data centre process)
+FC_FOREGROUND_DB  = "fuel cell foreground"    # separate DB for notebook 2's Babatunde et al. 1 kW PEM fuel cell stack
 
 # Set True only if you need to import ecoinvent into the active Brightway project.
 RUN_IMPORT_ECOINVENT = False
@@ -110,6 +111,85 @@ TECH_COUNT    = 1
 TECH_SOURCE_OVERRIDES = {'Data centre facility, hyperscale, Virginia (Zhang et al. 2025)': ('data centre foreground', 'dc_zhang_virginia_baseline_25y')}
 
 VALIDATE_CHEAP_METHOD = False
+
+# =============================================================================
+# PEM fuel cell operation (notebook 2 — "fuel cell foreground")
+# =============================================================================
+# Turns the Babatunde et al. (2024) stack into a generator: 1 kWh of AC
+# electricity from hydrogen. Every value here is a literature parameter, not a
+# fitted one — see notebook 2's "PEM fuel cell operation" markdown for the
+# citations and for why the activity has no direct biosphere flows.
+
+FC_RATED_POWER_KW     = 1.0        # matches the paper's 1 kW stack
+FC_H2_LHV_KWH_PER_KG  = 33.33      # hydrogen lower heating value, 120 MJ/kg
+
+# Net AC electrical efficiency at beginning of life, LHV basis. DOE's stationary
+# 1-25 kWe target is >=45% on natural gas (i.e. including reformer losses, so a
+# pure-H2 system should beat it); reported stack efficiency for a 1 kW H2-fed
+# PEMFC is ~51.6%, and ~50% is the usual figure quoted for mid-size stationary
+# PEMFC. 0.50 sits in the middle; 0.45-0.55 is the defensible range.
+FC_ETA_NET_BOL        = 0.50
+
+# Mean-over-life efficiency as a fraction of beginning-of-life. PEMFC end of life
+# is conventionally defined as a 10% drop in cell voltage (Stropnik et al. 2022);
+# degrading linearly to that point gives a lifetime mean of 95% of BOL. Set to
+# 1.0 to model a non-degrading stack.
+FC_DEGRADATION_DERATE = 0.95
+
+FC_STACK_LIFETIME_H   = 32_000     # Babatunde et al. 2024, section 3.4 (their own figure)
+FC_SYSTEM_LIFETIME_H  = 60_000     # DOE 2020 stationary target; BoP outlives the stack
+
+# Balance of plant and maintenance are taken from ecoinvent's own PEMFC datasets,
+# each written as (ecoinvent dataset - its stack content), so the paper's stack
+# can never be double-counted.
+FC_BOP_LOCATION = "CH"   # the only location where ecoinvent links the stack directly
+
+# ecoinvent's PEMFC is a domestic micro-CHP unit. Two of its items are artefacts
+# of that setting rather than of fuel cells: the hot-water/hydronic kit (34% of
+# the system's GWP) and 200 km of passenger-car travel per service visit (a
+# technician driving to a house). Neither applies to a rack of stacks in a data
+# centre, so both are subtracted by default. Set True if you are modelling a
+# domestic micro-CHP instead.
+FC_DOMESTIC_CHP_ITEMS = False
+
+# Stack fraction inside one ecoinvent maintenance event — i.e. a full stack is
+# replaced every 1/0.167 ~ 6 services. Used to scale maintenance to this
+# notebook's own stack-replacement rate, and to subtract the stack ecoinvent
+# bundles into it.
+FC_MAINT_STACK_FRACTION = 0.167
+
+# Which hydrogen the fuel cell burns: (database, activity code). Any per-kg-H2
+# activity works — swap in ae_op_/soec_op_/smr_ for a different supply chain.
+FC_H2_SOURCE = ("hydrogen foreground", "pem_op_hermesmann_1kg_h2")
+
+# --- 4.2.datacentre_hydrogen.ipynb ---
+# Backgrounds for the hydrogen chain's electricity. Carbon-only notebook.
+DC_H2_WIND_QUERY  = "electricity production, wind, 1-3MW turbine, onshore"
+DC_H2_WIND_LOC    = "GB"
+DC_H2_GRID_QUERY  = "market for electricity, low voltage"
+DC_H2_GRID_LOC    = "GB"
+DC_OPERATION_YEARS = 25   # the data centre foreground's operating life
+DC_H2_WIND_CAPACITIES_MW = [0, 10, 25, 50, 75, 100, 150, 200]   # wind farm sizes to sweep
+DC_H2_WIND_YEAR = "2025"  # year of Renewables.ninja wind data to pull for the sweep
+
+# --- derived ---
+FC_ETA_NET_MEAN = FC_ETA_NET_BOL * FC_DEGRADATION_DERATE
+FC_H2_PER_KWH   = 1.0 / (FC_ETA_NET_MEAN * FC_H2_LHV_KWH_PER_KG)      # kg H2 / kWh AC
+FC_STACK_PER_KWH = 1.0 / (FC_RATED_POWER_KW * FC_STACK_LIFETIME_H)    # unit / kWh AC
+FC_BOP_PER_KWH   = 1.0 / (FC_RATED_POWER_KW * FC_SYSTEM_LIFETIME_H)   # unit / kWh AC
+# Maintenance events per kWh, tied to the stack-replacement rate above so the two
+# can never disagree: ~6 services per stack, then x0.5 for ecoinvent's 2 kW unit.
+FC_MAINT_PER_KWH = (FC_STACK_PER_KWH / FC_MAINT_STACK_FRACTION) * 0.5
+
+if not 0.0 < FC_ETA_NET_BOL <= 1.0:
+    raise ValueError("FC_ETA_NET_BOL must be a fraction in (0, 1].")
+if not 0.0 < FC_DEGRADATION_DERATE <= 1.0:
+    raise ValueError("FC_DEGRADATION_DERATE must be a fraction in (0, 1].")
+if FC_STACK_LIFETIME_H <= 0 or FC_SYSTEM_LIFETIME_H <= 0:
+    raise ValueError("Fuel cell lifetimes must be positive.")
+if not 0.0 < FC_MAINT_STACK_FRACTION <= 1.0:
+    raise ValueError("FC_MAINT_STACK_FRACTION must be a fraction in (0, 1].")
+
 VALIDATION_N          = 0
 
 # =============================================================================
