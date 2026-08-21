@@ -162,6 +162,76 @@ FC_MAINT_STACK_FRACTION = 0.167
 # activity works — swap in ae_op_/soec_op_/smr_ for a different supply chain.
 FC_H2_SOURCE = ("hydrogen foreground", "pem_op_hermesmann_1kg_h2")
 
+# =============================================================================
+# Hydrogen storage tank (notebook 2)
+# =============================================================================
+# ecoinvent 3.9.1 has no hydrogen storage vessel, so the tank is modelled the
+# way Gandiglio et al. (2022) model theirs: as a mass of steel and nothing else.
+#   M. Gandiglio, P. Marocco, I. Bianco, D. Lovera, G.A. Blengini, M. Santarelli,
+#   "Life cycle assessment of a renewable energy system with hydrogen-battery
+#   storage for a remote off-grid community", Int. J. Hydrogen Energy 47 (2022).
+# Their inventory is one line - 15,652 kg of chromium steel 18/8 for the 21.6 m3
+# / 28 bar vessel at Ginostra - amortised over the plant's 25-year output.
+H2_STORAGE_FOREGROUND_DB = "hydrogen storage foreground"
+
+TANK_DESIGNS = {
+    # The real vessel in the paper. Low-pressure buffer, so heavy per kg stored.
+    "gandiglio_28bar": {
+        "steel_process": ("market for steel, chromium steel 18/8", "GLO"),
+        "steel_kg": 15_652.0, "volume_m3": 21.6, "pressure_bar": 28.0,
+        "note": "Gandiglio et al. 2022, Table 3 - as-built 21.6 m3 stainless vessel at Ginostra",
+    },
+    # Type I all-steel cylinder at 200 bar, sized from ~1 wt% gravimetric
+    # capacity. Roughly 3x lighter per kg H2 than the 28 bar design above.
+    "type1_200bar": {
+        "steel_process": ("market for steel, low-alloyed, hot rolled", "GLO"),
+        "steel_kg_per_kg_h2": 100.0, "pressure_bar": 200.0,
+        "note": "Type I seamless cylinder, ~1 wt% H2 - typical industrial stationary bottle",
+    },
+}
+TANK_DESIGN = "gandiglio_28bar"
+if TANK_DESIGN not in TANK_DESIGNS:
+    raise ValueError(f"TANK_DESIGN must be one of {list(TANK_DESIGNS)}")
+
+# Conditions used to convert the paper's tank volume + pressure into kg of H2.
+TANK_H2_TEMPERATURE_K   = 288.15   # 15 C
+TANK_H2_COMPRESSIBILITY = 1.017    # Z for H2 at ~28 bar; 1.0 would be ideal gas
+
+TANK_LIFETIME_YEARS = 25   # the paper's plant lifetime; the tank is never replaced
+# Electrolyser delivers at ~30 bar. Charged as electricity in the dispatch, not
+# as tank capital. Zero for the 28 bar design, which needs no extra compression.
+TANK_COMPRESSION_KWH_PER_KG = 0.0 if TANK_DESIGNS[TANK_DESIGN]["pressure_bar"] <= 30 else 2.5
+
+# =============================================================================
+# 4.3 wind -> data centre -> electrolyser -> tank -> fuel cell system model
+# =============================================================================
+SYS_DC_DEMAND_MW      = 7.31    # data centre continuous draw
+SYS_WIND_CAPACITY_MW  = 50.0    # wind farm at WIND_LAT / WIND_LON
+SYS_ELECTROLYSER_MW   = 25.0    # max rate surplus wind can be absorbed
+SYS_TANK_CAPACITY_T   = 10.0    # tonnes of H2. There is a real optimum here: with the
+                                # Gandiglio steel-mass tank, carbon falls to ~4.37 kt/yr at
+                                # 5-10 t and rises either side — 20 t costs 4.71 because the
+                                # vessel's own steel outweighs the grid import it displaces,
+                                # and 0 t costs 5.07 because nothing rides through a lull.
+                                # 5 t is within 1% of 10 t on half the steel, so if the tank
+                                # model worries you, go smaller. The optimum moves up if you
+                                # switch TANK_DESIGN to the lighter type1_200bar vessel.
+SYS_FUELCELL_MW       = None    # None = size to the data centre's demand
+SYS_START             = "2025-01-01"
+SYS_END               = "2025-12-31"
+SYS_INITIAL_SOC_FRAC  = 0.5     # tank fill at the start of the run
+SYS_ALLOW_GRID_BACKUP = True    # False = report unserved load instead of importing
+
+if SYS_FUELCELL_MW is None:
+    SYS_FUELCELL_MW = SYS_DC_DEMAND_MW
+for _n, _v in (("SYS_DC_DEMAND_MW", SYS_DC_DEMAND_MW), ("SYS_WIND_CAPACITY_MW", SYS_WIND_CAPACITY_MW),
+               ("SYS_ELECTROLYSER_MW", SYS_ELECTROLYSER_MW), ("SYS_TANK_CAPACITY_T", SYS_TANK_CAPACITY_T),
+               ("SYS_FUELCELL_MW", SYS_FUELCELL_MW)):
+    if _v is None or _v < 0:
+        raise ValueError(f"{_n} must be a non-negative number, got {_v!r}")
+if not 0.0 <= SYS_INITIAL_SOC_FRAC <= 1.0:
+    raise ValueError("SYS_INITIAL_SOC_FRAC must be between 0 and 1.")
+
 # --- 4.2.datacentre_hydrogen.ipynb ---
 # Backgrounds for the hydrogen chain's electricity. Carbon-only notebook.
 DC_H2_WIND_QUERY  = "electricity production, wind, 1-3MW turbine, onshore"
