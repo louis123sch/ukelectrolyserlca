@@ -1,0 +1,2 @@
+option,description,window_start,window_end,slices,slice_hours,dc_power_kw,dc_electricity_GWh_yr,operational_tco2e_yr,embodied_tco2e_yr,total_tco2e_yr,gco2e_per_kwh,electricity_cost_MGBP_yr,effective_price_GBP_per_MWh,grid_factor_mean_kgco2e_per_kwh,reference_us_serc_tco2e_yr
+1_grid_only_GB,"Data centre on GB grid, flat 100% load, no on-site generation",2025-01-01,2025-12-29,17350,0.5,7306.356164383562,64.00367999999999,15164.573212795383,841.4566714972913,16006.029884292675,250.0798373514254,5.109235597008415,79.82721613832855,0.2369328328120412,33501.935939488554

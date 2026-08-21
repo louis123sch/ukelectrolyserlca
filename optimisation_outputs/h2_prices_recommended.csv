@@ -1,0 +1,6 @@
+colour,variant,activity_code,low,central,high,central_source,corroboration
+grey,SMR unabated,smr_hermesmann_1kg_h2,2.85,2.93,3.37,"EHO UK 2024, SMR",derived from own inventory + FES gas: 2.85 (-3 %)
+blue,SMR + CCS,smr_ccs_hermesmann_1kg_h2,2.9,3.78,4.35,"EHO UK 2024, reforming with carbon capture","NESO ATR+CCS 2.90 (cheaper route, used as low case)"
+turquoise,methane pyrolysis,mp_e_1kg_h2,3.03,3.21,4.38,"CONSTRUCTED — 86% grey + 14% green, by its own energy split","direct energy cost 2.94; IEA GHR 2026 pre-commercial, publishes no cost"
+green,"behind the meter, on-site renewables",pem_op_hermesmann_1kg_h2,4.11,4.93,6.99,"EHO UK 2024, renewable H2 directly connected",NESO PEM cube 4.11-6.99 at CF 0.7-0.5
+green,grid-connected electrolyser,pem_op_hermesmann_1kg_h2,6.99,8.33,11.49,"EHO UK 2024, grid electrolysis","includes 2.77 EUR/kg UK grid fees + taxes, 29 % of total"

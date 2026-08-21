@@ -17,6 +17,15 @@ A multipage app wraps the notebooks in a UI:
   electrolysis/H2 techs, or anything written by page 1), configure the
   background scenario (grid region, wind farm, running strategy, time
   period), and run it.
+- **3 Optimisation Inputs** — the cost and carbon coefficients for the
+  data-centre powering study: the GB grid baseline, wind/solar/offshore
+  costs and embodied carbon, hydrogen prices by colour, and battery storage.
+  Every table is produced by a module in `optimisation/`, so the page never
+  holds a second copy of the science.
+- **4 Size Optimiser** — fix the demand (electrolyser technology, rating,
+  running strategy), the site and the date range, and find the cheapest wind /
+  solar / battery build that still meets an emissions threshold — by default
+  the UK Low Carbon Hydrogen Standard's 20 gCO2e/MJ LHV.
 
 This repo is standalone: the paper extractor (`ai_lca/`, vendored from the
 [ai-lca-starter](https://github.com/louis123sch/ai-lca-starter) project)
@@ -143,6 +152,58 @@ The Add Foreground page's full pipeline, in order:
 4. **Extract into your LCA setup** — the actual permanent write (was
    previously the last, unlabelled step) — immediately selectable on Setup
    LCA once done.
+
+## Optimisation inputs (`optimisation/`)
+
+Cost and carbon coefficients for a study comparing ways to power a data
+centre. Each module is standalone, runs from the project root, prints its own
+cross-checks and writes CSVs to `optimisation_outputs/`:
+
+| Module | Produces |
+| --- | --- |
+| `baseline_grid.py` | Baseline 1 — the data centre on the GB grid, with its US-SERC electricity swapped for the half-hourly Carbon Intensity API mix |
+| `tech_costs.py` | Onshore wind, offshore wind and solar PV costs — DESNZ/Arup 2024 |
+| `renewables.py` | The same three technologies' embodied carbon **per MW installed**, decomposed out of ecoinvent's per-kWh activities |
+| `h2_prices.py` | Hydrogen purchase price by colour — grey, blue, turquoise, green |
+| `battery.py` | Li-ion LFP storage — capex/opex and embodied carbon, split into power and energy terms |
+| `profiles.py` | Wind, solar, grid intensity and price on one half-hourly index for a site and period. Renewables.ninja fetches are disk-cached; sampled "representative day" files are refused, because a dispatch carrying battery state cannot use them |
+| `sizing.py` | The optimiser — a chronological dispatch plus a search over wind, solar and battery sizes, minimising levelised cost subject to an emissions threshold |
+
+Three companion documents carry the reasoning rather than the numbers:
+[SOURCES.md](optimisation/SOURCES.md) gives every input's provenance and a
+grade (transcribed / derived / assumed);
+[ASSUMPTIONS.md](optimisation/ASSUMPTIONS.md) records the scope decisions and
+what each one costs you; [DATA_GAPS.md](optimisation/DATA_GAPS.md) tracks what
+is still open.
+
+Each module carries self-checks that fail loudly rather than returning a
+plausible wrong number — coefficients are re-read from Brightway and compared
+against the values pinned in the module, scenario cases are checked for
+monotonicity, the renewables decomposition is re-amortised back to ecoinvent's
+own published per-kWh score, and `tech_costs` asserts its onshore wind rows
+still match what `5.prices.ipynb` independently writes. Between them these have
+caught several real errors, including a case-pairing bug inherited from the
+DESNZ reports' own scenario convention.
+
+The Streamlit pages **3 Optimisation Inputs** and **4 Size Optimiser** are thin
+views over these modules. They reload them on each rerun, so edits to
+`optimisation/*.py` show up without restarting the app.
+
+### Sizing runs
+
+`sizing.py` fixes the demand and sizes the supply. The electrolyser's rating and
+running strategy are yours to choose; wind MW, solar MWp and battery MW/MWh are
+what the optimiser solves for. The battery starts full and carries state across
+the whole period, which is why `profiles.py` insists on a continuous series.
+
+Three running strategies are supported: `baseload` (flat at rated power, grid
+fills the gaps), `renewables_only` (never import; shut down below minimum load)
+and `grid_when_clean` (import only when grid intensity is below a threshold).
+
+The emissions target is a **constraint, not a weighting** — the answer is the
+cheapest build that complies, and when nothing in the search space complies the
+result says so and names any bound the solver pressed against, rather than
+quietly returning a non-compliant build.
 
 ## Paper reader notebooks (`paper_reading_notebooks/1.*`)
 

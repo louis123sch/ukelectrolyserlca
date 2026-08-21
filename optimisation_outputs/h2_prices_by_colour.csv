@@ -1,0 +1,13 @@
+colour,case,price_GBP_per_kg,activity_code,activity_database,gas_m3_per_kg,elec_kwh_per_kg,direct_co2_kg_per_kg,build_year,discount_rate,basis,source,component_fuel,component_power,component_nonfuel,component_carbon,component_credit
+grey,low,2.85,smr_hermesmann_1kg_h2,hydrogen foreground,4.85,-1.1,9.0,2025,0.06,derived,Derived: SMR inventory gas x FES 2025 NBP gas price + scaled NESO blue non-fuel + UK ETS on direct CO2,1.796,-0.132,0.435,0.0,-0.0
+grey,central,2.93,smr_hermesmann_1kg_h2,hydrogen foreground,4.85,-1.1,9.0,2025,0.06,derived,Derived: SMR inventory gas x FES 2025 NBP gas price + scaled NESO blue non-fuel + UK ETS on direct CO2,1.796,-0.088,0.435,0.711,-0.0
+grey,high,3.37,smr_hermesmann_1kg_h2,hydrogen foreground,4.85,-1.1,9.0,2025,0.08,derived,Derived: SMR inventory gas x FES 2025 NBP gas price + scaled NESO blue non-fuel + UK ETS on direct CO2,1.796,-0.044,0.435,0.711,-0.0
+blue,low,2.9,smr_ccs_hermesmann_1kg_h2,hydrogen foreground,5.33,-0.05,0.99,2025,0.06,transcribed,"NESO Green Hydrogen Data Portal, LCOH blue (ATR+CCS) 2025-2050",,,,,
+blue,central,3.78,smr_ccs_hermesmann_1kg_h2,hydrogen foreground,5.33,-0.05,0.99,2025,0.06,transcribed,"NESO Green Hydrogen Data Portal, LCOH blue (ATR+CCS) 2025-2050",,,,,
+blue,high,4.35,smr_ccs_hermesmann_1kg_h2,hydrogen foreground,5.33,-0.05,0.99,2025,0.08,transcribed,"NESO Green Hydrogen Data Portal, LCOH blue (ATR+CCS) 2025-2050",,,,,
+turquoise,low,3.03,mp_e_1kg_h2,hydrogen foreground,5.72,10.29,0.0,2025,0.06,constructed,Constructed: grey/green blend weighted by the MP-E inventory's own gas:electricity energy split,2.118,0.412,0.0,0.0,-0.0
+turquoise,central,3.21,mp_e_1kg_h2,hydrogen foreground,5.72,10.29,0.0,2025,0.06,constructed,Constructed: grey/green blend weighted by the MP-E inventory's own gas:electricity energy split,2.118,0.823,0.0,0.0,-0.0
+turquoise,high,4.38,mp_e_1kg_h2,hydrogen foreground,5.72,10.29,0.0,2025,0.08,constructed,Constructed: grey/green blend weighted by the MP-E inventory's own gas:electricity energy split,2.118,1.235,0.0,0.0,-0.0
+green,low,4.11,pem_op_hermesmann_1kg_h2,hydrogen foreground,0.0,54.0,0.0,2025,0.06,transcribed,"NESO Green Hydrogen Data Portal, LCOH green 2025-2050",,,,,
+green,central,4.93,pem_op_hermesmann_1kg_h2,hydrogen foreground,0.0,54.0,0.0,2025,0.06,transcribed,"NESO Green Hydrogen Data Portal, LCOH green 2025-2050",,,,,
+green,high,6.99,pem_op_hermesmann_1kg_h2,hydrogen foreground,0.0,54.0,0.0,2025,0.08,transcribed,"NESO Green Hydrogen Data Portal, LCOH green 2025-2050",,,,,

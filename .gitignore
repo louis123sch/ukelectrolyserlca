@@ -9,3 +9,9 @@ ai_lca_outputs/
 # Streamlit agent skills — environment-specific symlinks installed on first run
 .agents/skills/developing-with-streamlit
 .claude/skills/developing-with-streamlit
+
+# Reproducible API caches — refetched on demand, and neso_green_lcoh.csv alone
+# is a 54 MB sensitivity cube. The derived CSVs beside them are kept.
+optimisation_outputs/neso_cache/
+optimisation_outputs/profile_cache/
+optimisation_outputs/renewables_decomposition_cache.json

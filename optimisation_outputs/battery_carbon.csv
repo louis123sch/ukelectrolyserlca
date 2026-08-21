@@ -1,0 +1,5 @@
+duration_h,embodied_kgco2e_per_kW,embodied_kgco2e_per_kWh,embodied_tco2e_per_MW,lifetime_throughput_MWh_per_MWh,embodied_kgco2e_per_MWh_throughput
+1,130.1,130.1,130.1,8350.0,15.58
+2,228.3,114.1,228.3,8350.0,13.67
+4,424.7,106.2,424.7,8350.0,12.71
+8,817.5,102.2,817.5,8350.0,12.24
