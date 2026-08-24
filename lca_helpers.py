@@ -1426,8 +1426,7 @@ def list_activity_exchanges(activity):
     """Non-production, non-electricity exchanges of ``activity``, for an uncertainty picker.
 
     Flags exchanges that already carry a Brightway/stats_arrays triangular
-    distribution (uncertainty type 5) — e.g. written by the Add Foreground
-    page/notebook 1 from a paper-stated range — so the UI can pre-fill from it.
+    distribution (uncertainty type 5) — so the UI can pre-fill from it.
     """
     rows = []
     for exc in activity.exchanges():

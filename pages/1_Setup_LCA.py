@@ -2,7 +2,8 @@
 
 Foreground processes come from any non-ecoinvent/biosphere database in the
 Brightway project: the built-in six electrolysis/H2 techs in "hydrogen
-foreground", plus anything the Add Foreground page (page 1) has written.
+foreground", plus the data centre, fuel cell and hydrogen storage foregrounds
+built by 2.tech_lca_foreground.ipynb.
 Running this page patches dashboard_config.py with the chosen settings and
 executes 1.dashboard_lca_adaptive.ipynb — the same pipeline the notebooks use.
 """
@@ -58,7 +59,7 @@ with db_col:
         "Foreground database",
         fg_databases,
         index=default_db_index,
-        help="The built-in 'hydrogen foreground' plus any database written by the Add Foreground page.",
+        help="Any non-ecoinvent, non-biosphere database in the Brightway project.",
     )
 
 processes = H.list_process_activities(selected_db)
@@ -347,7 +348,7 @@ if last_run is not None:
                 if prefilled:
                     st.caption(
                         f"Pre-filled from {len(prefilled)} exchange(s) with an uncertainty range already "
-                        "recorded on this process (e.g. extracted from a paper on the Add Foreground page)."
+                        "recorded on this process."
                     )
                     template_df = pd.DataFrame([
                         {"flow_name": r["name"], "lower": r["uncertainty_lower"], "mode": r["amount"],
