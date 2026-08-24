@@ -1,0 +1,50 @@
+{
+  "50.72,-3.53": {
+    "carbon_api_region": 11,
+    "outcode": "EX1",
+    "place": "Exeter",
+    "postcode": "EX1 1ES",
+    "region_name": "South West England",
+    "tnuos_zone": 14
+  },
+  "51.507,-0.128": {
+    "carbon_api_region": 13,
+    "outcode": "WC2N",
+    "place": "Westminster",
+    "postcode": "WC2N 5DU",
+    "region_name": "London",
+    "tnuos_zone": 12
+  },
+  "51.51,-0.6": {
+    "carbon_api_region": 12,
+    "outcode": "SL1",
+    "place": "Slough",
+    "postcode": "SL1 2LE",
+    "region_name": "South England",
+    "tnuos_zone": 13
+  },
+  "51.732,-0.371": {
+    "carbon_api_region": 10,
+    "outcode": "AL2",
+    "place": "St Albans",
+    "postcode": "AL2 3NW",
+    "region_name": "East England",
+    "tnuos_zone": 9
+  },
+  "52.62,1.29": {
+    "carbon_api_region": 10,
+    "outcode": "NR1",
+    "place": "Norwich",
+    "postcode": "NR1 2QE",
+    "region_name": "East England",
+    "tnuos_zone": 9
+  },
+  "57.48,-4.22": {
+    "carbon_api_region": 1,
+    "outcode": "IV2",
+    "place": "Highland",
+    "postcode": "IV2 3PR",
+    "region_name": "North Scotland",
+    "tnuos_zone": 1
+  }
+}

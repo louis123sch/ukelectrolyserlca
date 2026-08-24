@@ -284,6 +284,23 @@ confidence, and on cost only with the caveat attached.**
 
 ---
 
+## Site resolution
+`sites.py`
+
+| Input | Value | Grade | Source |
+|---|---|---|---|
+| Coordinate → outcode | reverse geocode, 2 km radius with an outcode fallback | transcribed | postcodes.io (Open Government Licence) |
+| Outcode → Carbon Intensity region | region id and name | transcribed | NESO Carbon Intensity API, `/regional/postcode/{outcode}` |
+| CI region → TNUoS demand zone | fixed 14→14 table | derived | Both schemes partition GB by **GSP group**, so the correspondence is structural. No open API publishes it. `check_zone_mapping()` asserts it is a bijection and that it agrees with three presets set independently from published sources |
+| Offshore availability | by resolved region | assumed | Judged by region rather than distance to coastline, which would need a coastline dataset |
+| Connection capacity | **not supplied**, defaults to unconstrained | — | No public register. See `DATA_GAPS.md` |
+
+Near a region boundary the nearest-postcode hop can land on the wrong side. The
+resolved region and zone are always reported rather than hidden, so a boundary
+case is visible.
+
+---
+
 ## Scope decisions
 
 These are choices, not data. They are recorded in `ASSUMPTIONS.md` with their

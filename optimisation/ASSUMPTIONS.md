@@ -57,6 +57,27 @@ Storage compression is still counted where it applies, via
 `dashboard_config.TANK_COMPRESSION_KWH_PER_KG` — zero for the 28 bar design,
 since the electrolyser already delivers at ~30 bar.
 
+## 3a. The site is a coordinate, and everything follows from it
+
+`sites.resolve(lat, lon)` derives the Carbon Intensity region and the TNUoS
+demand zone from the coordinate, so the weather, the grid mix and the network
+bill cannot drift apart from one another. Two real lookups
+(postcodes.io → Carbon Intensity API) plus a fixed GSP-group correspondence for
+the TNUoS zone, checked against presets set independently from published
+sources.
+
+*Consequence, and it is a correction*: `dashboard_config.WIND_LAT / WIND_LON`
+(51.7320, -0.3711) is a field near **St Albans** — Carbon Intensity region 10,
+TNUoS zone 9. Every cached grid series in this repo is **region 13, London**,
+TNUoS zone 12. So the study as it previously stood paired London's grid carbon
+intensity and London's £7.41/kW demand tariff with a Hertfordshire wind site.
+
+Carbon-wise the two regions are similar and the error is small. The network
+charge is not: zone 12 is £7.41/kW against zone 9's £1.11/kW. Nothing warned
+about it because nothing connected the wind coordinate to the grid region.
+`require_grid_region()` now refuses the combination outright, and the matrix is
+run at a coordinate genuinely inside region 13.
+
 ## 4. Cost basis
 
 DESNZ/Arup 2024 Cost of Electricity reports, **2023 real prices**, with each

@@ -41,6 +41,14 @@ st.caption(
 )
 
 RUNS = REPO_DIR / "optimisation_outputs" / "dc_runs"
+
+
+@st.cache_data(show_spinner=False)
+def _tnuos():
+    from optimisation import network_charges as nc
+    return nc.tnuos_hh_demand()
+
+
 CAPS = [("cap_wind", "Wind MW"), ("cap_offshore", "Offshore MW"),
         ("cap_solar", "Solar MWp"), ("cap_batt_p", "Battery MW"),
         ("cap_batt_e", "Battery MWh"), ("cap_ely", "Electrolyser MW"),
@@ -52,52 +60,125 @@ CAPS = [("cap_wind", "Wind MW"), ("cap_offshore", "Offshore MW"),
 # 1. The data centre
 # =============================================================================
 st.header("1. What are you powering, where, and when?")
+
+st.markdown(
+    "**A GB coordinate is the input.** The Carbon Intensity region and the TNUoS "
+    "demand zone are derived from it, so the weather, the grid mix and the "
+    "network bill always move together — picking a location cannot change one "
+    "without the others."
+)
+
+
+def _apply_preset():
+    key = st.session_state.get("dc_preset")
+    if key and key in sites.PRESETS:
+        lat, lon, _name = sites.PRESETS[key]
+        st.session_state["dc_lat"], st.session_state["dc_lon"] = lat, lon
+
+
+st.session_state.setdefault("dc_lat", sites.PRESETS[sites.DEFAULT_PRESET][0])
+st.session_state.setdefault("dc_lon", sites.PRESETS[sites.DEFAULT_PRESET][1])
+
+c1, c2, c3 = st.columns([1.2, 1, 1])
+with c1:
+    st.selectbox("Jump to a preset", [""] + list(sites.PRESETS), key="dc_preset",
+                 on_change=_apply_preset,
+                 format_func=lambda k: "—" if k == "" else
+                 f"{k} · {sites.PRESETS[k][2]}",
+                 help="A shortcut that fills the coordinates. Any GB coordinate works.")
+with c2:
+    lat = st.number_input("Latitude", 49.0, 61.0, key="dc_lat", format="%.4f", step=0.01)
+with c3:
+    lon = st.number_input("Longitude", -9.0, 2.0, key="dc_lon", format="%.4f", step=0.01)
+
 c1, c2, c3 = st.columns(3)
 with c1:
-    site_key = st.selectbox("Site", list(sites.SITES),
-                            format_func=lambda k: sites.get(k).name)
-    site = sites.get(site_key)
-    st.caption(site.note)
+    conn = st.number_input(
+        "Grid connection cap (MW)", 0.0, 10_000.0, 0.0, step=1.0,
+        help="0 means unconstrained. There is no public register of available "
+             "connection capacity, so any number here is yours, not sourced — "
+             "and it is the most decision-relevant input in the study.")
 with c2:
+    tdr = st.selectbox("TNUoS demand residual band",
+                       ["HV1", "HV2", "HV3", "HV4", "EHV1", "EHV2", "EHV3", "EHV4"],
+                       index=5, help="Set by agreed capacity, not by location.")
+with c3:
+    st.write("")
+
+try:
+    site = sites.resolve(lat, lon, tdr_band=tdr,
+                         connection_limit_mw=(conn or None))
+except Exception as exc:
+    st.error(f"Could not resolve that coordinate: {exc}")
+    st.stop()
+
+c1, c2, c3 = st.columns(3)
+with c1:
     size_mw = st.number_input("IT load (MW)", 0.1, 1000.0, 7.31, step=1.0,
                               help="7.31 MW is the Zhang et al. foreground's own "
                                    "continuous draw — the study's baseline case.")
     pue = st.number_input("PUE", 1.0, 2.0, 1.00, step=0.05,
                           help="1.00 reproduces the foreground, whose figure is "
                                "already facility-level rather than IT-only.")
-with c3:
+with c2:
     start = st.text_input("Window start", "2025-01-01")
     end = st.text_input("Window end", "2025-12-29")
     st.caption("The dispatch window. Real grid and price data exists for 2025 only.")
-
-c1, c2, c3, c4 = st.columns(4)
-with c1:
+with c3:
     horizon = st.number_input("Horizon (years)", 1.0, 50.0, 25.0, step=1.0,
                               help="Amortisation only — a different thing from the "
-                                   "dispatch window above. Both are reported.")
-with c2:
-    cost_case = st.radio("Cost case", ["low", "central", "high"], index=1, horizontal=True)
-with c3:
+                                   "dispatch window. Both are reported.")
+    cost_case = st.radio("Cost case", ["low", "central", "high"], index=1,
+                         horizontal=True)
+
+c1, c2 = st.columns(2)
+with c1:
     resample = st.selectbox(
         "Resolution", [1.0, 0.5, 2.0], index=0,
         format_func=lambda h: {0.5: "30 min (native)", 1.0: "1 h (recommended)",
                                2.0: "2 h (exploration)"}[h],
-        help="1 h is 3.5× faster than half-hourly for 0.14 % on cost and 0.32 % "
+        help="1 h is 3.5x faster than half-hourly for 0.14 % on cost and 0.32 % "
              "on carbon. 2 h costs 1.2 % on carbon — comparable to the "
              "differences between options, so use it only to explore.")
-with c4:
+with c2:
     unserved = st.number_input("Unserved allowance", 0.0, 0.10, 0.0, step=0.001,
                                format="%.3f",
                                help="Fraction of annual demand permitted to go "
                                     "unserved. 0 is the data centre standard.")
 
-st.info(
-    f"**{site.name}** — Carbon Intensity region {site.carbon_api_region} "
-    f"({site.region_name}), TNUoS zone {site.tnuos_zone}, "
-    f"{'offshore wind available' if site.offshore_wind else 'no offshore option'}. "
-    "Only the London site has cached grid data; the others need "
-    "`3.1.custom_grid_carbon_intensity_api.ipynb` re-run for their region first."
-)
+# --- what the coordinate resolved to -----------------------------------------
+try:
+    _hh, _ = _tnuos()
+    tariff = float(_hh.set_index("zone_no").tariff_GBP_per_kW.get(site.tnuos_zone,
+                                                                 float("nan")))
+except Exception:
+    tariff = float("nan")
+
+m1, m2, m3, m4 = st.columns(4)
+m1.metric("Resolved to", site.name)
+m2.metric("Carbon Intensity region", f"{site.carbon_api_region} · {site.region_name}")
+m3.metric("TNUoS zone", f"{site.tnuos_zone}")
+m4.metric("TNUoS demand tariff", f"£{tariff:.2f}/kW" if tariff == tariff else "—")
+
+have = sites.available_grid_regions()
+if site.carbon_api_region in have:
+    st.success(
+        f"Grid data cached for region {site.carbon_api_region} "
+        f"({site.region_name}). "
+        + ("Offshore wind available." if site.offshore_wind else "No offshore option.")
+    )
+else:
+    cached = ", ".join(f"{r} ({sites.CARBON_API_REGIONS[r]})" for r in sorted(have)) or "none"
+    st.error(
+        f"**No cached grid series for region {site.carbon_api_region} "
+        f"({site.region_name}).** Cached: {cached}.\n\n"
+        "Using another region's half-hourly intensities here would produce a "
+        "confident wrong answer about whether renewables beat the grid, so the "
+        "optimiser refuses. Generate this one first — it scores the GB fuel mix "
+        "against ecoinvent for every half-hour, so it takes a while:\n\n"
+        f"```bash\npython -c \"from optimisation import sites; "
+        f"sites.build_grid_series({site.carbon_api_region})\"\n```"
+    )
 
 # =============================================================================
 # 2. Which options to compare
@@ -137,7 +218,7 @@ if n_solves > 60:
                "across 8 cores. Results are cached by config hash, so re-running "
                "an unchanged scenario is free.")
 
-out_root = RUNS / f"{site_key}_{size_mw:g}MW_{start[:4]}"
+out_root = RUNS / f"{site.key}_{size_mw:g}MW_{start[:4]}"
 
 c1, c2, c3 = st.columns([1, 1, 4])
 with c1:
@@ -147,11 +228,15 @@ with c2:
 
 if launch:
     cmd = [sys.executable, str(REPO_DIR / "scripts" / "run_dc_scenarios.py"),
-           "--site", site_key, "--dc-size", str(size_mw), "--pue", str(pue),
+           "--lat", str(site.lat), "--lon", str(site.lon),
+           "--tdr-band", site.tdr_band,
+           "--dc-size", str(size_mw), "--pue", str(pue),
            "--start", start, "--end", end, "--horizon-years", str(horizon),
            "--resample", str(resample), "--points", str(points),
            "--cost-case", cost_case, "--unserved", str(unserved),
            "--out", str(out_root)]
+    if site.connection_limit_mw:
+        cmd += ["--connection-limit", str(site.connection_limit_mw)]
     if not choice.startswith("Core"):
         cmd += ["--only", *[str(s.n) for s in chosen]]
     if refresh:
@@ -172,7 +257,7 @@ if launch:
 st.header("3. Results")
 
 if not out_root.exists():
-    st.info("No results for this site and size yet. Run the matrix above.")
+    st.info(f"No results yet for {site.name} at {size_mw:g} MW. Run the matrix above.")
     st.stop()
 
 summaries = dc_runner.load_results(out_root)

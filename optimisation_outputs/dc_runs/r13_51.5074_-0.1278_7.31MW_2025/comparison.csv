@@ -1,0 +1,4 @@
+n,key,label,architecture,strategy,ely,h2_colour,point,degenerate,cost_m_GBP_per_year,gwp_t_per_year,gwp_g_per_kWh,cost_GBP_per_MWh,cap_wind,cap_offshore,cap_solar,cap_batt_p,cap_batt_e,cap_ely,cap_tank,cap_fc,cap_grid
+1,01_grid_only_free,Grid only,grid_only,free,-,-,knee,True,6.601899622009337,16014.012432700933,250.07983735142528,103.09733370202412,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,7.31
+1,01_grid_only_free,Grid only,grid_only,free,-,-,min_cost,True,6.601899622009337,16014.012432700933,250.07983735142528,103.09733370202412,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,7.31
+1,01_grid_only_free,Grid only,grid_only,free,-,-,min_gwp,True,6.601899622009337,16014.012432700933,250.07983735142528,103.09733370202412,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,7.31

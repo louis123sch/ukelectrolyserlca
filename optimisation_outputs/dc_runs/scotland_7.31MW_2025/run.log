@@ -1,0 +1,9 @@
+1 configuration(s) x 13 solves = 13 LPs
+site=scotland size=7.31 MW window=2025-01-01..2025-12-29 step=1.0 h case=central
+
+[1/1] 03_grid_res_battery_free                 FAILED  ValueError: Northern Scotland needs Carbon Intensity region 
+
+0/1 solved in 0 s
+  FAILED 03_grid_res_battery_free: ValueError: Northern Scotland needs Carbon Intensity region 1 (North Scotland), but the best available grid series is 'custom_grid_lca_carbon_api_regional_auto_r13_cheap_2025-01-01T00-00-00T_to_T2025-12-29T00-00-00.csv', which is region 13 (London).
+
+Run 3.1.custom_grid_carbon_intensity_api.ipynb with CARBON_API_REGION_ID_OVERRIDE = 1 for the period you want, or pick a site the cached data covers.

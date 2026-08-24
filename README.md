@@ -164,8 +164,28 @@ Two entry points, one engine. `pages/4_Data_Centre_Optimiser.py` for exploring
 and `scripts/run_dc_scenarios.py` for the full matrix headless:
 
 ```bash
-python scripts/run_dc_scenarios.py --workers 8 --points 12
+python scripts/run_dc_scenarios.py --lat 51.5074 --lon -0.1278 --workers 8
 ```
+
+**A GB coordinate is the input.** The Carbon Intensity region and the TNUoS
+demand zone are derived from it (postcodes.io → Carbon Intensity API, then a
+fixed GSP-group correspondence), so the weather, the grid mix and the network
+bill always move together — picking a location cannot change one without the
+others. `optimisation/sites.PRESETS` holds shortcuts for common sites.
+
+Only region 13 (London) has a cached half-hourly grid series. For anywhere else,
+`sites.build_grid_series(<region>)` generates one via notebook 3.1 — slow, since
+it scores the GB fuel mix against ecoinvent for every half-hour — and until then
+`require_grid_region()` refuses to substitute another region's intensities
+rather than producing a confident wrong answer.
+
+> **A correction this exposed.** `dashboard_config.WIND_LAT / WIND_LON` is a
+> field near St Albans — Carbon Intensity region 10, TNUoS zone 9 — while every
+> cached grid series is region 13, zone 12. The study previously paired London's
+> grid intensity and London's £7.41/kW demand tariff with a Hertfordshire wind
+> site. Carbon-wise the regions are similar; the network charge is not
+> (£7.41/kW against £1.11/kW). Nothing warned about it because nothing connected
+> the wind coordinate to the grid region.
 
 21 configurations, 18 of them involving hydrogen, each solved as a linear
 program that sizes nine assets *jointly* with ~8,700 hourly dispatch decisions.

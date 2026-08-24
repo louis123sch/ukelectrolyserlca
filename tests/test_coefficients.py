@@ -243,3 +243,67 @@ def test_soec_cost_is_flagged_as_having_no_source():
     soec = soec[soec.asset == "electrolyser_soec"]
     assert (soec.grade == "assumed").all()
     assert soec.note.str.contains("NO SOURCE").all()
+
+
+# =============================================================================
+# Site resolution
+# =============================================================================
+def test_tnuos_zone_mapping_is_a_bijection_and_matches_the_presets():
+    """The CI-region -> TNUoS-zone table is hand-built, so it needs a check.
+
+    The three original presets were set from published sources before the table
+    existed, so they are an independent check on it rather than a restatement.
+    """
+    from optimisation import sites
+    assert "OK" in sites.check_zone_mapping()
+
+
+def test_site_accepts_coordinates_in_every_form():
+    """Coordinates are the interface; presets are shortcuts."""
+    from optimisation import sites
+    lat, lon = 51.5074, -0.1278
+    a = sites.get(f"{lat},{lon}")
+    b = sites.get((lat, lon))
+    c = sites.resolve(lat, lon)
+    assert a.carbon_api_region == b.carbon_api_region == c.carbon_api_region
+    assert a.tnuos_zone == b.tnuos_zone == c.tnuos_zone
+    assert sites.get(a) is a
+
+
+def test_central_london_resolves_to_region_13_zone_12():
+    """A fixed point: the cached grid series is region 13, so this must match."""
+    from optimisation import sites
+    s = sites.resolve(51.5074, -0.1278)
+    assert s.carbon_api_region == 13
+    assert s.tnuos_zone == 12
+
+
+def test_the_repos_own_wind_coordinate_is_not_london():
+    """Regression on a pre-existing inconsistency, so it cannot quietly return.
+
+    dashboard_config.WIND_LAT/WIND_LON is a field near St Albans — region 10,
+    TNUoS zone 9 — while every cached grid series is region 13. The study as it
+    stood paired London's grid intensity and London's £7.41/kW tariff with a
+    Hertfordshire wind site. Nothing warned about it because nothing connected
+    the wind coordinate to the grid region.
+    """
+    from optimisation import sites
+    s = sites.resolve(51.7320, -0.3711)
+    assert s.carbon_api_region == 10, "St Albans is East England, not London"
+    assert s.tnuos_zone == 9
+
+
+def test_grid_region_guard_refuses_a_mismatched_series():
+    from optimisation import sites
+    s = sites.resolve(57.48, -4.22)          # Northern Scotland, region 1
+    with pytest.raises(ValueError, match="Carbon Intensity region 1"):
+        sites.require_grid_region(
+            s, "custom_grid_lca_carbon_api_regional_auto_r13_cheap_2025.csv")
+    assert sites.require_grid_region(
+        s, "custom_grid_lca_carbon_api_regional_auto_r1_cheap_2025.csv")
+
+
+def test_connection_limit_defaults_to_unconstrained():
+    """An invented limit would be the most decision-relevant unsourced number."""
+    from optimisation import sites
+    assert sites.resolve(51.5074, -0.1278).connection_limit_mw is None

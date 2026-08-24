@@ -49,6 +49,7 @@ sys.path.insert(0, str(ROOT))
 OUT_ROOT = ROOT / "optimisation_outputs" / "dc_runs"
 
 from optimisation import dc_architectures as A
+from optimisation import sites
 from optimisation import dc_model as M
 from optimisation import dc_pareto as P
 
@@ -77,7 +78,7 @@ def _coefficient_identity() -> dict:
     return out
 
 
-def run_one(scenario: A.Scenario, *, site: str, start: str, end: str,
+def run_one(scenario: A.Scenario, *, site, start: str, end: str,
             size_mw_it: float, pue: float, resample_hours: float | None,
             points: int, cost_case: str, horizon_years: float,
             unserved_fraction: float, out_root: Path,
@@ -85,8 +86,14 @@ def run_one(scenario: A.Scenario, *, site: str, start: str, end: str,
     """Solve one configuration's Pareto front and write it to disk."""
     from optimisation import dc_inputs as I
 
+    site = sites.get(site)
     cfg = {
-        "scenario": asdict(scenario), "site": site, "start": start, "end": end,
+        "scenario": asdict(scenario),
+        "site": {"key": site.key, "name": site.name, "lat": site.lat, "lon": site.lon,
+                 "carbon_api_region": site.carbon_api_region,
+                 "tnuos_zone": site.tnuos_zone, "tdr_band": site.tdr_band,
+                 "connection_limit_mw": site.connection_limit_mw},
+        "start": start, "end": end,
         "size_mw_it": size_mw_it, "pue": pue, "resample_hours": resample_hours,
         "points": points, "cost_case": cost_case, "horizon_years": horizon_years,
         "unserved_fraction": unserved_fraction,
@@ -113,9 +120,9 @@ def run_one(scenario: A.Scenario, *, site: str, start: str, end: str,
                         tank_design=scenario.tank_design, h2_colour=scenario.h2_colour,
                         cost_case=cost_case, horizon_years=horizon_years,
                         size_mw_it=size_mw_it, pue=pue)
-    from optimisation import sites
     assets = A.architecture(scenario.architecture,
-                            offshore=sites.get(site).offshore_wind)
+                            offshore=site.offshore_wind,
+                            grid_limit_mw=site.connection_limit_mw)
     if scenario.h2_colour is None and assets.buy_h2:
         # An architecture that *may* buy hydrogen still needs a priced colour.
         # Without one the LP buys it free and carbon-free; see the guard in
@@ -136,7 +143,10 @@ def run_one(scenario: A.Scenario, *, site: str, start: str, end: str,
         "key": scenario.key, "n": scenario.n, "label": scenario.label,
         "architecture": scenario.architecture, "ely_tech": scenario.ely_tech,
         "h2_colour": scenario.h2_colour, "strategy": scenario.strategy,
-        "site": site, "start": start, "end": end,
+        "site": site.key, "site_name": site.name,
+        "lat": site.lat, "lon": site.lon,
+        "carbon_api_region": site.carbon_api_region, "tnuos_zone": site.tnuos_zone,
+        "start": start, "end": end,
         "size_mw_it": size_mw_it, "pue": pue,
         "resample_hours": resample_hours, "cost_case": cost_case,
         "slices": series.n, "demand_MWh_per_year": mwh,
@@ -165,7 +175,7 @@ def _worker(args):
                 "traceback": traceback.format_exc()}
 
 
-def run_matrix(scenarios=None, *, site="london", start="2025-01-01",
+def run_matrix(scenarios=None, *, site=sites.DEFAULT_PRESET, start="2025-01-01",
                end="2025-12-29", size_mw_it=7.31, pue=1.0,
                resample_hours=1.0, points=12, cost_case="central",
                horizon_years=25.0, unserved_fraction=0.0,
@@ -173,7 +183,8 @@ def run_matrix(scenarios=None, *, site="london", start="2025-01-01",
                save_dispatch=False, refresh=False, progress=print) -> pd.DataFrame:
     """Solve every configuration, in parallel, and return the comparison table."""
     scenarios = scenarios if scenarios is not None else A.core_matrix()
-    out_root = Path(out_root or OUT_ROOT / f"{site}_{size_mw_it:g}MW_{start[:4]}")
+    site = sites.get(site)
+    out_root = Path(out_root or OUT_ROOT / f"{site.key}_{size_mw_it:g}MW_{start[:4]}")
     out_root.mkdir(parents=True, exist_ok=True)
 
     kw = dict(site=site, start=start, end=end, size_mw_it=size_mw_it, pue=pue,

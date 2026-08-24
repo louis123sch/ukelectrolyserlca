@@ -74,13 +74,18 @@ def data_centre_coefficients(refresh: bool = False) -> dict:
     return out
 
 
-def build_series(site_key: str, start: str, end: str, size_mw_it: float,
+def build_series(site, start: str, end: str, size_mw_it: float,
                  pue: float = 1.15, token: str | None = None) -> dc_model.Series:
-    """Aligned half-hourly inputs for one site and window."""
+    """Aligned half-hourly inputs for one site and window.
+
+    ``site`` is anything ``sites.get`` accepts — a ``Site``, a ``(lat, lon)``
+    pair, a ``"lat,lon"`` string, or a preset name. Coordinates are the real
+    interface; presets are shortcuts.
+    """
     from optimisation import network_charges as nc
     from optimisation import profiles
 
-    site = sites.get(site_key)
+    site = sites.get(site)
     df, meta = profiles.build(site.lat, site.lon, start, end, token=token)
     sites.require_grid_region(site, meta["grid_file"])
 
@@ -102,6 +107,10 @@ def build_series(site_key: str, start: str, end: str, size_mw_it: float,
     meta["capacity_GBP_per_MW_year"] = charges["capacity_GBP_per_MW_year"]
     meta["fixed_GBP_per_year"] = charges["fixed_GBP_per_year"]
     meta["site"] = site.key
+    meta["site_name"] = site.name
+    meta["lat"], meta["lon"] = site.lat, site.lon
+    meta["carbon_api_region"] = site.carbon_api_region
+    meta["tnuos_zone"] = site.tnuos_zone
     return series, meta
 
 
@@ -150,7 +159,7 @@ def resample(series: dc_model.Series, freq_hours: float) -> dc_model.Series:
     )
 
 
-def build_tech(site_key: str, meta: dict, *, ely_tech: str = "PEM operation",
+def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
                tank_design: str | None = None, h2_colour: str | None = None,
                cost_case: str = "central", horizon_years: float = 25.0,
                size_mw_it: float = 7.31, pue: float = 1.15) -> dc_model.Tech:
@@ -250,7 +259,7 @@ def build_tech(site_key: str, meta: dict, *, ely_tech: str = "PEM operation",
         dc_fixed_gwp_per_year=dc["fixed_kgco2e_per_year"] * scale_dc,
         dc_other_gwp_per_mwh=0.0,
         horizon_years=horizon_years,
-        labels={"site": site_key, "ely_tech": ely_tech, "tank_design": tank_design,
+        labels={"site": getattr(site, "key", site), "ely_tech": ely_tech, "tank_design": tank_design,
                 "h2_colour": h2_colour, "cost_case": cost_case},
     )
 
