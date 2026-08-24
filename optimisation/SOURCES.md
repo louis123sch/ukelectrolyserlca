@@ -228,6 +228,62 @@ case. Both are built; run both.
 
 ---
 
+## Demand-side network charges
+`network_charges.py`
+
+What the data centre pays to *import*, which until now the study omitted
+entirely — imports were priced at the Elexon wholesale price alone, roughly half
+of a real industrial bill. The omission was not neutral: it made every
+grid-connected architecture look cheaper against exactly the on-site generation
+that avoids the charges. The DESNZ/Arup connection figures in `tech_costs.py`
+are **generator**-side and are not a substitute.
+
+| Input | Value | Grade | Source |
+|---|---|---|---|
+| TNUoS HH demand tariff | zonal, **£0.00/kW (Scotland, floored) to £10.12/kW (South Western)**; London £7.41 | transcribed | NESO Data Portal, *TNUoS Tariffs*, CKAN datastore resource `6abe8416-149c-4c78-b65b-059eea19957a`, FY2026 Final. Fetched through the same API `h2_prices.py` uses, so it refreshes rather than going stale |
+| TNUoS demand residual (TDR) | banded £/site/day; EHV2 = £270,752/yr | transcribed | Same portal, resource `dcca94fd-343e-4d4e-8c5d-66009dec4ad3` |
+| BSUoS | £/MWh imported, half-yearly fixed; 2025 runs £12.17 → £10.74 → £15.69 | transcribed | Same portal, resource `4dfa533f-bec6-491b-a3f1-7ce92449bc9a` |
+| DUoS unit and capacity | HV Site Specific: red 3.440, amber 0.262, green 0.008 p/kWh; capacity 9.19 p/kVA/day | transcribed | London Power Networks plc, *Use of System Charging Statement* LC14 v1.3, effective 1 April 2026, **Annex 1**. No open API exists for DNO charging statements |
+| DUoS time bands | red = Mon–Fri 16:00–19:00, Nov–Feb | transcribed (red), **simplified** (amber) | The statement defines amber per-season; merged to one all-year window. Red is exact, and is an order of magnitude above amber |
+
+**The shape matters more than the level.** Two of the four charges scale with the
+*connection* rather than the energy, so a battery or hydrogen store that flattens
+the import profile shrinks the connection and its charges while importing the
+same annual energy. Modelling network charges as a flat £/MWh would erase
+precisely the effect the study exists to measure.
+
+For the 7.31 MW baseline in London: **£23.26/MWh on top of £79.83 wholesale**, a
+delivered £103.09/MWh and **1.29x** the figure the study had been using. 38 % of
+the addition is capacity- or connection-based.
+
+**Location is the headline.** A 100 MW data centre pays about **£1.0 m/year** in
+locational TNUoS at a South Western site and **nothing** in Scotland, whose
+tariffs are floored — unfloored they are −£33.84 and −£23.62/kW. That signal
+points the same way as the renewable resource, and it was entirely absent.
+
+---
+
+## Hydrogen-chain asset costs — the weakest numbers in the study
+`h2_capex.py`
+
+Three inputs the cost objective needs that **no UK source provides**. Every
+figure is graded `assumed` and given as low/central/high spanning the full
+published range rather than a point estimate with a nominal spread.
+
+| Input | Value (real 2025 GBP) | Grade | Source and why it is weak |
+|---|---|---|---|
+| Fuel cell capex | £780 / £1,795 / £3,512 per kW | assumed | DOE, *Technical Targets for 100 kW–3 MW Stationary CHP/DG Fuel Cell Systems Operating on Natural Gas*. These are **natural-gas** systems including a reformer this study does not have, so biased high; the low case is an aspirational 2020 target at 100 MW/yr volume, not a price |
+| H2 vessel capex | £427 / £658 / £889 per kg capacity | assumed | Range across the compressed-storage literature (EUR 500–1,040/kg; DOE 2005 status $1,100/kg at 430 bar). None is UK, none is recent, spread over 2x. **Gandiglio et al. 2022 supplies the inventory and should be checked for a cost too** |
+| SOEC capex | PEM × 1.2 / 1.5 / 2.0 | assumed | **No source at all.** A guess about a technology gap, not a measurement |
+
+For a 7.31 MW backup chain the fuel cell dominates below 22 t of storage and the
+tank above it — so across the whole plausible range, hydrogen's cost is set by two
+numbers with no UK source and spreads of 4.5x and 2x. **The carbon side of these
+same architectures is fully sourced. Rank hydrogen options on carbon with
+confidence, and on cost only with the caveat attached.**
+
+---
+
 ## Scope decisions
 
 These are choices, not data. They are recorded in `ASSUMPTIONS.md` with their

@@ -1,0 +1,15 @@
+zone_no,zone_name,peak_GBP_per_kW,yearround_GBP_per_kW,tariff_GBP_per_kW
+1,Northern Scotland,-0.827604,-33.839448,0.0
+2,Southern Scotland,-1.321113,-23.621013,0.0
+3,Northern,-1.647426,-11.00542,0.0
+4,North West,-0.702065,-5.877306,0.0
+5,Yorkshire,-0.790016,-4.258236,0.0
+6,N Wales & Mersey,-1.884671,-1.42314,0.0
+7,East Midlands,-1.07223,0.763595,0.0
+8,Midlands,-1.124923,4.115881,2.990958
+9,Eastern,0.606933,0.503811,1.110745
+10,South Wales,-3.661669,10.546712,6.885043
+11,South East,2.625117,2.943118,5.568235
+12,London,3.459054,3.946292,7.405345
+13,Southern,1.296782,6.273391,7.570174
+14,South Western,-0.663438,10.786474,10.123037

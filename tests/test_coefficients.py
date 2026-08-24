@@ -184,3 +184,62 @@ def test_every_assumed_row_explains_itself():
     for _, r in df[df.grade == "assumed"].iterrows():
         assert isinstance(r["note"], str) and r["note"].strip(), \
             f"{r['asset']} is ASSUMED but carries no note"
+
+
+# =============================================================================
+# Network charges and hydrogen-chain costs
+# =============================================================================
+def test_network_charges_split_capacity_from_volumetric():
+    """Collapsing everything to £/MWh would erase the trade being studied."""
+    import pandas as pd
+    from optimisation import network_charges as nc
+    idx = pd.date_range("2025-01-01", "2025-12-29", freq="30min")
+    ch = nc.import_charges(idx, zone_no=12, tdr_band="EHV2")
+    assert ch["capacity_GBP_per_MW_year"] > 0
+    assert ch["fixed_GBP_per_year"] > 0
+    assert (ch["volumetric_GBP_per_MWh"] > 0).all()
+
+
+def test_tnuos_is_zonal_and_scotland_is_floored_to_zero():
+    """The locational signal is the study's headline; assert it exists."""
+    from optimisation import network_charges as nc
+    hh, _ = nc.tnuos_hh_demand()
+    by_zone = hh.set_index("zone_name").tariff_GBP_per_kW
+    assert by_zone["Northern Scotland"] == pytest.approx(0.0)
+    assert by_zone["London"] > 5.0
+    assert by_zone.max() - by_zone.min() > 5.0
+
+
+def test_duos_red_band_is_winter_weekday_evening_only():
+    import pandas as pd
+    from optimisation import network_charges as nc
+    idx = pd.date_range("2025-01-01", "2025-12-29", freq="30min")
+    band = nc.duos_band(idx)
+    red = idx[band == "red"]
+    assert set(red.month) <= set(nc.DUOS_RED_MONTHS)
+    assert (red.dayofweek < 5).all()
+    assert red.hour.min() >= nc.DUOS_RED_HOURS[0]
+    assert red.hour.max() < nc.DUOS_RED_HOURS[1]
+
+
+def test_bsuos_covers_the_study_window():
+    import pandas as pd
+    from optimisation import network_charges as nc
+    idx = pd.date_range("2025-01-01", "2025-12-29", freq="30min")
+    s = nc.bsuos_series(idx)
+    assert s.notna().all() and (s > 0).all()
+    assert s.nunique() > 1, "BSUoS changes half-yearly; a constant means a lookup bug"
+
+
+def test_h2_capex_cases_are_ordered_and_every_assumption_is_noted():
+    from optimisation import h2_capex as hc
+    assert "OK" in hc.check(hc.fuel_cell_costs(), hc.tank_costs(), hc.electrolyser_costs())
+
+
+def test_soec_cost_is_flagged_as_having_no_source():
+    """SOEC carbon results are sound; SOEC cost results are not. Keep that visible."""
+    from optimisation import h2_capex as hc
+    soec = hc.electrolyser_costs()
+    soec = soec[soec.asset == "electrolyser_soec"]
+    assert (soec.grade == "assumed").all()
+    assert soec.note.str.contains("NO SOURCE").all()
