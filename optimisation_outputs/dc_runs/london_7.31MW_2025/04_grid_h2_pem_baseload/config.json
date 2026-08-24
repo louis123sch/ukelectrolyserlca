@@ -1,0 +1,26 @@
+{
+  "scenario": {
+    "n": 4,
+    "architecture": "grid_h2",
+    "label": "Grid + H2 (PEM)",
+    "ely_tech": "PEM operation",
+    "h2_colour": null,
+    "strategy": "baseload",
+    "tank_design": null,
+    "note": ""
+  },
+  "site": "london",
+  "start": "2025-01-01",
+  "end": "2025-12-29",
+  "size_mw_it": 7.31,
+  "pue": 1.0,
+  "resample_hours": 1.0,
+  "points": 12,
+  "cost_case": "central",
+  "horizon_years": 25.0,
+  "unserved_fraction": 0.0,
+  "coefficients": {
+    "tech_lca_coefficients.csv": "6c8c67259f51",
+    "h2_capex.csv": "6609c9ef914d"
+  }
+}

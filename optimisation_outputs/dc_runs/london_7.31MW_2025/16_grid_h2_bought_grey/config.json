@@ -1,0 +1,26 @@
+{
+  "scenario": {
+    "n": 16,
+    "architecture": "grid_h2_bought",
+    "label": "Grid + bought H2 (grey)",
+    "ely_tech": null,
+    "h2_colour": "grey",
+    "strategy": "free",
+    "tank_design": null,
+    "note": "just-in-time, no storage"
+  },
+  "site": "london",
+  "start": "2025-01-01",
+  "end": "2025-12-29",
+  "size_mw_it": 7.31,
+  "pue": 1.0,
+  "resample_hours": 1.0,
+  "points": 12,
+  "cost_case": "central",
+  "horizon_years": 25.0,
+  "unserved_fraction": 0.0,
+  "coefficients": {
+    "tech_lca_coefficients.csv": "6c8c67259f51",
+    "h2_capex.csv": "6609c9ef914d"
+  }
+}
