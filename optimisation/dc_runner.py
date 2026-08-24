@@ -59,12 +59,21 @@ def config_hash(payload: dict) -> str:
 
 
 def _coefficient_identity() -> dict:
-    """Fingerprint the coefficient tables so a cache cannot outlive them."""
-    from optimisation import coefficients
+    """Fingerprint the inputs *and the model code* so a cache cannot outlive them.
+
+    The coefficient tables are the obvious half. The model source is the other
+    half, and it was learned the hard way: a fix to the surplus-only constraint
+    silently left three stale scenario folders on disk, because the config hash
+    covered only what the user typed. A cached result that predates a
+    formulation change is worse than no cache, since it looks authoritative.
+    """
     out = {}
     for name in ("tech_lca_coefficients.csv", "h2_capex.csv"):
-        p = ROOT / "optimisation_outputs" / name
-        out[name] = hashlib.sha256(p.read_bytes()).hexdigest()[:12] if p.exists() else None
+        f = ROOT / "optimisation_outputs" / name
+        out[name] = hashlib.sha256(f.read_bytes()).hexdigest()[:12] if f.exists() else None
+    for name in ("dc_model.py", "dc_pareto.py", "dc_inputs.py", "dc_architectures.py"):
+        f = ROOT / "optimisation" / name
+        out[name] = hashlib.sha256(f.read_bytes()).hexdigest()[:12] if f.exists() else None
     return out
 
 
@@ -107,6 +116,13 @@ def run_one(scenario: A.Scenario, *, site: str, start: str, end: str,
     from optimisation import sites
     assets = A.architecture(scenario.architecture,
                             offshore=sites.get(site).offshore_wind)
+    if scenario.h2_colour is None and assets.buy_h2:
+        # An architecture that *may* buy hydrogen still needs a priced colour.
+        # Without one the LP buys it free and carbon-free; see the guard in
+        # dc_model.build_model. Locking it off is the right default: the
+        # scenario builds its own hydrogen instead.
+        from dataclasses import replace as _replace
+        assets = _replace(assets, buy_h2=False)
     result = P.front(series, assets, tech, points=points,
                      ely_strategy=scenario.strategy,
                      unserved_fraction=unserved_fraction)

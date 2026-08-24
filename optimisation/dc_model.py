@@ -181,6 +181,13 @@ def build_model(series: Series, assets: Assets, tech: Tech, *,
     """
     import linopy
 
+    if assets.buy_h2 and tech.bought_h2_gbp_per_kg <= 0:
+        raise ValueError(
+            "This architecture may buy hydrogen but no colour was priced, so "
+            "bought_h2_gbp_per_kg is 0 — the LP would buy free, zero-carbon "
+            "hydrogen and every result would be nonsense. Set h2_colour on the "
+            "scenario, or lock buy_h2 off.")
+
     n, dt = series.n, series.dt_hours
     t = pd.RangeIndex(n, name="t")
     m = linopy.Model()
@@ -385,10 +392,20 @@ def apply_strategy(m, V, series, assets, strategy, islanded_uses_cf_floor):
             #
             # Served demand, not gross demand — otherwise a system that builds
             # nothing has a negative allowance and the model is infeasible again.
-            demand_da = xr.DataArray(np.asarray(series.demand_mw, dtype=float), coords=[t])
-            generation = ((V["p_wind"] + V["p_offshore"] + V["p_solar"]) * dt).sum()
+            # Against *available* generation, not dispatched. Curtailment is
+            # implicit — p_wind <= cf x cap is an inequality — so writing this
+            # against p_wind makes it self-referential: the LP satisfies it by
+            # curtailing, which starves the electrolyser and drives the model to
+            # oversize generation absurdly instead of building storage. Measured:
+            # the dispatched form built 1,152 MW of wind and no hydrogen chain at
+            # all for a 7.31 MW load, against 33 MW of wind and a 60 t tank once
+            # corrected.
+            cf_w = xr.DataArray(np.asarray(series.cf_wind, dtype=float), coords=[t])
+            cf_s = xr.DataArray(np.asarray(series.cf_solar, dtype=float), coords=[t])
+            available = ((cf_w * V["cap_wind"] + cf_w * V["cap_offshore"]
+                          + cf_s * V["cap_solar"]) * dt).sum()
             served = float((series.demand_mw * dt).sum()) - (V["unserved"] * dt).sum()
-            m.add_constraints((V["p_ely"] * dt).sum() - generation + served <= 0,
+            m.add_constraints((V["p_ely"] * dt).sum() - available + served <= 0,
                               name="surplus_only")
     else:
         raise ValueError(f"Unknown electrolyser strategy {strategy!r}. "

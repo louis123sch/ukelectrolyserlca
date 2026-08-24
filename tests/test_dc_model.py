@@ -206,11 +206,15 @@ def test_surplus_only_caps_the_electrolyser_at_leftover_generation(series, tech)
     V, _ = _solve(series, tech, a, objective="cost", ely_strategy="flexible",
                   unserved_fraction=1.0)
     ely = V["p_ely"].solution.values.sum() * DT
-    gen = (V["p_wind"].solution.values + V["p_solar"].solution.values
-           + V["p_offshore"].solution.values).sum() * DT
+    # Available, not dispatched — curtailment is implicit, so measuring against
+    # p_wind would let the constraint be satisfied by generating less.
+    available = (series.cf_wind * float(V["cap_wind"].solution)
+                 + series.cf_solar * float(V["cap_solar"].solution)
+                 + series.cf_wind * float(V["cap_offshore"].solution)).sum() * DT
     served = series.demand_mw.sum() * DT - V["unserved"].solution.values.sum() * DT
-    assert ely <= gen - served + 1e-6, (
-        f"electrolyser took {ely:.3f} MWh against {gen - served:.3f} MWh of surplus")
+    assert ely <= available - served + 1e-6, (
+        f"electrolyser took {ely:.3f} MWh against {available - served:.3f} MWh "
+        "of available surplus")
 
 
 def test_surplus_only_stays_feasible_when_generation_falls_short(series, tech):
@@ -244,3 +248,46 @@ def test_fuel_cell_replacement_counts_take_the_binding_limit(series, tech):
         assert u >= cap / calendar - 1e-6
         assert u >= mwh / duty - 1e-6
         assert u == pytest.approx(max(cap / calendar, mwh / duty), rel=1e-6)
+
+
+def test_surplus_only_is_measured_against_available_not_dispatched_generation(series, tech):
+    """Regression: the constraint must not be satisfiable by curtailing.
+
+    Curtailment is implicit — p_wind <= cf x cap is an inequality — so writing
+    surplus-only against dispatched p_wind makes it self-referential: the LP
+    satisfies it by generating less, which starves the electrolyser and drives
+    the model to oversize generation instead of building storage. On the real
+    2025 London series the broken form built 1,152 MW of wind and no hydrogen
+    chain at all for a 7.31 MW load.
+
+    The observable signature is that `flexible` and `free` diverge wildly in an
+    islanded architecture. They should very nearly coincide there: with no grid
+    and no battery, giving the data centre first claim on renewable output is
+    close to what an unconstrained LP does anyway.
+    """
+    a = M.Assets(grid=False, wind=True, solar=True, electrolyser=True,
+                 tank=True, fuel_cell=True, grid_limit_mw=0.0)
+    _, flex = _solve(series, tech, a, objective="cost", ely_strategy="flexible",
+                     unserved_fraction=0.02)
+    _, free = _solve(series, tech, a, objective="cost", ely_strategy="free",
+                     unserved_fraction=0.02)
+    f, g = M.totals(flex)["cost_GBP_per_year"], M.totals(free)["cost_GBP_per_year"]
+    assert f >= g - 1.0, "a constrained strategy cannot beat the free one"
+    assert f <= g * 1.5, (
+        f"flexible £{f/1e6:.2f}m against free £{g/1e6:.2f}m — surplus-only is "
+        "over-binding, most likely measured against dispatched generation")
+
+
+def test_buying_hydrogen_without_a_price_is_refused(series, tech):
+    """Regression: an unpriced colour let the LP buy free, zero-carbon hydrogen.
+
+    Scenario 21 had buy_h2 enabled and no colour set, so bought_h2_gbp_per_kg
+    was 0. It returned the best result in the whole matrix — £2.83 m/yr and
+    24 g/kWh — entirely on free hydrogen. A silent zero is the worst kind of
+    wrong input: it produces a plausible, headline-grabbing answer.
+    """
+    import dataclasses
+    free_h2 = dataclasses.replace(tech, bought_h2_gbp_per_kg=0.0)
+    a = M.Assets(grid=True, fuel_cell=True, buy_h2=True, grid_limit_mw=None)
+    with pytest.raises(ValueError, match="no colour was priced"):
+        M.build_model(series, a, free_h2, objective="cost")

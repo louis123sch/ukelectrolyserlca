@@ -135,7 +135,9 @@ def core_matrix() -> list[Scenario]:
         ely_tech="PEM operation", strategy="free", note="control: what the LP would do")
     add(architecture="res_h2_grid", label="Everything available — control",
         ely_tech="PEM operation", strategy="free",
-        note="control: the configuration anyone would actually build")
+        note="control: the configuration anyone would actually build. Buying "
+             "hydrogen is locked off because no colour is priced here — it "
+             "builds its own instead")
     return S
 
 

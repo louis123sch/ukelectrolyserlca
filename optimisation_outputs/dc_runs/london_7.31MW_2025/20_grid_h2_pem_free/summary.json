@@ -119,8 +119,8 @@
     "duos_tariff": "HV Site Specific No Residual"
   },
   "perfect_foresight": true,
-  "solve_seconds": 15.720319032669067,
-  "config_hash": "051eb846979b0431",
+  "solve_seconds": 15.328595876693726,
+  "config_hash": "03c6da0212a53e94",
   "cached": false,
   "note": "control: what the LP would do"
 }

@@ -119,8 +119,8 @@
     "duos_tariff": "HV Site Specific No Residual"
   },
   "perfect_foresight": true,
-  "solve_seconds": 5.180784702301025,
-  "config_hash": "5389dd602cf41682",
+  "solve_seconds": 5.100284814834595,
+  "config_hash": "956cc768c37d1439",
   "cached": false,
   "note": "reference \u2014 the 16,006 t/yr baseline"
 }

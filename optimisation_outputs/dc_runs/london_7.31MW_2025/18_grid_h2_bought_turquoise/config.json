@@ -21,6 +21,10 @@
   "unserved_fraction": 0.0,
   "coefficients": {
     "tech_lca_coefficients.csv": "6c8c67259f51",
-    "h2_capex.csv": "6609c9ef914d"
+    "h2_capex.csv": "6609c9ef914d",
+    "dc_model.py": "a73f1fbe3838",
+    "dc_pareto.py": "57a4e105e081",
+    "dc_inputs.py": "3c7bd737a507",
+    "dc_architectures.py": "8c8da7738262"
   }
 }
