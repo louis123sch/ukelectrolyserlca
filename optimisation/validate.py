@@ -197,7 +197,12 @@ def check_cheap_clean_grid_builds_nothing(series, tech):
     s2.grid_gwp_per_mwh = np.zeros_like(series.grid_gwp_per_mwh)
     t2 = copy.copy(tech)
     t2.cost_grid_per_mw_year = 0.0
-    m, V, obj = M.build_model(s2, A.architecture("res_h2_grid"), t2, objective="cost")
+    # buy_h2 locked off: this check is about whether a free clean grid causes
+    # anything to be *built*, and an unpriced colour is refused outright by
+    # build_model — correctly, since free hydrogen would dominate everything.
+    import dataclasses
+    assets = dataclasses.replace(A.architecture("res_h2_grid"), buy_h2=False)
+    m, V, obj = M.build_model(s2, assets, t2, objective="cost")
     M.solve(m)
     built = {k: float(V[k].solution) for k in
              ("cap_wind", "cap_solar", "cap_batt_e", "cap_ely", "cap_tank", "cap_fc")}
@@ -248,6 +253,47 @@ def check_lcoe_is_plausible(series, tech):
         "Grid-only delivered is £103.09/MWh including network charges.")
 
 
+def check_superset_control_is_no_worse(run_dir: Path):
+    """The 'everything available' control cannot be beaten by a sub-architecture.
+
+    res_h2_grid unlocks every asset the other architectures unlock, so its
+    feasible set contains theirs. At the same objective it must therefore be at
+    least as good as every one of them. If a narrower architecture beats it, the
+    two are not solving the same problem — a bound, a strategy or a coefficient
+    differs where it should not.
+
+    This is checked against a completed matrix rather than by solving fresh,
+    because it is a property of the *set* of runs.
+    """
+    from optimisation import dc_runner
+    if not run_dir.exists():
+        return record("superset control", "control >= every sub-architecture",
+                      "Catches divergent bounds or coefficients between architectures.",
+                      None, f"no matrix at {run_dir.name} — run scripts/run_dc_scenarios.py")
+    summaries = dc_runner.load_results(run_dir)
+    df = dc_runner.comparison_table(summaries)
+    ctl = df[(df.architecture == "res_h2_grid") & (df.point == "min_cost")]
+    if ctl.empty:
+        return record("superset control", "control >= every sub-architecture",
+                      "Catches divergent bounds or coefficients between architectures.",
+                      None, "scenario 21 not in the matrix")
+    ctl_cost = float(ctl.cost_m_GBP_per_year.iloc[0])
+    others = df[(df.point == "min_cost") & (df.architecture != "res_h2_grid")]
+    # res_h2 is islanded by construction, so it is not a subset of the control.
+    others = others[others.architecture != "res_h2"]
+    best = others.cost_m_GBP_per_year.min()
+    who = others.loc[others.cost_m_GBP_per_year.idxmin(), "label"]
+    return record(
+        "superset control is no worse",
+        "res_h2_grid min-cost <= every non-islanded architecture's min-cost",
+        "Its feasible set contains theirs, so anything else winning means the "
+        "architectures disagree about a bound or a coefficient.",
+        ctl_cost <= best + 1e-3,
+        f"control £{ctl_cost:.3f} m vs best sub-architecture £{best:.3f} m ({who})",
+        "Equality is the expected outcome — the control converges on whichever "
+        "sub-architecture is genuinely best.")
+
+
 def _solved(series, assets, tech, objective, **kw):
     m, V, obj = M.build_model(series, assets, tech, objective=objective, **kw)
     M.solve(m)
@@ -278,6 +324,8 @@ def run(site="london", start="2025-01-01", end="2025-12-29",
     check_islanded_without_renewables_is_impossible(series, tech)
     check_cheap_clean_grid_builds_nothing(series, tech)
     check_lcoe_is_plausible(series, tech)
+    check_superset_control_is_no_worse(
+        ROOT / "optimisation_outputs" / "dc_runs" / f"{site}_{size_mw:g}MW_{start[:4]}")
 
     passed = sum(1 for c in CHECKS if c.passed)
     failed = [c for c in CHECKS if c.passed is False]

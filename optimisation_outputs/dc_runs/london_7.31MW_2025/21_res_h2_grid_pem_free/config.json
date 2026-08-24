@@ -1,0 +1,30 @@
+{
+  "scenario": {
+    "n": 21,
+    "architecture": "res_h2_grid",
+    "label": "Everything available \u2014 control",
+    "ely_tech": "PEM operation",
+    "h2_colour": null,
+    "strategy": "free",
+    "tank_design": null,
+    "note": "control: the configuration anyone would actually build. Buying hydrogen is locked off because no colour is priced here \u2014 it builds its own instead"
+  },
+  "site": "london",
+  "start": "2025-01-01",
+  "end": "2025-12-29",
+  "size_mw_it": 7.31,
+  "pue": 1.0,
+  "resample_hours": 1.0,
+  "points": 12,
+  "cost_case": "central",
+  "horizon_years": 25.0,
+  "unserved_fraction": 0.0,
+  "coefficients": {
+    "tech_lca_coefficients.csv": "6c8c67259f51",
+    "h2_capex.csv": "6609c9ef914d",
+    "dc_model.py": "bf3f39dde97a",
+    "dc_pareto.py": "57a4e105e081",
+    "dc_inputs.py": "3c7bd737a507",
+    "dc_architectures.py": "b4ee685add45"
+  }
+}

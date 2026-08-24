@@ -214,7 +214,7 @@ with tab_cmp:
         rule_y = alt.Chart(pd.DataFrame({"y": [base_cost]})).mark_rule(
             strokeDash=[4, 4], color="grey").encode(y="y:Q")
         chart = chart + rule_x + rule_y
-    st.altair_chart(chart, use_container_width=True)
+    st.altair_chart(chart, width="stretch")
     if base_cost is not None:
         st.caption("Dashed lines are the grid-only baseline. Down and left is better "
                    "on both axes.")
@@ -267,7 +267,7 @@ with tab_one:
         pts = alt.Chart(marks).mark_point(size=220, filled=True).encode(
             x="gwp_t:Q", y="cost_m:Q", color=alt.Color("which:N", title=""),
             tooltip=["which", "cost_m", "gwp_t"])
-        st.altair_chart(line + pts, use_container_width=True)
+        st.altair_chart(line + pts, width="stretch")
         st.caption(
             f"Carbon-price point uses the FES 2025 GB figure, "
             f"£{s.get('carbon_price_GBP_per_tCO2', float('nan')):.2f}/tCO₂ — "
