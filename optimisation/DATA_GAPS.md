@@ -33,6 +33,12 @@ authoritative UK source for each assumption rather than tabulating values.
 
 | Input | Source | Note |
 |---|---|---|
+| **Fuel cell capex** | DOE/NREL stationary PEMFC cost targets, or IEA | **Blocks the cost objective of every hydrogen architecture.** No figure anywhere in the repo |
+| **H2 tank capex** | Gandiglio et al. 2022 may carry a cost alongside its inventory — check the paper first | Same. Blocks all hydrogen runs |
+| **SOEC capex/opex** | NESO Green Hydrogen Data Portal, or IEA | `electrolyser_costs_clean.csv` has PEM and Alkaline only. Without it SOEC can be run carbon-only |
+| **Battery standing loss** | Modo Energy assumptions page, or BEIS 2022 | Not modelled at all — `battery.py` has round-trip efficiency only. Dominated by auxiliary load (HVAC, BMS, PCS standby), order 0.1–0.5 %/day |
+| **H2 tank leakage** | A compressed-gas storage standard; plus DESNZ/Warwick et al. 2022 for H₂'s own GWP100 (~11) if leakage is charged | Not modelled; flagged as a known omission in notebooks 2 and 4.3. **Decides hydrogen-versus-battery over a season** |
+| **Fuel cell BoP calendar life** | No public figure found for a stationary PEMFC balance of plant | Currently 25 y, ASSUMED. 60,000 h is a duty figure and implies a 300-year asset at backup duty |
 | **CO2 transport & storage** | FES: **£450/tCO2 in 2025**, falling to **£200/tCO2** long term; opex 5 % of capex | Needed for SMR-CCS, which captures 8.01 kg CO2 per kg H2. |
 | **Battery opex** | BEIS 2022 *Benefits of Long Duration Electricity Storage* | Public PDF. FES uses it for battery opex and storage discount rates. |
 | **Demand-side network charges** | Ofgem / DNO DUoS + TNUoS demand tariffs | The DESNZ connection figures are *generator*-side and are not a substitute. |
@@ -43,6 +49,7 @@ authoritative UK source for each assumption rather than tabulating values.
 |---|---|
 | ~~**Battery capex**~~ **CLOSED** | Source now identified and used. The FES *Economics Methodology report* states NESO's Li-ion capex is *"a combination of Modo survey data with CAPEX data from the National Renewable Energy Laboratory"*, citing **NREL, Cost Projections for Utility-Scale Battery Storage: 2023 Update (June 2023)**. Modo is proprietary; NREL is public. Using NREL is therefore not a US-flavoured fallback — it is half of what NESO itself uses. Modo's own model assumptions are published openly at docs.modoenergy.com and are already in real 2025 GBP, so NREL was not needed: **£300/kW + £100/kWh**, WACC 5.0 % real, 15 y life, 10,000 cycles to 67 % capacity. See `battery.py`. |
 | ~~**Battery LCA as a sized asset**~~ **MOSTLY CLOSED** | Built in `battery.py`: **98.2 kg CO₂e/kWh** (LFP pack) + **31.9 kg CO₂e/kW** (PCS), using ecoinvent's own documented pack density of 0.1158 kWh/kg. Still missing the **container/racking/HVAC**, which ecoinvent 3.9.1 has no dataset for. |
+| **Electrolyser stack/BoP split** | Hermesmann's capital good is one monolithic activity, so stack replacement cannot be charged separately and the whole capital is amortised on calendar life. For an electrolyser run hard this understates lifetime burden — real stacks are replaced every 60–90 kh. `fuel_cell.py` *can* make the split and does. |
 | **Battery fixed OPEX** | The one battery input with no source. Modo do not publish it; FES routes it to BEIS 2022 *Benefits of Long Duration Electricity Storage*. Currently a flagged 2 %-of-capex proxy. |
 | ~~**PV as a sized asset**~~ **CLOSED** | Built in `renewables.py`: **2,303 t CO₂e/MWp**, decomposed out of ecoinvent's per-kWh activity and verified to re-amortise back exactly. Wind and offshore wind done the same way. Caveat: ecoinvent's GB PV dataset is 2012-vintage multi-Si, so its embodied figure is a conservative upper bound. |
 

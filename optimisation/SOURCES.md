@@ -169,6 +169,65 @@ concrete, is far less affected.
 
 ---
 
+## Hydrogen chain — embodied carbon per unit of capacity
+`electrolysers.py`, `fuel_cell.py`, `h2_storage.py`, assembled by `coefficients.py`
+
+The same problem `renewables.py` solves, applied to the hydrogen chain: these
+inventories amortise their capital over an output level their authors chose, and
+the optimiser sizes capacity. Each module strips the capital back out and
+asserts that re-amortising it at the original basis rebuilds the original
+number.
+
+### Electrolysers — `electrolysers.py`
+
+| Input | Value | Grade | Source |
+|---|---|---|---|
+| AE / PEM / SOEC capital | 432.4 / 260.8 / 362.8 t CO₂e per MW | derived | Hermesmann et al. capital good, scored on ecoinvent 3.9.1 apos and divided out of the per-kg activity |
+| Rated capacity | **1 MW** each | derived | Only PEM states it. AE and SOEC are inferred from lifetime H₂ × specific energy, which lands on 160 GWh/MW for all three to within 0.2 % despite specific energies of 42.3–54.0 kWh/kg. `check_rating()` enforces it |
+| Implied utilisation in the foreground | 160,000 full-load hours, **73 % CF** over 25 y | derived | The trap this module exists to escape: an electrolyser built to run at 20 % CF is under-charged **3.7×** by the per-kg figure |
+| Variable burden | 0.042 / 0.107 / 1.628 kg CO₂e per kg H₂ | derived | Water, heat, electrolyte — genuinely per-kg, so left per-kg |
+| Plant lifetime | 25 y | transcribed | NESO Green Hydrogen Data Portal, same figure as `electrolyser_costs_clean.csv` |
+
+*No stack/BoP split is possible* — Hermesmann's capital good is one monolithic
+activity, so the whole of it is charged on calendar life. Registered in
+`DATA_GAPS.md`.
+
+### PEM fuel cell — `fuel_cell.py`
+
+| Input | Value | Grade | Source |
+|---|---|---|---|
+| Stack | 97.4 t CO₂e per MW, 32,000 h duty life | derived | Babatunde et al. 2024 Table S1; stack life their §3.4 |
+| Balance of plant | 469.0 t CO₂e per MW, 60,000 h duty life | derived | ecoinvent 3.9.1 "fuel cell production, PEM 2 kW" net of its own stack and of the domestic-CHP hot-water kit |
+| BoP **calendar** life | **25 y** | **assumed** | 60,000 h is a *duty* figure; at 200 h/yr it implies a 300-year asset. No public calendar life found. Charged over the same 25 y as the electrolyser and the data centre |
+| Maintenance | 3.11 kg CO₂e per MWh delivered | derived | ecoinvent PEMFC maintenance net of the stack it bundles |
+| Hydrogen consumption | 63.16 kg H₂ per MWh | derived | 1/(η 0.475 × LHV 33.33 kWh/kg) |
+
+Both replaceable components are charged at
+`max(1/calendar_years, full_load_hours_per_year/duty_hours)` — a maximum of two
+linear functions, exact in an LP. This matters at both ends: charged on duty
+alone a **backup** fuel cell is under-counted **16.4×**; charged on calendar
+alone a **baseload** one is under-counted 3.7×. `check_full_duty()` asserts the
+rule collapses onto the foreground's own per-kWh figure at 8,760 h/yr.
+
+Hydrogen is excluded from every coefficient — the LP supplies it explicitly.
+
+### Hydrogen storage — `h2_storage.py`
+
+| Input | Value | Grade | Source |
+|---|---|---|---|
+| Gandiglio 28 bar vessel | 312.8 kg steel per kg H₂ → **1,595 kg CO₂e per kg** capacity | transcribed | Gandiglio et al. 2022, Table 3 — the as-built 21.6 m³ stainless vessel at Ginostra |
+| Type I 200 bar cylinder | 100 kg steel per kg H₂ → **250 kg CO₂e per kg** capacity | assumed | ~1 wt% gravimetric capacity, a typical industrial stationary bottle. No Brightway activity exists for it |
+| Vessel lifetime | 25 y, never replaced within it | transcribed | The paper's own plant life |
+| Standing loss | **0 /h** | **assumed** | No boil-off exists for compressed gas at ambient temperature — that is a liquid-H₂ phenomenon. Real losses are fitting leakage, a maintenance question. **Load-bearing**: near-zero standing loss is exactly why hydrogen beats a battery over a season |
+
+**The design choice is not a detail.** Per kWh *deliverable back through the fuel
+cell*, the 28 bar vessel is 100.7 kg CO₂e/kWh against a Li-ion battery's 98.2 —
+no advantage at all. The 200 bar cylinder is 15.8, six times better. Which
+vessel the study uses decides whether hydrogen storage has an embodied-carbon
+case. Both are built; run both.
+
+---
+
 ## Scope decisions
 
 These are choices, not data. They are recorded in `ASSUMPTIONS.md` with their
@@ -179,7 +238,10 @@ transport is modelled for any colour.
 
 ## Still open
 
-Tracked in `DATA_GAPS.md`. At the time of writing: PV as a sized asset,
-battery fixed OPEX, and demand-side network charges (DUoS/TNUoS) for the data
-centre's own import — the DESNZ connection figures are *generator*-side and
-are not a substitute.
+Tracked in `DATA_GAPS.md`. At the time of writing, on the carbon side: the
+fuel cell's BoP calendar life, hydrogen tank standing loss, battery standing
+loss, and the absence of a stack/BoP split in the electrolyser inventory. On
+the cost side: fuel cell capex, hydrogen tank capex, SOEC costs, battery fixed
+OPEX, and demand-side network charges (DUoS/TNUoS) for the data centre's own
+import — the DESNZ connection figures are *generator*-side and are not a
+substitute.

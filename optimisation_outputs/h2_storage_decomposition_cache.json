@@ -1,0 +1,35 @@
+[
+  {
+    "design": "gandiglio_28bar",
+    "pressure_bar": 28.0,
+    "steel_process": "market for steel, chromium steel 18/8",
+    "steel_kg_per_kg_h2": 312.7788305183749,
+    "capacity_kg_h2": 50.04174986542284,
+    "kgco2e_per_kg_steel": 5.098479463018314,
+    "kgco2e_per_kg_capacity": 1594.6964438648201,
+    "lifetime_years": 25.0,
+    "kgco2e_per_kg_capacity_year": 63.78785775459281,
+    "compression_kwh_per_kg": 0.0,
+    "leakage_frac_per_hour": 0.0,
+    "leakage_is_assumed": true,
+    "is_as_built": true,
+    "note": "Gandiglio et al. 2022, Table 3 - as-built 21.6 m3 stainless vessel at Ginostra",
+    "brightway_kgco2e_per_kg_capacity": 1594.6221568176322
+  },
+  {
+    "design": "type1_200bar",
+    "pressure_bar": 200.0,
+    "steel_process": "market for steel, low-alloyed, hot rolled",
+    "steel_kg_per_kg_h2": 100.0,
+    "capacity_kg_h2": null,
+    "kgco2e_per_kg_steel": 2.501295258894637,
+    "kgco2e_per_kg_capacity": 250.1295258894637,
+    "lifetime_years": 25.0,
+    "kgco2e_per_kg_capacity_year": 10.005181035578548,
+    "compression_kwh_per_kg": 2.5,
+    "leakage_frac_per_hour": 0.0,
+    "leakage_is_assumed": true,
+    "is_as_built": false,
+    "note": "Type I seamless cylinder, ~1 wt% H2 - typical industrial stationary bottle"
+  }
+]

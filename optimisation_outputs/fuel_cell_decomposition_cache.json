@@ -1,0 +1,73 @@
+{
+  "activity": "Electricity, low voltage, from PEM fuel cell (hydrogen)",
+  "rated_kW": 1.0,
+  "eta_net_mean": 0.475,
+  "h2_kg_per_kWh": 0.06316421115795791,
+  "h2_kg_per_MWh": 63.16421115795791,
+  "stack_lifetime_hours": 32000.0,
+  "bop_duty_lifetime_hours": 60000.0,
+  "bop_calendar_lifetime_years": 25.0,
+  "bop_lifetime_is_assumed": true,
+  "stack_kgco2e_per_MW": 97431.26099890245,
+  "stack_kgco2e_per_MWh": 3.0447269062157014,
+  "bop_kgco2e_per_MW": 469039.76390894264,
+  "bop_kgco2e_per_MW_year": 18761.590556357707,
+  "maintenance_kgco2e_per_MWh": 3.11420656644904,
+  "_per_kwh": {
+    "fuel": 1.073850375929126,
+    "stack": 0.003044726906215701,
+    "bop": 0.007817329398482377,
+    "maint": 0.00311420656644904
+  },
+  "_foreground_total_per_kWh": 1.0878266388002733,
+  "_parts": [
+    {
+      "name": "Hydrogen production, PEM electrolysis Hermesmann",
+      "amount": 0.06316421115795791,
+      "kind": "fuel",
+      "kgco2e_per_kwh": 1.073850375929126
+    },
+    {
+      "name": "Fuel cell stack production, PEM, 1 kW (Babatunde et al. 2024)",
+      "amount": 3.125e-05,
+      "kind": "stack",
+      "kgco2e_per_kwh": 0.003044726906215701
+    },
+    {
+      "name": "fuel cell production, polymer electrolyte membrane, 2kW electrical, future",
+      "amount": 8.333333333333334e-06,
+      "kind": "bop",
+      "kgco2e_per_kwh": 0.014001071630570463
+    },
+    {
+      "name": "fuel cell production, stack polymer electrolyte membrane, 2kW electrical, future",
+      "amount": -8.333333333333334e-06,
+      "kind": "bop",
+      "kgco2e_per_kwh": -0.001433787071490213
+    },
+    {
+      "name": "maintenance, polymer electrolyte membrane fuel cell 2kW electrical",
+      "amount": 9.3562874251497e-05,
+      "kind": "maint",
+      "kgco2e_per_kwh": 0.012517901489565416
+    },
+    {
+      "name": "fuel cell production, stack polymer electrolyte membrane, 2kW electrical, future",
+      "amount": -1.5625e-05,
+      "kind": "maint",
+      "kgco2e_per_kwh": -0.002688350759044149
+    },
+    {
+      "name": "heating and sanitary equipment production, mini CHP plant",
+      "amount": -5.416666666666667e-06,
+      "kind": "bop",
+      "kgco2e_per_kwh": -0.004749955160597872
+    },
+    {
+      "name": "market for transport, passenger car",
+      "amount": -0.0187125748502994,
+      "kind": "maint",
+      "kgco2e_per_kwh": -0.006715344164072226
+    }
+  ]
+}
