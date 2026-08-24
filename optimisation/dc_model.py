@@ -438,3 +438,76 @@ def solve(m, solver="highs", **kw):
             "enough to ride the year is the usual cause — the VoLL penalty should "
             "make that expensive rather than infeasible, so this is worth reading.")
     return m
+
+def contributions(V, obj, series, tech, assets) -> dict:
+    """Break a solved system's cost and carbon into where they came from.
+
+    The LCA question the totals cannot answer: how much of this is the steel we
+    put in the ground, how much is the electricity we imported, and how much is
+    the building itself? Embodied against operational is the split that decides
+    whether an option is actually better or has just moved its burden upstream.
+    """
+    dt, scale = series.dt_hours, series.annual_scale
+    cap = {k: float(V[k].solution) for k in
+           ("cap_wind", "cap_offshore", "cap_solar", "cap_batt_p", "cap_batt_e",
+            "cap_ely", "cap_tank", "cap_fc")}
+    ser = {k: V[k].solution.values for k in ("imp", "p_ely", "p_fc", "h2_buy", "unserved")}
+    kg_per_mwh_in = 1000.0 / (tech.ely_kwh_per_kg + tech.tank_compression_kwh_per_kg)
+
+    gwp = {
+        "wind": tech.gwp_wind * cap["cap_wind"],
+        "offshore wind": tech.gwp_offshore * cap["cap_offshore"],
+        "solar": tech.gwp_solar * cap["cap_solar"],
+        "battery": tech.gwp_batt_p * cap["cap_batt_p"] + tech.gwp_batt_e * cap["cap_batt_e"],
+        "electrolyser": tech.gwp_ely * cap["cap_ely"],
+        "H2 tank": tech.gwp_tank * cap["cap_tank"],
+        "fuel cell": (tech.gwp_fc_bop_per_mw * float(V["fc_bop_units"].solution)
+                      + tech.gwp_fc_stack_per_mw * float(V["fc_stack_units"].solution)),
+    }
+    gwp_op = {
+        "grid import": scale * float((series.grid_gwp_per_mwh * ser["imp"] * dt).sum()),
+        "bought H2": scale * tech.bought_h2_gwp_per_kg * float(ser["h2_buy"].sum()),
+        "electrolyser consumables": scale * tech.ely_variable_gwp_per_kg
+                                    * kg_per_mwh_in * float((ser["p_ely"] * dt).sum()),
+        "fuel cell maintenance": scale * tech.gwp_fc_maint_per_mwh
+                                 * float((ser["p_fc"] * dt).sum()),
+    }
+    cost = {
+        "wind": tech.cost_wind * cap["cap_wind"],
+        "offshore wind": tech.cost_offshore * cap["cap_offshore"],
+        "solar": tech.cost_solar * cap["cap_solar"],
+        "battery": tech.cost_batt_p * cap["cap_batt_p"] + tech.cost_batt_e * cap["cap_batt_e"],
+        "electrolyser": tech.cost_ely * cap["cap_ely"],
+        "H2 tank": tech.cost_tank * cap["cap_tank"],
+        "fuel cell": tech.cost_fc * cap["cap_fc"],
+        "grid connection": tech.cost_grid_per_mw_year * float(V["cap_grid"].solution),
+    }
+    cost_op = {
+        "grid energy + network": scale * float((series.grid_price_per_mwh * ser["imp"] * dt).sum()),
+        "bought H2": scale * tech.bought_h2_gbp_per_kg * float(ser["h2_buy"].sum()),
+        "unserved (VoLL)": scale * VOLL_GBP_PER_MWH * float((ser["unserved"] * dt).sum()),
+        "connection fixed": tech.cost_grid_fixed_per_year,
+    }
+    mwh = float(series.demand_mw.sum() * dt) * scale
+    return {
+        "gwp_embodied": gwp, "gwp_operational": gwp_op,
+        "gwp_facility": {"data centre itself": tech.dc_fixed_gwp_per_year},
+        "cost_capital": cost, "cost_operational": cost_op,
+        "demand_MWh_per_year": mwh,
+        "totals": totals(obj),
+    }
+
+
+def dispatch_frame(V, series) -> pd.DataFrame:
+    """The solved dispatch as a tidy half-hourly (or hourly) frame."""
+    cols = ("p_wind", "p_offshore", "p_solar", "ch", "dis", "soc", "p_ely",
+            "h2_buy", "tank", "h2_fc", "p_fc", "imp", "exp", "unserved")
+    df = pd.DataFrame({k: V[k].solution.values for k in cols}, index=series.index)
+    df.insert(0, "demand", series.demand_mw)
+    df["grid_gwp_per_mwh"] = series.grid_gwp_per_mwh
+    df["price_per_mwh"] = series.grid_price_per_mwh
+    df["curtailed"] = (series.cf_wind * float(V["cap_wind"].solution)
+                       + series.cf_wind * float(V["cap_offshore"].solution)
+                       + series.cf_solar * float(V["cap_solar"].solution)
+                       - df.p_wind - df.p_offshore - df.p_solar)
+    return df

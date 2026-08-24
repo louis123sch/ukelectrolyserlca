@@ -158,9 +158,43 @@ cheapest build that complies, and when nothing in the search space complies the
 result says so and names any bound the solver pressed against, rather than
 quietly returning a non-compliant build.
 
-## LCA pipeline notebooks (numbered `1`–`5` at the project root)
+## The data centre powering study
 
-The root-level sequence runs `1` through `5` with no gap:
+Two entry points, one engine. `pages/4_Data_Centre_Optimiser.py` for exploring
+and `scripts/run_dc_scenarios.py` for the full matrix headless:
+
+```bash
+python scripts/run_dc_scenarios.py --workers 8 --points 12
+```
+
+21 configurations, 18 of them involving hydrogen, each solved as a linear
+program that sizes nine assets *jointly* with ~8,700 hourly dispatch decisions.
+Results land in `optimisation_outputs/dc_runs/`;
+`6.datacentre_optimiser.ipynb` reads them and does the analysis and plots.
+
+`optimisation/VALIDATION.md` carries the benchmarks (generated, not
+transcribed), `SOURCES.md` the provenance of every number, and `DATA_GAPS.md`
+what is still open — including the fuel cell and hydrogen vessel costs, which
+have no UK source and are graded `assumed`.
+
+### How this relates to notebook 4.3
+
+`4.3.wind_h2_storage_system.ipynb` dispatches a **fixed** build by a merit
+order that sees only the current step. The optimiser supersedes it for *sizing*
+— a tank's value comes from filling in spring and draining in autumn, which a
+myopic rule cannot anticipate, so it systematically mis-sizes the store. But
+4.3 is not obsolete: its merit order is preserved in `optimisation/myopic.py`
+as the **lower** bound on what a build achieves, against the LP's upper bound.
+Section 7 of notebook 6 runs both on the same build.
+
+The `SYS_*` settings in `dashboard_config.py` (50 MW wind, 25 MW electrolyser,
+10 t tank) are 4.3's hand-chosen inputs. The optimiser derives those numbers
+rather than reading them, so the two will disagree — that is the point, not a
+bug.
+
+## Notebooks (numbered `1`–`6` at the project root)
+
+The root-level sequence runs `1` through `6` with no gap:
 
 | Notebook | Role |
 | --- | --- |
@@ -170,6 +204,7 @@ The root-level sequence runs `1` through `5` with no gap:
 | `3.custom_grid.ipynb` / `3.1.custom_grid_carbon_intensity_api.ipynb` | grid LCA (CSV vs. live Carbon Intensity API) |
 | `4.wind_power.ipynb` / `4.1.datacentre_wind_power.ipynb` | wind/grid electrolyser and data-centre LCA |
 | `5.prices.ipynb` | electricity prices and techno-economic cost inputs |
+| `6.datacentre_optimiser.ipynb` | **results of the data-centre powering study** — Pareto fronts, installed mixes, carbon by source, a dispatch week, and the foresight bracket |
 
 `dashboard_config.GRID_DATA_SOURCE` accepts the new `'3'`/`'3.1'` shorthand
 (the old `'4'`/`'4.1'` values from before the renumbering still work too).
