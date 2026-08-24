@@ -14,3 +14,8 @@ _streamlit_runs/
 optimisation_outputs/neso_cache/
 optimisation_outputs/profile_cache/
 optimisation_outputs/renewables_decomposition_cache.json
+
+# Solver outputs — regenerable by scripts/run_dc_scenarios.py, and a 21-scenario
+# matrix is ~90 files. VALIDATION.md and notebook 6 carry the results that
+# matter, both generated from a run and both tracked.
+optimisation_outputs/dc_runs/

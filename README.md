@@ -189,8 +189,13 @@ rather than producing a confident wrong answer.
 
 21 configurations, 18 of them involving hydrogen, each solved as a linear
 program that sizes nine assets *jointly* with ~8,700 hourly dispatch decisions.
-Results land in `optimisation_outputs/dc_runs/`;
-`6.datacentre_optimiser.ipynb` reads them and does the analysis and plots.
+Results land in `optimisation_outputs/dc_runs/`, which is **gitignored** —
+they are regenerable, and a 21-scenario matrix is ~90 files. The results that
+matter are tracked: `optimisation/VALIDATION.md` and the executed outputs in
+`6.datacentre_optimiser.ipynb`, both generated from a real run.
+
+So a fresh clone has no `dc_runs/`. Run the command above once (~15 min on 8
+cores) and the notebook and the Streamlit page will find it.
 
 `optimisation/VALIDATION.md` carries the benchmarks (generated, not
 transcribed), `SOURCES.md` the provenance of every number, and `DATA_GAPS.md`

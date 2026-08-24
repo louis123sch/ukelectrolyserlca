@@ -301,9 +301,13 @@ def _solved(series, assets, tech, objective, **kw):
 
 
 # =============================================================================
-def run(site="london", start="2025-01-01", end="2025-12-29",
+def run(site=None, start="2025-01-01", end="2025-12-29",
         size_mw=7.31, resample_hours=1.0):
+    """``site`` is anything sites.get accepts — a coordinate, a pair, a preset."""
     from optimisation import dc_inputs as I
+    from optimisation import sites
+
+    site = sites.get(site if site is not None else sites.DEFAULT_PRESET)
 
     print("=" * 100)
     print("VALIDATION — benchmarks the optimiser must agree with")
@@ -313,7 +317,8 @@ def run(site="london", start="2025-01-01", end="2025-12-29",
     if resample_hours:
         series = I.resample(series, resample_hours)
     tech = I.build_tech(site, meta, size_mw_it=size_mw, pue=1.0)
-    print(f"  {site}, {start} to {end}, {series.n:,} steps of "
+    print(f"  {site.describe()}")
+    print(f"  {start} to {end}, {series.n:,} steps of "
           f"{series.dt_hours:g} h, {size_mw} MW\n")
 
     check_electrolyser_embodied_against_source(tech)
@@ -325,7 +330,7 @@ def run(site="london", start="2025-01-01", end="2025-12-29",
     check_cheap_clean_grid_builds_nothing(series, tech)
     check_lcoe_is_plausible(series, tech)
     check_superset_control_is_no_worse(
-        ROOT / "optimisation_outputs" / "dc_runs" / f"{site}_{size_mw:g}MW_{start[:4]}")
+        ROOT / "optimisation_outputs" / "dc_runs" / f"{site.key}_{size_mw:g}MW_{start[:4]}")
 
     passed = sum(1 for c in CHECKS if c.passed)
     failed = [c for c in CHECKS if c.passed is False]
@@ -333,7 +338,7 @@ def run(site="london", start="2025-01-01", end="2025-12-29",
     for c in failed:
         print(f"    FAILED: {c.name} — {c.observed}")
 
-    write_doc(site, start, end, size_mw, series)
+    write_doc(site.name, start, end, size_mw, series)
     print(f"\nWrote:\n  {DOC.relative_to(ROOT)}")
     return CHECKS
 
