@@ -9,51 +9,37 @@ ecoinvent foreground model.
 A multipage app wraps the notebooks in a UI:
 
 - **Home** — Brightway project status and latest run results.
-- **1 Add Foreground** — a paper-to-Brightway extractor, so a paper/datasheet
-  can be turned into a reviewed foreground process without leaving the app.
-  It defaults its Brightway project to this project's (`hydrogen-smr`), so
-  anything it writes is immediately visible on page 2.
-- **2 Setup LCA** — pick any foreground process (the six built-in
+- **1 Setup LCA** — pick any foreground process (the six built-in
   electrolysis/H2 techs, or anything written by page 1), configure the
   background scenario (grid region, wind farm, running strategy, time
   period), and run it.
-- **3 Optimisation Inputs** — the cost and carbon coefficients for the
+- **2 Optimisation Inputs** — the cost and carbon coefficients for the
   data-centre powering study: the GB grid baseline, wind/solar/offshore
   costs and embodied carbon, hydrogen prices by colour, and battery storage.
   Every table is produced by a module in `optimisation/`, so the page never
   holds a second copy of the science.
-- **4 Size Optimiser** — fix the demand (electrolyser technology, rating,
+- **3 Size Optimiser** — fix the demand (electrolyser technology, rating,
   running strategy), the site and the date range, and find the cheapest wind /
   solar / battery build that still meets an emissions threshold — by default
   the UK Low Carbon Hydrogen Standard's 20 gCO2e/MJ LHV.
 
-This repo is standalone: the paper extractor (`ai_lca/`, vendored from the
-[ai-lca-starter](https://github.com/louis123sch/ai-lca-starter) project)
-ships in this repo, not a sibling clone — nothing outside this directory is
-required to run it.
-
 ### Setup
 
-Requires the `brightway` conda environment (already has bw2data/bw2io/bw2calc,
-streamlit, pandas, jupyter, openai, and the rest of `ai_lca`'s dependencies).
+Requires the `brightway` conda environment (bw2data/bw2io/bw2calc, streamlit,
+pandas, jupyter, scipy). The data-centre optimiser additionally needs an LP
+solver — see `DC_OPTIMISER_PLAN.md`.
 
-Create a `.env` file (gitignored) with a real `OPENAI_API_KEY` — needed by
-the Add Foreground page and by `paper_reading_notebooks/1.paper_ingest_and_extract.ipynb` (the only
-places that call the LLM):
+Create a `.env` file (gitignored) with a Renewables.ninja API token, used by
+`optimisation/profiles.py` to fetch wind and solar capacity factors:
 
 ```
-OPENAI_API_KEY=sk-...
+RENEWABLES_NINJA_TOKEN=...
 ```
 
 ```bash
 conda activate brightway
 streamlit run Home.py
 ```
-
-The model and reasoning level aren't configured via `.env` — they're fixed
-in `ai_lca/llm.py` (`DEFAULT_MODEL`, `DEFAULT_REASONING_EFFORT`), a single
-source of truth every extraction call reads, instead of each call site
-falling back to its own environment-variable default.
 
 ### How "Run LCA" works
 
@@ -98,20 +84,14 @@ at one outside the default database.
 
 ### Uncertainty and Monte Carlo
 
-A flow's amount can carry a triangular-distribution range (lower/mode/upper),
-sourced two ways:
+A flow's amount can carry a triangular-distribution range (lower/mode/upper):
 
-- **Add Foreground page** — the extraction prompt looks for a source-stated
-  range for a flow (an asset-lifespan range, an explicit +/- tolerance, a
-  min-max table column) and pre-fills `uncertainty_lower`/`uncertainty_upper`
-  columns in the inventory review table, alongside `amount` as the mode. Edit
-  or add ranges by hand there too.
 - **Setup LCA page, section 3** — an optional, per-run Monte Carlo table for
   the *selected* foreground process's own non-electricity exchanges (default
   5 empty rows, add more freely). Pre-filled automatically when the process
-  already has a stored range from Add Foreground.
+  already carries a stored range.
 
-Either path ends up calling `write_foreground_database()`, which sets a real
+This calls `write_foreground_database()`, which sets a real
 Brightway/stats_arrays triangular distribution (`uncertainty type = 5`) on
 the matching exchange — the *canonical* place Brightway expects uncertainty,
 so it works from any Brightway tooling, not just this app. Setup LCA's "Run
@@ -125,33 +105,6 @@ data, so adding a second independent uncertainty source there would
 double-count it. Each iteration re-solves the full ecoinvent LCI, so it's
 slow (~3-4s/iteration on typical hardware) — the iteration slider defaults
 low (50) with a live time estimate.
-
-### Recreating and harmonizing a paper's own result
-
-The Add Foreground page's full pipeline, in order:
-
-1. **Interpret paper and extract foreground** — now also pulls the source's
-   stated impact assessment method (`study_context.impact_assessment_method`,
-   e.g. "IPCC 2021 GWP100") and any result(s) it reports for itself (most
-   often its baseline scenario), shown as **Source's own reported result(s)**.
-2. **Search Brightway candidates** — matches every flow to a real ecoinvent
-   node, same as before (per-flow search/re-search, candidate selection).
-3. **Run LCA (source's method)** — before anything is written, scores the
-   reviewed-and-mapped foreground with a Brightway method matched from the
-   extracted method text (`H.find_methods()` in `lca_helpers.py`, editable),
-   using `run_dry_lca()` in `ai_lca/brightway_writer.py`: builds temporary
-   activities in the built-in foreground database purely as scratch space,
-   scores them, deletes them again — nothing persists. The recreated score
-   sits right next to the source's own reported result for comparison.
-   **Harmonization** — once you've sanity-checked the recreation, adjust the
-   matched background processes for your own study (most commonly
-   re-targeting the source's operational geography to yours): set a target
-   location and re-search every mapped flow with it promoted first. Existing
-   picks stay as the fallback; review/override individual flows in "Review
-   Brightway mappings" above.
-4. **Extract into your LCA setup** — the actual permanent write (was
-   previously the last, unlabelled step) — immediately selectable on Setup
-   LCA once done.
 
 ## Optimisation inputs (`optimisation/`)
 
@@ -205,52 +158,68 @@ cheapest build that complies, and when nothing in the search space complies the
 result says so and names any bound the solver pressed against, rather than
 quietly returning a non-compliant build.
 
-## Paper reader notebooks (`paper_reading_notebooks/1.*`)
+## The data centre powering study
 
-A notebook-native alternative to the Add Foreground Streamlit page, for
-running the extraction yourself cell by cell instead of through a UI. These
-live in their own [paper_reading_notebooks/](paper_reading_notebooks/)
-subfolder, separate from the numbered LCA pipeline notebooks below — each
-still opens and runs standalone (a bootstrap cell at the top locates the
-project root and chdirs there, so `ai_lca_config`/`ai_lca` imports and every
-relative path work exactly as before the move):
+Two entry points, one engine. `pages/4_Data_Centre_Optimiser.py` for exploring
+and `scripts/run_dc_scenarios.py` for the full matrix headless:
 
-- **[paper_reading_notebooks/1.paper_ingest_and_extract.ipynb](paper_reading_notebooks/1.paper_ingest_and_extract.ipynb)** —
-  loads the source document/text and runs the two-pass LLM extraction (the
-  only notebook here that calls OpenAI). Prints the classified/locked process
-  structure and extracted flows, with their `process_id`/`flow_id` values.
-- **[paper_reading_notebooks/1.1.paper_process_review.ipynb](paper_reading_notebooks/1.1.paper_process_review.ipynb)** —
-  applies `PROCESS_REVIEW` (include/rename/merge/re-parent).
-- **[paper_reading_notebooks/1.2.paper_inventory_review.ipynb](paper_reading_notebooks/1.2.paper_inventory_review.ipynb)** —
-  applies `INVENTORY_REVIEW` (include/amount/unit/direction/notes per flow).
-- **[paper_reading_notebooks/1.3.paper_brightway_matching.ipynb](paper_reading_notebooks/1.3.paper_brightway_matching.ipynb)** —
-  searches Brightway for each flow and picks a candidate via
-  `SEARCH_CANDIDATE_INDEX`, mirroring `GRID_CANDIDATE_INDEX`'s pattern; prints
-  every candidate list so a bad auto-match (e.g. full-text search returning an
-  unrelated activity) is visible before it reaches the writer.
-- **[paper_reading_notebooks/1.4.paper_write_foreground.ipynb](paper_reading_notebooks/1.4.paper_write_foreground.ipynb)** —
-  validates the write plan and, only once `CONFIRM_WRITE_FOREGROUND = True`,
-  writes `NEW_FOREGROUND_DB_NAME` — then that database is immediately
-  selectable from `1.3.paper_brightway_matching`-review-tested foreground
-  processes, either via `H.list_process_activities(...)` in a notebook or the
-  Setup LCA page's foreground picker.
+```bash
+python scripts/run_dc_scenarios.py --lat 51.5074 --lon -0.1278 --workers 8
+```
 
-All settings — source material, `RUN_LABEL`, the three review-override dicts
-above, and the write confirmation gate — live in
-[ai_lca_config.py](ai_lca_config.py), following the exact same "edit once,
-save, re-run the notebook" contract as `dashboard_config.py`. Each notebook
-persists its output under `ai_lca_outputs/<RUN_LABEL>/` (gitignored) so the
-next notebook — or a later re-run — can pick up where the last one left off
-without repeating the OpenAI call.
+**A GB coordinate is the input.** The Carbon Intensity region and the TNUoS
+demand zone are derived from it (postcodes.io → Carbon Intensity API, then a
+fixed GSP-group correspondence), so the weather, the grid mix and the network
+bill always move together — picking a location cannot change one without the
+others. `optimisation/sites.PRESETS` holds shortcuts for common sites.
 
-Both interfaces call the same vendored `ai_lca` library (`./ai_lca`, including
-a `notebook_helpers` module written for this notebook workflow), so review
-edits behave identically regardless of which one you use.
+Only region 13 (London) has a cached half-hourly grid series. For anywhere else,
+`sites.build_grid_series(<region>)` generates one via notebook 3.1 — slow, since
+it scores the GB fuel mix against ecoinvent for every half-hour — and until then
+`require_grid_region()` refuses to substitute another region's intensities
+rather than producing a confident wrong answer.
 
-## LCA pipeline notebooks (numbered `1`–`5` at the project root)
+> **A correction this exposed.** `dashboard_config.WIND_LAT / WIND_LON` is a
+> field near St Albans — Carbon Intensity region 10, TNUoS zone 9 — while every
+> cached grid series is region 13, zone 12. The study previously paired London's
+> grid intensity and London's £7.41/kW demand tariff with a Hertfordshire wind
+> site. Carbon-wise the regions are similar; the network charge is not
+> (£7.41/kW against £1.11/kW). Nothing warned about it because nothing connected
+> the wind coordinate to the grid region.
 
-Renumbered after the paper-reader notebooks moved out to their own
-subfolder, so the root-level sequence runs `1` through `5` with no gap:
+21 configurations, 18 of them involving hydrogen, each solved as a linear
+program that sizes nine assets *jointly* with ~8,700 hourly dispatch decisions.
+Results land in `optimisation_outputs/dc_runs/`, which is **gitignored** —
+they are regenerable, and a 21-scenario matrix is ~90 files. The results that
+matter are tracked: `optimisation/VALIDATION.md` and the executed outputs in
+`6.datacentre_optimiser.ipynb`, both generated from a real run.
+
+So a fresh clone has no `dc_runs/`. Run the command above once (~15 min on 8
+cores) and the notebook and the Streamlit page will find it.
+
+`optimisation/VALIDATION.md` carries the benchmarks (generated, not
+transcribed), `SOURCES.md` the provenance of every number, and `DATA_GAPS.md`
+what is still open — including the fuel cell and hydrogen vessel costs, which
+have no UK source and are graded `assumed`.
+
+### How this relates to notebook 4.3
+
+`4.3.wind_h2_storage_system.ipynb` dispatches a **fixed** build by a merit
+order that sees only the current step. The optimiser supersedes it for *sizing*
+— a tank's value comes from filling in spring and draining in autumn, which a
+myopic rule cannot anticipate, so it systematically mis-sizes the store. But
+4.3 is not obsolete: its merit order is preserved in `optimisation/myopic.py`
+as the **lower** bound on what a build achieves, against the LP's upper bound.
+Section 7 of notebook 6 runs both on the same build.
+
+The `SYS_*` settings in `dashboard_config.py` (50 MW wind, 25 MW electrolyser,
+10 t tank) are 4.3's hand-chosen inputs. The optimiser derives those numbers
+rather than reading them, so the two will disagree — that is the point, not a
+bug.
+
+## Notebooks (numbered `1`–`6` at the project root)
+
+The root-level sequence runs `1` through `6` with no gap:
 
 | Notebook | Role |
 | --- | --- |
@@ -260,9 +229,9 @@ subfolder, so the root-level sequence runs `1` through `5` with no gap:
 | `3.custom_grid.ipynb` / `3.1.custom_grid_carbon_intensity_api.ipynb` | grid LCA (CSV vs. live Carbon Intensity API) |
 | `4.wind_power.ipynb` / `4.1.datacentre_wind_power.ipynb` | wind/grid electrolyser and data-centre LCA |
 | `5.prices.ipynb` | electricity prices and techno-economic cost inputs |
+| `6.datacentre_optimiser.ipynb` | **results of the data-centre powering study** — Pareto fronts, installed mixes, carbon by source, a dispatch week, and the foresight bracket |
 
 `dashboard_config.GRID_DATA_SOURCE` accepts the new `'3'`/`'3.1'` shorthand
 (the old `'4'`/`'4.1'` values from before the renumbering still work too).
-`a.dashboard_lca.ipynb` is an untracked-by-number, pre-existing snapshot of
-an earlier `dashboard_lca` revision kept as a manual backup — it wasn't part
-of the renumbering.
+`a.dashboard_lca.ipynb` is a pre-existing snapshot of an earlier
+`dashboard_lca` revision, kept as a manual backup.

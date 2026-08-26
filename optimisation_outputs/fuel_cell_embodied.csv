@@ -1,0 +1,2 @@
+activity,rated_kW,eta_net_mean,h2_kg_per_kWh,h2_kg_per_MWh,stack_lifetime_hours,bop_duty_lifetime_hours,bop_calendar_lifetime_years,bop_lifetime_is_assumed,stack_kgco2e_per_MW,stack_kgco2e_per_MWh,bop_kgco2e_per_MW,bop_kgco2e_per_MW_year,maintenance_kgco2e_per_MWh
+"Electricity, low voltage, from PEM fuel cell (hydrogen)",1.0,0.475,0.06316421115795791,63.16421115795791,32000.0,60000.0,25.0,True,97431.26099890245,3.0447269062157014,469039.76390894264,18761.590556357707,3.11420656644904

@@ -1,0 +1,107 @@
+[
+  {
+    "technology": "AE operation",
+    "activity": "Hydrogen production, alkaline electrolysis Hermesmann",
+    "location": "DE",
+    "rated_MW": 1.0,
+    "kwh_per_kg": 51.8,
+    "units_per_kg": 3.24e-07,
+    "lifetime_kg_h2": 3086419.75308642,
+    "lifetime_GWh": 159.87654320987653,
+    "full_load_hours": 159876.54320987655,
+    "implied_capacity_factor": 0.7300298776706692,
+    "capital_kgco2e_per_unit": 432383.70685280376,
+    "capital_kgco2e_per_MW": 432383.70685280376,
+    "capital_kgco2e_per_MW_year": 17295.34827411215,
+    "capital_kgco2e_per_kg_h2": 0.1400923210203084,
+    "variable_kgco2e_per_kg": 0.04160858350925193,
+    "foreground_fixed_kgco2e_per_kg": 0.18169673835362302,
+    "_consumables": [
+      [
+        "market for water, deionised",
+        8.99,
+        0.0026149940797132953
+      ],
+      [
+        "market for water, completely softened",
+        88.1,
+        0.029039799548466035
+      ],
+      [
+        "market for electrolyte, KOH, LiOH additive",
+        0.0037,
+        0.0099537898810726
+      ]
+    ]
+  },
+  {
+    "technology": "PEM operation",
+    "activity": "Hydrogen production, PEM electrolysis Hermesmann",
+    "location": "GB",
+    "rated_MW": 1.0,
+    "kwh_per_kg": 54.0,
+    "units_per_kg": 3.37e-07,
+    "lifetime_kg_h2": 2967359.0504451036,
+    "lifetime_GWh": 160.23738872403558,
+    "full_load_hours": 160237.38872403558,
+    "implied_capacity_factor": 0.7316775740823542,
+    "capital_kgco2e_per_unit": 260837.57278137782,
+    "capital_kgco2e_per_MW": 260837.57278137782,
+    "capital_kgco2e_per_MW_year": 10433.502911255113,
+    "capital_kgco2e_per_kg_h2": 0.08790226202732433,
+    "variable_kgco2e_per_kg": 0.10716682636953401,
+    "foreground_fixed_kgco2e_per_kg": 0.19506678389531815,
+    "_consumables": [
+      [
+        "market for water, deionised",
+        8.99,
+        0.0026149940797132953
+      ],
+      [
+        "market for water, completely softened",
+        88.1,
+        0.029039799548466035
+      ],
+      [
+        "market group for heat, district or industrial, other than natural gas",
+        1.008,
+        0.07551203274135468
+      ]
+    ]
+  },
+  {
+    "technology": "SOEC operation",
+    "activity": "Hydrogen production, SOEC electrolysis Hermesmann",
+    "location": "GB",
+    "rated_MW": 1.0,
+    "kwh_per_kg": 42.3,
+    "units_per_kg": 2.645e-07,
+    "lifetime_kg_h2": 3780718.3364839316,
+    "lifetime_GWh": 159.9243856332703,
+    "full_load_hours": 159924.38563327029,
+    "implied_capacity_factor": 0.7302483362249784,
+    "capital_kgco2e_per_unit": 362769.2013179078,
+    "capital_kgco2e_per_MW": 362769.2013179078,
+    "capital_kgco2e_per_MW_year": 14510.76805271631,
+    "capital_kgco2e_per_kg_h2": 0.09595245374858662,
+    "variable_kgco2e_per_kg": 1.6282767947178207,
+    "foreground_fixed_kgco2e_per_kg": 1.7241998872042936,
+    "_consumables": [
+      [
+        "market for water, deionised",
+        8.99,
+        0.0026149940797132953
+      ],
+      [
+        "market for water, completely softened",
+        644.7,
+        0.21250804504989845
+      ],
+      [
+        "market group for heat, district or industrial, other than natural gas",
+        18.864,
+        1.413153755588209
+      ]
+    ]
+  }
+]

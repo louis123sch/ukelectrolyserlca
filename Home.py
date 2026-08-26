@@ -1,8 +1,9 @@
 """Home — project status and latest results.
 
 Entry point for the multipage app:
-  1. Add Foreground  — paper/document → reviewed Brightway foreground database.
-  2. Setup LCA       — pick a foreground process, configure the grid/wind background, run it.
+  1. Setup LCA             — pick a foreground process, configure the grid/wind background, run it.
+  2. Optimisation Inputs   — cost and carbon coefficients for the data-centre powering study.
+  3. Size Optimiser        — cheapest wind/solar/battery build for a fixed electrolyser.
 """
 
 from __future__ import annotations
@@ -24,9 +25,10 @@ st.markdown(
     """
 Use the sidebar to navigate:
 
-- **1 Add Foreground** — turn a paper, datasheet or spec into a reviewed Brightway foreground process.
-- **2 Setup LCA** — pick any foreground process (built-in or newly added), configure the background
-  scenario (grid region, wind farm, running strategy, time period), and run the LCA.
+- **1 Setup LCA** — pick any foreground process, configure the background scenario (grid region,
+  wind farm, running strategy, time period), and run the LCA.
+- **2 Optimisation Inputs** — the cost and carbon coefficients for the data-centre powering study.
+- **3 Size Optimiser** — fix an electrolyser, find the cheapest compliant wind/solar/battery build.
 """
 )
 
@@ -54,7 +56,7 @@ try:
     with st.expander("Foreground databases and processes", expanded=True):
         for db in fg_dbs:
             rows = H.list_process_activities(db)
-            tag = " (built-in)" if db == cfg.FOREGROUND_DB else " (from Add Foreground)"
+            tag = " (built-in)" if db == cfg.FOREGROUND_DB else ""
             st.markdown(f"**{db}**{tag} — {len(rows)} process(es)")
             if rows:
                 st.dataframe(

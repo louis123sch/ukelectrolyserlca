@@ -169,6 +169,138 @@ concrete, is far less affected.
 
 ---
 
+## Hydrogen chain — embodied carbon per unit of capacity
+`electrolysers.py`, `fuel_cell.py`, `h2_storage.py`, assembled by `coefficients.py`
+
+The same problem `renewables.py` solves, applied to the hydrogen chain: these
+inventories amortise their capital over an output level their authors chose, and
+the optimiser sizes capacity. Each module strips the capital back out and
+asserts that re-amortising it at the original basis rebuilds the original
+number.
+
+### Electrolysers — `electrolysers.py`
+
+| Input | Value | Grade | Source |
+|---|---|---|---|
+| AE / PEM / SOEC capital | 432.4 / 260.8 / 362.8 t CO₂e per MW | derived | Hermesmann et al. capital good, scored on ecoinvent 3.9.1 apos and divided out of the per-kg activity |
+| Rated capacity | **1 MW** each | derived | Only PEM states it. AE and SOEC are inferred from lifetime H₂ × specific energy, which lands on 160 GWh/MW for all three to within 0.2 % despite specific energies of 42.3–54.0 kWh/kg. `check_rating()` enforces it |
+| Implied utilisation in the foreground | 160,000 full-load hours, **73 % CF** over 25 y | derived | The trap this module exists to escape: an electrolyser built to run at 20 % CF is under-charged **3.7×** by the per-kg figure |
+| Variable burden | 0.042 / 0.107 / 1.628 kg CO₂e per kg H₂ | derived | Water, heat, electrolyte — genuinely per-kg, so left per-kg |
+| Plant lifetime | 25 y | transcribed | NESO Green Hydrogen Data Portal, same figure as `electrolyser_costs_clean.csv` |
+
+*No stack/BoP split is possible* — Hermesmann's capital good is one monolithic
+activity, so the whole of it is charged on calendar life. Registered in
+`DATA_GAPS.md`.
+
+### PEM fuel cell — `fuel_cell.py`
+
+| Input | Value | Grade | Source |
+|---|---|---|---|
+| Stack | 97.4 t CO₂e per MW, 32,000 h duty life | derived | Babatunde et al. 2024 Table S1; stack life their §3.4 |
+| Balance of plant | 469.0 t CO₂e per MW, 60,000 h duty life | derived | ecoinvent 3.9.1 "fuel cell production, PEM 2 kW" net of its own stack and of the domestic-CHP hot-water kit |
+| BoP **calendar** life | **25 y** | **assumed** | 60,000 h is a *duty* figure; at 200 h/yr it implies a 300-year asset. No public calendar life found. Charged over the same 25 y as the electrolyser and the data centre |
+| Maintenance | 3.11 kg CO₂e per MWh delivered | derived | ecoinvent PEMFC maintenance net of the stack it bundles |
+| Hydrogen consumption | 63.16 kg H₂ per MWh | derived | 1/(η 0.475 × LHV 33.33 kWh/kg) |
+
+Both replaceable components are charged at
+`max(1/calendar_years, full_load_hours_per_year/duty_hours)` — a maximum of two
+linear functions, exact in an LP. This matters at both ends: charged on duty
+alone a **backup** fuel cell is under-counted **16.4×**; charged on calendar
+alone a **baseload** one is under-counted 3.7×. `check_full_duty()` asserts the
+rule collapses onto the foreground's own per-kWh figure at 8,760 h/yr.
+
+Hydrogen is excluded from every coefficient — the LP supplies it explicitly.
+
+### Hydrogen storage — `h2_storage.py`
+
+| Input | Value | Grade | Source |
+|---|---|---|---|
+| Gandiglio 28 bar vessel | 312.8 kg steel per kg H₂ → **1,595 kg CO₂e per kg** capacity | transcribed | Gandiglio et al. 2022, Table 3 — the as-built 21.6 m³ stainless vessel at Ginostra |
+| Type I 200 bar cylinder | 100 kg steel per kg H₂ → **250 kg CO₂e per kg** capacity | assumed | ~1 wt% gravimetric capacity, a typical industrial stationary bottle. No Brightway activity exists for it |
+| Vessel lifetime | 25 y, never replaced within it | transcribed | The paper's own plant life |
+| Standing loss | **0 /h** | **assumed** | No boil-off exists for compressed gas at ambient temperature — that is a liquid-H₂ phenomenon. Real losses are fitting leakage, a maintenance question. **Load-bearing**: near-zero standing loss is exactly why hydrogen beats a battery over a season |
+
+**The design choice is not a detail.** Per kWh *deliverable back through the fuel
+cell*, the 28 bar vessel is 100.7 kg CO₂e/kWh against a Li-ion battery's 98.2 —
+no advantage at all. The 200 bar cylinder is 15.8, six times better. Which
+vessel the study uses decides whether hydrogen storage has an embodied-carbon
+case. Both are built; run both.
+
+---
+
+## Demand-side network charges
+`network_charges.py`
+
+What the data centre pays to *import*, which until now the study omitted
+entirely — imports were priced at the Elexon wholesale price alone, roughly half
+of a real industrial bill. The omission was not neutral: it made every
+grid-connected architecture look cheaper against exactly the on-site generation
+that avoids the charges. The DESNZ/Arup connection figures in `tech_costs.py`
+are **generator**-side and are not a substitute.
+
+| Input | Value | Grade | Source |
+|---|---|---|---|
+| TNUoS HH demand tariff | zonal, **£0.00/kW (Scotland, floored) to £10.12/kW (South Western)**; London £7.41 | transcribed | NESO Data Portal, *TNUoS Tariffs*, CKAN datastore resource `6abe8416-149c-4c78-b65b-059eea19957a`, FY2026 Final. Fetched through the same API `h2_prices.py` uses, so it refreshes rather than going stale |
+| TNUoS demand residual (TDR) | banded £/site/day; EHV2 = £270,752/yr | transcribed | Same portal, resource `dcca94fd-343e-4d4e-8c5d-66009dec4ad3` |
+| BSUoS | £/MWh imported, half-yearly fixed; 2025 runs £12.17 → £10.74 → £15.69 | transcribed | Same portal, resource `4dfa533f-bec6-491b-a3f1-7ce92449bc9a` |
+| DUoS unit and capacity | HV Site Specific: red 3.440, amber 0.262, green 0.008 p/kWh; capacity 9.19 p/kVA/day | transcribed | London Power Networks plc, *Use of System Charging Statement* LC14 v1.3, effective 1 April 2026, **Annex 1**. No open API exists for DNO charging statements |
+| DUoS time bands | red = Mon–Fri 16:00–19:00, Nov–Feb | transcribed (red), **simplified** (amber) | The statement defines amber per-season; merged to one all-year window. Red is exact, and is an order of magnitude above amber |
+
+**The shape matters more than the level.** Two of the four charges scale with the
+*connection* rather than the energy, so a battery or hydrogen store that flattens
+the import profile shrinks the connection and its charges while importing the
+same annual energy. Modelling network charges as a flat £/MWh would erase
+precisely the effect the study exists to measure.
+
+For the 7.31 MW baseline in London: **£23.26/MWh on top of £79.83 wholesale**, a
+delivered £103.09/MWh and **1.29x** the figure the study had been using. 38 % of
+the addition is capacity- or connection-based.
+
+**Location is the headline.** A 100 MW data centre pays about **£1.0 m/year** in
+locational TNUoS at a South Western site and **nothing** in Scotland, whose
+tariffs are floored — unfloored they are −£33.84 and −£23.62/kW. That signal
+points the same way as the renewable resource, and it was entirely absent.
+
+---
+
+## Hydrogen-chain asset costs — the weakest numbers in the study
+`h2_capex.py`
+
+Three inputs the cost objective needs that **no UK source provides**. Every
+figure is graded `assumed` and given as low/central/high spanning the full
+published range rather than a point estimate with a nominal spread.
+
+| Input | Value (real 2025 GBP) | Grade | Source and why it is weak |
+|---|---|---|---|
+| Fuel cell capex | £780 / £1,795 / £3,512 per kW | assumed | DOE, *Technical Targets for 100 kW–3 MW Stationary CHP/DG Fuel Cell Systems Operating on Natural Gas*. These are **natural-gas** systems including a reformer this study does not have, so biased high; the low case is an aspirational 2020 target at 100 MW/yr volume, not a price |
+| H2 vessel capex | £427 / £658 / £889 per kg capacity | assumed | Range across the compressed-storage literature (EUR 500–1,040/kg; DOE 2005 status $1,100/kg at 430 bar). None is UK, none is recent, spread over 2x. **Gandiglio et al. 2022 supplies the inventory and should be checked for a cost too** |
+| SOEC capex | PEM × 1.2 / 1.5 / 2.0 | assumed | **No source at all.** A guess about a technology gap, not a measurement |
+
+For a 7.31 MW backup chain the fuel cell dominates below 22 t of storage and the
+tank above it — so across the whole plausible range, hydrogen's cost is set by two
+numbers with no UK source and spreads of 4.5x and 2x. **The carbon side of these
+same architectures is fully sourced. Rank hydrogen options on carbon with
+confidence, and on cost only with the caveat attached.**
+
+---
+
+## Site resolution
+`sites.py`
+
+| Input | Value | Grade | Source |
+|---|---|---|---|
+| Coordinate → outcode | reverse geocode, 2 km radius with an outcode fallback | transcribed | postcodes.io (Open Government Licence) |
+| Outcode → Carbon Intensity region | region id and name | transcribed | NESO Carbon Intensity API, `/regional/postcode/{outcode}` |
+| CI region → TNUoS demand zone | fixed 14→14 table | derived | Both schemes partition GB by **GSP group**, so the correspondence is structural. No open API publishes it. `check_zone_mapping()` asserts it is a bijection and that it agrees with three presets set independently from published sources |
+| Offshore availability | by resolved region | assumed | Judged by region rather than distance to coastline, which would need a coastline dataset |
+| Connection capacity | **not supplied**, defaults to unconstrained | — | No public register. See `DATA_GAPS.md` |
+
+Near a region boundary the nearest-postcode hop can land on the wrong side. The
+resolved region and zone are always reported rather than hidden, so a boundary
+case is visible.
+
+---
+
 ## Scope decisions
 
 These are choices, not data. They are recorded in `ASSUMPTIONS.md` with their
@@ -179,7 +311,10 @@ transport is modelled for any colour.
 
 ## Still open
 
-Tracked in `DATA_GAPS.md`. At the time of writing: PV as a sized asset,
-battery fixed OPEX, and demand-side network charges (DUoS/TNUoS) for the data
-centre's own import — the DESNZ connection figures are *generator*-side and
-are not a substitute.
+Tracked in `DATA_GAPS.md`. At the time of writing, on the carbon side: the
+fuel cell's BoP calendar life, hydrogen tank standing loss, battery standing
+loss, and the absence of a stack/BoP split in the electrolyser inventory. On
+the cost side: fuel cell capex, hydrogen tank capex, SOEC costs, battery fixed
+OPEX, and demand-side network charges (DUoS/TNUoS) for the data centre's own
+import — the DESNZ connection figures are *generator*-side and are not a
+substitute.

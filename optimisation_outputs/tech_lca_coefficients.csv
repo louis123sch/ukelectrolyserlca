@@ -1,0 +1,16 @@
+# built_at,2026-08-24T09:47:57+00:00
+# cost_case,central
+asset,capacity_unit,capital_kgco2e_per_capacity_unit,calendar_lifetime_years,duty_lifetime_hours,variable_kgco2e_per_unit,variable_output_unit,throughput_kgco2e_per_MWh,source,grade,note
+onshore_wind,MW,658234.9992438675,35.0,,,,,"ecoinvent 3.9.1 apos capital exchange, decomposed; DESNZ/Arup 2024 lifetime",derived,
+offshore_wind,MW,890286.5090927392,35.0,,,,,"ecoinvent 3.9.1 apos capital exchange, decomposed; DESNZ/Arup 2024 lifetime",derived,
+solar_pv,MWp,2302592.432487031,38.0,,,,,"ecoinvent 3.9.1 apos capital exchange, decomposed; DESNZ/Arup 2024 lifetime",derived,ecoinvent GB PV is a 2012 multi-Si plant — a conservative upper bound
+battery_power,MW,31861.72,15.0,,,,,"ecoinvent 3.9.1 apos (LFP pack, 500 kW inverter); Modo Energy asset life",derived,power conversion system
+battery_energy,MWh,98200.17021276595,15.0,,,,,"ecoinvent 3.9.1 apos (LFP pack, 500 kW inverter); Modo Energy asset life",derived,LFP pack; container/racking/HVAC still missing — see DATA_GAPS.md
+electrolyser_ae,MW,432383.70685280376,25.0,,0.04160858350925193,kg H2,,"Hermesmann et al. capital good, decomposed; NESO 25 y plant life",derived,51.8 kWh/kg; capital was amortised at 73% CF in the foreground; no stack/BoP split
+electrolyser_pem,MW,260837.57278137782,25.0,,0.10716682636953401,kg H2,,"Hermesmann et al. capital good, decomposed; NESO 25 y plant life",derived,54.0 kWh/kg; capital was amortised at 73% CF in the foreground; no stack/BoP split
+electrolyser_soec,MW,362769.2013179078,25.0,,1.6282767947178207,kg H2,,"Hermesmann et al. capital good, decomposed; NESO 25 y plant life",derived,42.3 kWh/kg; capital was amortised at 73% CF in the foreground; no stack/BoP split
+fuel_cell_bop,MW,469039.76390894264,25.0,60000.0,,,,ecoinvent 3.9.1 2 kW PEMFC net of stack; DOE 2020 duty life,assumed,calendar life ASSUMED — no public figure; see DATA_GAPS.md
+fuel_cell_stack,MW,97431.26099890245,,32000.0,,,,Babatunde et al. 2024 Table S1; stack life their §3.4,derived,"calendar life taken as the study horizon, i.e. at least one stack"
+fuel_cell_maintenance,MW,0.0,,,,,3.11420656644904,"ecoinvent 3.9.1 PEMFC maintenance, net of bundled stack",derived,pure throughput term
+h2_tank_gandiglio_28bar,kg H2,1594.6964438648201,25.0,,,,,Gandiglio et al. 2022 Table 3,transcribed,0.0 kWh/kg charging compression; standing loss 0/h ASSUMED
+h2_tank_type1_200bar,kg H2,250.1295258894637,25.0,,,,,derived from a ~1 wt% Type I cylinder,assumed,2.5 kWh/kg charging compression; standing loss 0/h ASSUMED

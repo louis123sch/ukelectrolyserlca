@@ -1,0 +1,16 @@
+asset,case,capex_GBP_per_kW,capex_GBP_per_MW,fixed_opex_frac,lifetime_years,annual_GBP_per_MW_year,grade,note,capex_GBP_per_kg_capacity,annual_GBP_per_kg_year,capex_GBP_per_kWe
+fuel_cell,low,780.3418803418805,780341.8803418805,0.02,25.0,76650.4219895779,assumed,"DOE natural-gas system — includes a reformer this study does not have, so biased high",,,
+fuel_cell,central,1794.7863247863252,1794786.3247863252,0.03,25.0,194243.8338238924,assumed,"DOE natural-gas system — includes a reformer this study does not have, so biased high",,,
+fuel_cell,high,3511.538461538462,3511538.461538462,0.05,25.0,450273.0527992543,assumed,"DOE natural-gas system — includes a reformer this study does not have, so biased high",,,
+h2_tank,low,,,0.01,25.0,,assumed,spread across the literature is over 2x; none of the sources is UK or recent,427.35042735042737,37.703725731741,
+h2_tank,central,,,0.02,25.0,,assumed,spread across the literature is over 2x; none of the sources is UK or recent,658.1196581196582,64.64493420807774,
+h2_tank,high,,,0.03,25.0,,assumed,spread across the literature is over 2x; none of the sources is UK or recent,888.8888888888889,96.20152729979907,
+electrolyser_ae,low,,,0.0275,25.0,,transcribed,NESO Green Hydrogen Data Portal,,,1740.0
+electrolyser_ae,central,,,0.0275,25.0,,transcribed,NESO Green Hydrogen Data Portal,,,1740.0
+electrolyser_ae,high,,,0.0275,25.0,,transcribed,NESO Green Hydrogen Data Portal,,,1740.0
+electrolyser_pem,low,,,0.0275,25.0,,transcribed,NESO Green Hydrogen Data Portal,,,2010.0
+electrolyser_pem,central,,,0.0275,25.0,,transcribed,NESO Green Hydrogen Data Portal,,,2010.0
+electrolyser_pem,high,,,0.0275,25.0,,transcribed,NESO Green Hydrogen Data Portal,,,2010.0
+electrolyser_soec,low,,,0.0275,25.0,,assumed,NO SOURCE — PEM x 1.2. SOEC carbon results are sound; SOEC cost results are not,,,2412.0
+electrolyser_soec,central,,,0.0275,25.0,,assumed,NO SOURCE — PEM x 1.5. SOEC carbon results are sound; SOEC cost results are not,,,3015.0
+electrolyser_soec,high,,,0.0275,25.0,,assumed,NO SOURCE — PEM x 2.0. SOEC carbon results are sound; SOEC cost results are not,,,4020.0
