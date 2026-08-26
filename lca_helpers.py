@@ -23,6 +23,27 @@ import contextlib
 import io
 import json
 import os
+
+# MKL 2025's default (OpenMP) threading layer fails to load on this Windows
+# setup (pypardiso raises WinError 0xc06d007f on every solve); the TBB layer
+# works and stays multi-threaded. Must be set before MKL's first call, hence
+# before numpy/bw2calc are imported. setdefault so an explicit setting wins.
+if os.name == "nt":
+    os.environ.setdefault("MKL_THREADING_LAYER", "TBB")
+    # If MKL is already loaded (e.g. under Streamlit, where numpy runs long
+    # before this module), the env var is read too late - switch the layer
+    # through MKL's own API instead. A no-op when MKL is absent or already
+    # on a working layer.
+    try:
+        import ctypes as _ctypes
+        import sys as _sys
+        from pathlib import Path as _Path
+        _mkl = _Path(_sys.prefix) / "Library" / "bin" / "mkl_rt.2.dll"
+        if _mkl.exists():
+            _ctypes.CDLL(str(_mkl)).MKL_Set_Threading_Layer(_ctypes.c_int(4))  # 4 = TBB
+    except Exception:
+        pass
+
 import uuid
 from io import StringIO
 from pathlib import Path
@@ -151,6 +172,12 @@ def _select_gwp_method():
     ]
     if not gwp_methods:
         raise ValueError("No IPCC GWP/climate change method found in this Brightway project.")
+    # Prefer the plain method over the 'no LT' (long-term-excluded) variant,
+    # matching optimisation/baseline_grid.gwp_method and notebook 2 — the
+    # study should score everything with one method, not two.
+    with_lt = [m for m in preferred if "no LT" not in str(m)]
+    if with_lt:
+        return with_lt[0]
     return preferred[0] if preferred else gwp_methods[0]
 
 
@@ -290,6 +317,22 @@ def resolve_tech_activity(label, tech_source_overrides=None, foreground_db=None)
 # =============================================================================
 # CSV loading and timeslice selection
 # =============================================================================
+def safe_filename_label(label) -> str:
+    """Make a time-slice label safe to embed in a filename on every OS.
+
+    Range labels look like "2025-01-01 00:00:00 -> 2025-12-29 00:00:00";
+    '>' and ':' are illegal in Windows filenames, so the arrow becomes
+    "_to_" and the remaining separators become dashes/underscores.
+    """
+    s = str(label)
+    s = s.replace(" -> ", "_to_").replace("->", "_to_")
+    for ch, rep in ((" ", "_"), (":", "-"), ("/", "-"), ("\\", "-"),
+                    ("<", "-"), (">", "-"), ('"', "-"), ("|", "-"),
+                    ("?", "-"), ("*", "-")):
+        s = s.replace(ch, rep)
+    return s
+
+
 def resolve_csv_path(csv_path=None):
     """Resolve the GB grid CSV from a few common locations."""
     csv_path = csv_path or cfg.CSV_PATH
@@ -297,7 +340,6 @@ def resolve_csv_path(csv_path=None):
         Path(csv_path),
         Path.cwd() / csv_path,
         Path.cwd().parent / csv_path,
-        Path("/mnt/data") / Path(csv_path).name,
     ]
     for p in candidates:
         if p.exists():
@@ -1379,6 +1421,16 @@ def create_ninja_session(token=None):
 
     if not token:
         token_source = "prompt"
+        import sys as _sys
+        if not (hasattr(_sys.stdin, "isatty") and _sys.stdin.isatty()):
+            # Under Streamlit or nbconvert a prompt would hang the process
+            # forever - fail fast with the same guidance instead.
+            raise RuntimeError(
+                "No Renewables.ninja token found. Create a .env file next to "
+                "lca_helpers.py containing RENEWABLES_NINJA_TOKEN=<your token> "
+                "(or set NINJA_API_TOKEN in dashboard_config.py / the "
+                "RENEWABLES_NINJA_TOKEN environment variable)."
+            )
         prompt_fn = getpass if cfg.USE_GETPASS else input
         try:
             token = prompt_fn("Paste your Renewables.ninja API token: ")

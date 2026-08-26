@@ -20,6 +20,7 @@ ECOINVENT_VERSION = "3.9.1"
 SYSTEM_MODEL      = "apos"                       # "apos", "cutoff", "consequential", ...
 FOREGROUND_DB     = "hydrogen foreground"
 DC_FOREGROUND_DB  = "data centre foreground"  # separate DB for non-hydrogen foregrounds (e.g. notebook 2's Zhang et al. data centre process)
+DC_CODE           = "dc_zhang_virginia_baseline_25y"  # must match the DC_CODE defined in 2.tech_lca_foreground.ipynb
 FC_FOREGROUND_DB  = "fuel cell foreground"    # separate DB for notebook 2's Babatunde et al. 1 kW PEM fuel cell stack
 
 # Set True only if you need to import ecoinvent into the active Brightway project.
@@ -49,15 +50,15 @@ RUN_PRICE_NOTEBOOK_FROM_DASHBOARD = False
 # "csv"        / "3"   = old 3.custom_grid.ipynb using df_fuel_ckan.csv
 # "carbon_api" / "3.1" = new 3.1.custom_grid_carbon_intensity_api.ipynb
 # ("4"/"4.1" also still accepted — the pre-renumbering shorthand.)
-GRID_DATA_SOURCE = "carbon_api"
+GRID_DATA_SOURCE = 'carbon_api'
 
 # CSV input for the old National Grid ESO half-hourly fuel mix workflow.
 CSV_PATH = "df_fuel_ckan.csv"
 
 # Carbon Intensity API input settings for 3.1.
 CARBON_API_BASE = "https://api.carbonintensity.org.uk"
-CARBON_API_SCOPE = "regional_auto"          # "regional_auto" or "national"
-CARBON_API_REGION_ID_OVERRIDE = None
+CARBON_API_SCOPE = 'regional_auto'
+CARBON_API_REGION_ID_OVERRIDE = 1
 CARBON_API_LOCAL_TZ = "Europe/London"
 CARBON_API_MAX_DAYS_PER_REQUEST = 13
 CARBON_API_REQUEST_SLEEP_S = 0.05
@@ -78,7 +79,7 @@ RUN_GRID_SCENARIO_LCA = True
 GRID_TIME_MODE = 'range'
 GRID_SINGLE_DATETIME = '2023-07-15 12:00:00'
 GRID_RANGE_START = '2025-01-01 00:00:00'
-GRID_RANGE_END = '2025-02-28 00:00:00'
+GRID_RANGE_END = '2025-12-29 00:00:00'
 
 # "year_average" mode: pick one whole year and run the LCA on 12 wind-based
 # representative days (per season: average-wind day, top-10% wind day and
@@ -100,15 +101,15 @@ TECH_ORDER_DEFAULT = [
     "SOEC operation",
     "MP-E",
 ]
-TECH_SELECTED = ['Data centre facility, hyperscale, Virginia (Zhang et al. 2025)']
-TECH_COUNT    = 1
+TECH_SELECTED = []
+TECH_COUNT = 1
 
 # Optional per-label source override: {label: (database_name, activity_code)}.
 # Lets a technology label point at an activity outside FOREGROUND_DB — e.g. a
 # process the AI-LCA foreground extractor wrote into its own database. Leave
 # empty to use the built-in H2_CODES/ELECTROLYSER_CODES lookup as before.
 # Populated by the Streamlit Setup-LCA page; safe to leave {} in notebook use.
-TECH_SOURCE_OVERRIDES = {'Data centre facility, hyperscale, Virginia (Zhang et al. 2025)': ('data centre foreground', 'dc_zhang_virginia_baseline_25y')}
+TECH_SOURCE_OVERRIDES = {}
 
 VALIDATE_CHEAP_METHOD = False
 
@@ -278,7 +279,7 @@ NINJA_HUB_HEIGHT_M = 80.0
 WIND_INSTALLED_CAPACITY_KW = 1000.0
 
 # Electrolyser operating rule — list any subset of available techs.
-ELECTROLYSER_TECHS = ['Data centre facility, hyperscale, Virginia (Zhang et al. 2025)']
+ELECTROLYSER_TECHS = ['PEM operation']
 ELECTROLYSER_CAPACITY_KW = 1000.0
 MIN_LOAD_FRACTION = 0.1
 WIND_TO_HALFHOUR_METHOD   = "ffill"              # "ffill" or "linear"

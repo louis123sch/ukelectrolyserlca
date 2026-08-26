@@ -11,6 +11,7 @@ executes 1.dashboard_lca_adaptive.ipynb — the same pipeline the notebooks use.
 from __future__ import annotations
 
 import datetime as dt
+import importlib
 import os
 import sys
 from pathlib import Path
@@ -23,21 +24,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import dashboard_config as cfg
 import lca_helpers as H
+import ui_defaults as D
 from backend.runner import REPO_DIR, run_lca
+from ui_common import connect_brightway
+
+importlib.reload(D)
 
 st.set_page_config(page_title="Setup LCA", layout="wide")
 st.title("Setup LCA")
 st.caption("Select a foreground process, configure the background scenario, then run it.")
 
-
-@st.cache_resource(show_spinner="Connecting to Brightway…")
-def _connect():
-    H.setup_brightway()
-    return True
-
-
 try:
-    _connect()
+    connect_brightway()
 except Exception as exc:
     st.error(f"Could not open Brightway project {cfg.PROJECT_NAME!r}: {exc}")
     st.stop()
@@ -116,7 +114,7 @@ st.header("2. Background setup")
 
 strategy = st.radio(
     "Running strategy",
-    ["Grid only", "Wind + grid (blended)", "Wind + grid (switching)", "Wind + grid (both)"],
+    D.SETUP_STRATEGIES,
     horizontal=True,
     help=(
         "Grid only runs the selected process against the live UK grid mix. "
@@ -124,9 +122,8 @@ strategy = st.radio(
         "or switching (all-or-nothing) mode."
     ),
 )
-run_grid_only = strategy == "Grid only"
-wind_mode = {"Wind + grid (blended)": "blended", "Wind + grid (switching)": "switching",
-             "Wind + grid (both)": "both"}.get(strategy)
+run_grid_only = strategy == D.SETUP_STRATEGY_GRID_ONLY
+wind_mode = D.SETUP_WIND_MODE_BY_STRATEGY.get(strategy)
 
 loc_col, wind_col, elec_col = st.columns(3)
 with loc_col:
@@ -134,35 +131,41 @@ with loc_col:
     lat = st.number_input("Latitude", value=float(cfg.WIND_LAT), format="%.4f")
     lon = st.number_input("Longitude", value=float(cfg.WIND_LON), format="%.4f")
     st.caption("Used to auto-pick the nearest GB Carbon Intensity API region and to site the wind farm.")
-    method_mode = st.selectbox("Grid LCA method", ["cheap", "exact"], index=0,
+    method_mode = st.selectbox("Grid LCA method", D.LCA_METHODS, index=D.LCA_METHOD_INDEX,
                                 help="'cheap' decomposes each tech once then reuses it per timeslice — much faster.")
 
 with wind_col:
     st.subheader("Wind farm")
-    wind_capacity_kw = st.number_input("Installed capacity (kW)", min_value=0.0,
-                                        value=float(cfg.WIND_INSTALLED_CAPACITY_KW), step=100.0,
+    wind_capacity_kw = st.number_input("Installed capacity (kW)",
+                                        min_value=D.SETUP_WIND_CAPACITY_KW_MIN,
+                                        value=float(cfg.WIND_INSTALLED_CAPACITY_KW),
+                                        step=D.SETUP_WIND_CAPACITY_KW_STEP,
                                         disabled=run_grid_only)
-    turbine_options = ["Vestas V90 2000", "Vestas V80 2000", "Siemens SWT 2300", "Enercon E70 2300", "Other…"]
-    turbine_default = cfg.NINJA_TURBINE if cfg.NINJA_TURBINE in turbine_options else "Other…"
+    turbine_options = D.SETUP_TURBINE_OPTIONS
+    turbine_default = cfg.NINJA_TURBINE if cfg.NINJA_TURBINE in turbine_options else D.SETUP_TURBINE_OTHER
     turbine_choice = st.selectbox("Turbine model", turbine_options,
                                    index=turbine_options.index(turbine_default), disabled=run_grid_only)
-    if turbine_choice == "Other…":
+    if turbine_choice == D.SETUP_TURBINE_OTHER:
         turbine = st.text_input("Turbine model (renewables.ninja identifier)", value=cfg.NINJA_TURBINE,
                                  disabled=run_grid_only)
     else:
         turbine = turbine_choice
-    hub_height = st.number_input("Hub height (m)", min_value=0.0, value=float(cfg.NINJA_HUB_HEIGHT_M),
+    hub_height = st.number_input("Hub height (m)", min_value=D.SETUP_HUB_HEIGHT_M_MIN,
+                                  value=float(cfg.NINJA_HUB_HEIGHT_M),
                                   disabled=run_grid_only)
 
 with elec_col:
     st.subheader("Electrolyser")
     st.caption(f"Selected process: **{tech_label}**")
-    electrolyser_capacity_kw = st.number_input("Capacity (kW)", min_value=0.0,
-                                                value=float(cfg.ELECTROLYSER_CAPACITY_KW), step=100.0,
+    electrolyser_capacity_kw = st.number_input("Capacity (kW)",
+                                                min_value=D.SETUP_ELECTROLYSER_KW_MIN,
+                                                value=float(cfg.ELECTROLYSER_CAPACITY_KW),
+                                                step=D.SETUP_ELECTROLYSER_KW_STEP,
                                                 disabled=run_grid_only)
-    min_load_frac = st.slider("Minimum load fraction", 0.0, 1.0, float(cfg.MIN_LOAD_FRACTION),
-                               disabled=run_grid_only)
-    wind_method_mode = st.selectbox("Wind LCA method", ["cheap", "exact"], index=0, disabled=run_grid_only)
+    min_load_frac = st.slider("Minimum load fraction", D.SETUP_MIN_LOAD_MIN, D.SETUP_MIN_LOAD_MAX,
+                               float(cfg.MIN_LOAD_FRACTION), disabled=run_grid_only)
+    wind_method_mode = st.selectbox("Wind LCA method", D.LCA_METHODS, index=D.LCA_METHOD_INDEX,
+                                     disabled=run_grid_only)
 
 st.subheader("Renewables.ninja API token")
 ninja_token = st.text_input(
@@ -178,8 +181,8 @@ if not run_grid_only and not (ninja_token or os.getenv("RENEWABLES_NINJA_TOKEN")
     )
 
 st.subheader("Time period")
-time_mode = st.radio("Mode", ["single", "range", "year_average"], horizontal=True,
-                      index=["single", "range", "year_average"].index(cfg.GRID_TIME_MODE))
+time_mode = st.radio("Mode", D.SETUP_TIME_MODES, horizontal=True,
+                      index=D.SETUP_TIME_MODES.index(cfg.GRID_TIME_MODE))
 
 if time_mode == "single":
     default_dt = dt.datetime.fromisoformat(cfg.GRID_SINGLE_DATETIME)
@@ -201,7 +204,8 @@ elif time_mode == "range":
     year = cfg.GRID_YEAR
     st.caption("A multi-day/multi-month range fetches many half-hourly points — this can take a while.")
 else:
-    year = st.number_input("Year", min_value=2015, max_value=dt.date.today().year, value=int(cfg.GRID_YEAR))
+    year = st.number_input("Year", min_value=D.SETUP_YEAR_MIN, max_value=dt.date.today().year,
+                            value=int(cfg.GRID_YEAR))
     single_datetime = cfg.GRID_SINGLE_DATETIME
     range_start = cfg.GRID_RANGE_START
     range_end = cfg.GRID_RANGE_END
@@ -358,7 +362,8 @@ if last_run is not None:
                 else:
                     st.caption("No stored uncertainty found for this process — fill in the template below if needed.")
                     template_df = pd.DataFrame(
-                        [{"flow_name": None, "lower": None, "mode": None, "upper": None} for _ in range(5)]
+                        [{"flow_name": None, "lower": None, "mode": None, "upper": None}
+                         for _ in range(D.SETUP_MC_TEMPLATE_ROWS)]
                     )
 
                 uncertainty_editor_df = st.data_editor(
@@ -377,12 +382,15 @@ if last_run is not None:
                     key="uncertainty_editor",
                 )
                 n_iterations = st.slider(
-                    "Monte Carlo iterations", 20, 1000, 50, step=10,
+                    "Monte Carlo iterations", D.SETUP_MC_ITER_MIN, D.SETUP_MC_ITER_MAX,
+                    D.SETUP_MC_ITER, step=D.SETUP_MC_ITER_STEP,
                     help="Each iteration re-solves the full LCI against all of ecoinvent — "
                          "roughly 3-4s/iteration on typical hardware, so start low.",
                 )
-                st.caption(f"Estimated time: ~{n_iterations * 3.5 / 60:.1f}-{n_iterations * 4.5 / 60:.1f} minutes "
-                           f"at ~3.5-4.5s/iteration.")
+                _lo = n_iterations * D.SETUP_MC_SECONDS_PER_ITER_LOW / 60
+                _hi = n_iterations * D.SETUP_MC_SECONDS_PER_ITER_HIGH / 60
+                st.caption(f"Estimated time: ~{_lo:.1f}-{_hi:.1f} minutes at "
+                           f"~{D.SETUP_MC_SECONDS_PER_ITER_LOW}-{D.SETUP_MC_SECONDS_PER_ITER_HIGH}s/iteration.")
 
                 uncertainty_rows = [
                     {"name": r["flow_name"], "lower": r["lower"], "mode": r["mode"], "upper": r["upper"]}

@@ -3,8 +3,15 @@
   "configurations": [
     {
       "name": "streamlit-app",
-      "runtimeExecutable": "/opt/miniconda3/envs/brightway/bin/streamlit",
-      "runtimeArgs": ["run", "Home.py", "--server.headless", "true"],
+      "runtimeExecutable": "C:/Users/ls1524/AppData/Local/miniconda3/envs/brightway/python.exe",
+      "runtimeArgs": [
+        "-m",
+        "streamlit",
+        "run",
+        "Home.py",
+        "--server.headless",
+        "true"
+      ],
       "port": 8501
     }
   ]

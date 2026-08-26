@@ -36,8 +36,9 @@ def main(argv=None):
                          f"{', '.join(sites.PRESETS)}")
     ap.add_argument("--connection-limit", type=float, default=None,
                     help="grid connection cap in MW; omit for unconstrained")
-    ap.add_argument("--tdr-band", default=sites.DEFAULT_TDR_BAND,
-                    help="TNUoS demand residual band, by agreed capacity")
+    ap.add_argument("--tdr-band", default=None,
+                    help="override the TNUoS demand residual band; by default it "
+                         "is derived from the connection limit, else from peak demand")
     ap.add_argument("--dc-size", type=float, default=7.31, help="IT load, MW")
     ap.add_argument("--pue", type=float, default=1.0,
                     help="1.0 reproduces the Zhang foreground, whose figure is already facility-level")
@@ -64,13 +65,16 @@ def main(argv=None):
     if args.lat is None and args.site is None:
         args.site = sites.DEFAULT_PRESET
     try:
+        peak_mw = args.dc_size * args.pue
         site = (sites.resolve(args.lat, args.lon,
                               connection_limit_mw=args.connection_limit,
-                              tdr_band=args.tdr_band)
+                              tdr_band=args.tdr_band,
+                              agreed_capacity_mw=peak_mw)
                 if args.lat is not None
                 else sites.preset(args.site,
                                   connection_limit_mw=args.connection_limit,
-                                  tdr_band=args.tdr_band))
+                                  tdr_band=args.tdr_band,
+                                  agreed_capacity_mw=peak_mw))
     except Exception as exc:
         ap.error(str(exc))
 

@@ -201,7 +201,7 @@ def run(cost_case: str = "central"):
     OUT_DIR.mkdir(exist_ok=True)
     out = df.copy()
     out.attrs.clear()
-    with CSV_PATH.open("w") as fh:
+    with CSV_PATH.open("w", encoding="utf-8", newline="") as fh:
         fh.write(f"# built_at,{datetime.now(timezone.utc).isoformat(timespec='seconds')}\n")
         fh.write(f"# cost_case,{cost_case}\n")
         out.to_csv(fh, index=False)
@@ -215,7 +215,7 @@ def load() -> pd.DataFrame:
         raise FileNotFoundError(
             f"{CSV_PATH.relative_to(ROOT)} has not been built. Run "
             "`python optimisation/coefficients.py` in the brightway environment first.")
-    return pd.read_csv(CSV_PATH, comment="#")
+    return pd.read_csv(CSV_PATH, comment="#", encoding="utf-8")
 
 
 if __name__ == "__main__":

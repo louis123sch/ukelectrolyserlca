@@ -1,0 +1,4 @@
+{
+  "python.defaultInterpreterPath": "${userHome}\\AppData\\Local\\miniconda3\\envs\\brightway\\python.exe",
+  "python.terminal.activateEnvInCurrentTerminal": true
+}

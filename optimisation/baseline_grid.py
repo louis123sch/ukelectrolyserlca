@@ -56,7 +56,7 @@ GRID_CSV = ROOT / "custom_grid_lca_outputs" / (
     "2025-01-01T00-00-00T_to_T2025-12-29T00-00-00.csv"
 )
 PRICE_CSV = ROOT / "price_outputs" / (
-    "elexon_market_index_clean_2025-01-01_00-00-00_->_2025-12-29_00-00-00.csv"
+    "elexon_market_index_clean_2025-01-01_00-00-00_to_2025-12-29_00-00-00.csv"
 )
 OUT_DIR = ROOT / "optimisation_outputs"
 

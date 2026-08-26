@@ -164,7 +164,7 @@ def decompose_all(use_cache: bool = True, refresh: bool = False):
         return _MEMO
     if use_cache and CACHE_PATH.exists():
         try:
-            cached = json.loads(CACHE_PATH.read_text())
+            cached = json.loads(CACHE_PATH.read_text(encoding="utf-8"))
             if sorted(r["technology"] for r in cached) == sorted(TECHNOLOGIES):
                 _MEMO = cached
                 return _MEMO
@@ -179,7 +179,7 @@ def decompose_all(use_cache: bool = True, refresh: bool = False):
     rows = [decompose(tech, ei, H, method) for tech in TECHNOLOGIES]
 
     OUT_DIR.mkdir(exist_ok=True)
-    CACHE_PATH.write_text(json.dumps(rows, indent=2))
+    CACHE_PATH.write_text(json.dumps(rows, indent=2), encoding="utf-8")
     _MEMO = rows
     return rows
 

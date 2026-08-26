@@ -146,7 +146,7 @@ def decompose(use_cache: bool = True, refresh: bool = False) -> dict:
         return _MEMO
     if use_cache and CACHE_PATH.exists():
         try:
-            _MEMO = json.loads(CACHE_PATH.read_text())
+            _MEMO = json.loads(CACHE_PATH.read_text(encoding="utf-8"))
             return _MEMO
         except Exception:
             pass
@@ -209,7 +209,7 @@ def decompose(use_cache: bool = True, refresh: bool = False) -> dict:
         "_parts": parts,
     }
     OUT_DIR.mkdir(exist_ok=True)
-    CACHE_PATH.write_text(json.dumps(out, indent=2))
+    CACHE_PATH.write_text(json.dumps(out, indent=2), encoding="utf-8")
     _MEMO = out
     return out
 

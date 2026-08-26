@@ -145,6 +145,23 @@ def test_locked_assets_stay_at_zero(series, tech):
         assert abs(float(V[k].solution)) < 1e-9, f"{k} was built in grid_only"
 
 
+def test_islanded_architectures_pay_no_connection_charge(series, tech):
+    """No connection, no TNUoS demand residual.
+
+    It cannot move an islanded run's own argmin, but these results are ranked
+    against grid-connected ones, where charging it is a flat penalty on going
+    off-grid — roughly £4/MWh at the previously hard-coded EHV2 band.
+    """
+    islanded = M.Assets(grid=False, wind=True, solar=True, electrolyser=True,
+                        tank=True, fuel_cell=True, grid_limit_mw=0.0)
+    _, obj = _solve(series, tech, islanded, objective="cost")
+    assert M.totals(obj)["cost_const_GBP_per_year"] == 0.0
+
+    connected = M.Assets(grid=True, wind=True, solar=True, grid_limit_mw=None)
+    _, obj_g = _solve(series, tech, connected, objective="cost")
+    assert M.totals(obj_g)["cost_const_GBP_per_year"] == tech.cost_grid_fixed_per_year
+
+
 # =============================================================================
 # Objectives
 # =============================================================================

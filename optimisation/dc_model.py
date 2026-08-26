@@ -310,7 +310,13 @@ def build_model(series: Series, assets: Assets, tech: Tech, *,
     # objective, and they cannot change an argmin anyway. They are added back
     # for reporting, and — importantly — netted off any epsilon limit, which is
     # stated against the *total* the user sees, not the variable part.
-    cost_const = tech.cost_grid_fixed_per_year
+    #
+    # The fixed connection charge (TNUoS demand residual + DUoS fixed) is only
+    # payable by a site that HAS a connection. Charging it to the islanded
+    # architectures would not move their own argmin, but these results are
+    # compared across architectures, where a flat ~£4/MWh penalty on going
+    # off-grid is exactly the trade being studied.
+    cost_const = tech.cost_grid_fixed_per_year if assets.grid else 0.0
     gwp_const = (tech.dc_fixed_gwp_per_year
                  + tech.dc_other_gwp_per_mwh
                  * float(series.demand_mw.sum() * dt) * scale)
@@ -486,7 +492,7 @@ def contributions(V, obj, series, tech, assets) -> dict:
         "grid energy + network": scale * float((series.grid_price_per_mwh * ser["imp"] * dt).sum()),
         "bought H2": scale * tech.bought_h2_gbp_per_kg * float(ser["h2_buy"].sum()),
         "unserved (VoLL)": scale * VOLL_GBP_PER_MWH * float((ser["unserved"] * dt).sum()),
-        "connection fixed": tech.cost_grid_fixed_per_year,
+        "connection fixed": tech.cost_grid_fixed_per_year if assets.grid else 0.0,
     }
     mwh = float(series.demand_mw.sum() * dt) * scale
     return {

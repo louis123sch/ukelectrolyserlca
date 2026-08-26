@@ -1,14 +1,12 @@
 """Home — project status and latest results.
 
 Entry point for the multipage app:
-  1. Setup LCA             — pick a foreground process, configure the grid/wind background, run it.
-  2. Optimisation Inputs   — cost and carbon coefficients for the data-centre powering study.
-  3. Size Optimiser        — cheapest wind/solar/battery build for a fixed electrolyser.
+  1. Setup LCA              — pick a foreground process, configure the grid/wind background, run it.
+  2. Electrolyser Optimiser — cheapest wind/solar/battery build for a fixed electrolyser.
+  3. Data Centre Optimiser  — cheapest/cleanest installed mix to power a data centre.
 """
 
 from __future__ import annotations
-
-from pathlib import Path
 
 import pandas as pd
 import streamlit as st
@@ -16,6 +14,7 @@ import streamlit as st
 import dashboard_config as cfg
 import lca_helpers as H
 from backend.runner import latest_plots
+from ui_common import connect_brightway, latest_csv
 
 st.set_page_config(page_title="UK Electrolyser LCA", layout="wide")
 st.title("UK Electrolyser LCA")
@@ -27,21 +26,17 @@ Use the sidebar to navigate:
 
 - **1 Setup LCA** — pick any foreground process, configure the background scenario (grid region,
   wind farm, running strategy, time period), and run the LCA.
-- **2 Optimisation Inputs** — the cost and carbon coefficients for the data-centre powering study.
-- **3 Size Optimiser** — fix an electrolyser, find the cheapest compliant wind/solar/battery build.
+- **2 Electrolyser Optimiser** — fix an electrolyser, find the cheapest compliant
+  wind/solar/battery build. Its cost and carbon inputs are on the page itself.
+- **3 Data Centre Optimiser** — pick a size, a site and a power option, get the installed mix
+  at minimum cost, minimum emissions, and the knee point between them.
 """
 )
 
 
-@st.cache_resource(show_spinner="Connecting to Brightway…")
-def _connect():
-    H.setup_brightway()
-    return True
-
-
 st.header("Project status")
 try:
-    _connect()
+    connect_brightway()
     st.success(f"Connected to Brightway project **{cfg.PROJECT_NAME}**.")
 
     cols = st.columns(4)
@@ -68,15 +63,6 @@ except Exception as exc:
 
 st.header("Latest results")
 
-
-def _latest_csv(folder: str, pattern: str = "*.csv"):
-    p = Path(folder)
-    if not p.exists():
-        return None
-    files = sorted(p.glob(pattern), key=lambda f: f.stat().st_mtime, reverse=True)
-    return files[0] if files else None
-
-
 result_cols = st.columns(3)
 result_specs = [
     ("Grid (Carbon Intensity API)", cfg.GRID_OUTPUT_DIR, "custom_grid_lca_carbon_api_*.csv"),
@@ -86,9 +72,9 @@ result_specs = [
 for col, (label, folder, pattern) in zip(result_cols, result_specs):
     with col:
         st.subheader(label)
-        latest = _latest_csv(folder, pattern)
+        latest = latest_csv(folder, pattern)
         if latest is None:
-            st.caption("No results yet — run one from **2 Setup LCA**.")
+            st.caption("No results yet — run one from **1 Setup LCA**.")
             continue
         st.caption(latest.name)
         try:

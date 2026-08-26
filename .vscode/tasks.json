@@ -1,0 +1,40 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Streamlit: run app",
+      "detail": "Serve Home.py from the brightway env on a fixed port so it can be opened in a browser.",
+      "type": "shell",
+      "command": "${userHome}\\AppData\\Local\\miniconda3\\envs\\brightway\\python.exe",
+      "args": [
+        "-u",
+        "-m",
+        "streamlit",
+        "run",
+        "Home.py",
+        "--server.port",
+        "8501",
+        "--server.headless",
+        "true"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": { "PYTHONIOENCODING": "utf-8" }
+      },
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": [{ "regexp": "^(.*)$", "message": 1 }],
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".*Uvicorn server started.*",
+          "endsPattern": ".*You can now view your Streamlit app.*"
+        }
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    }
+  ]
+}

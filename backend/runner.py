@@ -94,7 +94,7 @@ class RunResult:
 def _extract_notebook_log(nb_path: Path, max_chars: int = 20000) -> str:
     import json
 
-    nb = json.loads(nb_path.read_text())
+    nb = json.loads(nb_path.read_text(encoding="utf-8"))
     chunks = []
     for cell in nb.get("cells", []):
         if cell.get("cell_type") != "code":
@@ -136,7 +136,7 @@ def _extract_notebook_images(nb_path: Path) -> list[tuple[str, bytes]]:
     import base64
     import json
 
-    nb = json.loads(nb_path.read_text())
+    nb = json.loads(nb_path.read_text(encoding="utf-8"))
     images: list[tuple[str, bytes]] = []
     for cell in nb.get("cells", []):
         if cell.get("cell_type") != "code":
@@ -168,7 +168,7 @@ def _save_plots(nb_path: Path, plots_dir: Path) -> list[tuple[str, Path]]:
         (plots_dir / filename).write_bytes(png_bytes)
         captions[filename] = caption
         saved.append((caption, plots_dir / filename))
-    (plots_dir / "captions.json").write_text(json.dumps(captions, indent=2))
+    (plots_dir / "captions.json").write_text(json.dumps(captions, indent=2), encoding="utf-8")
     return saved
 
 
@@ -184,24 +184,30 @@ def run_lca(overrides: dict, secrets: dict | None = None, timeout_s: int = 1800)
     """
     RUNS_DIR.mkdir(exist_ok=True)
 
-    base_text = CONFIG_PATH.read_text()
+    base_text = CONFIG_PATH.read_text(encoding="utf-8")
     backup_path = RUNS_DIR / "dashboard_config.before_last_run.py"
-    backup_path.write_text(base_text)
+    backup_path.write_text(base_text, encoding="utf-8")
 
     new_text = apply_config_overrides(base_text, overrides)
-    CONFIG_PATH.write_text(new_text)
+    CONFIG_PATH.write_text(new_text, encoding="utf-8")
+
+    # dashboard_config.py is a *tracked* file, so the patch above must never
+    # outlive the run. It used to: a failed run left its overrides in place,
+    # the next run inherited them, and a stale TECH_SELECTED pointing at a
+    # database this project does not have made every later run die in the
+    # foreground-LCA cell before writing any output at all.
+    def _restore_config():
+        try:
+            CONFIG_PATH.write_text(base_text, encoding="utf-8")
+        except Exception:
+            pass
 
     output_dirs = [REPO_DIR / d for d in OUTPUT_DIRS]
     before = _snapshot(output_dirs)
 
-    python_exe = Path(sys.executable)
-    nbconvert_exe = python_exe.with_name("jupyter-nbconvert")
-    if not nbconvert_exe.exists():
-        nbconvert_exe = "jupyter-nbconvert"  # fall back to PATH lookup
-
     executed_path = RUNS_DIR / "last_run_executed.ipynb"
     cmd = [
-        str(nbconvert_exe),
+        sys.executable, "-m", "nbconvert",
         "--to", "notebook",
         "--execute",
         f"--ExecutePreprocessor.timeout={timeout_s}",
@@ -216,6 +222,12 @@ def run_lca(overrides: dict, secrets: dict | None = None, timeout_s: int = 1800)
     # a plain "Agg" backend renders plt.show() a no-op and silently produces
     # zero images, which is otherwise very easy to hit by accident.
     env["MPLBACKEND"] = "module://matplotlib_inline.backend_inline"
+    # The child prints unicode (em-dashes and pound signs); without this the
+    # Windows console codepage mangles or crashes those prints.
+    env["PYTHONIOENCODING"] = "utf-8"
+    if os.name == "nt":
+        # See lca_helpers: MKL 2025 OpenMP layer is broken on Windows.
+        env.setdefault("MKL_THREADING_LAYER", "TBB")
 
     try:
         proc = subprocess.run(
@@ -223,6 +235,8 @@ def run_lca(overrides: dict, secrets: dict | None = None, timeout_s: int = 1800)
             cwd=REPO_DIR,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout_s + 60,
             env=env,
         )
@@ -232,6 +246,8 @@ def run_lca(overrides: dict, secrets: dict | None = None, timeout_s: int = 1800)
             error_text=f"Run timed out after {timeout_s}s.\n{exc.stdout or ''}\n{exc.stderr or ''}",
             config_backup=backup_path,
         )
+    finally:
+        _restore_config()
 
     new_files = _new_or_changed(before, output_dirs)
 
@@ -265,7 +281,7 @@ def latest_plots() -> list[tuple[str, Path]]:
     if not PLOTS_DIR.exists():
         return []
     captions_path = PLOTS_DIR / "captions.json"
-    captions = json.loads(captions_path.read_text()) if captions_path.exists() else {}
+    captions = json.loads(captions_path.read_text(encoding="utf-8")) if captions_path.exists() else {}
     return [
         (captions.get(p.name, f"Figure {p.stem}"), p)
         for p in sorted(PLOTS_DIR.glob("*.png"))

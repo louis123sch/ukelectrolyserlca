@@ -138,11 +138,11 @@ def _cache(name: str, fetch):
     path = CACHE_DIR / f"{name}.json"
     if path.exists():
         try:
-            return json.loads(path.read_text()), True
+            return json.loads(path.read_text(encoding="utf-8")), True
         except Exception:
             pass
     records = fetch()
-    path.write_text(json.dumps(records, indent=2))
+    path.write_text(json.dumps(records, indent=2), encoding="utf-8")
     return records, False
 
 
@@ -187,6 +187,53 @@ def tnuos_tdr(year_fy: int = TARIFF_FY, publication: str = PUBLICATION):
     out.columns = ["band", "GBP_per_site_day"]
     out["GBP_per_site_year"] = out["GBP_per_site_day"] * DAYS_PER_YEAR
     return out.reset_index(drop=True), cached
+
+
+# -----------------------------------------------------------------------------
+# Which band a site falls in
+# -----------------------------------------------------------------------------
+# The TDR band follows from the site's agreed capacity and connection voltage —
+# never from its location, and never from a free choice by the modeller. Left as
+# a dropdown it swings the answer by £22/MWh across HV1..EHV4, which is larger
+# than most of the differences this study reports.
+#
+# WARNING — THE BOUNDARIES BELOW ARE ASSUMED, THE TARIFFS ARE NOT.
+# The £/site/day figures come from the NESO feed fetched above. The capacity
+# boundaries do not: under the Targeted Charging Review each DNO sets its own
+# band boundaries in its DCUSA charging statement, so there is no single national
+# table, and the NESO resource carries only band -> £/day. The ladder below is a
+# stand-in based on typical GB connection practice (HV up to roughly 8 MVA, EHV
+# above it, four capacity bands within each tier). Replace it with the DNO's
+# published table before quoting any absolute cost.
+TDR_BANDS_ARE_ASSUMED = True
+
+TDR_BAND_MAX_MVA = [
+    (1.0, "HV1"),
+    (2.0, "HV2"),
+    (4.0, "HV3"),
+    (8.0, "HV4"),
+    (15.0, "EHV1"),
+    (30.0, "EHV2"),
+    (60.0, "EHV3"),
+    (float("inf"), "EHV4"),
+]
+
+
+def tdr_band_for_capacity(agreed_capacity_mw: float,
+                          power_factor: float = 1.0) -> str:
+    """The TDR band a site of this agreed capacity would be assigned.
+
+    `agreed_capacity_mw` is the *connection* size, not the annual energy: the
+    grid connection cap where one is imposed, otherwise the site's peak demand.
+    See TDR_BANDS_ARE_ASSUMED — the boundaries are a stand-in, not sourced.
+    """
+    if agreed_capacity_mw <= 0:
+        raise ValueError("agreed capacity must be positive to imply a TDR band")
+    mva = agreed_capacity_mw / power_factor
+    for ceiling, band in TDR_BAND_MAX_MVA:
+        if mva <= ceiling:
+            return band
+    return TDR_BAND_MAX_MVA[-1][1]
 
 
 # =============================================================================

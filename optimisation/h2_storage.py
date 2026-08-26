@@ -123,7 +123,7 @@ def decompose(use_cache: bool = True, refresh: bool = False):
         return _MEMO
     if use_cache and CACHE_PATH.exists():
         try:
-            _MEMO = json.loads(CACHE_PATH.read_text())
+            _MEMO = json.loads(CACHE_PATH.read_text(encoding="utf-8"))
             return _MEMO
         except Exception:
             pass
@@ -171,7 +171,7 @@ def decompose(use_cache: bool = True, refresh: bool = False):
             r["brightway_kgco2e_per_kg_capacity"] = built
 
     OUT_DIR.mkdir(exist_ok=True)
-    CACHE_PATH.write_text(json.dumps(rows, indent=2))
+    CACHE_PATH.write_text(json.dumps(rows, indent=2), encoding="utf-8")
     _MEMO = rows
     return rows
 

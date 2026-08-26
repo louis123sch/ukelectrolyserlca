@@ -168,15 +168,25 @@ def _best_covering(folder: Path, pattern: str, time_col: str, start, end):
     return best, index
 
 
-def load_grid_and_price(start, end):
-    """Half-hourly GB grid intensity and wholesale price for the window."""
-    gpath, gindex = _best_covering(
-        GRID_DIR, "custom_grid_lca_carbon_api_*.csv", "datetime", start, end)
+def load_grid_and_price(start, end, carbon_api_region: int | None = None):
+    """Half-hourly GB grid intensity and wholesale price for the window.
+
+    ``carbon_api_region`` restricts the search to that Carbon Intensity
+    region's files. Without it the search is region-blind and simply picks
+    whichever file covers the window best — which, once more than one region
+    is cached, can hand a Scottish site London's grid mix. The caller that
+    knows its region should always pass it.
+    """
+    pattern = ("custom_grid_lca_carbon_api_*.csv" if carbon_api_region is None
+               else f"custom_grid_lca_carbon_api_*_r{int(carbon_api_region)}_*.csv")
+    gpath, gindex = _best_covering(GRID_DIR, pattern, "datetime", start, end)
     if gpath is None:
+        where = ("custom_grid_lca_outputs/" if carbon_api_region is None else
+                 f"custom_grid_lca_outputs/ for region {carbon_api_region}")
         raise FileNotFoundError(
-            "No Carbon Intensity API output found in custom_grid_lca_outputs/. "
-            "Run 3.1.custom_grid_carbon_intensity_api.ipynb (or the Setup LCA "
-            "page) for the period you want first.")
+            f"No Carbon Intensity API output found in {where}. "
+            "Run 3.1.custom_grid_carbon_intensity_api.ipynb (or build it from "
+            "the Data Centre Optimiser page) for the period you want first.")
     grid = pd.read_csv(gpath, parse_dates=["datetime"]).rename(
         columns={"datetime": "time",
                  "custom_electricity_score": "grid_kgco2e_per_kwh"})
@@ -215,14 +225,15 @@ def load_grid_and_price(start, end):
 
 
 def build(lat, lon, start, end, *, turbine="Vestas V90 2000",
-          hub_height_m=80.0, tilt=35.0, azim=180.0, token=None):
+          hub_height_m=80.0, tilt=35.0, azim=180.0, token=None,
+          carbon_api_region: int | None = None):
     """Everything the dispatch needs, aligned on one half-hourly index.
 
     Renewables.ninja is hourly; the grid and price series are half-hourly. The
     hourly capacity factors are forward-filled onto the half-hourly index,
     matching ``lca_helpers.align_wind_to_grid_timeslices``'s default.
     """
-    grid, gname, pname = load_grid_and_price(start, end)
+    grid, gname, pname = load_grid_and_price(start, end, carbon_api_region)
     wind, wind_hit = fetch_wind_cf(lat, lon, start, end, turbine, hub_height_m,
                                    token=token)
     solar, solar_hit = fetch_solar_cf(lat, lon, start, end, tilt, azim,

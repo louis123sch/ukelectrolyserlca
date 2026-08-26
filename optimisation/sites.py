@@ -117,8 +117,12 @@ CI_REGION_TO_TNUOS_ZONE = {
     14: 11,  # South East England  -> South East
 }
 
-# TDR band is set by agreed capacity, not by location. EHV2 suits a data centre
-# of a few tens of MW; see network_charges.tnuos_tdr() for the full band list.
+# The TDR band is set by agreed capacity and connection voltage, not by
+# location and not by preference. Prefer passing ``agreed_capacity_mw`` to
+# ``resolve()`` and letting it derive; see
+# ``network_charges.tdr_band_for_capacity()``. This default only applies when
+# neither a band nor a capacity is given, and reproduces the figure this study
+# published before the band was derived.
 DEFAULT_TDR_BAND = "EHV2"
 
 # Offshore wind needs a credible coastal connection. Judged by the resolved
@@ -168,7 +172,7 @@ class Site:
 def _cache() -> dict:
     if CACHE_PATH.exists():
         try:
-            return json.loads(CACHE_PATH.read_text())
+            return json.loads(CACHE_PATH.read_text(encoding="utf-8"))
         except Exception:
             pass
     return {}
@@ -176,7 +180,7 @@ def _cache() -> dict:
 
 def _save_cache(c: dict):
     CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    CACHE_PATH.write_text(json.dumps(c, indent=2, sort_keys=True))
+    CACHE_PATH.write_text(json.dumps(c, indent=2, sort_keys=True), encoding="utf-8")
 
 
 def _get(url: str, timeout: int = 20):
@@ -239,13 +243,27 @@ def lookup(lat: float, lon: float) -> dict:
 
 def resolve(lat: float, lon: float, *, name: str | None = None,
             connection_limit_mw: float | None = None,
-            tdr_band: str = DEFAULT_TDR_BAND,
+            tdr_band: str | None = None,
+            agreed_capacity_mw: float | None = None,
             carbon_api_region: int | None = None) -> Site:
     """Build a Site from a coordinate, deriving its region and TNUoS zone.
 
     ``carbon_api_region`` overrides the lookup, for a boundary case you have
     checked yourself or when the APIs are unreachable.
+
+    The TDR band is derived from the connection, in this order: an explicit
+    ``tdr_band`` wins; otherwise it is banded from ``connection_limit_mw`` if
+    one is imposed, else from ``agreed_capacity_mw`` (the site's peak demand);
+    otherwise it falls back to DEFAULT_TDR_BAND.
     """
+    if tdr_band is None:
+        capacity = connection_limit_mw or agreed_capacity_mw
+        if capacity:
+            from . import network_charges as nc
+            tdr_band = nc.tdr_band_for_capacity(float(capacity))
+        else:
+            tdr_band = DEFAULT_TDR_BAND
+
     if carbon_api_region is not None:
         region = int(carbon_api_region)
         info = {"outcode": "", "place": name or "",
@@ -370,13 +388,28 @@ def build_grid_series(carbon_api_region: int, start="2025-01-01 00:00:00",
         "GRID_RANGE_START": start,
         "GRID_RANGE_END": end,
         "RUN_GRID_SCENARIO_LCA": True,
+        # Notebook 3.1 writes the grid series only *after* scoring a foreground
+        # technology, so the run dies before writing anything if TECH_SELECTED
+        # names something this project cannot resolve. Which technology gets
+        # scored makes no difference to the grid series itself, so pin it to the
+        # built-in default (empty TECH_SELECTED falls back to TECH_ORDER_DEFAULT)
+        # rather than inheriting whatever the last Setup-LCA run left behind.
+        "TECH_SELECTED": [],
+        "TECH_COUNT": 1,
+        "TECH_SOURCE_OVERRIDES": {},
+        # ELECTROLYSER_TECHS is validated against the built-in electrolyser
+        # names unless the label is in TECH_SOURCE_OVERRIDES, which was just
+        # cleared — so it has to be pinned to a built-in too.
+        "ELECTROLYSER_TECHS": ["PEM operation"],
     }, timeout_s=timeout_s)
     have = available_grid_regions()
     if carbon_api_region not in have:
+        detail = (result.error_text or "")[-1500:] if result is not None else ""
         raise RuntimeError(
             "The run finished but no series for region "
-            f"{carbon_api_region} appeared in custom_grid_lca_outputs/. "
-            "Check the notebook log.")
+            f"{carbon_api_region} appeared in custom_grid_lca_outputs/."
+            + (f"\n\nEnd of the notebook log:\n{detail}" if detail.strip()
+               else " Check _streamlit_runs/last_run_executed.ipynb."))
     print(f"Done: {have[carbon_api_region][-1]}")
     return result
 

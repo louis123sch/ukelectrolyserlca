@@ -13,15 +13,20 @@ A multipage app wraps the notebooks in a UI:
   electrolysis/H2 techs, or anything written by page 1), configure the
   background scenario (grid region, wind farm, running strategy, time
   period), and run it.
-- **2 Optimisation Inputs** — the cost and carbon coefficients for the
-  data-centre powering study: the GB grid baseline, wind/solar/offshore
-  costs and embodied carbon, hydrogen prices by colour, and battery storage.
-  Every table is produced by a module in `optimisation/`, so the page never
-  holds a second copy of the science.
-- **3 Size Optimiser** — fix the demand (electrolyser technology, rating,
-  running strategy), the site and the date range, and find the cheapest wind /
-  solar / battery build that still meets an emissions threshold — by default
-  the UK Low Carbon Hydrogen Standard's 20 gCO2e/MJ LHV.
+- **2 Electrolyser Optimiser** — fix the demand (electrolyser technology,
+  rating, running strategy), the site and the date range, and find the
+  cheapest wind / solar / battery build that still meets an emissions
+  threshold — by default the UK Low Carbon Hydrogen Standard's 20 gCO2e/MJ
+  LHV. Its cost and carbon inputs (generation costs, embodied carbon,
+  battery storage) are shown on the page itself; pressing Run builds
+  whatever data the run needs first, under one progress bar.
+- **3 Data Centre Optimiser** — pick a size, a site, a window and which power
+  options to compare; get the installed mix at minimum cost, minimum
+  emissions, and the knee point between them. Its inputs (the GB grid
+  baseline, hydrogen prices by colour, generation and battery coefficients)
+  are shown on the page itself. Every table on both optimiser pages is
+  produced by a module in `optimisation/`, so no page ever holds a second
+  copy of the science.
 
 ### Setup
 
@@ -138,7 +143,7 @@ still match what `5.prices.ipynb` independently writes. Between them these have
 caught several real errors, including a case-pairing bug inherited from the
 DESNZ reports' own scenario convention.
 
-The Streamlit pages **3 Optimisation Inputs** and **4 Size Optimiser** are thin
+The Streamlit pages **2 Electrolyser Optimiser** and **3 Data Centre Optimiser** are thin
 views over these modules. They reload them on each rerun, so edits to
 `optimisation/*.py` show up without restarting the app.
 
@@ -160,7 +165,7 @@ quietly returning a non-compliant build.
 
 ## The data centre powering study
 
-Two entry points, one engine. `pages/4_Data_Centre_Optimiser.py` for exploring
+Two entry points, one engine. `pages/3_Data_Centre_Optimiser.py` for exploring
 and `scripts/run_dc_scenarios.py` for the full matrix headless:
 
 ```bash

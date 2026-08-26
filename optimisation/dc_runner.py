@@ -105,7 +105,7 @@ def run_one(scenario: A.Scenario, *, site, start: str, end: str,
 
     if summary_path.exists() and not refresh:
         try:
-            cached = json.loads(summary_path.read_text())
+            cached = json.loads(summary_path.read_text(encoding="utf-8"))
             if cached.get("config_hash") == h:
                 cached["cached"] = True
                 return cached
@@ -135,7 +135,8 @@ def run_one(scenario: A.Scenario, *, site, start: str, end: str,
                      unserved_fraction=unserved_fraction)
 
     folder.mkdir(parents=True, exist_ok=True)
-    (folder / "config.json").write_text(json.dumps(cfg, indent=2, default=str))
+    (folder / "config.json").write_text(json.dumps(cfg, indent=2, default=str),
+                                        encoding="utf-8")
     result["front"].to_parquet(folder / "pareto.parquet", index=False)
 
     mwh = float(series.demand_mw.sum() * series.dt_hours) * series.annual_scale
@@ -161,7 +162,8 @@ def run_one(scenario: A.Scenario, *, site, start: str, end: str,
         "config_hash": h, "cached": False,
         "note": scenario.note,
     }
-    summary_path.write_text(json.dumps(summary, indent=2, default=str))
+    summary_path.write_text(json.dumps(summary, indent=2, default=str),
+                            encoding="utf-8")
     return summary
 
 
@@ -251,4 +253,5 @@ def comparison_table(summaries) -> pd.DataFrame:
 
 def load_results(out_root: Path) -> list[dict]:
     """Read back every summary.json under a results folder."""
-    return [json.loads(p.read_text()) for p in sorted(Path(out_root).glob("*/summary.json"))]
+    return [json.loads(p.read_text(encoding="utf-8"))
+            for p in sorted(Path(out_root).glob("*/summary.json"))]

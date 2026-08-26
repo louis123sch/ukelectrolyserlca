@@ -50,7 +50,7 @@ def data_centre_coefficients(refresh: bool = False) -> dict:
     """
     if DC_CACHE.exists() and not refresh:
         try:
-            return json.loads(DC_CACHE.read_text())
+            return json.loads(DC_CACHE.read_text(encoding="utf-8"))
         except Exception:
             pass
     import bw2data as bd
@@ -70,7 +70,7 @@ def data_centre_coefficients(refresh: bool = False) -> dict:
         "fixed_kgco2e_per_year": fixed / years,
     }
     OUT_DIR.mkdir(exist_ok=True)
-    DC_CACHE.write_text(json.dumps(out, indent=2))
+    DC_CACHE.write_text(json.dumps(out, indent=2), encoding="utf-8")
     return out
 
 
@@ -86,7 +86,11 @@ def build_series(site, start: str, end: str, size_mw_it: float,
     from optimisation import profiles
 
     site = sites.get(site)
-    df, meta = profiles.build(site.lat, site.lon, start, end, token=token)
+    # Pass the region so the search cannot pick another region's series:
+    # require_grid_region below would refuse it, which used to block a site
+    # whose own series was sitting on disk all along.
+    df, meta = profiles.build(site.lat, site.lon, start, end, token=token,
+                              carbon_api_region=site.carbon_api_region)
     sites.require_grid_region(site, meta["grid_file"])
 
     index = pd.DatetimeIndex(df.index)
@@ -272,7 +276,7 @@ def _bought_h2_gwp(activity_code: str) -> float:
     cache = {}
     if _H2_GWP_CACHE.exists():
         try:
-            cache = json.loads(_H2_GWP_CACHE.read_text())
+            cache = json.loads(_H2_GWP_CACHE.read_text(encoding="utf-8"))
         except Exception:
             pass
     if activity_code in cache:
@@ -285,7 +289,7 @@ def _bought_h2_gwp(activity_code: str) -> float:
     score = H.run_lca_score(act, bg.gwp_method())
     cache[activity_code] = score
     OUT_DIR.mkdir(exist_ok=True)
-    _H2_GWP_CACHE.write_text(json.dumps(cache, indent=2))
+    _H2_GWP_CACHE.write_text(json.dumps(cache, indent=2), encoding="utf-8")
     return score
 
 
