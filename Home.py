@@ -2,7 +2,7 @@
 
 Entry point for the multipage app:
   1. Setup LCA             — pick a foreground process, configure the grid/wind background, run it.
-  2. Optimisation Inputs   — cost and carbon coefficients for the data-centre powering study.
+  2. Data Centre Optimiser — size it, site it, tick the kit, get the optimal capacities.
   3. Size Optimiser        — cheapest wind/solar/battery build for a fixed electrolyser.
 """
 
@@ -27,7 +27,9 @@ Use the sidebar to navigate:
 
 - **1 Setup LCA** — pick any foreground process, configure the background scenario (grid region,
   wind farm, running strategy, time period), and run the LCA.
-- **2 Optimisation Inputs** — the cost and carbon coefficients for the data-centre powering study.
+- **2 Data Centre Optimiser** — size the data centre, place it, tick the infrastructure you want
+  to investigate, and get the optimal capacity of each piece. The coefficients it runs on are on
+  the same page, underneath the answer.
 - **3 Size Optimiser** — fix an electrolyser, find the cheapest compliant wind/solar/battery build.
 """
 )
@@ -88,7 +90,7 @@ for col, (label, folder, pattern) in zip(result_cols, result_specs):
         st.subheader(label)
         latest = _latest_csv(folder, pattern)
         if latest is None:
-            st.caption("No results yet — run one from **2 Setup LCA**.")
+            st.caption("No results yet — run one from **1 Setup LCA**.")
             continue
         st.caption(latest.name)
         try:

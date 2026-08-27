@@ -7,6 +7,14 @@
     "region_name": "South West England",
     "tnuos_zone": 14
   },
+  "51.482,-3.179": {
+    "carbon_api_region": 7,
+    "outcode": "CF10",
+    "place": "Cardiff",
+    "postcode": "CF10 2AF",
+    "region_name": "South Wales",
+    "tnuos_zone": 10
+  },
   "51.507,-0.128": {
     "carbon_api_region": 13,
     "outcode": "WC2N",
@@ -31,6 +39,14 @@
     "region_name": "East England",
     "tnuos_zone": 9
   },
+  "52.486,-1.89": {
+    "carbon_api_region": 8,
+    "outcode": "B4",
+    "place": "Birmingham",
+    "postcode": "B4 7DL",
+    "region_name": "West Midlands",
+    "tnuos_zone": 8
+  },
   "52.62,1.29": {
     "carbon_api_region": 10,
     "outcode": "NR1",
@@ -38,6 +54,30 @@
     "postcode": "NR1 2QE",
     "region_name": "East England",
     "tnuos_zone": 9
+  },
+  "52.631,1.297": {
+    "carbon_api_region": 10,
+    "outcode": "NR3",
+    "place": "Norwich",
+    "postcode": "NR3 1FH",
+    "region_name": "East England",
+    "tnuos_zone": 9
+  },
+  "53.801,-1.549": {
+    "carbon_api_region": 5,
+    "outcode": "LS1",
+    "place": "Leeds",
+    "postcode": "LS1 3ED",
+    "region_name": "Yorkshire",
+    "tnuos_zone": 5
+  },
+  "54.978,-1.618": {
+    "carbon_api_region": 4,
+    "outcode": "NE1",
+    "place": "Newcastle upon Tyne",
+    "postcode": "NE1 4LQ",
+    "region_name": "North East England",
+    "tnuos_zone": 3
   },
   "57.48,-4.22": {
     "carbon_api_region": 1,

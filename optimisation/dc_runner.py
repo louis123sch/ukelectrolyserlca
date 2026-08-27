@@ -82,8 +82,16 @@ def run_one(scenario: A.Scenario, *, site, start: str, end: str,
             size_mw_it: float, pue: float, resample_hours: float | None,
             points: int, cost_case: str, horizon_years: float,
             unserved_fraction: float, out_root: Path,
-            save_dispatch: bool = False, refresh: bool = False) -> dict:
-    """Solve one configuration's Pareto front and write it to disk."""
+            gwp_target_kg_per_year: float | None = None,
+            save_dispatch: bool = False, refresh: bool = False,
+            progress=None) -> dict:
+    """Solve one configuration's Pareto front and write it to disk.
+
+    ``progress`` is called with a short tag per LP ("min_cost", "eps 3/12").
+    Only the single-configuration path uses it — across the matrix, progress is
+    reported per scenario by ``run_matrix`` instead, since the workers are in
+    other processes.
+    """
     from optimisation import dc_inputs as I
 
     site = sites.get(site)
@@ -97,6 +105,7 @@ def run_one(scenario: A.Scenario, *, site, start: str, end: str,
         "size_mw_it": size_mw_it, "pue": pue, "resample_hours": resample_hours,
         "points": points, "cost_case": cost_case, "horizon_years": horizon_years,
         "unserved_fraction": unserved_fraction,
+        "gwp_target_kg_per_year": gwp_target_kg_per_year,
         "coefficients": _coefficient_identity(),
     }
     h = config_hash(cfg)
@@ -122,7 +131,8 @@ def run_one(scenario: A.Scenario, *, site, start: str, end: str,
                         size_mw_it=size_mw_it, pue=pue)
     assets = A.architecture(scenario.architecture,
                             offshore=site.offshore_wind,
-                            grid_limit_mw=site.connection_limit_mw)
+                            grid_limit_mw=site.connection_limit_mw,
+                            flags=scenario.assets)
     if scenario.h2_colour is None and assets.buy_h2:
         # An architecture that *may* buy hydrogen still needs a priced colour.
         # Without one the LP buys it free and carbon-free; see the guard in
@@ -132,7 +142,9 @@ def run_one(scenario: A.Scenario, *, site, start: str, end: str,
         assets = _replace(assets, buy_h2=False)
     result = P.front(series, assets, tech, points=points,
                      ely_strategy=scenario.strategy,
-                     unserved_fraction=unserved_fraction)
+                     unserved_fraction=unserved_fraction,
+                     gwp_target=gwp_target_kg_per_year,
+                     progress=progress)
 
     folder.mkdir(parents=True, exist_ok=True)
     (folder / "config.json").write_text(json.dumps(cfg, indent=2, default=str))
@@ -155,6 +167,10 @@ def run_one(scenario: A.Scenario, *, site, start: str, end: str,
         "knee": result["knee"], "carbon_price": result["carbon_price"],
         "max_curvature": result["max_curvature"],
         "carbon_price_GBP_per_tCO2": result.get("carbon_price_GBP_per_tCO2"),
+        "target": result.get("target"),
+        "target_gwp_kgco2e_per_year": result.get("target_gwp_kgco2e_per_year"),
+        "target_note": result.get("target_note"),
+        "assets": scenario.assets,
         "network_charges": meta.get("network_charges"),
         "perfect_foresight": True,
         "solve_seconds": time.time() - t0,
@@ -179,6 +195,7 @@ def run_matrix(scenarios=None, *, site=sites.DEFAULT_PRESET, start="2025-01-01",
                end="2025-12-29", size_mw_it=7.31, pue=1.0,
                resample_hours=1.0, points=12, cost_case="central",
                horizon_years=25.0, unserved_fraction=0.0,
+               gwp_target_kg_per_year=None,
                out_root: Path | None = None, workers=None,
                save_dispatch=False, refresh=False, progress=print) -> pd.DataFrame:
     """Solve every configuration, in parallel, and return the comparison table."""
@@ -190,6 +207,7 @@ def run_matrix(scenarios=None, *, site=sites.DEFAULT_PRESET, start="2025-01-01",
     kw = dict(site=site, start=start, end=end, size_mw_it=size_mw_it, pue=pue,
               resample_hours=resample_hours, points=points, cost_case=cost_case,
               horizon_years=horizon_years, unserved_fraction=unserved_fraction,
+              gwp_target_kg_per_year=gwp_target_kg_per_year,
               out_root=out_root, save_dispatch=save_dispatch, refresh=refresh)
 
     results, t0 = [], time.time()
@@ -231,7 +249,10 @@ def comparison_table(summaries) -> pd.DataFrame:
     """One row per configuration, at each of the three answers."""
     rows = []
     for s in summaries:
-        for point in ("min_cost", "min_gwp", "knee"):
+        points = ["min_cost", "min_gwp", "knee"]
+        if s.get("target"):
+            points.append("target")
+        for point in points:
             p = s[point]
             rows.append({
                 "n": s["n"], "key": s["key"], "label": s["label"],

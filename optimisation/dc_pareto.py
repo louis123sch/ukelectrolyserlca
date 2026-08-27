@@ -78,7 +78,7 @@ def _extract(V, obj, series, tag):
 
 def front(series, assets, tech, *, points: int = DEFAULT_POINTS,
           ely_strategy: str = "free", unserved_fraction: float = 0.0,
-          progress=None) -> dict:
+          gwp_target: float | None = None, progress=None) -> dict:
     """Solve the exact cost/carbon frontier for one configuration."""
     def solve_one(objective, gwp_limit=None):
         m, V, obj = M.build_model(series, assets, tech, objective=objective,
@@ -110,13 +110,46 @@ def front(series, assets, tech, *, points: int = DEFAULT_POINTS,
             rows.append(_extract(V, obj, series, f"eps_{k}"))
 
     df = pd.DataFrame(rows).sort_values("gwp_kgco2e_per_year").reset_index(drop=True)
-    return {
+    out = {
         "front": df,
         "degenerate": bool(degenerate),
         "min_cost": anchor_cost,
         "min_gwp": anchor_gwp,
         **special_points(df, degenerate),
     }
+    if gwp_target is not None:
+        out.update(_target_point(solve_one, series, gwp_target, g_lo, g_hi,
+                                 anchor_cost, progress))
+    return out
+
+
+def _target_point(solve_one, series, target: float, g_lo: float, g_hi: float,
+                  anchor_cost: dict, progress=None) -> dict:
+    """Cheapest system that emits no more than ``target`` kg CO2e per year.
+
+    One extra epsilon-constrained solve rather than a read off the sampled
+    front, so the answer is exact at the number the user actually typed instead
+    of at whichever sweep point happens to sit nearest it.
+
+    Two cases are answered without solving. Below ``g_lo`` there is no system:
+    the target is under what this kit can achieve at any price. At or above the
+    min-cost point's own emissions the constraint does not bind, so the answer
+    is the min-cost system and saying so is more useful than re-deriving it.
+    """
+    if target < g_lo * (1 - 1e-9):
+        return {"target": None, "target_gwp_kgco2e_per_year": target,
+                "target_note": (
+                    f"unreachable — the cleanest system this combination can "
+                    f"build still emits {g_lo / 1000:,.0f} t CO2e/yr")}
+    if target >= g_hi:
+        return {"target": dict(anchor_cost, point="target"),
+                "target_gwp_kgco2e_per_year": target,
+                "target_note": ("not binding — the cheapest system already comes "
+                                f"in at {g_hi / 1000:,.0f} t CO2e/yr")}
+    if progress: progress("target")
+    V, obj = solve_one("cost", gwp_limit=target)
+    return {"target": _extract(V, obj, series, "target"),
+            "target_gwp_kgco2e_per_year": target, "target_note": ""}
 
 
 def special_points(df: pd.DataFrame, degenerate: bool) -> dict:

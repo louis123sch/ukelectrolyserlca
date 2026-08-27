@@ -54,18 +54,19 @@ except Exception as exc:
 st.header("1. What are you powering?")
 demand_type = st.radio(
     "Demand", ["Electrolyser", "Data centre"], horizontal=True,
-    help="The data centre case is a fixed 7.31 MW flat load — the Zhang et al. "
-         "foreground's own figure. It is not wired into the optimiser yet.",
+    help="The data centre has its own optimiser on page 2, which solves nine "
+         "sizing dimensions exactly rather than searching four heuristically.",
 )
 
 if demand_type == "Data centre":
     st.info(
-        "**Not wired up yet.** The data centre is a fixed 7.31 MW flat load, so it "
-        "fits this optimiser's shape exactly — the only differences are that the "
-        "output is MWh served rather than kg of hydrogen, and the emissions "
-        "threshold would be gCO₂e/kWh rather than the hydrogen standard. Its grid "
-        "baseline is on the **Optimisation Inputs** page. Pick *Electrolyser* to "
-        "run the optimiser."
+        "**The data centre lives on page 2 — Data Centre Optimiser.** Not a "
+        "stub: it is a different and better tool for that question. This page "
+        "searches four dimensions with differential evolution over a "
+        "merit-order dispatch, which suits a fixed electrolyser; the data "
+        "centre problem has nine sizing dimensions and an inter-seasonal "
+        "hydrogen store, so it is solved as a linear program that sizes and "
+        "dispatches jointly and exactly. Pick *Electrolyser* to use this page."
     )
     st.stop()
 

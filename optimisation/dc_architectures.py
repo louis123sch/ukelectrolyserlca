@@ -53,11 +53,40 @@ BOUGHT_COLOURS = ("grey", "blue", "turquoise", "green")
 ONSITE_TECHS = ("PEM operation", "AE operation", "SOEC operation")
 STRATEGIES = ("baseload", "flexible", "free")
 
+# The nine things that can be built, in the order they are shown to the user.
+# A named architecture is one particular subset of these; a custom one is any
+# subset at all, which is what the Streamlit page hands over.
+ASSET_FLAGS = ("grid", "wind", "offshore_wind", "solar", "battery",
+               "electrolyser", "tank", "fuel_cell", "buy_h2")
+_SHORT = dict(grid="g", wind="w", offshore_wind="o", solar="s", battery="b",
+              electrolyser="e", tank="t", fuel_cell="f", buy_h2="x")
+
+
+def custom(flags: dict, *, grid_limit_mw=None, offshore=False,
+           allow_export=False) -> M.Assets:
+    """Asset bounds for an arbitrary tick-box combination.
+
+    Same contract as a named architecture — everything is an upper bound, so a
+    ticked asset the LP does not want is still sized to zero. Two things are
+    enforced rather than trusted to the caller: offshore wind is only available
+    where the site has it, and unticking the grid means a hard zero import
+    limit and no export, not merely a grid the LP is free to use.
+    """
+    f = {k: bool(flags.get(k)) for k in ASSET_FLAGS}
+    f["offshore_wind"] = f["offshore_wind"] and offshore
+    assets = M.Assets(**f, grid_limit_mw=grid_limit_mw, allow_export=allow_export)
+    if not f["grid"]:
+        assets = replace(assets, grid_limit_mw=0.0, allow_export=False)
+    return assets
+
 
 def architecture(name: str, *, grid_limit_mw=None, offshore=False,
-                 allow_export=False) -> M.Assets:
-    """Asset bounds for one named power option."""
+                 allow_export=False, flags: dict | None = None) -> M.Assets:
+    """Asset bounds for one named power option, or for ``custom`` flags."""
     base = dict(grid_limit_mw=grid_limit_mw, allow_export=allow_export)
+    if name == "custom":
+        return custom(flags or {}, grid_limit_mw=grid_limit_mw,
+                      offshore=offshore, allow_export=allow_export)
     if name == "grid_only":
         return M.Assets(grid=True, **base)
     if name == "grid_battery":
@@ -90,10 +119,15 @@ class Scenario:
     strategy: str = "free"
     tank_design: str | None = None
     note: str = ""
+    assets: dict | None = None          # only for architecture == "custom"
 
     @property
     def key(self) -> str:
         bits = [f"{self.n:02d}", self.architecture]
+        if self.architecture == "custom":
+            on = "".join(_SHORT[k] for k in ASSET_FLAGS
+                         if (self.assets or {}).get(k))
+            bits.append(on or "none")
         if self.ely_tech:
             bits.append(self.ely_tech.split()[0].lower())
         if self.h2_colour:
@@ -144,7 +178,7 @@ def core_matrix() -> list[Scenario]:
 def table() -> pd.DataFrame:
     rows = []
     for s in core_matrix():
-        a = architecture(s.architecture)
+        a = architecture(s.architecture, flags=s.assets, offshore=True)
         rows.append({
             "n": s.n, "key": s.key, "architecture": s.architecture,
             "label": s.label, "ely": s.ely_tech.split()[0] if s.ely_tech else "-",

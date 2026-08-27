@@ -86,7 +86,8 @@ def build_series(site, start: str, end: str, size_mw_it: float,
     from optimisation import profiles
 
     site = sites.get(site)
-    df, meta = profiles.build(site.lat, site.lon, start, end, token=token)
+    df, meta = profiles.build(site.lat, site.lon, start, end, token=token,
+                              carbon_api_region=site.carbon_api_region)
     sites.require_grid_region(site, meta["grid_file"])
 
     index = pd.DatetimeIndex(df.index)

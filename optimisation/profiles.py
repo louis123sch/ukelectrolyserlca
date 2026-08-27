@@ -168,15 +168,31 @@ def _best_covering(folder: Path, pattern: str, time_col: str, start, end):
     return best, index
 
 
-def load_grid_and_price(start, end):
-    """Half-hourly GB grid intensity and wholesale price for the window."""
+def load_grid_and_price(start, end, *, carbon_api_region: int | None = None):
+    """Half-hourly GB grid intensity and wholesale price for the window.
+
+    ``carbon_api_region`` restricts the grid-file search to that region alone.
+    Without it, ``_best_covering`` ranks purely on window coverage across
+    *every* cached region and has no way to prefer the right one — harmless
+    while only one region is ever cached, but once a second region is built
+    the window-coverage tie between them is broken by glob order, not by
+    which region the site is actually in. Regression: a Highland (region 1)
+    site silently resolving to a Exeter (region 11) grid file once both were
+    cached, caught only because ``sites.require_grid_region`` happened to be
+    checking downstream — this parameter is the actual fix, that check is the
+    net. Price is GB-wide, not regional, so it needs no such filter.
+    """
+    grid_pattern = ("custom_grid_lca_carbon_api_*.csv" if carbon_api_region is None
+                    else f"custom_grid_lca_carbon_api_*_r{carbon_api_region}_*.csv")
     gpath, gindex = _best_covering(
-        GRID_DIR, "custom_grid_lca_carbon_api_*.csv", "datetime", start, end)
+        GRID_DIR, grid_pattern, "datetime", start, end)
     if gpath is None:
+        region_bit = f" for region {carbon_api_region}" if carbon_api_region else ""
         raise FileNotFoundError(
-            "No Carbon Intensity API output found in custom_grid_lca_outputs/. "
-            "Run 3.1.custom_grid_carbon_intensity_api.ipynb (or the Setup LCA "
-            "page) for the period you want first.")
+            f"No Carbon Intensity API output found in custom_grid_lca_outputs/"
+            f"{region_bit}. Run 3.1.custom_grid_carbon_intensity_api.ipynb (or "
+            "the Setup LCA page), or sites.build_grid_series(region), for the "
+            "period you want first.")
     grid = pd.read_csv(gpath, parse_dates=["datetime"]).rename(
         columns={"datetime": "time",
                  "custom_electricity_score": "grid_kgco2e_per_kwh"})
@@ -215,14 +231,25 @@ def load_grid_and_price(start, end):
 
 
 def build(lat, lon, start, end, *, turbine="Vestas V90 2000",
-          hub_height_m=80.0, tilt=35.0, azim=180.0, token=None):
+          hub_height_m=80.0, tilt=35.0, azim=180.0, token=None,
+          carbon_api_region: int | None = None):
     """Everything the dispatch needs, aligned on one half-hourly index.
 
     Renewables.ninja is hourly; the grid and price series are half-hourly. The
     hourly capacity factors are forward-filled onto the half-hourly index,
     matching ``lca_helpers.align_wind_to_grid_timeslices``'s default.
+
+    ``carbon_api_region`` should be passed by a caller that has already
+    resolved a ``Site`` (it already paid for the lookup and knows the answer).
+    Left unset, it is resolved here from ``lat, lon`` so a caller working from
+    a raw coordinate still gets the right region's grid file rather than an
+    arbitrary one — see ``load_grid_and_price``.
     """
-    grid, gname, pname = load_grid_and_price(start, end)
+    if carbon_api_region is None:
+        from optimisation import sites
+        carbon_api_region = sites.resolve(lat, lon).carbon_api_region
+    grid, gname, pname = load_grid_and_price(start, end,
+                                             carbon_api_region=carbon_api_region)
     wind, wind_hit = fetch_wind_cf(lat, lon, start, end, turbine, hub_height_m,
                                    token=token)
     solar, solar_hit = fetch_solar_cf(lat, lon, start, end, tilt, azim,
