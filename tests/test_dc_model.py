@@ -50,6 +50,8 @@ def tech():
         gwp_ely=10_433, gwp_tank=63.8,
         gwp_fc_bop_per_mw=469_040, gwp_fc_stack_per_mw=97_431,
         gwp_fc_maint_per_mwh=3.11,
+        gwp_grid_per_mw=333.5,
+        cost_fc_stack_per_mw=308_698.0,
         fc_bop_calendar_years=25.0, fc_bop_duty_hours=60_000.0,
         fc_stack_duty_hours=32_000.0,
         cost_wind=150_000, cost_offshore=230_000, cost_solar=95_000,

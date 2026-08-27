@@ -57,10 +57,19 @@ region — which is exactly what ``resolve`` now does, and what
 Grid connection limits are ASSUMED
 ----------------------------------
 There is no public, machine-readable register of available connection capacity
-by location. ``connection_limit_mw`` defaults to **None** — unconstrained —
-because an invented number would be the single most decision-relevant input in
-the study and the least defensible. Set it explicitly when you have a real
-figure for a real site.
+by location, so ``connection_limit_mw`` cannot be sourced for a given site. What
+*can* be said is that a connection is contracted against the load it serves:
+a site does not agree 868 MW to run a 360 MW data centre without a reason, and
+the agreed capacity is what the TDR band is then read from.
+
+``max_connection_mw`` therefore derives a ceiling from the load and a stated
+headroom multiple, and the band follows from that ceiling rather than from the
+load directly. The multiple is **ASSUMED** and named so it can be argued with;
+what is not assumed is the chain. Before this, the three could disagree freely —
+a 300 MW load could carry an unbounded connection billed at a 7 MW site's band.
+
+Pin ``connection_limit_mw`` explicitly whenever a real figure exists; the
+derivation is a default, not a claim about a particular substation.
 
 Sources
 -------
@@ -119,7 +128,46 @@ CI_REGION_TO_TNUOS_ZONE = {
 
 # TDR band is set by agreed capacity, not by location. EHV2 suits a data centre
 # of a few tens of MW; see network_charges.tnuos_tdr() for the full band list.
-DEFAULT_TDR_BAND = "EHV2"
+# None means "derive it from what the site actually draws", via
+# network_charges.tdr_band_for. "EHV2" was the study's reference 7.31 MW data
+# centre — correct for that site, and 17x too cheap for a 300 MW one, because
+# nothing rescaled it. Pin a string here only to override the derivation.
+DEFAULT_TDR_BAND = None
+
+# How much more connection than load a site is assumed to contract for.
+#
+# ASSUMED, and the most consequential assumption here, so it is one named number
+# rather than a scatter of judgements. A connection must cover the load at
+# minimum; above that it buys the ability to import hard in a lull — to serve
+# demand and refill storage at the same time — which is precisely what the
+# optimiser reaches for when it is left unbounded. Measured on the 300 MW
+# Highland run, the unbounded minimum-carbon build wanted 2.41x the load, and
+# spent six hours a year using it.
+#
+# 1.5 is deliberately below that: it grants real headroom without conceding the
+# whole peak the optimiser would take if nothing stopped it. Raise it to see
+# what the extra connection buys; set it to 1.0 to ask what a site sized purely
+# for its load can achieve.
+CONNECTION_HEADROOM_ASSUMED = 1.5
+
+
+def max_connection_mw(load_mw: float,
+                      headroom: float | None = None) -> tuple[float, str]:
+    """The largest connection a site of this load is assumed to contract for.
+
+    Returns ``(mw, note)``. The note is never empty: this number is assumed,
+    and every caller should be able to say so.
+    """
+    if load_mw <= 0:
+        raise ValueError(f"load_mw must be positive, got {load_mw}")
+    h = CONNECTION_HEADROOM_ASSUMED if headroom is None else headroom
+    if h < 1.0:
+        raise ValueError(
+            f"headroom must be at least 1.0 — a connection below the load "
+            f"cannot serve it — got {h}")
+    return load_mw * h, (
+        f"connection ceiling ASSUMED at {h:g}x the {load_mw:,.1f} MW load; "
+        f"see sites.CONNECTION_HEADROOM_ASSUMED")
 
 # Offshore wind needs a credible coastal connection. Judged by the resolved
 # region rather than by distance to water, which would need a coastline dataset.
@@ -136,8 +184,14 @@ class Site:
     tnuos_zone: int
     name: str = ""
     outcode: str = ""
-    tdr_band: str = DEFAULT_TDR_BAND
+    tdr_band: str | None = DEFAULT_TDR_BAND
     connection_limit_mw: float | None = None
+    # None means "infer from the connection size". An explicit True/False states
+    # it, which is always better: whether a site takes its supply from the
+    # transmission or the distribution system is a network-design fact, and
+    # inferring it from an assumed MW threshold decides the TDR band — £270,752
+    # a year against £4,670,801 — on a guess.
+    transmission_connected: bool | None = None
     key: str = ""
 
     @property
@@ -239,7 +293,8 @@ def lookup(lat: float, lon: float) -> dict:
 
 def resolve(lat: float, lon: float, *, name: str | None = None,
             connection_limit_mw: float | None = None,
-            tdr_band: str = DEFAULT_TDR_BAND,
+            transmission_connected: bool | None = None,
+            tdr_band: str | None = DEFAULT_TDR_BAND,
             carbon_api_region: int | None = None) -> Site:
     """Build a Site from a coordinate, deriving its region and TNUoS zone.
 
@@ -261,6 +316,7 @@ def resolve(lat: float, lon: float, *, name: str | None = None,
         name=name or info.get("place") or f"{lat:.4f}, {lon:.4f}",
         outcode=info.get("outcode", ""),
         tdr_band=tdr_band, connection_limit_mw=connection_limit_mw,
+        transmission_connected=transmission_connected,
         key=f"r{info['carbon_api_region']}_{float(lat):.4f}_{float(lon):.4f}",
     )
 

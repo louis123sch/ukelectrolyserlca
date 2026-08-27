@@ -131,7 +131,14 @@ def _best_covering(folder: Path, pattern: str, time_col: str, start, end):
     """
     lo, hi = pd.Timestamp(start), pd.Timestamp(end)
     best, best_rank, index = None, None, {}
-    for path in folder.glob(pattern):
+    # Sorted, because the rank below can tie and glob order is filesystem
+    # order. Measured: for the June 2025 week both the full-year Elexon export
+    # and the "576 representative days" export cover the window with 337
+    # contiguous slices, so the pair ties and whichever the filesystem yielded
+    # first won. Their values are identical there, so nothing was wrong — but
+    # which file a run used was not reproducible, and a future pair that
+    # disagreed would be picked between silently.
+    for path in sorted(folder.glob(pattern)):
         try:
             times = pd.read_csv(path, usecols=[time_col],
                                 parse_dates=[time_col])[time_col].sort_values()
@@ -152,7 +159,11 @@ def _best_covering(folder: Path, pattern: str, time_col: str, start, end):
         regular = float((gaps <= SLICE_MINUTES + 1).mean()) if len(gaps) else 0.0
         contiguous = bool(len(gaps)) and regular >= 0.98 and gaps.max() <= 24 * 60
         index[path.name] = (times.min(), times.max(), len(covered), contiguous)
-        rank = (contiguous, len(covered))
+        # Break a tie on total series length, preferring the broader export: a
+        # file that also covers the rest of the year is a plain date-range run,
+        # while a short one is more likely to be a sampled or partial artefact.
+        # Name last, so the choice is fully determined.
+        rank = (contiguous, len(covered), len(times), path.name)
         if best_rank is None or rank > best_rank:
             best, best_rank = path, rank
     if best is not None and best_rank is not None and not best_rank[0]:

@@ -69,6 +69,7 @@ Run:  python optimisation/h2_storage.py
 from __future__ import annotations
 
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -105,6 +106,43 @@ def capacity_kg(design, cfg):
     p_pa = design["pressure_bar"] * 1e5
     return (p_pa * design["volume_m3"]) / (
         cfg.TANK_H2_COMPRESSIBILITY * R_H2_J_PER_KG_K * cfg.TANK_H2_TEMPERATURE_K)
+
+
+# Feed pressure assumed when nobody says otherwise. 30 bar is the pressurised
+# PEM/alkaline delivery pressure, which is what this module's own docstring was
+# silently assuming for every technology. Callers that know the electrolyser
+# should pass its real delivery pressure instead — see
+# ``electrolysers.DELIVERY_PRESSURE_BAR``.
+DEFAULT_FEED_PRESSURE_BAR = 30.0
+
+# Real specific work over the isothermal minimum. Anchored on the worked example
+# in the hydrogen storage and compression review (arXiv:1702.06015): compressing
+# from 1 to 500 bar takes a minimum of 8 MJ/kg isothermally, against 15 MJ/kg
+# for a realistic three-stage adiabatic machine at 70 % isentropic efficiency.
+# The isothermal formula below reproduces that 8 MJ/kg to within 6 %, so the
+# ratio is applied to it rather than a second correlation being invented.
+COMPRESSION_REAL_OVER_ISOTHERMAL = 15.0 / 8.0
+H2_GAS_CONSTANT_J_PER_KG_K = 4124.0
+COMPRESSION_INLET_K = 293.15
+
+
+def compression_kwh_per_kg(from_bar: float, to_bar: float) -> float:
+    """Electricity to compress one kg of hydrogen between two pressures.
+
+    Isothermal minimum ``R T ln(P2/P1)``, scaled to a real multistage machine.
+    Returns zero when the feed is already at or above the target, which is the
+    case that made the old flat rule look right: a 30 bar PEM feeding a 28 bar
+    tank genuinely needs no compressor. A 1 bar SOEC feeding the same tank needs
+    about 2.1 kWh/kg, which is roughly 5 % on top of its 42.3 kWh/kg — enough to
+    matter in a comparison it was previously winning.
+    """
+    if from_bar <= 0 or to_bar <= 0:
+        raise ValueError(f"pressures must be positive, got {from_bar}, {to_bar}")
+    if to_bar <= from_bar:
+        return 0.0
+    j_per_kg = (H2_GAS_CONSTANT_J_PER_KG_K * COMPRESSION_INLET_K
+                * math.log(to_bar / from_bar))
+    return j_per_kg * COMPRESSION_REAL_OVER_ISOTHERMAL / 3.6e6
 
 
 def steel_kg_per_kg_h2(design, cfg):
@@ -145,7 +183,11 @@ def decompose(use_cache: bool = True, refresh: bool = False):
         intensity = steel_kg_per_kg_h2(design, cfg)
         per_kg_cap = per_kg_steel * intensity
 
-        compression = 0.0 if design["pressure_bar"] <= 30 else 2.5
+        # Filled in by the caller, which is the only place that knows which
+        # electrolyser is feeding this tank. Left at the tank's own pressure
+        # here so the table still reads standalone.
+        compression = compression_kwh_per_kg(DEFAULT_FEED_PRESSURE_BAR,
+                                             design["pressure_bar"])
         rows.append({
             "design": name,
             "pressure_bar": design["pressure_bar"],

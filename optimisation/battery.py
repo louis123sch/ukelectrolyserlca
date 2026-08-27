@@ -87,6 +87,31 @@ ASSET_LIFE_YEARS = 15        # Modo: BESS asset lifetime
 # =============================================================================
 WARRANTED_CYCLES = 10_000          # to the repowering threshold
 CAPACITY_AT_END_OF_LIFE = 0.67     # ~67 % remaining after those cycles
+# Standing loss per hour of storage held: self-discharge plus the auxiliary
+# load that keeps a containerised system alive — BMS, and above all the HVAC
+# that holds LFP cells in their temperature window.
+#
+# ZERO, AND ASSUMED, not measured. It is stated here rather than left to a
+# caller's default, which is what it was: dc_inputs read it with
+# ``getattr(battery, "STANDING_LOSS_PER_HOUR", 0.0)`` against a module that had
+# never defined it, so the model ran a battery with no standing loss and
+# nothing anywhere said so.
+#
+# It is not negligible in principle. Auxiliary load moves system round-trip
+# efficiency by 2-4 points seasonally in a containerised system, and it falls
+# hardest on a *lightly cycled* battery, which is exactly what the minimum-carbon
+# builds hold: measured on the 300 MW Highland run, the 3,258 MWh battery sits
+# below 1 % of capacity for 5,540 of 8,675 hours. Modo's 88 % is a round-trip
+# number and does not carry a standing term, so setting one from it would be
+# double counting.
+#
+# Left at zero because no source in this study gives a figure, and an invented
+# one would decide the hydrogen-versus-battery seasonal contest by assumption.
+# Registered in DATA_GAPS.md alongside the tank's leakage, which is the same
+# parameter on the other side of that contest.
+STANDING_LOSS_PER_HOUR = 0.0
+STANDING_LOSS_IS_ASSUMED = True
+
 ROUND_TRIP_EFFICIENCY = 0.88       # Modo standard; least firmly sourced here
 CYCLES_PER_DAY = (1.0, 2.0)        # configurable, warranty-aligned
 

@@ -55,46 +55,133 @@ from optimisation import dc_model as M
 
 DEFAULT_POINTS = 12
 DEGENERATE_REL_TOL = 1e-6
+# Slack on the second-stage carbon cap, so floating point cannot make "the same
+# carbon" infeasible. Far tighter than anything that moves a result.
+LEX_TOL = 1e-6
 
 CAPACITY_VARS = ("cap_wind", "cap_offshore", "cap_solar", "cap_batt_p",
                  "cap_batt_e", "cap_ely", "cap_tank", "cap_fc", "cap_grid")
+
+# Energy through each sized asset over a year, reported alongside the capacity
+# that carries it, because a capacity alone cannot say whether it was sized by
+# energy or by a handful of peak hours. Measured on the 300 MW Highland run:
+# the min-GWP connection is 868 MW carrying 246,749 MWh, a 3.2 % load factor,
+# against 37.7 % at min cost. Six hours out of 8,675 sit above 99 % of it, and
+# the peak is demand plus the battery charging at full power in one hour. That
+# is a real property of the cleanest build, not a solver artefact — a
+# lexicographic re-solve (min cost subject to the same carbon) recovers only
+# 3.3 MW — but it is invisible in a capacity column on its own.
+# Keyed by the capacity variable so the UI can pair them without a second map.
+ENERGY_VARS = {
+    "cap_wind": "p_wind", "cap_offshore": "p_offshore", "cap_solar": "p_solar",
+    "cap_batt_p": "dis",            # discharge; cap_batt_e shares this flow
+    "cap_ely": "p_ely", "cap_fc": "p_fc", "cap_grid": "imp",
+}
+# cap_batt_e and cap_tank have no MWh of their own: the battery's energy rating
+# shares the power rating's flow, and the tank is sized in kg of stock, not MWh
+# of throughput. Both are left blank rather than given a number that would
+# invite a comparison it cannot support.
+
+
+def _energy(V, series, name):
+    """Annualised MWh through one flow variable."""
+    return float(V[name].solution.sum()) * series.dt_hours * series.annual_scale
 
 
 def _extract(V, obj, series, tag):
     tot = M.totals(obj)
     row = {"point": tag}
     row.update({k: float(V[k].solution) for k in CAPACITY_VARS})
+    row.update({f"{k}_MWh_per_year": _energy(V, series, flow)
+                for k, flow in ENERGY_VARS.items()})
     mwh = float(series.demand_mw.sum() * series.dt_hours) * series.annual_scale
     row.update({
         "cost_GBP_per_year": tot["cost_GBP_per_year"],
         "gwp_kgco2e_per_year": tot["gwp_kgco2e_per_year"],
         "gwp_g_per_kWh": tot["gwp_kgco2e_per_year"] / mwh,
         "cost_GBP_per_MWh": tot["cost_GBP_per_year"] / mwh,
-        "import_MWh_per_year": float((V["imp"].solution.sum())) * series.dt_hours * series.annual_scale,
-        "unserved_MWh_per_year": float((V["unserved"].solution.sum())) * series.dt_hours * series.annual_scale,
+        "import_MWh_per_year": _energy(V, series, "imp"),
+        "export_MWh_per_year": _energy(V, series, "exp"),
+        "unserved_MWh_per_year": _energy(V, series, "unserved"),
     })
     return row
+
+
+_LIMIT = {"cost": "cost_limit", "gwp": "gwp_limit"}
+_TOTAL = {"cost": "cost_GBP_per_year", "gwp": "gwp_kgco2e_per_year"}
+
+
+def _tie_break(solve_one, series, anchor, progress, *, first, second):
+    """Settle an anchor that its own objective leaves partly undetermined.
+
+    Stage 1 has already minimised ``first``. Stage 2 minimises ``second`` while
+    holding ``first`` at its optimum, which chooses between systems the first
+    objective could not tell apart. Stage 3 then minimises the grid connection
+    with both held, because neither objective necessarily prices it: cost does
+    not in a floored TNUoS zone, and carbon prices it only lightly. The result
+    is the smallest connection among the systems that are optimal on both.
+
+    Refinement, never a gate — if an epsilon solve is infeasible at this
+    tolerance, the best answer so far stands.
+    """
+    tag = anchor["point"]
+    f_opt = anchor[_TOTAL[first]]
+    try:
+        if progress: progress(f"{tag} — {second} tie-break")
+        lim = {_LIMIT[first]: f_opt * (1 + LEX_TOL)}
+        V, obj = solve_one(second, **lim)
+        anchor = _extract(V, obj, series, tag)
+
+        if progress: progress(f"{tag} — connection tie-break")
+        lim[_LIMIT[second]] = anchor[_TOTAL[second]] * (1 + LEX_TOL)
+        V, obj = solve_one("connection", **lim)
+        anchor = _extract(V, obj, series, tag)
+    except RuntimeError:
+        pass
+    return anchor
 
 
 def front(series, assets, tech, *, points: int = DEFAULT_POINTS,
           ely_strategy: str = "free", unserved_fraction: float = 0.0,
           gwp_target: float | None = None, progress=None) -> dict:
     """Solve the exact cost/carbon frontier for one configuration."""
-    def solve_one(objective, gwp_limit=None):
+    def solve_one(objective, gwp_limit=None, cost_limit=None):
         m, V, obj = M.build_model(series, assets, tech, objective=objective,
-                                  gwp_limit=gwp_limit,
+                                  gwp_limit=gwp_limit, cost_limit=cost_limit,
                                   unserved_fraction=unserved_fraction,
                                   ely_strategy=ely_strategy)
         M.solve(m)
         return V, obj
 
+    # Both anchors get the same lexicographic treatment, for the same reason and
+    # in mirror image. A single-objective solve pins only what its own objective
+    # can see, and each objective is blind to something: cost cannot see the
+    # connection at a transmission site in a floored TNUoS zone, where it is
+    # genuinely £0.00/kW, and carbon cannot see anything priced but unburdened.
+    #
+    # Measured, before this existed: across 14 regions on a flat 120 MW load,
+    # min_cost reported a 180 MW connection — the ceiling — in exactly the seven
+    # zones whose locational tariff is floored to zero, and the correct 120 MW
+    # in the seven that pay something. The epsilon points were never affected,
+    # because a binding carbon cap makes cap_grid's embodied carbon count.
     if progress: progress("min_cost")
     V, obj = solve_one("cost")
     anchor_cost = _extract(V, obj, series, "min_cost")
+    anchor_cost = _tie_break(solve_one, series, anchor_cost, progress,
+                             first="cost", second="gwp")
 
+    # Minimum carbon, then the cheapest system that achieves it. The second
+    # stage is not cosmetic: once a transmission-connected site pays no DUoS and
+    # sits in a floored TNUoS zone, cap_grid has a zero coefficient in *both*
+    # objectives, so a carbon-only solve is free to return any connection at all
+    # that fits the dispatch. Re-solving for cost at the same carbon pins it.
+    # Every other point on the front is already a min-cost solve, so this also
+    # makes the anchor mean the same thing as its neighbours.
     if progress: progress("min_gwp")
     V, obj = solve_one("gwp")
     anchor_gwp = _extract(V, obj, series, "min_gwp")
+    anchor_gwp = _tie_break(solve_one, series, anchor_gwp, progress,
+                            first="gwp", second="cost")
 
     g_hi = anchor_cost["gwp_kgco2e_per_year"]
     g_lo = anchor_gwp["gwp_kgco2e_per_year"]

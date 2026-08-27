@@ -95,6 +95,12 @@ DAYS_PER_YEAR = 365.0
 # (one row per named site), so they cannot be generalised into a study input.
 # Using HV for an EHV-connected site overstates DUoS somewhat — noted in
 # DATA_GAPS.md.
+# Which licence area and voltage the DUoS table above was transcribed for. A
+# tariff is only valid where it came from, and nothing in the numbers says so —
+# audit.py reads these to catch the table being used somewhere it does not apply.
+DUOS_SOURCE_AREA = "London Power Networks (LPN), HV Site Specific"
+DUOS_SOURCE_ZONE = 12          # TNUoS zone that LPN corresponds to
+
 DUOS_LPN_HV = {
     "HV Site Specific No Residual": {
         "llfc": 90, "red_p_per_kwh": 3.440, "amber_p_per_kwh": 0.262,
@@ -247,9 +253,109 @@ def duos_series(index: pd.DatetimeIndex, tariff: str = DUOS_DEFAULT_TARIFF) -> p
 # =============================================================================
 # Assembly — what the LP actually needs
 # =============================================================================
+# -----------------------------------------------------------------------------
+# TDR band selection — the band a site is in, from what it actually draws
+# -----------------------------------------------------------------------------
+# The bands are PERCENTILES of the GB site population, not fixed sizes, and the
+# two tiers are not even measured on the same quantity:
+#
+#   distribution (LV/HV/EHV)  40th / 70th / 85th percentile of *agreed capacity*
+#                             DCUSA Schedule 32, via DCP358
+#   transmission (T-Demand)   40th / 70th / 93rd percentile of *gross
+#                             consumption*  — CUSC 14.15.137, as amended by
+#                             CMP389 (which moved the 3/4 boundary from the 85th)
+#
+# NESO re-derives the numeric boundaries at each price control from site data
+# the DNOs supply, so there is no published MW lookup table to transcribe. The
+# figures below are the realised boundaries for the current control.
+#
+# Sources
+# -------
+# percentile structure   CUSC 14.15.137-138 via CMP389, "Transmission Demand
+#                        Residual (TDR) band boundaries updates", NESO.
+#                        TRANSCRIBED.
+# EHV kVA boundaries     TCR / DCUSA Schedule 32 banding. NEEDS VERIFICATION —
+#                        taken from secondary summaries of the schedule, not
+#                        from the schedule itself. Logged in DATA_GAPS.md.
+# T-Demand boundaries    ASSUMED. The consumption percentiles are not published
+#                        as MWh. Only the top band is used here, and only for
+#                        sites far above any plausible 93rd percentile.
+# transmission tier      ASSUMED. No code sets an MW threshold: whether a site
+#                        connects to the transmission or the distribution system
+#                        is a network-design outcome, not a tariff rule.
+
+EHV_BAND_KVA = ((5_000.0, "EHV1"), (12_000.0, "EHV2"),
+                (21_500.0, "EHV3"), (float("inf"), "EHV4"))
+
+# ASSUMED tier boundary. Distribution networks do connect loads of a few tens of
+# MW; several hundred MW is transmission territory in practice. Between the two
+# this returns a band but says it is a guess.
+TRANSMISSION_MW_ASSUMED = 100.0
+
+# ASSUMED. A site drawing this much a year is far above the 93rd percentile of
+# transmission-connected final demand, so the top band is safe even though the
+# boundary itself is unpublished.
+T_DEMAND_TOP_BAND_MWH = 500_000.0
+
+
+def is_transmission_connected(peak_mw: float,
+                              explicit: bool | None = None) -> tuple[bool, str]:
+    """Whether a site of this size connects to the transmission system.
+
+    One decision, used by both the TDR band and the DUoS liability, because they
+    must agree: a site cannot be on T-Demand bands and paying distribution
+    charges at the same time. Returns ``(is_transmission, note)``.
+    """
+    if explicit is not None:
+        return explicit, ""
+    return peak_mw >= TRANSMISSION_MW_ASSUMED, (
+        f"tier INFERRED from {peak_mw:,.0f} MW against an ASSUMED "
+        f"{TRANSMISSION_MW_ASSUMED:g} MW boundary; no code sets one, so pass "
+        f"transmission_connected= to state it")
+
+
+def tdr_band_for(peak_mw: float, annual_mwh: float | None = None, *,
+                 power_factor: float = 1.0,
+                 transmission_connected: bool | None = None) -> tuple[str, str]:
+    """The TDR band for a site, and a note on how sound the answer is.
+
+    ``peak_mw`` is the agreed capacity the site would contract for — for this
+    study, the grid connection the optimiser sizes, or the flat load if the
+    connection is not known yet. Returns ``(band, note)``; ``note`` is empty
+    only when the answer rests on transcribed boundaries alone.
+
+    The band matters more than its size suggests: EHV2 is £270,752/year and
+    T-Demand4 is £4,670,801/year, so getting the tier wrong is a larger error
+    than any plausible mistake inside a tier.
+    """
+    if peak_mw <= 0:
+        raise ValueError(f"peak_mw must be positive, got {peak_mw}")
+    transmission_connected, inferred = is_transmission_connected(
+        peak_mw, transmission_connected)
+
+    if transmission_connected:
+        if annual_mwh is None:
+            return "T-Demand4", (
+                "T-Demand bands are set on gross consumption, not capacity, and "
+                "none was given — top band returned. " + inferred).strip()
+        if annual_mwh >= T_DEMAND_TOP_BAND_MWH:
+            return "T-Demand4", inferred
+        return "T-Demand4", (
+            f"{annual_mwh:,.0f} MWh/yr is below the {T_DEMAND_TOP_BAND_MWH:,.0f} "
+            f"MWh at which the top band is safe, and the real 40th/70th/93rd "
+            f"percentile boundaries are unpublished — band is ASSUMED. "
+            + inferred).strip()
+
+    kva = peak_mw * 1000.0 / power_factor
+    band = next(b for ceiling, b in EHV_BAND_KVA if kva <= ceiling)
+    return band, (f"EHV boundaries NEED VERIFICATION against DCUSA Schedule 32. "
+                  + inferred).strip()
+
+
 def import_charges(index: pd.DatetimeIndex, zone_no: int, tdr_band: str,
                    duos_tariff: str = DUOS_DEFAULT_TARIFF,
-                   power_factor: float = 1.0):
+                   power_factor: float = 1.0,
+                   transmission_connected: bool = False):
     """Split every demand-side charge into the two shapes an LP can carry.
 
     Returns ``volumetric`` — a £/MWh series to add to the wholesale price on
@@ -276,12 +382,25 @@ def import_charges(index: pd.DatetimeIndex, zone_no: int, tdr_band: str,
                          f"Bands: {tdr.band.tolist()}")
     tdr_per_year = float(band.iloc[0].GBP_per_site_year)
 
-    duos = DUOS_LPN_HV[duos_tariff]
-    duos_capacity_per_mw_year = (duos["capacity_p_per_kva_day"] / 100.0
-                                 * DAYS_PER_YEAR * 1000.0 / power_factor)
-    duos_fixed_per_year = duos["fixed_p_per_mpan_day"] / 100.0 * DAYS_PER_YEAR
+    # DUoS is levied by the DNOs under DCUSA on users of the *distribution*
+    # network. A site with a Bilateral Connection Agreement takes its supply
+    # from the transmission system and pays none of it — not the capacity
+    # charge, not the p/kWh bands, not the standing charge. Charging it anyway
+    # was the single largest error in the connection cost: at the 300 MW
+    # Highland site it put £33,543.50/MW/year of London Power Networks HV
+    # capacity charge on a Scottish transmission connection, £29.1 m/year.
+    if transmission_connected:
+        duos_capacity_per_mw_year = 0.0
+        duos_fixed_per_year = 0.0
+        duos_vol = pd.Series(0.0, index=index, name="duos_GBP_per_MWh")
+    else:
+        duos = DUOS_LPN_HV[duos_tariff]
+        duos_capacity_per_mw_year = (duos["capacity_p_per_kva_day"] / 100.0
+                                     * DAYS_PER_YEAR * 1000.0 / power_factor)
+        duos_fixed_per_year = duos["fixed_p_per_mpan_day"] / 100.0 * DAYS_PER_YEAR
+        duos_vol = duos_series(index, duos_tariff)
 
-    volumetric = bsuos_series(index) + duos_series(index, duos_tariff)
+    volumetric = bsuos_series(index) + duos_vol
     return {
         "volumetric_GBP_per_MWh": volumetric.rename("network_GBP_per_MWh"),
         "capacity_GBP_per_MW_year": tnuos_per_kw * 1000.0 + duos_capacity_per_mw_year,
@@ -292,7 +411,8 @@ def import_charges(index: pd.DatetimeIndex, zone_no: int, tdr_band: str,
             "tnuos_tdr_GBP_per_year": tdr_per_year,
             "duos_fixed_GBP_per_year": duos_fixed_per_year,
             "bsuos_mean_GBP_per_MWh": float(bsuos_series(index).mean()),
-            "duos_mean_GBP_per_MWh": float(duos_series(index, duos_tariff).mean()),
+            "duos_mean_GBP_per_MWh": float(duos_vol.mean()),
+            "transmission_connected": transmission_connected,
             "zone_name": zone.iloc[0].zone_name,
             "tdr_band": tdr_band,
             "duos_tariff": duos_tariff,

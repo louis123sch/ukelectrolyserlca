@@ -70,6 +70,14 @@ CAPS = [("cap_grid", "Grid connection", "MW"),
         ("cap_tank", "Hydrogen storage", "kg"),
         ("cap_fc", "Fuel cell", "MW")]
 
+# Capacities that have a matching annual-energy figure from dc_pareto.ENERGY_VARS.
+# cap_batt_e and cap_tank are absent by design — see the note in that module.
+ENERGY_CAPS = {"cap_grid", "cap_wind", "cap_solar", "cap_batt_p", "cap_ely", "cap_fc"}
+NA = float("nan")
+
+# Sentinel for the TNUoS band control: derive the band rather than pin one.
+TDR_AUTO = "Auto — from the load"
+
 # which capacity variable each tick-box can switch on
 FLAG_CAPS = {"grid": ["cap_grid"], "wind": ["cap_wind"], "solar": ["cap_solar"],
              "battery": ["cap_batt_p", "cap_batt_e"],
@@ -188,7 +196,7 @@ def _apply_preset():
 st.session_state.setdefault("dc_lat", sites.PRESETS[sites.DEFAULT_PRESET][0])
 st.session_state.setdefault("dc_lon", sites.PRESETS[sites.DEFAULT_PRESET][1])
 
-c1, c2, c3, c4, c5 = st.columns([1.4, 1, 1, 1.1, 1])
+c1, c2, c3, c4, c5, c6 = st.columns([1.3, 0.9, 0.9, 1.0, 1.0, 1.1])
 with c1:
     st.selectbox("Jump to a preset", [""] + list(sites.PRESETS), key="dc_preset",
                  on_change=_apply_preset,
@@ -202,19 +210,79 @@ with c3:
 with c4:
     conn = st.number_input(
         "Connection cap (MW)", 0.0, 10_000.0, 0.0, step=1.0,
-        help="0 means unconstrained. There is no public register of available "
-             "connection capacity, so any number here is yours, not sourced — "
-             "and it is the most decision-relevant input in the study.")
+        help="**0 derives it** from the IT load and PUE below, at "
+             f"{sites.CONNECTION_HEADROOM_ASSUMED:g}x the load — an assumed "
+             "headroom, not a sourced figure, since there is no public register "
+             "of available connection capacity by location. The derived ceiling "
+             "is what the LP is held to *and* what the TNUoS band is read from, "
+             "so the two cannot disagree. Enter a number when you have a real "
+             "figure for a real site.")
 with c5:
-    tdr = st.selectbox("TNUoS band",
-                       ["HV1", "HV2", "HV3", "HV4", "EHV1", "EHV2", "EHV3", "EHV4"],
-                       index=5, help="Set by agreed capacity, not by location.")
+    headroom = st.number_input(
+        "Connection headroom (x load)", 1.0, 4.0,
+        float(sites.CONNECTION_HEADROOM_ASSUMED), step=0.1,
+        help="How much more connection than load the site is assumed to "
+             "contract for, when the cap above is left at 0. **Assumed, not "
+             "sourced** — there is no public register of available connection "
+             "capacity. 1.0 asks what a site sized purely for its load can "
+             "achieve; the unbounded minimum-carbon build on the 300 MW "
+             "Highland run wanted 2.41x, and used it for six hours a year. "
+             "The ceiling is what the LP is held to *and* what the TNUoS band "
+             "is read from.")
+
+with c6:
+    # "Auto" is the default and should stay it. This control used to offer only
+    # the distribution bands and default to EHV2 — right for the study's 7.31 MW
+    # reference data centre and 17x too cheap for a 300 MW one, with no way to
+    # say so, because the transmission bands were not in the list at all. It
+    # also silently overrode the derivation in build_series, so the load could
+    # say 300 MW while the charge stayed at 7 MW's band.
+    tdr = st.selectbox(
+        "TNUoS band", [TDR_AUTO, "HV1", "HV2", "HV3", "HV4",
+                       "EHV1", "EHV2", "EHV3", "EHV4",
+                       "T-Demand1", "T-Demand2", "T-Demand3", "T-Demand4"],
+        index=0,
+        help="Set by what the site draws, not by where it is. **Auto** derives "
+             "it from the IT load and PUE you set below — distribution bands "
+             "(LV/HV/EHV) by agreed capacity, transmission bands (T-Demand) by "
+             "gross consumption. Override only if you know the site's actual "
+             "band; a band that disagrees with the load misprices the "
+             "connection by millions a year.")
 
 try:
-    site = sites.resolve(lat, lon, tdr_band=tdr, connection_limit_mw=(conn or None))
+    site = sites.resolve(lat, lon, tdr_band=(None if tdr == TDR_AUTO else tdr),
+                         connection_limit_mw=(conn or None))
 except Exception as exc:
     st.error(f"Could not resolve that coordinate: {exc}")
     st.stop()
+
+# What the settings above actually resolve to. The chain is load -> connection
+# ceiling -> band -> tariff, and each link used to be settable independently of
+# the others, so the page could show a 300 MW site being charged a 7 MW band.
+_load_preview = size_mw * pue          # both set in section 1, above
+if _load_preview > 0:
+    from optimisation import network_charges as _nc
+    _cmw, _cnote = ((float(conn), "") if conn else
+                    sites.max_connection_mw(_load_preview, headroom))
+    _trans, _ = _nc.is_transmission_connected(_cmw)
+    _band = tdr if tdr != TDR_AUTO else _nc.tdr_band_for(
+        _cmw, _load_preview * 8760.0, transmission_connected=_trans)[0]
+    _mismatch = tdr != TDR_AUTO and (_trans != _band.startswith("T-Demand"))
+    st.caption(
+        f"**Resolves to:** {_load_preview:,.1f} MW load → "
+        f"{_cmw:,.1f} MW connection ceiling "
+        f"({f'derived at {headroom:g}x' if not conn else 'as entered'}) → "
+        f"{'transmission' if _trans else 'distribution'}-connected → "
+        f"band **{_band}**"
+        + (f"  ·  _{_cnote}_" if _cnote else ""))
+    if _mismatch:
+        st.warning(
+            f"**The band you picked does not match the connection.** "
+            f"{_band} is a "
+            f"{'transmission' if _band.startswith('T-Demand') else 'distribution'}"
+            f" band, but a {_cmw:,.0f} MW connection is "
+            f"{'transmission' if _trans else 'distribution'}-connected. Set the "
+            f"band to Auto unless you know the site's actual agreed band.")
 
 try:
     _hh, _ = _tnuos()
@@ -411,6 +479,7 @@ if launch:
             cost_case=cost_case, horizon_years=horizon,
             unserved_fraction=unserved,
             gwp_target_kg_per_year=gwp_target,
+            connection_headroom=headroom,
             out_root=out_root, refresh=refresh, progress=_tick)
     except Exception as exc:
         status.update(label=f"Failed: {type(exc).__name__}", state="error")
@@ -481,34 +550,56 @@ else:
         )
 
     # --- the sizing itself, side by side -------------------------------------
-    rows = []
+    # Asset x build x (capacity, energy) is three dimensions in a two-
+    # dimensional table. Interleaving capacity and MWh columns fits, but at
+    # eight columns nobody can read across it. Two tables of the same shape,
+    # stacked, keep every column narrow and put each MWh directly under the
+    # capacity it belongs to.
+    caps, energy = [], []
     for key, name, unit in CAPS:
         allowed = any(key in FLAG_CAPS[f] for f in ran_kit)
         vals = {colname: float(p.get(key, 0.0)) for colname, p in cols.items()}
         if not allowed and all(v <= 1e-6 for v in vals.values()):
             continue
-        rows.append({"Asset": name, "Unit": unit, **vals})
-    mix = pd.DataFrame(rows)
-    st.dataframe(
-        mix, width="stretch", hide_index=True,
-        column_config={name: st.column_config.NumberColumn(format="%.2f")
-                       for name in cols})
+        caps.append({"Asset": name, "Unit": unit, **vals})
 
-    if summary.get("h2_colour"):
-        st.caption(f"Hydrogen is bought as **{summary['h2_colour']}** at the "
-                   "plant-gate price in the Hydrogen table below, so there is "
-                   "no electrolyser to size.")
-    zero_notes = []
-    for colname in cols:
-        zeroed = [r["Asset"] for r in rows if r.get(colname, 0.0) <= 1e-6]
-        if zeroed:
-            zero_notes.append(f"**{colname}** — " + ", ".join(zeroed))
-    if zero_notes:
-        st.info(
-            "**Sized to zero:** that is an answer, not a gap — for this site, "
-            "this load and that point on the frontier, the optimiser would "
-            "rather not build them at all.\n\n" + "  \n".join(zero_notes)
-        )
+        # Absent, not zero, for an asset with no MWh of its own, and for a
+        # result cached before this column existed — both must read blank
+        # rather than as a genuine zero.
+        mwh = {colname: (float(point[f"{key}_MWh_per_year"])
+                         if key in ENERGY_CAPS and f"{key}_MWh_per_year" in point
+                         else NA)
+               for colname, point in cols.items()}
+        energy.append({"Asset": name, **mwh})
+
+    num = {name: st.column_config.NumberColumn(format="%.2f") for name in cols}
+    st.markdown("**What to build**")
+    st.dataframe(pd.DataFrame(caps), width="stretch", hide_index=True,
+                 column_config=num)
+
+    st.markdown("**Energy through it, MWh per year**")
+    st.dataframe(pd.DataFrame(energy), width="stretch", hide_index=True,
+                 column_config={name: st.column_config.NumberColumn(
+                     format="localized") for name in cols})
+    st.caption(
+        "Same rows, same order, so each figure sits under the capacity built to "
+        "carry it. **Battery energy and hydrogen storage are blank on purpose:** "
+        "the battery's energy rating shares the power rating's flow, and the "
+        "tank is sized in kg of stock rather than MWh of throughput, so neither "
+        "has an MWh of its own."
+    )
+
+    st.caption(
+        "**A small MWh against a large capacity means the asset was sized by "
+        "peak, not by energy** — which is normal for a battery and worth "
+        "looking at for the grid connection. On the 300 MW Highland run the "
+        "lowest-emissions connection is 868 MW carrying 246,749 MWh, a 3.2 % "
+        "load factor against 37.7 % at lowest cost, with six hours of the year "
+        "above 99 % of it. That is genuine: re-solving for least cost at the "
+        "same carbon shrinks it by 3.3 MW. Decarbonising the last stretch buys "
+        "a connection sized for a handful of hours, and at Highland's DUoS "
+        "capacity rate those 868 MW are £29 m/yr of the build's cost."
+    )
 
     # --- what each build delivers ---------------------------------------------
     st.subheader("What each build delivers")
@@ -583,8 +674,11 @@ else:
                 "variables, so the frontier is exact. The coloured markers are "
                 "the builds in the tables above."
             )
-            show = f[["point", "cost_m", "gwp_t", "gwp_g_per_kWh"] +
-                     [k for k, _, _ in CAPS]]
+            show = f[["point", "cost_m", "gwp_t", "gwp_g_per_kWh"]
+                     + [c for k, _, _ in CAPS
+                        for c in ((k, f"{k}_MWh_per_year") if k in ENERGY_CAPS
+                                  else (k,))
+                        if c in f.columns]]
             with st.expander("Every point on the frontier, with its sizing"):
                 st.dataframe(show.round(2), width="stretch", hide_index=True)
             _download(front, "frontier.csv")
@@ -601,6 +695,8 @@ else:
 
     export_rows = [
         {**{k: p.get(k, 0.0) for k, _, _ in CAPS},
+         **{f"{k}_MWh_per_year": p.get(f"{k}_MWh_per_year", NA)
+            for k, _, _ in CAPS if k in ENERGY_CAPS},
          "cost_GBP_per_year": p["cost_GBP_per_year"],
          "gwp_kgco2e_per_year": p["gwp_kgco2e_per_year"],
          "gwp_g_per_kWh": p["gwp_g_per_kWh"],

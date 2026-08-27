@@ -75,7 +75,8 @@ def data_centre_coefficients(refresh: bool = False) -> dict:
 
 
 def build_series(site, start: str, end: str, size_mw_it: float,
-                 pue: float = 1.15, token: str | None = None) -> dc_model.Series:
+                 pue: float = 1.15, token: str | None = None,
+                 connection_headroom: float | None = None) -> dc_model.Series:
     """Aligned half-hourly inputs for one site and window.
 
     ``site`` is anything ``sites.get`` accepts — a ``Site``, a ``(lat, lon)``
@@ -91,7 +92,24 @@ def build_series(site, start: str, end: str, size_mw_it: float,
     sites.require_grid_region(site, meta["grid_file"])
 
     index = pd.DatetimeIndex(df.index)
-    charges = nc.import_charges(index, zone_no=site.tnuos_zone, tdr_band=site.tdr_band)
+    # load -> connection ceiling -> band. The band is read from the agreed
+    # capacity, which is the connection, not the load: charging a 300 MW site on
+    # its load alone is how it stayed on a 7 MW band. A site that pins its own
+    # connection limit keeps it; otherwise the ceiling is derived and used both
+    # as the band's basis and as the LP's upper bound on cap_grid.
+    load_mw = size_mw_it * pue
+    annual_mwh = load_mw * dc_model.HOURS_PER_YEAR
+    conn_mw, conn_note = sites.max_connection_mw(load_mw, connection_headroom)
+    if site.connection_limit_mw is not None:
+        conn_mw, conn_note = float(site.connection_limit_mw), ""
+    transmission, tier_note = nc.is_transmission_connected(
+        conn_mw, site.transmission_connected)
+    tdr_band, tdr_note = site.tdr_band, ""
+    if tdr_band is None:
+        tdr_band, tdr_note = nc.tdr_band_for(
+            conn_mw, annual_mwh, transmission_connected=transmission)
+    charges = nc.import_charges(index, zone_no=site.tnuos_zone, tdr_band=tdr_band,
+                                transmission_connected=transmission)
     price = df["price_GBP_per_MWh"].to_numpy() + \
         charges["volumetric_GBP_per_MWh"].to_numpy()
 
@@ -107,6 +125,15 @@ def build_series(site, start: str, end: str, size_mw_it: float,
     meta["network_charges"] = charges["components"]
     meta["capacity_GBP_per_MW_year"] = charges["capacity_GBP_per_MW_year"]
     meta["fixed_GBP_per_year"] = charges["fixed_GBP_per_year"]
+    meta["tdr_band"] = tdr_band
+    meta["tdr_band_note"] = tdr_note
+    meta["connection_limit_mw"] = conn_mw
+    meta["connection_limit_note"] = conn_note
+    meta["connection_headroom"] = (
+        connection_headroom if connection_headroom is not None
+        else sites.CONNECTION_HEADROOM_ASSUMED)
+    meta["transmission_connected"] = transmission
+    meta["connection_tier_note"] = tier_note
     meta["site"] = site.key
     meta["site_name"] = site.name
     meta["lat"], meta["lon"] = site.lat, site.lon
@@ -169,6 +196,7 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
     from optimisation import battery as batt
     from optimisation import electrolysers as ely
     from optimisation import fuel_cell as fc
+    from optimisation import grid_connection as gc
     from optimisation import h2_capex as hc
     from optimisation import h2_prices
     from optimisation import h2_storage as h2s
@@ -237,6 +265,7 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
         gwp_fc_bop_per_mw=d["bop_kgco2e_per_MW"],
         gwp_fc_stack_per_mw=d["stack_kgco2e_per_MW"],
         gwp_fc_maint_per_mwh=d["maintenance_kgco2e_per_MWh"],
+        gwp_grid_per_mw=gc.kgco2e_per_mw_year(),
         fc_bop_calendar_years=d["bop_calendar_lifetime_years"],
         fc_bop_duty_hours=d["bop_duty_lifetime_hours"],
         fc_stack_duty_hours=d["stack_lifetime_hours"],
@@ -247,14 +276,19 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
         cost_ely=float(ec.capex_GBP_per_kWe) * 1000.0 * (crf_e + float(ec.fixed_opex_frac)),
         cost_tank=float(tkc.annual_GBP_per_kg_year),
         cost_fc=float(fcr.annual_GBP_per_MW_year),
+        cost_fc_stack_per_mw=float(fcr.stack_GBP_per_MW),
         cost_grid_per_mw_year=meta["capacity_GBP_per_MW_year"],
         cost_grid_fixed_per_year=meta["fixed_GBP_per_year"],
         ely_kwh_per_kg=ely_row["kwh_per_kg"],
         ely_variable_gwp_per_kg=ely_row["variable_kgco2e_per_kg"],
-        tank_compression_kwh_per_kg=tank_row["compression_kwh_per_kg"],
+        # From the electrolyser that actually feeds this tank, not from the
+        # tank's pressure alone. h2_storage cannot know which technology was
+        # chosen; this is the only place that does.
+        tank_compression_kwh_per_kg=h2s.compression_kwh_per_kg(
+            ely.DELIVERY_PRESSURE_BAR[ely_tech], tank_row["pressure_bar"]),
         tank_leakage_per_hour=tank_row["leakage_frac_per_hour"],
         batt_rte=batt.ROUND_TRIP_EFFICIENCY,
-        batt_leakage_per_hour=getattr(batt, "STANDING_LOSS_PER_HOUR", 0.0),
+        batt_leakage_per_hour=batt.STANDING_LOSS_PER_HOUR,
         fc_kg_h2_per_mwh=d["h2_kg_per_MWh"],
         bought_h2_gbp_per_kg=h2_price, bought_h2_gwp_per_kg=h2_gwp,
         dc_fixed_gwp_per_year=dc["fixed_kgco2e_per_year"] * scale_dc,

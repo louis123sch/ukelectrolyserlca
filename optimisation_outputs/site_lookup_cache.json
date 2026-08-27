@@ -7,6 +7,22 @@
     "region_name": "South West England",
     "tnuos_zone": 14
   },
+  "50.82,-0.137": {
+    "carbon_api_region": 14,
+    "outcode": "BN1",
+    "place": "Brighton and Hove",
+    "postcode": "BN1 1FL",
+    "region_name": "South East England",
+    "tnuos_zone": 11
+  },
+  "50.91,-1.404": {
+    "carbon_api_region": 12,
+    "outcode": "SO15",
+    "place": "Southampton",
+    "postcode": "SO15 2AN",
+    "region_name": "South England",
+    "tnuos_zone": 13
+  },
   "51.482,-3.179": {
     "carbon_api_region": 7,
     "outcode": "CF10",
@@ -47,6 +63,14 @@
     "region_name": "West Midlands",
     "tnuos_zone": 8
   },
+  "52.489,-1.898": {
+    "carbon_api_region": 8,
+    "outcode": "B19",
+    "place": "Birmingham",
+    "postcode": "B19 3TE",
+    "region_name": "West Midlands",
+    "tnuos_zone": 8
+  },
   "52.62,1.29": {
     "carbon_api_region": 10,
     "outcode": "NR1",
@@ -63,6 +87,30 @@
     "region_name": "East England",
     "tnuos_zone": 9
   },
+  "52.954,-1.158": {
+    "carbon_api_region": 9,
+    "outcode": "NG1",
+    "place": "Nottingham",
+    "postcode": "NG1 5AQ",
+    "region_name": "East Midlands",
+    "tnuos_zone": 7
+  },
+  "53.227,-4.129": {
+    "carbon_api_region": 6,
+    "outcode": "LL57",
+    "place": "Gwynedd",
+    "postcode": "LL57 2RE",
+    "region_name": "North Wales",
+    "tnuos_zone": 6
+  },
+  "53.48,-2.24": {
+    "carbon_api_region": 3,
+    "outcode": "M2",
+    "place": "Manchester",
+    "postcode": "M2 3HQ",
+    "region_name": "North West England",
+    "tnuos_zone": 4
+  },
   "53.801,-1.549": {
     "carbon_api_region": 5,
     "outcode": "LS1",
@@ -71,6 +119,14 @@
     "region_name": "Yorkshire",
     "tnuos_zone": 5
   },
+  "54.978,-1.617": {
+    "carbon_api_region": 4,
+    "outcode": "NE1",
+    "place": "Newcastle upon Tyne",
+    "postcode": "NE1 4LB",
+    "region_name": "North East England",
+    "tnuos_zone": 3
+  },
   "54.978,-1.618": {
     "carbon_api_region": 4,
     "outcode": "NE1",
@@ -78,6 +134,14 @@
     "postcode": "NE1 4LQ",
     "region_name": "North East England",
     "tnuos_zone": 3
+  },
+  "55.86,-4.25": {
+    "carbon_api_region": 2,
+    "outcode": "G1",
+    "place": "Glasgow City",
+    "postcode": "G1 1DG",
+    "region_name": "South Scotland",
+    "tnuos_zone": 2
   },
   "57.48,-4.22": {
     "carbon_api_region": 1,

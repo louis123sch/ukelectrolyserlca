@@ -79,6 +79,7 @@ def _coefficient_identity() -> dict:
 
 
 def run_one(scenario: A.Scenario, *, site, start: str, end: str,
+            connection_headroom: float | None = None,
             size_mw_it: float, pue: float, resample_hours: float | None,
             points: int, cost_case: str, horizon_years: float,
             unserved_fraction: float, out_root: Path,
@@ -122,16 +123,34 @@ def run_one(scenario: A.Scenario, *, site, start: str, end: str,
             pass
 
     t0 = time.time()
-    series, meta = I.build_series(site, start, end, size_mw_it, pue=pue)
+    series, meta = I.build_series(site, start, end, size_mw_it, pue=pue,
+                                  connection_headroom=connection_headroom)
+    # Record what was *used*, not what was asked for. site.tdr_band is None
+    # whenever the band is derived from the load, so writing it straight into
+    # the config would leave the run with no record of the band it was actually
+    # charged on — and a config that cannot reproduce its own run is worse than
+    # no config.
+    cfg["site"]["tdr_band"] = meta["tdr_band"]
+    cfg["site"]["tdr_band_source"] = ("pinned on the site" if site.tdr_band
+                                      else "derived from the load")
+    cfg["site"]["transmission_connected"] = meta["transmission_connected"]
+    cfg["site"]["connection_limit_mw"] = meta["connection_limit_mw"]
+    cfg["site"]["connection_headroom"] = meta["connection_headroom"]
+    cfg["site"]["connection_limit_source"] = ("pinned on the site"
+                                              if site.connection_limit_mw is not None
+                                              else "derived from the load")
     if resample_hours:
         series = I.resample(series, resample_hours)
     tech = I.build_tech(site, meta, ely_tech=scenario.ely_tech or "PEM operation",
                         tank_design=scenario.tank_design, h2_colour=scenario.h2_colour,
                         cost_case=cost_case, horizon_years=horizon_years,
                         size_mw_it=size_mw_it, pue=pue)
+    # The ceiling the band was read from is the ceiling the LP is held to.
+    # Deriving one and optimising against the other is exactly the incoherence
+    # this chain exists to remove.
     assets = A.architecture(scenario.architecture,
                             offshore=site.offshore_wind,
-                            grid_limit_mw=site.connection_limit_mw,
+                            grid_limit_mw=meta["connection_limit_mw"],
                             flags=scenario.assets)
     if scenario.h2_colour is None and assets.buy_h2:
         # An architecture that *may* buy hydrogen still needs a priced colour.
@@ -195,7 +214,7 @@ def run_matrix(scenarios=None, *, site=sites.DEFAULT_PRESET, start="2025-01-01",
                end="2025-12-29", size_mw_it=7.31, pue=1.0,
                resample_hours=1.0, points=12, cost_case="central",
                horizon_years=25.0, unserved_fraction=0.0,
-               gwp_target_kg_per_year=None,
+               gwp_target_kg_per_year=None, connection_headroom=None,
                out_root: Path | None = None, workers=None,
                save_dispatch=False, refresh=False, progress=print) -> pd.DataFrame:
     """Solve every configuration, in parallel, and return the comparison table."""
@@ -208,7 +227,7 @@ def run_matrix(scenarios=None, *, site=sites.DEFAULT_PRESET, start="2025-01-01",
               resample_hours=resample_hours, points=points, cost_case=cost_case,
               horizon_years=horizon_years, unserved_fraction=unserved_fraction,
               gwp_target_kg_per_year=gwp_target_kg_per_year,
-              out_root=out_root, save_dispatch=save_dispatch, refresh=refresh)
+              connection_headroom=connection_headroom, out_root=out_root, save_dispatch=save_dispatch, refresh=refresh)
 
     results, t0 = [], time.time()
     if workers == 1:

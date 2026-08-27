@@ -122,12 +122,14 @@ class Tech:
     gwp_ely: float; gwp_tank: float
     gwp_fc_bop_per_mw: float; gwp_fc_stack_per_mw: float
     gwp_fc_maint_per_mwh: float
+    gwp_grid_per_mw: float
     fc_bop_calendar_years: float; fc_bop_duty_hours: float
     fc_stack_duty_hours: float
     # cost, GBP per MW (or MWh / kg) per year
     cost_wind: float; cost_offshore: float; cost_solar: float
     cost_batt_p: float; cost_batt_e: float
     cost_ely: float; cost_tank: float; cost_fc: float
+    cost_fc_stack_per_mw: float
     cost_grid_per_mw_year: float; cost_grid_fixed_per_year: float
     # flows
     ely_kwh_per_kg: float; ely_variable_gwp_per_kg: float
@@ -321,6 +323,10 @@ def build_model(series: Series, assets: Assets, tech: Tech, *,
         + tech.cost_batt_p * V["cap_batt_p"] + tech.cost_batt_e * V["cap_batt_e"]
         + tech.cost_ely * V["cap_ely"] + tech.cost_tank * V["cap_tank"]
         + tech.cost_fc * V["cap_fc"]
+        # Stack replacements, on the same convex max(calendar, duty) count the
+        # carbon side uses. Without this, running the fuel cell hard buys extra
+        # stacks in carbon and nothing in cost.
+        + tech.cost_fc_stack_per_mw * V["fc_stack_units"]
         + tech.cost_grid_per_mw_year * V["cap_grid"]
         + scale * (price * V["imp"] * dt).sum()
         + scale * (tech.bought_h2_gbp_per_kg * V["h2_buy"]).sum()
@@ -334,6 +340,12 @@ def build_model(series: Series, assets: Assets, tech: Tech, *,
         + tech.gwp_ely * V["cap_ely"] + tech.gwp_tank * V["cap_tank"]
         + tech.gwp_fc_bop_per_mw * V["fc_bop_units"]
         + tech.gwp_fc_stack_per_mw * V["fc_stack_units"]
+        # The connection is a built asset like any other. Without this term a
+        # carbon-only solve cannot see cap_grid at all, and — once a
+        # transmission-connected site in a floored TNUoS zone pays nothing per
+        # MW either — neither objective can, leaving its size to the solver's
+        # stopping vertex. See grid_connection.py.
+        + tech.gwp_grid_per_mw * V["cap_grid"]
         + scale * (tech.gwp_fc_maint_per_mwh * V["p_fc"] * dt).sum()
         + scale * (ci * V["imp"] * dt).sum()
         + scale * (tech.bought_h2_gwp_per_kg * V["h2_buy"]).sum()
@@ -349,8 +361,19 @@ def build_model(series: Series, assets: Assets, tech: Tech, *,
         m.add_objective(cost)
     elif objective == "gwp":
         m.add_objective(gwp)
+    elif objective == "connection":
+        # Smallest grid connection, for use only as a final tie-break with both
+        # cost and gwp already pinned by epsilon constraints. cap_grid is priced
+        # in cost and absent from gwp, so at a site where the connection charge
+        # is zero — a transmission connection in a floored TNUoS zone — neither
+        # objective has any preference between connections, and the reported
+        # size is whichever vertex the solver stopped at. Minimising it directly
+        # is the only thing that makes the number mean "the connection this
+        # build actually needs".
+        m.add_objective(1.0 * V["cap_grid"])
     else:
-        raise ValueError(f"objective must be 'cost' or 'gwp', got {objective!r}")
+        raise ValueError(
+            f"objective must be 'cost', 'gwp' or 'connection', got {objective!r}")
 
     return m, V, {"cost": cost, "gwp": gwp,
                   "cost_const": cost_const, "gwp_const": gwp_const}
@@ -463,6 +486,7 @@ def contributions(V, obj, series, tech, assets) -> dict:
         "H2 tank": tech.gwp_tank * cap["cap_tank"],
         "fuel cell": (tech.gwp_fc_bop_per_mw * float(V["fc_bop_units"].solution)
                       + tech.gwp_fc_stack_per_mw * float(V["fc_stack_units"].solution)),
+        "grid connection": tech.gwp_grid_per_mw * float(V["cap_grid"].solution),
     }
     gwp_op = {
         "grid import": scale * float((series.grid_gwp_per_mwh * ser["imp"] * dt).sum()),
@@ -479,7 +503,8 @@ def contributions(V, obj, series, tech, assets) -> dict:
         "battery": tech.cost_batt_p * cap["cap_batt_p"] + tech.cost_batt_e * cap["cap_batt_e"],
         "electrolyser": tech.cost_ely * cap["cap_ely"],
         "H2 tank": tech.cost_tank * cap["cap_tank"],
-        "fuel cell": tech.cost_fc * cap["cap_fc"],
+        "fuel cell": (tech.cost_fc * cap["cap_fc"]
+                      + tech.cost_fc_stack_per_mw * float(V["fc_stack_units"].solution)),
         "grid connection": tech.cost_grid_per_mw_year * float(V["cap_grid"].solution),
     }
     cost_op = {

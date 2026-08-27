@@ -83,6 +83,42 @@ TECHNOLOGIES = {
     "SOEC operation": 1.0,
 }
 
+# Pressure the hydrogen leaves the electrolyser at, in bar.
+#
+# This exists because ``h2_storage`` needs it and was assuming it. Its
+# compression parasitic is the work of getting hydrogen from the electrolyser's
+# delivery pressure up to the tank's, and it was keyed off the *tank* pressure
+# alone — zero for the 28 bar design, justified in that module's own docstring
+# by "the electrolyser already leaves at ~30 bar". True of PEM. Not true of
+# SOEC, which is the technology the 300 MW runs use.
+#
+# The consequence was a comparability error, not just a missing term: the three
+# technologies were being compared head to head at three different delivery
+# pressures with no compression charged to any of them, which flatters whichever
+# one delivers at the lowest pressure. That is SOEC, the most efficient on
+# kWh/kg and therefore the one most likely to be selected on the strength of it.
+#
+# Sources
+# -------
+# PEM   30 bar. 30-40 bar PEM electrolysers are the widely commercialised
+#       class; only one 700 bar unit is on the market. TRANSCRIBED from the
+#       high-pressure PEM review (Energy Convers. Manag. 2022).
+# SOEC  1 bar. SOEC operates at atmospheric pressure; pressurised SOEC is a
+#       research and early-commercial interest precisely *because* it displaces
+#       downstream compression. TRANSCRIBED from the pressurised-SOE
+#       operational-strategies review (Fuel Cells, 2026) and IRENA's SOEC
+#       innovation-landscape brief.
+# AE    30 bar. ASSUMED. Alkaline is deployed both atmospheric and pressurised
+#       to ~30 bar, and the source inventory does not state which it is. This is
+#       the optimistic end; if the AE inventory is atmospheric, its compression
+#       is understated by the same ~2 kWh/kg as SOEC's was.
+DELIVERY_PRESSURE_BAR = {
+    "AE operation": 30.0,
+    "PEM operation": 30.0,
+    "SOEC operation": 1.0,
+}
+DELIVERY_PRESSURE_ASSUMED = {"AE operation"}
+
 # The shared capital basis the three inventories agree on, used only to check
 # the rating. Not used in any coefficient.
 EXPECTED_LIFETIME_GWH_PER_MW = 160.0

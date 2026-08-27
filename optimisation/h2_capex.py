@@ -109,6 +109,14 @@ def capital_recovery_factor(rate, lifetime_years):
     return rate / (1.0 - (1.0 + rate) ** -lifetime_years)
 
 
+def fc_stack_cost_fraction() -> float:
+    """Stack share of fuel cell capital, taken from the LCA's own split."""
+    from optimisation import fuel_cell as fc
+    d = fc.decompose()
+    stack, bop = d["stack_kgco2e_per_MW"], d["bop_kgco2e_per_MW"]
+    return stack / (stack + bop)
+
+
 def fuel_cell_costs():
     """£/kW installed, and the annualised £/kW/year that follows."""
     from optimisation import fuel_cell as fc
@@ -118,13 +126,34 @@ def fuel_cell_costs():
     rows = []
     for case in CASES:
         capex = FC_USD_PER_KW[case] / USD_PER_GBP_2025
+        # Split capital between stack and balance of plant on the *same*
+        # fraction the LCA uses, because it is the same physical decomposition
+        # and a second free parameter would only invite the two to drift apart.
+        # DOE's independent finding agrees with the shape: for stationary PEM
+        # systems the stack is under 50 % of system cost and typically under
+        # 15 % at volume, with BoP dominating. This study's carbon split puts
+        # the stack at 17 %, inside that range.
+        #
+        # It matters because the stack wears out on *duty* — 32,000 hours — while
+        # BoP runs to calendar. Charging the whole system on calendar life made
+        # running the fuel cell hard free in cost while still costing carbon, so
+        # the two objectives were pricing different physics for one machine.
+        stack_frac = fc_stack_cost_fraction()
         rows.append({
             "asset": "fuel_cell", "case": case,
             "capex_GBP_per_kW": capex,
             "capex_GBP_per_MW": capex * 1000.0,
             "fixed_opex_frac": FC_FIXED_OPEX_FRAC[case],
             "lifetime_years": life,
-            "annual_GBP_per_MW_year": capex * 1000.0 * (crf + FC_FIXED_OPEX_FRAC[case]),
+            "stack_cost_fraction": stack_frac,
+            # BoP only: the calendar-driven part, annualised as before.
+            "annual_GBP_per_MW_year": (capex * 1000.0 * (1.0 - stack_frac)
+                                       * (crf + FC_FIXED_OPEX_FRAC[case])),
+            # Stack capital, charged per replacement. Undiscounted, matching the
+            # carbon side, because the LP abstracts away *when* a replacement
+            # falls and a discount factor would need that schedule. This
+            # overstates a distant replacement slightly.
+            "stack_GBP_per_MW": capex * 1000.0 * stack_frac,
             "grade": GRADE,
             "note": "DOE natural-gas system — includes a reformer this study does "
                     "not have, so biased high" if FC_INCLUDES_REFORMER else "",
