@@ -24,6 +24,8 @@ import contextlib
 import importlib
 import io
 import sys
+import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import altair as alt
@@ -34,9 +36,9 @@ REPO_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_DIR))
 
 import lca_helpers as H
-from optimisation import baseline_grid, battery, h2_prices, profiles, renewables, tech_costs
+from optimisation import baseline_grid, battery, gb_map, h2_prices, profiles, renewables, tech_costs
 from optimisation import dc_architectures as A
-from optimisation import dc_inputs, dc_model, dc_pareto, dc_runner, sites
+from optimisation import dc_inputs, dc_job, dc_model, dc_pareto, dc_runner, sites
 
 # Streamlit keeps imported modules in sys.modules across reruns, so edits to
 # optimisation/*.py would otherwise need a full app restart to show up. These
@@ -48,7 +50,8 @@ from optimisation import dc_inputs, dc_model, dc_pareto, dc_runner, sites
 # profiles is a leaf dc_inputs imports lazily inside build_series — easy to
 # forget precisely because it never appears at this page's own call sites.
 for _mod in (tech_costs, renewables, h2_prices, battery, baseline_grid,
-             sites, profiles, dc_model, dc_inputs, dc_pareto, A, dc_runner):
+             gb_map, sites, profiles, dc_model, dc_inputs, dc_pareto, A, dc_runner,
+             dc_job):
     importlib.reload(_mod)
 
 st.set_page_config(page_title="Data Centre Optimiser", layout="wide")
@@ -111,6 +114,53 @@ def _console(text: str, label: str = "Module output — cross-checks and caveats
             st.code(text, language="text")
 
 
+# One colour per source, used by both charts so the battery's band and its
+# state of charge are visibly the same asset.
+SOURCE_COLOURS = {
+    "Solar PV": "#e8b833", "Wind": "#4c9f70", "Offshore wind": "#2f6f8f",
+    "Battery": "#8a63b8", "Fuel cell": "#4bacc6", "Grid import": "#9aa0a6",
+    "Unserved": "#d62728",
+}
+
+# Above this many periods a chart stops being readable before it stops being
+# drawable, so the window is averaged down to it. Mean power over a longer step
+# is still the right height for an area chart — the energy under the curve is
+# preserved — but a one-hour price spike is not.
+MAX_PLOT_PERIODS = 1500
+
+# The dispatch panels are a vconcat, which cannot autosize to its container.
+PLOT_WIDTH = 780
+
+
+@st.cache_data(show_spinner=False)
+def _dispatch(path: str) -> pd.DataFrame:
+    return pd.read_parquet(path)
+
+
+def _for_display(win: pd.DataFrame) -> tuple[pd.DataFrame, str]:
+    """Thin a window down to something Vega can draw, and say so if it was."""
+    if len(win) <= MAX_PLOT_PERIODS:
+        return win, ""
+    step = win.index[1] - win.index[0]
+    factor = int(len(win) / MAX_PLOT_PERIODS) + 1
+    coarse = win.resample(step * factor).mean(numeric_only=True)
+    return coarse, (f" Averaged to {_pretty(step * factor)} steps to stay "
+                    f"drawable — {len(win):,} periods would not.")
+
+
+def _pretty(td: timedelta) -> str:
+    h = td.total_seconds() / 3600.0
+    return f"{h / 24:.0f} day" if h >= 24 else f"{h:.0f} h"
+
+
+def _tail(path, lines: int = 40) -> str:
+    """The last of a job's log — the only thing a crashed child leaves behind."""
+    try:
+        return "\n".join(Path(path).read_text().splitlines()[-lines:]) or "(empty)"
+    except Exception as exc:
+        return f"(no log: {exc})"
+
+
 def _download(df: pd.DataFrame, name: str, label: str | None = None):
     st.download_button(label or f"Download {name}",
                        df.to_csv(index=False).encode("utf-8"),
@@ -135,9 +185,15 @@ with c1:
                               help="7.31 MW is the Zhang et al. foreground's own "
                                    "continuous draw — the study's baseline case.")
 with c2:
-    pue = st.number_input("PUE", 1.0, 2.0, 1.00, step=0.05,
-                          help="1.00 reproduces the foreground, whose figure is "
-                               "already facility-level rather than IT-only.")
+    pue = st.number_input("PUE", 1.0, 2.0, 1.50, step=0.05,
+                          help="1.50 is the base case. IT load x PUE is the "
+                               "only thing the model sees: it sets the flat "
+                               "demand, and the foreground's embodied hardware "
+                               "is scaled by it too, so cooling plant is "
+                               "treated as proportional to the reference "
+                               "facility rather than costed separately. Set "
+                               "**1.00** to reproduce Zhang et al. exactly, "
+                               "whose 7.31 MW is already facility-level.")
 with c3:
     horizon = st.number_input("Horizon (years)", 1.0, 50.0, 25.0, step=1.0,
                               help="Amortisation only — a different thing from the "
@@ -169,7 +225,9 @@ with c4:
 
 st.caption(
     f"**{size_mw * pue:,.2f} MW facility draw**, flat. The dispatch window is "
-    "the period the optimiser sees; real GB grid and price data exists for 2025 only."
+    "the period the optimiser sees. Any window the Carbon Intensity and Elexon "
+    "APIs serve works — from 2018-05-11 to yesterday — and one that has not "
+    "been built yet is built by the run rather than refused."
 )
 
 
@@ -186,6 +244,31 @@ st.markdown(
 )
 
 
+MAP_PARAM = "pick"
+
+
+def _map_key() -> str:
+    """The map's widget key, which moves with the coordinate.
+
+    A fixed key would leave the last click sitting in the chart's state: after
+    typing a coordinate by hand, clicking that same point again would produce
+    no change of state, so no rerun, so a dead click. Keying the chart on the
+    coordinate hands every rerun a chart whose selection is empty, and makes
+    any click on it a change.
+    """
+    return (f"dc_map_{st.session_state['dc_lat']:.4f}"
+            f"_{st.session_state['dc_lon']:.4f}")
+
+
+def _map_click() -> tuple[float, float] | None:
+    """The coordinate a click on the map landed on, if one just did."""
+    sel = (st.session_state.get(_map_key()) or {}).get("selection") or {}
+    pts = sel.get(MAP_PARAM) or []
+    if not pts:
+        return None
+    return round(float(pts[0]["lat"]), 4), round(float(pts[0]["lon"]), 4)
+
+
 def _apply_preset():
     key = st.session_state.get("dc_preset")
     if key and key in sites.PRESETS:
@@ -195,6 +278,18 @@ def _apply_preset():
 
 st.session_state.setdefault("dc_lat", sites.PRESETS[sites.DEFAULT_PRESET][0])
 st.session_state.setdefault("dc_lon", sites.PRESETS[sites.DEFAULT_PRESET][1])
+
+# A click on the map arrives as the chart's widget state on the rerun the click
+# itself triggers, and Streamlit refuses to let a widget's key be written after
+# that widget exists. So the click is spent here, above the number inputs it
+# feeds, rather than next to the chart it came from.
+_click = _map_click()
+if _click:
+    st.session_state["dc_lat"], st.session_state["dc_lon"] = _click
+# Every click leaves a dead entry behind, because the key moves with it.
+for _k in [k for k in st.session_state
+           if k.startswith("dc_map_") and k != _map_key()]:
+    del st.session_state[_k]
 
 c1, c2, c3, c4, c5, c6 = st.columns([1.3, 0.9, 0.9, 1.0, 1.0, 1.1])
 with c1:
@@ -249,6 +344,82 @@ with c6:
              "band; a band that disagrees with the load misprices the "
              "connection by millions a year.")
 
+# --- the map ----------------------------------------------------------------
+# Two ways in, one coordinate out. Clicking the map writes the number inputs
+# above; typing in them moves the marker. Vega can only report a click as the
+# *nearest data point*, so what is clickable is gb_map's grid of GB land
+# coordinates rather than the continuous plane — see that module for why the
+# grid is land-only and stops at the Irish Sea.
+@st.cache_data(show_spinner=False)
+def _click_grid() -> pd.DataFrame:
+    return gb_map.land_grid()
+
+
+def _geo(iso: str) -> alt.Data:
+    fc = gb_map.outline()
+    return alt.Data(
+        values={"type": "FeatureCollection",
+                "features": [f for f in fc["features"]
+                             if f["properties"]["iso"] == iso]},
+        format=alt.DataFormat(property="features", type="json"))
+
+
+_pick = alt.selection_point(name=MAP_PARAM, fields=["lat", "lon"],
+                            nearest=True, on="click", empty=False, clear=False)
+_ie = alt.Chart(_geo("IRL")).mark_geoshape(
+    fill="#ededed", stroke="#d0d0d0", strokeWidth=0.4)
+_gb = alt.Chart(_geo("GBR")).mark_geoshape(
+    fill="#dfe8dc", stroke="#78907a", strokeWidth=0.5)
+_hit = alt.Chart(_click_grid()).mark_square(size=14, opacity=0).encode(
+    longitude="lon:Q", latitude="lat:Q",
+    tooltip=[alt.Tooltip("lat:Q", title="lat", format=".2f"),
+             alt.Tooltip("lon:Q", title="lon", format=".2f")],
+).add_params(_pick)
+_pre = alt.Chart(pd.DataFrame(
+    [{"lat": v[0], "lon": v[1], "name": f"{k} · {v[2]}"}
+     for k, v in sites.PRESETS.items()])).mark_point(
+    shape="diamond", size=45, filled=True, color="#4c78a8", opacity=0.85).encode(
+    longitude="lon:Q", latitude="lat:Q", tooltip=["name:N"])
+_here = alt.Chart(pd.DataFrame([{"lat": lat, "lon": lon}])).mark_point(
+    shape="circle", size=200, filled=False, color="#d62728",
+    strokeWidth=2.5).encode(
+    longitude="lon:Q", latitude="lat:Q",
+    tooltip=[alt.Tooltip("lat:Q", format=".4f"),
+             alt.Tooltip("lon:Q", format=".4f")])
+_dot = _here.mark_point(shape="circle", size=18, filled=True, color="#d62728")
+
+mc, mi = st.columns([1, 2])
+with mc:
+    st.altair_chart(
+        alt.layer(_ie, _gb, _hit, _pre, _here, _dot)
+        .project(type="mercator")
+        .properties(width=330, height=430)
+        .configure_view(strokeWidth=0),
+        key=_map_key(), on_select="rerun")
+with mi:
+    _snap = gb_map.nearest_land(lat, lon)
+    _off_km = ((_snap[0] - lat) ** 2
+               + ((_snap[1] - lon) * 0.6) ** 2) ** 0.5 * 111.0
+    st.markdown(
+        "**Click anywhere on Great Britain** to place the data centre there; "
+        "the latitude and longitude above fill in, and everything below "
+        "re-resolves from them. Typing the coordinates instead moves the red "
+        "marker — the two controls are the same input.\n\n"
+        "The blue diamonds are the presets. A click snaps to the nearest point "
+        f"of a {gb_map.DEFAULT_STEP_LAT:g}° × {gb_map.DEFAULT_STEP_LON:g}° "
+        "grid of GB land, so it lands within about 5 km of the cursor — finer "
+        "than a Carbon Intensity region, but not exact. **Type the coordinate "
+        "when the site is real**, especially near a region boundary.\n\n"
+        "Ireland is drawn for orientation only, and Northern Ireland is not "
+        "clickable: the Carbon Intensity API's regional series, which is the "
+        "grid mix this page runs on, covers GB only."
+    )
+    if _off_km > 8.0:
+        st.caption(
+            f"The marker is {_off_km:,.0f} km from the nearest clickable land "
+            "point — a coordinate this far offshore has no postcode, so the "
+            "reverse geocode below will fail or land somewhere unintended.")
+
 try:
     site = sites.resolve(lat, lon, tdr_band=(None if tdr == TDR_AUTO else tdr),
                          connection_limit_mw=(conn or None))
@@ -297,24 +468,45 @@ m2.metric("Carbon Intensity region", f"{site.carbon_api_region} · {site.region_
 m3.metric("TNUoS zone", f"{site.tnuos_zone}")
 m4.metric("TNUoS demand tariff", f"£{tariff:.2f}/kW" if tariff == tariff else "—")
 
-have = sites.available_grid_regions()
-grid_ready = site.carbon_api_region in have
-if grid_ready:
+# Readiness is about *this window*, not about the region having some file
+# somewhere. A region whose only cached series is one week of June is not ready
+# for a January window, and saying "cached" on the strength of the file
+# existing is how that mismatch got discovered by a run failing minutes later
+# with an error about representative-day sampling that had nothing to do with it.
+#
+# Nothing here gates the Optimise button any more: a missing window is built by
+# the run itself (dc_inputs.build_series -> sites.ensure_grid_series). This box
+# only says whether this run will pay for a build first.
+try:
+    _status = profiles.window_status(start, end,
+                                     carbon_api_region=site.carbon_api_region)
+except Exception as _exc:                      # unparseable dates, mostly
+    _status = {"ok": False, "grid_ok": False, "price_ok": False,
+               "grid_index": {}, "detail": str(_exc)}
+
+if _status["ok"]:
     st.success(
-        f"Grid data cached for region {site.carbon_api_region} ({site.region_name})."
-    )
+        f"Grid and price data cover {start} to {end} for region "
+        f"{site.carbon_api_region} ({site.region_name}) — "
+        f"`{_status['grid_file']}`. The run starts solving immediately.")
 else:
-    cached = ", ".join(f"{r} ({sites.CARBON_API_REGIONS[r]})" for r in sorted(have)) or "none"
-    st.error(
-        f"**No cached grid series for region {site.carbon_api_region} "
-        f"({site.region_name}).** Cached: {cached}.\n\n"
-        "Using another region's half-hourly intensities here would produce a "
-        "confident wrong answer about whether renewables beat the grid, so the "
-        "optimiser refuses. Generate this one first — it scores the GB fuel mix "
-        "against ecoinvent for every half-hour, so it takes a while:\n\n"
-        f"```bash\npython -c \"from optimisation import sites; "
-        f"sites.build_grid_series({site.carbon_api_region})\"\n```"
-    )
+    _missing = " and ".join(
+        k for k in ("grid", "price") if not _status[f"{k}_ok"]) or "data"
+    st.info(
+        f"**No {_missing} series covers {start} to {end}"
+        + (f" for region {site.carbon_api_region} ({site.region_name})"
+           if not _status["grid_ok"] else "")
+        + " yet — the run will build it first.**\n\n"
+        "Substituting another region's half-hourly intensities, or another "
+        "month's, would give a confident wrong answer about whether renewables "
+        "beat the grid here, so the window is built rather than borrowed. "
+        "Building scores the GB fuel mix against ecoinvent for every half-hour: "
+        "a week takes a couple of minutes, a full year considerably longer. It "
+        "happens inside the same detached process as the solve, so you can "
+        "close the tab while it runs.")
+    if _status["grid_index"]:
+        with st.expander("What is on disk for this region"):
+            st.code(profiles.describe_files(_status["grid_index"]))
 
 
 # =============================================================================
@@ -434,10 +626,15 @@ with c2:
         help="Each point is one LP solve. The knee needs a genuine sweep, not "
              "just the two anchors, to be a real knee rather than a coin flip.")
 
+# Two anchors plus points-1 epsilon solves, and a target if one is asked for.
+# Each anchor can also need up to two tie-break solves — see dc_pareto._tie_break
+# — which is why the count is a range rather than a number.
 n_solves = int(points) + 1 + (1 if gwp_target is not None else 0)
-st.caption(f"**{n_solves} LP solve(s)** at {resample:g} h steps. Results are cached "
-           "on a hash of every input above plus the model source, so re-running "
-           "an unchanged scenario is free.")
+st.caption(f"**{n_solves}–{n_solves + 4} LP solves** at {resample:g} h steps — the "
+           "spread is the anchor tie-breaks, which only run when an objective "
+           "leaves its own answer undetermined. Results are cached on a hash of "
+           "every input above plus the model source, so re-running an unchanged "
+           "scenario is free.")
 
 kit_on = [k for k in A.ASSET_FLAGS if flags[k]]
 LABELS = {"grid": "grid", "wind": "wind", "solar": "solar", "battery": "battery",
@@ -455,41 +652,100 @@ scenario = A.Scenario(
 
 out_root = RUNS / f"{site.key}_{size_mw:g}MW_{start[:4]}_custom"
 
+# Is something already solving? The answer lives in a file, not in this
+# session, so it is the same answer for every tab and every reload.
+job = dc_job.active()
+job_running = bool(job and job["state"] in ("starting", "running"))
+
 c1, c2, _ = st.columns([1, 1, 3])
 with c1:
     launch = st.button("Optimise", type="primary",
-                       disabled=bool(problems) or not grid_ready)
+                       disabled=bool(problems) or job_running,
+                       help="A run is already in progress — stop it, or wait."
+                       if job_running else None)
 with c2:
-    refresh = st.checkbox("Ignore cache", value=False)
+    refresh = st.checkbox("Ignore cache", value=False, disabled=job_running)
 
 if launch:
-    status = st.status(f"Solving — {label}", expanded=True)
-    log = status.empty()
-    done = {"n": 0}
+    dc_job.start(
+        scenario=scenario, site=site, out_root=out_root, label=label,
+        total=n_solves + 4,
+        start=start, end=end, size_mw_it=size_mw, pue=pue,
+        resample_hours=(resample or None), points=int(points),
+        cost_case=cost_case, horizon_years=horizon,
+        unserved_fraction=unserved, gwp_target_kg_per_year=gwp_target,
+        connection_headroom=headroom, refresh=refresh,
+        # Always: it is a few MB, and a run whose dispatch was not kept cannot
+        # be asked about later without solving it again.
+        save_dispatch=True)
+    st.rerun()
 
-    def _tick(tag):
-        done["n"] += 1
-        log.write(f"LP {done['n']}/{n_solves} — {tag}")
+# --- whatever is running, wherever it was started ---------------------------
+# The solve is a detached process writing to disk, not a call inside this
+# script (see optimisation/dc_job.py). So this panel is the same whether the
+# run was just launched, or launched twenty minutes ago by a browser tab that
+# has since been closed: it reads the job's status file either way.
+if job:
+    _el = ""
+    with contextlib.suppress(Exception):
+        _t0 = datetime.fromisoformat(job["started"])
+        _el = f" · {(datetime.now(timezone.utc) - _t0).total_seconds() / 60:.0f} min elapsed"
 
-    try:
-        summary = dc_runner.run_one(
-            scenario, site=site, start=start, end=end,
-            size_mw_it=size_mw, pue=pue,
-            resample_hours=(resample or None), points=int(points),
-            cost_case=cost_case, horizon_years=horizon,
-            unserved_fraction=unserved,
-            gwp_target_kg_per_year=gwp_target,
-            connection_headroom=headroom,
-            out_root=out_root, refresh=refresh, progress=_tick)
-    except Exception as exc:
-        status.update(label=f"Failed: {type(exc).__name__}", state="error")
-        st.exception(exc)
-        st.stop()
+    if job_running:
+        box = st.container(border=True)
+        box.markdown(f"**Solving — {job['label']}** at {job['site_name']}{_el}")
+        # Never let the bar sit at 100 % while the solve is still going: the
+        # exact number of LPs is not known ahead of time (tie-breaks), so the
+        # denominator is an estimate and the bar is kept honest about it.
+        _n = int(job.get("done") or 0)
+        _tot = max(int(job.get("total") or 1), _n + 1)
+        box.progress(_n / _tot, text=f"LP {_n} of ~{_tot} — {job.get('tag', '')}")
+        box.caption(
+            "This is running in its own process. **Leave the page, close the "
+            "tab, come back tomorrow** — it keeps going, and this panel finds "
+            "it again. Only Stop, or killing the machine, ends it."
+        )
+        if job.get("quiet"):
+            _building = "building grid data" in str(job.get("tag", ""))
+            box.caption(
+                f"No progress line for {job['quiet_seconds'] / 60:.0f} minutes. "
+                + ("That is the grid build above: it scores the GB fuel mix "
+                   "against ecoinvent for every half-hour of the window, and "
+                   "reports nothing until it finishes."
+                   if _building else
+                   "That is normal before the first LP — building the "
+                   "half-hourly series can fetch and score a full year of grid "
+                   "data — and abnormal after it."))
+        b1, b2, _ = box.columns([1, 1, 3])
+        if b1.button("Stop"):
+            dc_job.cancel(job["folder"])
+            st.rerun()
+        b2.button("Refresh")
 
-    tag = "read from cache" if summary.get("cached") else f"{summary['solve_seconds']:.0f} s"
-    status.update(label=f"Solved — {label} ({tag})", state="complete", expanded=False)
-    st.session_state["dc_summary"] = summary
-    st.session_state["dc_out_root"] = str(out_root)
+    elif job["state"] == "done":
+        _summary = dc_job.summary(job["folder"])
+        if _summary:
+            st.session_state["dc_summary"] = _summary
+            st.session_state["dc_out_root"] = str(Path(job["folder"]).parent)
+            _how = ("read from cache" if job.get("cached") else
+                    f"{job.get('solve_seconds') or 0:.0f} s")
+            st.success(f"**Solved — {job['label']}** ({_how}). "
+                       "The answer is below, and stays here across refreshes.")
+        else:
+            st.warning("The job finished but wrote no summary — see its log.")
+
+    else:
+        st.error(
+            f"**The run {'was cancelled' if job.get('tag') == 'cancelled' else job['state']}"
+            f" — {job['label']}.**\n\n"
+            + (f"`{job['error']}`" if job.get("error") else
+               "The solver process is no longer alive and left no result. "
+               "Its log has the last thing it printed."))
+        with st.expander("Job log"):
+            st.code(_tail(job.get("log")), language="text")
+        if st.button("Dismiss"):
+            dc_job.clear_pointer()
+            st.rerun()
 
 
 # =============================================================================
@@ -646,6 +902,97 @@ else:
                 "quoting a delta."
             )
         _console(base_console, "Grid baseline — module output")
+
+    # --- the dispatch, period by period ---------------------------------------
+    # Capacities say what is built; only the dispatch says how it is used. The
+    # bands are an attribution, not an LP output — dc_model.serve_stack owns
+    # that convention, and explains it, so this page does not restate it.
+    _disp_path = Path(st.session_state["dc_out_root"]) / summary["key"] / "dispatch.parquet"
+    if _disp_path.exists():
+        st.subheader("How each build actually runs")
+
+        _have = [(k, name) for k, name in POINTS_SHOWN
+                 if k in set(_dispatch(str(_disp_path)).point.unique())]
+        d1, d2 = st.columns([1.4, 2])
+        with d1:
+            _pick_pt = st.radio("Which build", [k for k, _ in _have],
+                                format_func=dict(_have).get, key="dsp_point")
+        _frame = (_dispatch(str(_disp_path)).query("point == @_pick_pt")
+                  .set_index("t").sort_index())
+        _t0 = _frame.index.min().to_pydatetime()
+        _t1 = _frame.index.max().to_pydatetime()
+        _span = _t1 - _t0
+        with d2:
+            if _span > timedelta(days=8):
+                _default = (_t0, _t0 + timedelta(days=7))
+                _lo, _hi = st.slider(
+                    "Time range", _t0, _t1, _default, format="D MMM",
+                    key="dsp_range",
+                    help="A week shows the daily cycle; a month shows the "
+                         "weather. The whole window is averaged down to stay "
+                         "drawable — the shape survives, single hours do not.")
+            else:
+                _lo, _hi = _t0, _t1
+                st.caption(f"The whole window: {_t0:%d %b} to {_t1:%d %b}.")
+
+        _win = _frame.loc[_lo:_hi]
+        _win, _note = _for_display(_win)
+        _stack = dc_model.serve_stack(_win)
+
+        _order = [x for x in dc_model.SERVE_SOURCES
+                  if _stack.loc[_stack.source == x, "mw"].abs().sum() > 1e-9]
+        _area = alt.Chart(_stack[_stack.source.isin(_order)]).mark_area(
+            interpolate="step-after").encode(
+            x=alt.X("t:T", title=None, axis=alt.Axis(format="%-d %b %H:%M")),
+            y=alt.Y("mw:Q", title="MW serving the load", stack=True),
+            color=alt.Color("source:N", title=None,
+                            sort=list(dc_model.SERVE_SOURCES),
+                            scale=alt.Scale(domain=list(dc_model.SERVE_SOURCES),
+                                            range=list(SOURCE_COLOURS.values())),
+                            legend=alt.Legend(orient="bottom", columns=4)),
+            order=alt.Order("rank:Q", sort="ascending"),
+            tooltip=[alt.Tooltip("t:T", title="when"), "source:N",
+                     alt.Tooltip("mw:Q", format=".2f", title="MW")],
+        # Vega-Lite only honours a container width on single and layered
+        # views, never inside a vconcat — so both panels are pinned to the same
+        # explicit width instead, which is also what keeps their x axes lined up.
+        ).properties(height=260, width=PLOT_WIDTH)
+
+        _cap_e = float((summary.get(_pick_pt) or {}).get("cap_batt_e") or 0.0)
+        if _cap_e > 1e-6:
+            _soc = alt.Chart(_win.reset_index()).mark_line(
+                color=SOURCE_COLOURS["Battery"], strokeWidth=1.5).encode(
+                x=alt.X("t:T", title=None, axis=alt.Axis(format="%-d %b %H:%M")),
+                y=alt.Y("soc:Q", title="Battery charge, MWh",
+                        scale=alt.Scale(domain=[0, _cap_e * 1.05])),
+                tooltip=[alt.Tooltip("t:T", title="when"),
+                         alt.Tooltip("soc:Q", format=".2f", title="MWh")],
+            ).properties(height=130, width=PLOT_WIDTH)
+            _full = alt.Chart(pd.DataFrame({"y": [_cap_e]})).mark_rule(
+                strokeDash=[4, 4], color="grey").encode(y="y:Q")
+            st.altair_chart(alt.vconcat(_area, _soc + _full)
+                            .resolve_scale(x="shared"), width="stretch")
+            st.caption(
+                f"The dashed line is this build's {_cap_e:,.1f} MWh of battery "
+                f"energy — where the charge line touches it, the battery is "
+                "full and further surplus is curtailed or exported."
+                + _note)
+        else:
+            st.altair_chart(_area, width="stretch")
+            st.caption("This build has no battery, so there is no state of "
+                       "charge to plot." + _note)
+
+        st.caption(
+            "**Bands are demand served, not generation.** They sum to demand in "
+            "every period, so renewable output that charged the battery, ran "
+            "the electrolyser, was exported or was curtailed is not in them. "
+            "Which source served the load when several were flowing is a "
+            "reading convention — renewables first, then battery, then fuel "
+            "cell, with the grid as the residual — set out in full in "
+            "`dc_model.serve_stack`."
+        )
+        _download(_win.reset_index(), f"dispatch_{_pick_pt}.csv",
+                  "Download this window, every column")
 
     # --- the trade-off curve, with every shown point marked -------------------
     out_root_p = Path(st.session_state["dc_out_root"])
@@ -954,3 +1301,15 @@ with tab_src:
                 st.markdown(path.read_text())
             else:
                 st.warning(f"{fname} not found.")
+
+
+# =============================================================================
+# Poll, last of all
+# =============================================================================
+# Deliberately at the bottom: a rerun redraws the page from the top, so waiting
+# here means everything above is already on screen while the solve continues.
+# The sleep costs this session nothing that matters — the work is in another
+# process, and closing the tab stops the polling, not the run.
+if job_running:
+    time.sleep(2.0)
+    st.rerun()

@@ -76,19 +76,27 @@ def data_centre_coefficients(refresh: bool = False) -> dict:
 
 def build_series(site, start: str, end: str, size_mw_it: float,
                  pue: float = 1.15, token: str | None = None,
-                 connection_headroom: float | None = None) -> dc_model.Series:
+                 connection_headroom: float | None = None,
+                 auto_build: bool = True, on_progress=None) -> dc_model.Series:
     """Aligned half-hourly inputs for one site and window.
 
     ``site`` is anything ``sites.get`` accepts — a ``Site``, a ``(lat, lon)``
     pair, a ``"lat,lon"`` string, or a preset name. Coordinates are the real
     interface; presets are shortcuts.
+
+    ``auto_build`` builds the grid series if none covers the window yet, rather
+    than raising — see ``profiles.load_grid_and_price``. On by default, so any
+    window at any GB coordinate just works; the wait only happens when
+    something is genuinely missing. ``on_progress`` takes a one-line notice
+    before that wait.
     """
     from optimisation import network_charges as nc
     from optimisation import profiles
 
     site = sites.get(site)
     df, meta = profiles.build(site.lat, site.lon, start, end, token=token,
-                              carbon_api_region=site.carbon_api_region)
+                              carbon_api_region=site.carbon_api_region,
+                              auto_build=auto_build, on_progress=on_progress)
     sites.require_grid_region(site, meta["grid_file"])
 
     index = pd.DatetimeIndex(df.index)

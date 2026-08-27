@@ -14,13 +14,21 @@ A multipage app wraps the notebooks in a UI:
   background scenario (grid region, wind farm, running strategy, time
   period), and run it.
 - **2 Data Centre Optimiser** — the data-centre powering study, on one page.
-  Size the data centre, place it on a GB coordinate, tick the infrastructure
-  worth investigating (grid, onshore/offshore wind, solar, battery,
+  Size the data centre, place it on a GB coordinate — by clicking the map or
+  by typing the latitude and longitude, which are the same input — tick the
+  infrastructure worth investigating (grid, onshore/offshore wind, solar, battery,
   electrolyser, H2 tank, fuel cell, bought H2), say which answer you want —
   cheapest, lowest-carbon, cheapest that hits a carbon target, or the knee of
   the trade-off curve — and it returns the installed capacity of each ticked
   asset that delivers it. The study's 21 named configurations load into the
-  tick-boxes as presets. Section 6 carries the coefficients the answer runs on
+  tick-boxes as presets. Pressing **Optimise** launches the solve as a
+  detached process (`optimisation/dc_job.py`), so leaving the page,
+  refreshing, closing the tab or restarting Streamlit does not lose it —
+  come back and the page finds the run again, in progress or finished.
+  Section 5 also charts the dispatch behind each answer — demand served
+  per source over any window of the run, with the battery's state of
+  charge on its own axis beneath it.
+  Section 6 carries the coefficients the answer runs on
   — the GB grid baseline, wind/solar/offshore costs and embodied carbon,
   hydrogen prices by colour, and battery storage — because they are the
   assumptions behind the answer above them, and reading the two apart is how a
@@ -182,11 +190,18 @@ fixed GSP-group correspondence), so the weather, the grid mix and the network
 bill always move together — picking a location cannot change one without the
 others. `optimisation/sites.PRESETS` holds shortcuts for common sites.
 
-Only region 13 (London) has a cached half-hourly grid series. For anywhere else,
-`sites.build_grid_series(<region>)` generates one via notebook 3.1 — slow, since
-it scores the GB fuel mix against ecoinvent for every half-hour — and until then
-`require_grid_region()` refuses to substitute another region's intensities
-rather than producing a confident wrong answer.
+**Any window, anywhere, builds itself.** A run needs a half-hourly grid series
+for its region *and its dates*; if one is not on disk, `sites.ensure_grid_series`
+builds exactly that window via notebook 3.1 before the first LP, the same way
+Renewables.ninja is already fetched on demand for whatever dates are asked for.
+It is the slow part — the GB fuel mix is scored against ecoinvent for every
+half-hour, a couple of minutes per week of window — so it builds only what is
+genuinely missing, one build at a time machine-wide, and puts
+`dashboard_config.py` back afterwards. What it will never do is substitute
+another region's or another month's intensities: `require_grid_region()` and the
+window check refuse that rather than produce a confident wrong answer. Windows
+run from 2018-05-11, where the Carbon Intensity API's regional data begins, to
+yesterday.
 
 > **A correction this exposed.** `dashboard_config.WIND_LAT / WIND_LON` is a
 > field near St Albans — Carbon Intensity region 10, TNUoS zone 9 — while every

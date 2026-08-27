@@ -82,8 +82,10 @@ Run:  python optimisation/sites.py
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import sys
+import time
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
@@ -247,14 +249,22 @@ def lookup(lat: float, lon: float) -> dict:
 
     # 100 m is postcodes.io's default radius and misses open country — the
     # repo's own wind coordinate is in a field near St Albans and returns
-    # nothing at the default. Widen, then fall back to the outcode endpoint,
-    # which resolves anywhere in GB.
+    # nothing at the default. Widen, then fall back to the outcode endpoint.
+    #
+    # The outcode fallback needs its radius widened too, and by a lot: its own
+    # default is 5 km, and empty country is exactly where no postcode was found
+    # in the first place. A point in the Cairngorms (57.15, -3.52) is 17 km
+    # from the nearest outcode centroid — it used to fail as "not in GB", which
+    # for a map click is both wrong and unhelpful. 25 km is the endpoint's
+    # maximum. A hit that far away only ever decides the *region*, and regions
+    # are hundreds of km across, so the extra reach costs nothing in accuracy.
     hit, outcode = None, None
     try:
         q = urllib.parse.urlencode({"lon": lon, "lat": lat, "limit": 1, "radius": 2000})
         hit = (_get(f"{POSTCODES_IO}?{q}").get("result") or [None])[0]
         if hit is None:
-            q = urllib.parse.urlencode({"lon": lon, "lat": lat, "limit": 1})
+            q = urllib.parse.urlencode({"lon": lon, "lat": lat, "limit": 1,
+                                        "radius": 25000})
             hit = (_get(f"{POSTCODES_IO.replace('/postcodes', '/outcodes')}?{q}")
                    .get("result") or [None])[0]
     except Exception as exc:
@@ -263,7 +273,8 @@ def lookup(lat: float, lon: float) -> dict:
             "Pass carbon_api_region= explicitly to skip the lookup.") from exc
     if hit is None:
         raise ValueError(
-            f"No GB postcode within 2 km of {lat}, {lon}. This study's grid, "
+            f"No GB postcode within 2 km of {lat}, {lon}, and no postcode "
+            f"district within 25 km. This study's grid, "
             "price and network-charge data are all GB-only, so a site outside "
             "GB cannot be modelled.")
     outcode = hit.get("outcode")
@@ -402,39 +413,228 @@ def require_grid_region(site: Site, grid_filename: str):
           f"CARBON_API_REGION_ID_OVERRIDE = {site.carbon_api_region}.")
 
 
+def _as_datetime(value, *, end_of_day=False) -> str:
+    """Accept '2025-01-01' or a full timestamp; return what the config wants.
+
+    A bare date as the *end* means "include that day", so it is pushed to the
+    following midnight — otherwise asking for 01-01..02-20 builds a series that
+    stops the instant 20 February begins, and the window check then reports the
+    build as short by a day. A value that already carries a time is left alone.
+    """
+    import re
+    import pandas as pd
+    ts = pd.Timestamp(value)
+    if end_of_day and re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(value).strip()):
+        ts = ts + pd.Timedelta(days=1)
+    return ts.strftime("%Y-%m-%d %H:%M:%S")
+
+
+BUILD_LOCK = ROOT / "optimisation_outputs" / ".grid_build.lock"
+
+
+@contextlib.contextmanager
+def _build_lock(wait_s: float = 6 * 3600, on_progress=None):
+    """One grid build at a time, machine-wide.
+
+    ``backend.runner.run_lca`` patches the single tracked ``dashboard_config.py``
+    and executes the notebook against it. That was safe while a build was a
+    deliberate act on the Setup LCA page; it is not safe now that any run can
+    start one, because ``dc_runner.run_matrix``'s workers are separate
+    processes and two of them building at once would each be running the
+    other's config. Waiting is the right behaviour rather than failing: the
+    second builder usually wants what the first is already producing.
+    """
+    import fcntl
+    BUILD_LOCK.parent.mkdir(parents=True, exist_ok=True)
+    handle = open(BUILD_LOCK, "w")
+    waited = 0.0
+    while True:
+        try:
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            break
+        except OSError:
+            if waited == 0.0 and on_progress:
+                on_progress("waiting for another grid build to finish")
+            if waited > wait_s:
+                handle.close()
+                raise TimeoutError(
+                    f"Another grid build has held {BUILD_LOCK.name} for "
+                    f"{waited / 60:.0f} minutes. If nothing is running, delete "
+                    "that file.")
+            time.sleep(5.0)
+            waited += 5.0
+    try:
+        yield
+    finally:
+        fcntl.flock(handle, fcntl.LOCK_UN)
+        handle.close()
+
+
 def build_grid_series(carbon_api_region: int, start="2025-01-01 00:00:00",
-                      end="2025-12-29 00:00:00", timeout_s: int = 3600):
+                      end="2025-12-29 00:00:00", timeout_s: int = 3600,
+                      with_prices: bool = False, restore_config: bool = True):
     """Generate the half-hourly grid series for a region, via notebook 3.1.
 
     Wraps ``backend.runner.run_lca``, which patches ``dashboard_config.py`` and
     executes the pipeline — the same path the Setup LCA page uses. Slow (it
     scores the fuel mix against ecoinvent for every half-hour) but it is what
     makes an arbitrary coordinate usable rather than an error.
+
+    ``with_prices`` also runs the Elexon notebook over the same window. Prices
+    are GB-wide, so one build serves every region — but they are per-window
+    like everything else, and a window outside what ``price_outputs/`` holds
+    fails on price after paying for the grid build. Left off by default because
+    the common case (a 2025 window) already has its prices on disk.
     """
     if carbon_api_region not in CARBON_API_REGIONS:
         raise ValueError(f"Region must be 1-14, got {carbon_api_region}")
-    from backend.runner import run_lca
+    from backend.runner import CONFIG_PATH, run_lca
+    start, end = _as_datetime(start), _as_datetime(end, end_of_day=True)
     print(f"Building grid series for region {carbon_api_region} "
-          f"({CARBON_API_REGIONS[carbon_api_region]}), {start[:10]} to {end[:10]}.")
+          f"({CARBON_API_REGIONS[carbon_api_region]}), {start[:10]} to {end[:10]}"
+          + (" (with prices)" if with_prices else "") + ".")
     print("This scores the GB fuel mix against ecoinvent for every half-hour "
           "and takes a while.")
-    result = run_lca({
-        "GRID_DATA_SOURCE": "carbon_api",
-        "CARBON_API_SCOPE": "regional_auto",
-        "CARBON_API_REGION_ID_OVERRIDE": int(carbon_api_region),
-        "GRID_TIME_MODE": "range",
-        "GRID_RANGE_START": start,
-        "GRID_RANGE_END": end,
-        "RUN_GRID_SCENARIO_LCA": True,
-    }, timeout_s=timeout_s)
+    # run_lca patches dashboard_config.py in place and leaves it patched — the
+    # Setup LCA page's contract, where the user chose those values and expects
+    # to see them. A build started on the optimiser's behalf did not choose
+    # them, so it puts the file back: a run that silently rewrote the project's
+    # config would be a worse surprise than a slow one.
+    config = CONFIG_PATH.read_text()
+    try:
+        result = run_lca({
+            "GRID_DATA_SOURCE": "carbon_api",
+            "CARBON_API_SCOPE": "regional_auto",
+            "CARBON_API_REGION_ID_OVERRIDE": int(carbon_api_region),
+            "GRID_TIME_MODE": "range",
+            "GRID_RANGE_START": start,
+            "GRID_RANGE_END": end,
+            "RUN_GRID_SCENARIO_LCA": True,
+            "RUN_PRICE_NOTEBOOK_FROM_DASHBOARD": bool(with_prices),
+        }, timeout_s=timeout_s)
+    finally:
+        if restore_config:
+            CONFIG_PATH.write_text(config)
+    if not result.success:
+        raise RuntimeError(
+            f"The pipeline run for region {carbon_api_region} failed.\n"
+            + (result.error_text or "")[-2000:])
     have = available_grid_regions()
     if carbon_api_region not in have:
         raise RuntimeError(
             "The run finished but no series for region "
             f"{carbon_api_region} appeared in custom_grid_lca_outputs/. "
             "Check the notebook log.")
-    print(f"Done: {have[carbon_api_region][-1]}")
+    # Newest by mtime, not last alphabetically: the region's file list is
+    # sorted by name, so "Done: ..." used to name whichever file sorted last —
+    # often the representative-days one, which is not what was just built.
+    folder = ROOT / "custom_grid_lca_outputs"
+    newest = max((folder / n for n in have[carbon_api_region]),
+                 key=lambda f: f.stat().st_mtime)
+    print(f"Done: {newest.name}")
     return result
+
+
+# The Carbon Intensity API's regional series begins here; before it there is
+# nothing to build, and a run that asks for 2015 should be told so in a second
+# rather than after an hour of a notebook fetching empty pages.
+CARBON_API_FIRST_DAY = "2018-05-11"
+
+
+def _check_buildable(start, end):
+    """Refuse a window the upstream APIs cannot serve, before paying for it."""
+    import pandas as pd
+    lo, hi = pd.Timestamp(start), pd.Timestamp(end)
+    now = pd.Timestamp.now().normalize()
+    first = pd.Timestamp(CARBON_API_FIRST_DAY)
+    if hi <= lo:
+        raise ValueError(f"Window ends before it starts: {lo:%Y-%m-%d} to {hi:%Y-%m-%d}.")
+    if lo < first:
+        raise ValueError(
+            f"{lo:%Y-%m-%d} is before the Carbon Intensity API's regional data "
+            f"starts ({CARBON_API_FIRST_DAY}). Nothing can be built for it — "
+            "pick a later window.")
+    if lo > now:
+        raise ValueError(
+            f"{lo:%Y-%m-%d} is in the future. The grid series is measured data, "
+            "not a forecast, so there is nothing to build yet.")
+
+
+def _build_timeout(start, end) -> int:
+    """A cap generous enough for the window asked for, not a fixed hour.
+
+    Measured: a one-week regional build runs in about two minutes end to end
+    with a warm API cache. The cap scales off that with a wide margin, because
+    it exists to catch a hung notebook, not to time a healthy one — a fixed
+    3600 s silently killed long builds partway through.
+    """
+    import pandas as pd
+    days = max((pd.Timestamp(end) - pd.Timestamp(start)).total_seconds() / 86400.0, 1.0)
+    return int(min(max(1800.0, 600.0 + days * 120.0), 6 * 3600.0))
+
+
+def ensure_grid_series(carbon_api_region: int, start, end, *,
+                       timeout_s: int | None = None, dry_run: bool = False,
+                       on_progress=None):
+    """Make the window exist for this region, building only what is missing.
+
+    The optimiser's other inputs already work this way: ask for dates and they
+    are fetched and cached. The grid series did not, so a window nobody had
+    built yet was an error rather than a wait — and the error named the wrong
+    cause, because "no file reaches this window" and "the only file is sampled"
+    were reported identically. This is the missing half: check coverage of the
+    window actually asked for, build exactly that window if it is missing, and
+    do nothing at all when it is already there.
+
+    Returns a dict saying what it found and what it built. ``dry_run`` answers
+    "would this run have to build?" without building. ``on_progress`` is called
+    with one line of text before the slow part, so a detached run can say what
+    it is waiting on rather than going silent for an hour.
+    """
+    from optimisation import profiles
+    if carbon_api_region not in CARBON_API_REGIONS:
+        raise ValueError(f"Region must be 1-14, got {carbon_api_region}")
+    status = profiles.window_status(start, end,
+                                    carbon_api_region=carbon_api_region)
+    out = {"region": carbon_api_region, "start": str(start), "end": str(end),
+           "grid_ok": status["grid_ok"], "price_ok": status["price_ok"],
+           "built": False, "detail": status["detail"]}
+    if status["ok"] or dry_run:
+        return out
+    _check_buildable(start, end)
+    with _build_lock(on_progress=on_progress):
+        # Re-checked inside the lock: two runs that wanted the same window
+        # queue here, and the second one wants what the first just built, not
+        # another hour of the same notebook.
+        status = profiles.window_status(start, end,
+                                        carbon_api_region=carbon_api_region)
+        if status["ok"]:
+            out.update(grid_ok=True, price_ok=True, detail="")
+            return out
+        if on_progress:
+            on_progress(
+                f"building grid data for region {carbon_api_region} "
+                f"({CARBON_API_REGIONS[carbon_api_region]}), "
+                f"{str(start)[:10]} to {str(end)[:10]}")
+        build_grid_series(carbon_api_region, start, end,
+                          timeout_s=timeout_s or _build_timeout(start, end),
+                          with_prices=not status["price_ok"])
+    after = profiles.window_status(start, end,
+                                   carbon_api_region=carbon_api_region)
+    out.update(built=True, grid_ok=after["grid_ok"], price_ok=after["price_ok"],
+               detail=after["detail"])
+    if not after["ok"]:
+        # The notebook can finish successfully and still not cover the window:
+        # the Carbon Intensity API only holds so much history, and it returns
+        # what it has rather than failing. Say so here, where the dates are,
+        # instead of letting the loader report it as a missing file.
+        raise RuntimeError(
+            f"Built region {carbon_api_region} for {start}..{end}, but "
+            f"{after['detail']}. The upstream APIs return what they hold, so a "
+            "window they do not cover comes back short. Check the notebook log "
+            "in _streamlit_runs/, and try a window inside what the Carbon "
+            "Intensity and Elexon APIs actually serve.")
+    return out
 
 
 # -----------------------------------------------------------------------------

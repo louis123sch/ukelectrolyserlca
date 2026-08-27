@@ -1,4 +1,12 @@
 {
+  "50.4,-3.52": {
+    "carbon_api_region": 11,
+    "outcode": "TQ5",
+    "place": "Torbay",
+    "postcode": "TQ5 8QZ",
+    "region_name": "South West England",
+    "tnuos_zone": 14
+  },
   "50.72,-3.53": {
     "carbon_api_region": 11,
     "outcode": "EX1",
@@ -55,6 +63,14 @@
     "region_name": "East England",
     "tnuos_zone": 9
   },
+  "52.0,-4.4": {
+    "carbon_api_region": 7,
+    "outcode": "SA44",
+    "place": "Carmarthenshire",
+    "postcode": "SA44 5JB",
+    "region_name": "South Wales",
+    "tnuos_zone": 10
+  },
   "52.486,-1.89": {
     "carbon_api_region": 8,
     "outcode": "B4",
@@ -103,6 +119,14 @@
     "region_name": "North Wales",
     "tnuos_zone": 6
   },
+  "53.3,-4.4": {
+    "carbon_api_region": 6,
+    "outcode": "LL71",
+    "place": "Isle of Anglesey",
+    "postcode": "LL71 7AN",
+    "region_name": "North Wales",
+    "tnuos_zone": 6
+  },
   "53.48,-2.24": {
     "carbon_api_region": 3,
     "outcode": "M2",
@@ -118,6 +142,14 @@
     "postcode": "LS1 3ED",
     "region_name": "Yorkshire",
     "tnuos_zone": 5
+  },
+  "54.5,-3.1": {
+    "carbon_api_region": 3,
+    "outcode": "LA22",
+    "place": "Westmorland and Furness",
+    "postcode": null,
+    "region_name": "North West England",
+    "tnuos_zone": 4
   },
   "54.978,-1.617": {
     "carbon_api_region": 4,
@@ -135,6 +167,22 @@
     "region_name": "North East England",
     "tnuos_zone": 3
   },
+  "55.35,-2.56": {
+    "carbon_api_region": 2,
+    "outcode": "TD8",
+    "place": "Scottish Borders",
+    "postcode": null,
+    "region_name": "South Scotland",
+    "tnuos_zone": 2
+  },
+  "55.7,-6.48": {
+    "carbon_api_region": 1,
+    "outcode": "PA47",
+    "place": "Argyll and Bute",
+    "postcode": "PA47 7SZ",
+    "region_name": "North Scotland",
+    "tnuos_zone": 1
+  },
   "55.86,-4.25": {
     "carbon_api_region": 2,
     "outcode": "G1",
@@ -143,11 +191,35 @@
     "region_name": "South Scotland",
     "tnuos_zone": 2
   },
+  "57.15,-3.52": {
+    "carbon_api_region": 1,
+    "outcode": "PH25",
+    "place": "Highland",
+    "postcode": null,
+    "region_name": "North Scotland",
+    "tnuos_zone": 1
+  },
+  "57.15,-5.2": {
+    "carbon_api_region": 1,
+    "outcode": "IV63",
+    "place": "Highland",
+    "postcode": "IV63 7YW",
+    "region_name": "North Scotland",
+    "tnuos_zone": 1
+  },
   "57.48,-4.22": {
     "carbon_api_region": 1,
     "outcode": "IV2",
     "place": "Highland",
     "postcode": "IV2 3PR",
+    "region_name": "North Scotland",
+    "tnuos_zone": 1
+  },
+  "58.05,-4.8": {
+    "carbon_api_region": 1,
+    "outcode": "IV27",
+    "place": "Highland",
+    "postcode": null,
     "region_name": "North Scotland",
     "tnuos_zone": 1
   }

@@ -14,7 +14,9 @@ What it writes, per scenario
 ``config.json``      everything needed to reproduce the run, including a hash
 ``pareto.parquet``   the full front, one row per point, with the capacity mix
 ``summary.json``     the atom the UI and the comparison plots read
-``dispatch.parquet`` optional, large, flag-gated
+``dispatch.parquet`` the half-hourly dispatch behind the shown points only —
+                     written when ``save_dispatch`` is set, which the Streamlit
+                     page always does because it charts it
 
 Caching is on the **config hash**, which covers the scenario, the site, the
 window, the size, the resolution and the coefficient tables' own identity. Change
@@ -85,13 +87,18 @@ def run_one(scenario: A.Scenario, *, site, start: str, end: str,
             unserved_fraction: float, out_root: Path,
             gwp_target_kg_per_year: float | None = None,
             save_dispatch: bool = False, refresh: bool = False,
-            progress=None) -> dict:
+            progress=None, notice=None) -> dict:
     """Solve one configuration's Pareto front and write it to disk.
 
     ``progress`` is called with a short tag per LP ("min_cost", "eps 3/12").
     Only the single-configuration path uses it — across the matrix, progress is
     reported per scenario by ``run_matrix`` instead, since the workers are in
     other processes.
+
+    ``notice`` is the same idea for the step before the LPs: it is called if
+    the window's grid series has to be built first, which is minutes to hours
+    of notebook, and is otherwise the one stretch of a run that reports
+    nothing.
     """
     from optimisation import dc_inputs as I
 
@@ -113,10 +120,14 @@ def run_one(scenario: A.Scenario, *, site, start: str, end: str,
     folder = out_root / scenario.key
     summary_path = folder / "summary.json"
 
+    # A cached run that predates the dispatch capture has a valid summary and no
+    # dispatch.parquet. Asking for the dispatch has to miss the cache, or the
+    # page would offer a chart it can never draw.
     if summary_path.exists() and not refresh:
         try:
             cached = json.loads(summary_path.read_text())
-            if cached.get("config_hash") == h:
+            if cached.get("config_hash") == h and (
+                    not save_dispatch or (folder / "dispatch.parquet").exists()):
                 cached["cached"] = True
                 return cached
         except Exception:
@@ -124,7 +135,8 @@ def run_one(scenario: A.Scenario, *, site, start: str, end: str,
 
     t0 = time.time()
     series, meta = I.build_series(site, start, end, size_mw_it, pue=pue,
-                                  connection_headroom=connection_headroom)
+                                  connection_headroom=connection_headroom,
+                                  on_progress=notice)
     # Record what was *used*, not what was asked for. site.tdr_band is None
     # whenever the band is derived from the load, so writing it straight into
     # the config would leave the run with no record of the band it was actually
@@ -163,11 +175,18 @@ def run_one(scenario: A.Scenario, *, site, start: str, end: str,
                      ely_strategy=scenario.strategy,
                      unserved_fraction=unserved_fraction,
                      gwp_target=gwp_target_kg_per_year,
-                     progress=progress)
+                     progress=progress, keep_dispatch=save_dispatch)
 
     folder.mkdir(parents=True, exist_ok=True)
     (folder / "config.json").write_text(json.dumps(cfg, indent=2, default=str))
     result["front"].to_parquet(folder / "pareto.parquet", index=False)
+    if result.get("dispatch"):
+        # One long frame rather than one file per point: three or four points of
+        # a year at hourly steps is a few MB, and a single file cannot go stale
+        # against its own siblings.
+        disp = pd.concat([d.assign(point=name) for name, d in result["dispatch"].items()])
+        disp.index.name = "t"
+        disp.reset_index().to_parquet(folder / "dispatch.parquet", index=False)
 
     mwh = float(series.demand_mw.sum() * series.dt_hours) * series.annual_scale
     summary = {

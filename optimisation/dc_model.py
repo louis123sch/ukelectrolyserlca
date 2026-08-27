@@ -523,6 +523,66 @@ def contributions(V, obj, series, tech, assets) -> dict:
     }
 
 
+# The order demand is attributed to sources in serve_stack, and the labels the
+# UI shows. Renewables first is not an assumption about the solver — it is the
+# only reading of a half-hour in which both renewables and imports are flowing
+# that does not imply the site curtailed its own free energy to buy some.
+SERVE_SOURCES = ("Solar PV", "Wind", "Offshore wind", "Battery", "Fuel cell",
+                 "Grid import", "Unserved")
+
+
+def serve_stack(df: pd.DataFrame) -> pd.DataFrame:
+    """Attribute each period's *served demand* to a source. Long, one row per pair.
+
+    **This is a convention, not an LP output.** The model conserves energy over
+    the whole site — generation, charging, electrolysis, import and export all
+    balance against demand — but it never labels an electron. When the battery
+    discharges at the same half-hour the grid is importing, nothing in the
+    solution says which one served the load and which one charged the tank.
+
+    The convention here: renewables serve load first (split pro rata between
+    solar, onshore and offshore by their output in that period, so no
+    technology is privileged), then the battery, then the fuel cell, then the
+    grid takes the residual. Unserved demand is carried as its own band, so the
+    bands always sum to demand rather than to what happened to be generated.
+
+    What this means for reading the chart: a band is what that source
+    *contributed to the load*, not what it produced. Renewable output that went
+    to the battery, the electrolyser, an export or a curtailment is not in the
+    stack — ``dispatch_frame`` carries those columns for anyone who wants them.
+    """
+    served = (df.demand - df.unserved).clip(lower=0.0)
+    ren = df.p_solar + df.p_wind + df.p_offshore
+    to_load = pd.concat([ren, served], axis=1).min(axis=1)
+    share = to_load / ren.where(ren > 0)
+
+    rem = served - to_load
+    batt = pd.concat([df.dis, rem], axis=1).min(axis=1)
+    rem = rem - batt
+    fc = pd.concat([df.p_fc, rem], axis=1).min(axis=1)
+    rem = (rem - fc).clip(lower=0.0)          # the grid is the residual
+
+    bands = {
+        "Solar PV": (df.p_solar * share).fillna(0.0),
+        "Wind": (df.p_wind * share).fillna(0.0),
+        "Offshore wind": (df.p_offshore * share).fillna(0.0),
+        "Battery": batt,
+        "Fuel cell": fc,
+        "Grid import": rem,
+        "Unserved": df.unserved,
+    }
+    # Solver noise puts -0.0 and the odd -1e-12 in the flows; a negative band
+    # would draw below the axis and read as a source consuming demand.
+    out = pd.DataFrame(bands, index=df.index)[list(SERVE_SOURCES)].clip(lower=0.0)
+    out.index.name = "t"
+    long = out.reset_index().melt(id_vars="t", var_name="source", value_name="mw")
+    # Carried as a column because a chart cannot stack on a tuple: renewables at
+    # the bottom, then the stores that shift them, then the grid, and unserved
+    # demand on top where its absence is the thing you are checking for.
+    long["rank"] = long.source.map({s: i for i, s in enumerate(SERVE_SOURCES)})
+    return long
+
+
 def dispatch_frame(V, series) -> pd.DataFrame:
     """The solved dispatch as a tidy half-hourly (or hourly) frame."""
     cols = ("p_wind", "p_offshore", "p_solar", "ch", "dis", "soc", "p_ely",

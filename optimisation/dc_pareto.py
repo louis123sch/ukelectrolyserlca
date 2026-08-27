@@ -111,7 +111,7 @@ _LIMIT = {"cost": "cost_limit", "gwp": "gwp_limit"}
 _TOTAL = {"cost": "cost_GBP_per_year", "gwp": "gwp_kgco2e_per_year"}
 
 
-def _tie_break(solve_one, series, anchor, progress, *, first, second):
+def _tie_break(solve_one, series, anchor, progress, *, first, second, capture=None):
     """Settle an anchor that its own objective leaves partly undetermined.
 
     Stage 1 has already minimised ``first``. Stage 2 minimises ``second`` while
@@ -131,11 +131,13 @@ def _tie_break(solve_one, series, anchor, progress, *, first, second):
         lim = {_LIMIT[first]: f_opt * (1 + LEX_TOL)}
         V, obj = solve_one(second, **lim)
         anchor = _extract(V, obj, series, tag)
+        if capture: capture(tag, V)
 
         if progress: progress(f"{tag} — connection tie-break")
         lim[_LIMIT[second]] = anchor[_TOTAL[second]] * (1 + LEX_TOL)
         V, obj = solve_one("connection", **lim)
         anchor = _extract(V, obj, series, tag)
+        if capture: capture(tag, V)
     except RuntimeError:
         pass
     return anchor
@@ -143,8 +145,24 @@ def _tie_break(solve_one, series, anchor, progress, *, first, second):
 
 def front(series, assets, tech, *, points: int = DEFAULT_POINTS,
           ely_strategy: str = "free", unserved_fraction: float = 0.0,
-          gwp_target: float | None = None, progress=None) -> dict:
-    """Solve the exact cost/carbon frontier for one configuration."""
+          gwp_target: float | None = None, progress=None,
+          keep_dispatch: bool = False) -> dict:
+    """Solve the exact cost/carbon frontier for one configuration.
+
+    ``keep_dispatch`` also returns the half-hourly dispatch behind the three
+    points the UI shows. It is off by default because it costs no solving but a
+    lot of memory: one frame per solved point, held until the knee is known —
+    which it is not until the sweep is finished, since the knee is chosen from
+    the front rather than solved for.
+    """
+    frames: dict[str, pd.DataFrame] = {}
+
+    def capture(tag, V):
+        if keep_dispatch:
+            # Later solves of the same tag are refinements of it (the anchor
+            # tie-breaks), so the last one written is the one that is reported.
+            frames[tag] = M.dispatch_frame(V, series)
+
     def solve_one(objective, gwp_limit=None, cost_limit=None):
         m, V, obj = M.build_model(series, assets, tech, objective=objective,
                                   gwp_limit=gwp_limit, cost_limit=cost_limit,
@@ -167,8 +185,9 @@ def front(series, assets, tech, *, points: int = DEFAULT_POINTS,
     if progress: progress("min_cost")
     V, obj = solve_one("cost")
     anchor_cost = _extract(V, obj, series, "min_cost")
+    capture("min_cost", V)
     anchor_cost = _tie_break(solve_one, series, anchor_cost, progress,
-                             first="cost", second="gwp")
+                             first="cost", second="gwp", capture=capture)
 
     # Minimum carbon, then the cheapest system that achieves it. The second
     # stage is not cosmetic: once a transmission-connected site pays no DUoS and
@@ -180,8 +199,9 @@ def front(series, assets, tech, *, points: int = DEFAULT_POINTS,
     if progress: progress("min_gwp")
     V, obj = solve_one("gwp")
     anchor_gwp = _extract(V, obj, series, "min_gwp")
+    capture("min_gwp", V)
     anchor_gwp = _tie_break(solve_one, series, anchor_gwp, progress,
-                            first="gwp", second="cost")
+                            first="gwp", second="cost", capture=capture)
 
     g_hi = anchor_cost["gwp_kgco2e_per_year"]
     g_lo = anchor_gwp["gwp_kgco2e_per_year"]
@@ -195,6 +215,7 @@ def front(series, assets, tech, *, points: int = DEFAULT_POINTS,
             if progress: progress(f"eps {k}/{points}")
             V, obj = solve_one("cost", gwp_limit=limit)
             rows.append(_extract(V, obj, series, f"eps_{k}"))
+            capture(f"eps_{k}", V)
 
     df = pd.DataFrame(rows).sort_values("gwp_kgco2e_per_year").reset_index(drop=True)
     out = {
@@ -206,12 +227,19 @@ def front(series, assets, tech, *, points: int = DEFAULT_POINTS,
     }
     if gwp_target is not None:
         out.update(_target_point(solve_one, series, gwp_target, g_lo, g_hi,
-                                 anchor_cost, progress))
+                                 anchor_cost, progress, capture=capture))
+    if keep_dispatch:
+        # Keyed by the *name of the point* rather than its tag, because the knee
+        # is whichever epsilon solve turned out to be closest to the corner —
+        # a caller asking for "the knee's dispatch" cannot know it was eps_7.
+        out["dispatch"] = {name: frames[out[name]["point"]]
+                           for name in ("min_cost", "min_gwp", "knee", "target")
+                           if out.get(name) and out[name]["point"] in frames}
     return out
 
 
 def _target_point(solve_one, series, target: float, g_lo: float, g_hi: float,
-                  anchor_cost: dict, progress=None) -> dict:
+                  anchor_cost: dict, progress=None, capture=None) -> dict:
     """Cheapest system that emits no more than ``target`` kg CO2e per year.
 
     One extra epsilon-constrained solve rather than a read off the sampled
@@ -235,6 +263,7 @@ def _target_point(solve_one, series, target: float, g_lo: float, g_hi: float,
                                 f"in at {g_hi / 1000:,.0f} t CO2e/yr")}
     if progress: progress("target")
     V, obj = solve_one("cost", gwp_limit=target)
+    if capture: capture("target", V)
     return {"target": _extract(V, obj, series, "target"),
             "target_gwp_kgco2e_per_year": target, "target_note": ""}
 
