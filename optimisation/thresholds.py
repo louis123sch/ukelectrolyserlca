@@ -369,7 +369,7 @@ def find(scenario, knob_name: str, *, site=sites.DEFAULT_PRESET,
     path = folder / f"{knob.name}.json"
     if path.exists() and not refresh:
         try:
-            cached = json.loads(path.read_text())
+            cached = json.loads(path.read_text(encoding="utf-8"))
             if cached.get("config_hash") == h:
                 cached["cached"] = True
                 return cached
@@ -424,7 +424,7 @@ def find(scenario, knob_name: str, *, site=sites.DEFAULT_PRESET,
         "config_hash": h, "cached": False,
     })
     folder.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(result, indent=2, default=str))
+    path.write_text(json.dumps(result, indent=2, default=str), encoding="utf-8")
     return result
 
 
@@ -503,7 +503,7 @@ def from_run(run_folder) -> dict:
     than swallowed, and the caller decides whether to say so or refuse.
     """
     folder = Path(run_folder)
-    cfg = json.loads((folder / "config.json").read_text())
+    cfg = json.loads((folder / "config.json").read_text(encoding="utf-8"))
     sc, site_cfg = dict(cfg["scenario"]), cfg["site"]
 
     # Scenario grew fields after some runs were written, and will again. Drop
@@ -637,7 +637,7 @@ def load_run(out_root, scenario_key: str | None = None) -> list[dict]:
         if f.name in ("config.json", "status.json", "request.json", "summary.json"):
             continue
         try:
-            r = json.loads(f.read_text())
+            r = json.loads(f.read_text(encoding="utf-8"))
         except Exception:
             continue
         if "knob" in r and "status" in r:

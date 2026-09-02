@@ -5,11 +5,13 @@ solving itself is dc_runner's, and is tested by running it.
 """
 import json
 import os
+import pathlib
 import sys
+import time
 
 import pytest
 
-sys.path.insert(0, "/Users/louis/lca-ai-project/ukelectrolyserlca")
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 from optimisation import dc_job
 
 
@@ -125,3 +127,107 @@ def test_dismissing_one_kind_leaves_the_other_alone(tmp_path, monkeypatch):
     dc_job.clear_pointer("thresholds")
     assert dc_job.active("thresholds") is None
     assert dc_job.active("front") is not None
+
+
+# -----------------------------------------------------------------------------
+# Liveness on Windows, which is where the POSIX idiom is worse than useless
+# -----------------------------------------------------------------------------
+def test_a_process_that_has_exited_reads_as_dead():
+    """``os.kill(pid, 0)`` returns cleanly for an exited pid on Windows, so a
+    finished-or-crashed solve read as "running" forever and the Optimise button
+    never came back. Spawn a real child and let it exit rather than trust a
+    made-up pid, which the OS can reject for the wrong reason."""
+    import subprocess as sp
+    child = sp.Popen([sys.executable, "-c", "pass"])
+    child.wait()
+    assert dc_job._alive(child.pid) is False
+    assert dc_job._alive(os.getpid()) is True
+
+
+def test_checking_liveness_sends_no_signal_to_the_child():
+    """The bug this replaced: signal 0 *is* CTRL_C_EVENT on Windows, so polling
+    a job's status sent a real Ctrl-C to the console and took the Streamlit
+    server — and the child it had just launched — down with it."""
+    import subprocess as sp
+    child = sp.Popen([sys.executable, "-c", "import time; time.sleep(30)"],
+                     stdin=sp.DEVNULL, **dc_job._SPAWN_KW)
+    try:
+        for _ in range(5):
+            assert dc_job._alive(child.pid) is True
+        assert child.poll() is None          # still running, not interrupted
+    finally:
+        # The Stop button's path. os.killpg/os.getpgid do not exist on Windows,
+        # and AttributeError is not OSError, so the old handler did not catch it.
+        assert dc_job._terminate(child.pid) is True
+    child.wait(timeout=10)
+    assert dc_job._alive(child.pid) is False
+
+
+def test_the_child_is_launched_detached_from_this_console():
+    """``start_new_session`` is silently ignored on Windows, which left the
+    solver in the server's own process group."""
+    if sys.platform == "win32":
+        import subprocess as sp
+        flags = dc_job._SPAWN_KW["creationflags"]
+        assert flags & sp.CREATE_NEW_PROCESS_GROUP
+        assert flags & sp.DETACHED_PROCESS
+        assert "start_new_session" not in dc_job._SPAWN_KW
+    else:
+        assert dc_job._SPAWN_KW == {"start_new_session": True}
+
+
+def test_a_status_write_survives_the_page_reading_it(tmp_path, monkeypatch):
+    """os.replace is refused on Windows while any other handle is open on the
+    destination. The child writes a status line after every LP and the page
+    opens that file on every rerun, so an unretried replace killed the solve."""
+    monkeypatch.setattr(dc_job, "_REPLACE_PAUSE", 0.0)
+    target = tmp_path / dc_job.STATUS
+    dc_job._write_json(target, {"state": "running", "done": 0})
+    with open(target, "r", encoding="utf-8") as reader_holding_it_open:
+        reader_holding_it_open.read(1)
+        # One try is all a single blocked attempt gets; the retry is the fix.
+        monkeypatch.setattr(dc_job, "_REPLACE_TRIES", 1)
+        if sys.platform == "win32":
+            with pytest.raises(PermissionError):
+                dc_job._write_json(target, {"state": "running", "done": 1})
+    monkeypatch.setattr(dc_job, "_REPLACE_TRIES", 12)
+    dc_job._write_json(target, {"state": "running", "done": 2})
+    assert json.loads(target.read_text(encoding="utf-8"))["done"] == 2
+
+
+def test_a_lost_run_does_not_claim_the_previous_runs_answer(tmp_path):
+    """summary.json is also the scenario's cache, so an earlier run of the same
+    scenario leaves one in this very folder. A run that dies before recording
+    its own config_hash used to adopt it and show the old answer as the new."""
+    stale = {"config_hash": "from_the_run_before"}
+    summary = tmp_path / dc_job.SUMMARY
+    summary.write_text(json.dumps(stale), encoding="utf-8")
+    an_hour_ago = time.time() - 3600
+    os.utime(summary, (an_hour_ago, an_hour_ago))          # a real cached answer
+    _status(tmp_path, pid=999_999, started=dc_job._now())  # this run began just now
+    s = dc_job.read(tmp_path)
+    assert s["state"] == "lost", "a summary older than the run is not its result"
+    assert s.get("config_hash") != "from_the_run_before"
+
+
+def test_a_summary_written_by_this_run_is_still_recognised(tmp_path):
+    """The case the branch exists for: killed between writing the result and
+    the final status line."""
+    _status(tmp_path, pid=999_999, started=dc_job._now())
+    (tmp_path / dc_job.SUMMARY).write_text(json.dumps({"config_hash": "mine"}),
+                                           encoding="utf-8")
+    s = dc_job.read(tmp_path)
+    assert s["state"] == "done" and s["config_hash"] == "mine"
+
+
+def test_stop_refuses_a_pid_older_than_the_job(tmp_path, monkeypatch):
+    """Windows reuses pids briskly and _terminate kills a whole tree, so the
+    pid in the status file is not on its own enough evidence to kill anything."""
+    killed = []
+    monkeypatch.setattr(dc_job, "_terminate", lambda pid: killed.append(pid) or True)
+    # This interpreter is certainly older than a job "started" a moment ago.
+    _status(tmp_path, pid=os.getpid(), started=dc_job._now())
+    if dc_job._started_at(os.getpid()) is None:
+        pytest.skip("no process creation time on this platform")
+    assert dc_job.cancel(tmp_path) is False
+    assert killed == [], "cancel killed a process that predates the job"

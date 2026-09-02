@@ -224,7 +224,7 @@ class Site:
 def _cache() -> dict:
     if CACHE_PATH.exists():
         try:
-            return json.loads(CACHE_PATH.read_text())
+            return json.loads(CACHE_PATH.read_text(encoding="utf-8"))
         except Exception:
             pass
     return {}
@@ -232,7 +232,7 @@ def _cache() -> dict:
 
 def _save_cache(c: dict):
     CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    CACHE_PATH.write_text(json.dumps(c, indent=2, sort_keys=True))
+    CACHE_PATH.write_text(json.dumps(c, indent=2, sort_keys=True), encoding="utf-8")
 
 
 def _get(url: str, timeout: int = 20):
@@ -431,6 +431,39 @@ def _as_datetime(value, *, end_of_day=False) -> str:
 
 BUILD_LOCK = ROOT / "optimisation_outputs" / ".grid_build.lock"
 
+# One exclusive lock, taken two ways. Both ``flock`` and ``msvcrt.locking`` are
+# held by the *handle*, so the OS hands the lock back when a holder dies — which
+# an O_EXCL lock file does not. That matters here more than the portability: a
+# build killed halfway must not leave every later run waiting six hours on a
+# file nobody owns any more.
+if sys.platform == "win32":
+    import msvcrt
+
+    def _try_lock(handle) -> bool:
+        try:
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+        except OSError:
+            return False
+        return True
+
+    def _unlock(handle):
+        handle.seek(0)
+        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+
+else:
+    import fcntl
+
+    def _try_lock(handle) -> bool:
+        try:
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            return False
+        return True
+
+    def _unlock(handle):
+        fcntl.flock(handle, fcntl.LOCK_UN)
+
 
 @contextlib.contextmanager
 def _build_lock(wait_s: float = 6 * 3600, on_progress=None):
@@ -444,30 +477,29 @@ def _build_lock(wait_s: float = 6 * 3600, on_progress=None):
     other's config. Waiting is the right behaviour rather than failing: the
     second builder usually wants what the first is already producing.
     """
-    import fcntl
     BUILD_LOCK.parent.mkdir(parents=True, exist_ok=True)
-    handle = open(BUILD_LOCK, "w")
+    # "a+" rather than "w": the file's contents are irrelevant, and truncating
+    # it out from under the process that currently holds the byte lock is not.
+    handle = open(BUILD_LOCK, "a+")
     waited = 0.0
-    while True:
-        try:
-            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            break
-        except OSError:
-            if waited == 0.0 and on_progress:
-                on_progress("waiting for another grid build to finish")
-            if waited > wait_s:
-                handle.close()
-                raise TimeoutError(
-                    f"Another grid build has held {BUILD_LOCK.name} for "
-                    f"{waited / 60:.0f} minutes. If nothing is running, delete "
-                    "that file.")
-            time.sleep(5.0)
-            waited += 5.0
+    while not _try_lock(handle):
+        if waited == 0.0 and on_progress:
+            on_progress("waiting for another grid build to finish")
+        if waited > wait_s:
+            handle.close()
+            raise TimeoutError(
+                f"Another grid build has held {BUILD_LOCK.name} for "
+                f"{waited / 60:.0f} minutes. If nothing is running, delete "
+                "that file.")
+        time.sleep(5.0)
+        waited += 5.0
     try:
         yield
     finally:
-        fcntl.flock(handle, fcntl.LOCK_UN)
-        handle.close()
+        try:
+            _unlock(handle)
+        finally:
+            handle.close()
 
 
 def build_grid_series(carbon_api_region: int, start="2025-01-01 00:00:00",
@@ -500,7 +532,7 @@ def build_grid_series(carbon_api_region: int, start="2025-01-01 00:00:00",
     # to see them. A build started on the optimiser's behalf did not choose
     # them, so it puts the file back: a run that silently rewrote the project's
     # config would be a worse surprise than a slow one.
-    config = CONFIG_PATH.read_text()
+    config = CONFIG_PATH.read_text(encoding="utf-8")
     try:
         result = run_lca({
             "GRID_DATA_SOURCE": "carbon_api",
@@ -514,7 +546,7 @@ def build_grid_series(carbon_api_region: int, start="2025-01-01 00:00:00",
         }, timeout_s=timeout_s)
     finally:
         if restore_config:
-            CONFIG_PATH.write_text(config)
+            CONFIG_PATH.write_text(config, encoding="utf-8")
     if not result.success:
         raise RuntimeError(
             f"The pipeline run for region {carbon_api_region} failed.\n"

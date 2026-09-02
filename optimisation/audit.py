@@ -134,10 +134,13 @@ ACCEPTED: dict[str, str] = {
         "remaining non-electricity burden is US-built and constant across every "
         "architecture, so it shifts all results equally and changes no ranking.",
     "geography:PV embodied carbon is not GB-sourced":
-        "The dataset is GB; its vintage is the issue. ecoinvent 3.9.1's GB "
-        "open-ground PV is a 2012 multi-Si plant restating to ~57 gCO2e/kWh "
-        "against ~20-40 in current literature, so PV's embodied figure is a "
-        "conservative upper bound. Stated in renewables.py.",
+        "ecoinvent's GB open-ground PV activity is a 2008 plant at a 12.95 % "
+        "module, and is byte-identical in 3.10.1, so the database cannot fix "
+        "it. Solar is therefore scored on IEA PVPS Task 12's 2023 update "
+        "instead — European rather than GB, but their 976 kWh/kWp reference "
+        "yield is within 10 % of the DESNZ GB load factor, so it transfers "
+        "with no irradiance correction. No UK source exists; see DATA_GAPS.md. "
+        "Pass solar_basis='ecoinvent' to get the old figure back.",
 }
 
 
@@ -504,7 +507,8 @@ def check_geography(site, start, end, size_mw_it=300.0, pue=1.2):
         "fuel cell capex": "US DOE, USD converted at a fixed 2025 rate",
         "data centre foreground": "Zhang et al., Virginia (US-SERC); the "
                                   "electricity is swapped for GB, the rest is not",
-        "PV embodied carbon": "ecoinvent GB dataset, but 2012-vintage multi-Si",
+        "PV embodied carbon": "IEA PVPS Task 12 2023, European reference system "
+                              "(ecoinvent's GB dataset is a 2008 plant)",
     }
     for k, v in foreign.items():
         report("geography", "warn", f"{k} is not GB-sourced", v)

@@ -5,13 +5,14 @@ a period when several were flowing. The convention is documented on the
 function; these tests hold it to the two things it must never get wrong — the
 bands sum to demand, and nothing is negative.
 """
+import pathlib
 import sys
 
 import numpy as np
 import pandas as pd
 import pytest
 
-sys.path.insert(0, "/Users/louis/lca-ai-project/ukelectrolyserlca")
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 from optimisation import dc_model as M
 
 COLS = ("demand", "p_wind", "p_offshore", "p_solar", "dis", "p_fc", "unserved")

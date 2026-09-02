@@ -157,7 +157,10 @@ def _pretty(td: timedelta) -> str:
 def _tail(path, lines: int = 40) -> str:
     """The last of a job's log — the only thing a crashed child leaves behind."""
     try:
-        return "\n".join(Path(path).read_text().splitlines()[-lines:]) or "(empty)"
+        # errors="replace": this is a log tail shown in an expander, and a
+        # solver that emits one odd byte must not be able to raise here.
+        return "\n".join(Path(path).read_text(encoding="utf-8", errors="replace")
+                         .splitlines()[-lines:]) or "(empty)"
     except Exception as exc:
         return f"(no log: {exc})"
 
@@ -1384,13 +1387,34 @@ with tab_gen:
 
         st.divider()
         rows_, carbon_console = _gen_decompose()
-        emb = renewables.apply_case(rows_, cost_case)
-        st.markdown("**Embodied carbon** — per MW installed, decomposed out of ecoinvent")
+        solar_basis = st.selectbox(
+            "Solar embodied-carbon basis",
+            list(renewables.SOLAR_EMBODIED_BASES),
+            index=list(renewables.SOLAR_EMBODIED_BASES).index(
+                renewables.SOLAR_EMBODIED_BASIS),
+            format_func=lambda k: renewables.SOLAR_EMBODIED_BASES[k]["label"],
+            help="ecoinvent 3.9.1's GB open-ground PV activity is a 2008 plant at a "
+                 "12.95% module, so it is the default for wind but not for solar. "
+                 "Selecting it here reproduces results from before that changed.",
+        )
+        emb = renewables.apply_case(rows_, cost_case, solar_basis=solar_basis)
+        st.markdown("**Embodied carbon** — per MW installed, decomposed out of ecoinvent "
+                    "(solar on the basis selected above)")
         st.dataframe(
-            emb[["technology", "capital_kgco2e_per_MW", "ecoinvent_implied_load_factor",
+            emb[["technology", "embodied_basis", "capital_kgco2e_per_MW",
+                 "ecoinvent_capital_kgco2e_per_MW", "ecoinvent_implied_load_factor",
                  "study_load_factor", "study_lifetime_years",
-                 "restated_kgco2e_per_kWh", "ecoinvent_per_kWh", "ratio_to_ecoinvent"]],
+                 "restated_kgco2e_per_kWh", "ecoinvent_restated_kgco2e_per_kWh",
+                 "ecoinvent_per_kWh", "ratio_to_ecoinvent"]],
             width="stretch", hide_index=True,
+        )
+        pv_ = emb[emb.technology == "solar_pv"].iloc[0]
+        st.caption(
+            f"`restated_kgco2e_per_kWh` moves with **both** the basis and the yield; "
+            f"`ecoinvent_restated_kgco2e_per_kWh` moves with the yield alone, so the two "
+            f"columns separate the effects. Solar here is "
+            f"{pv_.restated_kgco2e_per_kWh*1000:.1f} g CO₂e/kWh against ecoinvent's "
+            f"{pv_.ecoinvent_restated_kgco2e_per_kWh*1000:.1f} at the same yield."
         )
         w = emb[emb.technology == "onshore_wind"].iloc[0]
         st.warning(
@@ -1408,14 +1432,24 @@ with tab_gen:
             f"variable. The optimiser above uses the per-MW figures here."
         )
         pv = emb[emb.technology == "solar_pv"].iloc[0]
-        st.info(
-            f"**PV is a conservative upper bound.** ecoinvent 3.9.1's GB open-ground PV "
-            f"is a 2012 multi-Si plant, so it restates to "
-            f"~{pv.restated_kgco2e_per_kWh*1000:.0f} g CO₂e/kWh against ~20–40 g/kWh in "
-            f"current literature. If the optimiser above sized solar to zero, read that "
-            f"as a dataset-vintage artefact before reading it as a finding about solar. "
-            f"Wind, being mostly steel and concrete, is far less affected."
-        )
+        if pv.embodied_basis == "ecoinvent":
+            st.warning(
+                f"**Solar is on the ecoinvent basis — a 2008 plant.** Its GB open-ground "
+                f"activity is Solarpark El Tesoro, installed 2008 at a 12.95 % module, "
+                f"restating to ~{pv.restated_kgco2e_per_kWh*1000:.0f} g CO₂e/kWh. If the "
+                f"optimiser sized solar to zero, read that as a dataset-vintage artefact "
+                f"before reading it as a finding about solar. Switch the basis above."
+            )
+        else:
+            st.info(
+                f"**Solar is on {pv.embodied_basis_label}** — "
+                f"{pv.restated_kgco2e_per_kWh*1000:.1f} g CO₂e/kWh at this yield, against "
+                f"ecoinvent's {pv.ecoinvent_restated_kgco2e_per_kWh*1000:.1f}. ecoinvent's "
+                f"GB PV activity is a 2008 plant at a 12.95 % module and is unchanged in "
+                f"3.10.1, so it is not a defensible basis for capacity that has not been "
+                f"built yet. Wind stays on ecoinvent: mostly steel and concrete, and it "
+                f"ages far more slowly. See SOURCES.md."
+            )
         _download(emb.drop(columns=["_parts"]), "renewables_embodied.csv")
     except Exception as exc:
         st.error(f"Generation inputs failed: {exc}")
@@ -1533,7 +1567,7 @@ with tab_src:
         path = REPO_DIR / "optimisation" / fname
         with st.expander(flabel, expanded=(fname == "SOURCES.md")):
             if path.exists():
-                st.markdown(path.read_text())
+                st.markdown(path.read_text(encoding="utf-8"))
             else:
                 st.warning(f"{fname} not found.")
 

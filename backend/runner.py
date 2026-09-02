@@ -94,7 +94,7 @@ class RunResult:
 def _extract_notebook_log(nb_path: Path, max_chars: int = 20000) -> str:
     import json
 
-    nb = json.loads(nb_path.read_text())
+    nb = json.loads(nb_path.read_text(encoding="utf-8"))
     chunks = []
     for cell in nb.get("cells", []):
         if cell.get("cell_type") != "code":
@@ -136,7 +136,7 @@ def _extract_notebook_images(nb_path: Path) -> list[tuple[str, bytes]]:
     import base64
     import json
 
-    nb = json.loads(nb_path.read_text())
+    nb = json.loads(nb_path.read_text(encoding="utf-8"))
     images: list[tuple[str, bytes]] = []
     for cell in nb.get("cells", []):
         if cell.get("cell_type") != "code":
@@ -168,7 +168,8 @@ def _save_plots(nb_path: Path, plots_dir: Path) -> list[tuple[str, Path]]:
         (plots_dir / filename).write_bytes(png_bytes)
         captions[filename] = caption
         saved.append((caption, plots_dir / filename))
-    (plots_dir / "captions.json").write_text(json.dumps(captions, indent=2))
+    (plots_dir / "captions.json").write_text(json.dumps(captions, indent=2),
+                                             encoding="utf-8")
     return saved
 
 
@@ -184,24 +185,24 @@ def run_lca(overrides: dict, secrets: dict | None = None, timeout_s: int = 1800)
     """
     RUNS_DIR.mkdir(exist_ok=True)
 
-    base_text = CONFIG_PATH.read_text()
+    base_text = CONFIG_PATH.read_text(encoding="utf-8")
     backup_path = RUNS_DIR / "dashboard_config.before_last_run.py"
-    backup_path.write_text(base_text)
+    backup_path.write_text(base_text, encoding="utf-8")
 
     new_text = apply_config_overrides(base_text, overrides)
-    CONFIG_PATH.write_text(new_text)
+    CONFIG_PATH.write_text(new_text, encoding="utf-8")
 
     output_dirs = [REPO_DIR / d for d in OUTPUT_DIRS]
     before = _snapshot(output_dirs)
 
-    python_exe = Path(sys.executable)
-    nbconvert_exe = python_exe.with_name("jupyter-nbconvert")
-    if not nbconvert_exe.exists():
-        nbconvert_exe = "jupyter-nbconvert"  # fall back to PATH lookup
-
     executed_path = RUNS_DIR / "last_run_executed.ipynb"
+    # ``-m nbconvert`` rather than the console script beside the interpreter.
+    # That sibling only exists on POSIX, where bin/ holds python and
+    # jupyter-nbconvert together; Windows keeps python.exe at the env root and
+    # the scripts in Scripts\, so the old lookup always missed and fell back to
+    # a bare PATH search — which found base conda's nbconvert, not this env's.
     cmd = [
-        str(nbconvert_exe),
+        sys.executable, "-m", "nbconvert",
         "--to", "notebook",
         "--execute",
         f"--ExecutePreprocessor.timeout={timeout_s}",
@@ -211,6 +212,16 @@ def run_lca(overrides: dict, secrets: dict | None = None, timeout_s: int = 1800)
     ]
 
     env = {**os.environ, **(secrets or {})}
+    # Running the right nbconvert is only half of it: the python3 kernelspec's
+    # argv starts with a bare "python", resolved from PATH when the kernel is
+    # launched. Put this interpreter's own directory first so the notebook runs
+    # in the environment that asked for it — otherwise it lands in whatever
+    # python PATH happens to name, and reports the whole science stack missing.
+    _here = Path(sys.executable).parent
+    env["PATH"] = os.pathsep.join(
+        [str(_here)]
+        + ([str(_here / "Scripts")] if (_here / "Scripts").is_dir() else [])
+        + [env.get("PATH", "")])
     # Force the inline backend so figures are always captured as PNG outputs
     # regardless of what MPLBACKEND (if any) this process inherited — e.g.
     # a plain "Agg" backend renders plt.show() a no-op and silently produces
@@ -223,6 +234,12 @@ def run_lca(overrides: dict, secrets: dict | None = None, timeout_s: int = 1800)
             cwd=REPO_DIR,
             capture_output=True,
             text=True,
+            # text=True alone decodes through the locale codec — cp1252 on
+            # Windows — and nbconvert relays the notebook's own output, which
+            # carries characters cp1252 cannot represent. Losing a whole run's
+            # log to a decode error is worse than a replacement character.
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout_s + 60,
             env=env,
         )
@@ -265,7 +282,8 @@ def latest_plots() -> list[tuple[str, Path]]:
     if not PLOTS_DIR.exists():
         return []
     captions_path = PLOTS_DIR / "captions.json"
-    captions = json.loads(captions_path.read_text()) if captions_path.exists() else {}
+    captions = (json.loads(captions_path.read_text(encoding="utf-8"))
+                if captions_path.exists() else {})
     return [
         (captions.get(p.name, f"Figure {p.stem}"), p)
         for p in sorted(PLOTS_DIR.glob("*.png"))

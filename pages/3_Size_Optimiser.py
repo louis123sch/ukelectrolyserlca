@@ -156,7 +156,8 @@ with c2:
         st.caption(
             f"After the stack's {fixed_kg:.3f} kg CO₂e/kg "
             f"({100*fixed_kg/limit_kg:.0f}% of the budget). For reference: onshore "
-            f"wind ≈ 5.6, solar PV ≈ 56.7, GB grid mean ≈ 237 g CO₂e/kWh."
+            f"wind ≈ 5.6, solar PV ≈ 25.8, GB grid mean ≈ 237 g CO₂e/kWh. Solar is on "
+            f"IEA PVPS Task 12 rather than ecoinvent — see SOURCES.md."
         )
 
 with st.expander("Search space (multiples of the electrolyser's rating)"):
@@ -283,12 +284,14 @@ if r:
         )
     if r["solar_mwp"] < 0.05 * capacity_mw and r["wind_mw"] > 0:
         st.info(
-            "**Solar was sized to roughly zero.** With ecoinvent 3.9.1's GB PV "
-            "dataset at ~57 g CO₂e/kWh — a 2012 multi-Si plant — solar is too "
-            "carbon-intensive to help against a hydrogen standard, even though it "
-            "is cheap. Modern PV would be ~20–40 g/kWh and could change this "
-            "result, so read it as a dataset-vintage artefact rather than a "
-            "finding about solar."
+            "**Solar was sized to roughly zero.** On the current basis — IEA PVPS "
+            "Task 12 2023, ~25.8 g CO₂e/kWh — solar is about 4.6× onshore wind per "
+            "kWh, so it is still the more carbon-intensive way to buy the same "
+            "energy even though it is no dearer. This is now a finding about solar "
+            "rather than a dataset-vintage artefact: the older ecoinvent basis put "
+            "it at ~57 g/kWh, where solar could never compete. What remains "
+            "untested is whether solar's seasonal complementarity with wind pays "
+            "for itself in a smaller store."
         )
 
     out = pd.DataFrame([{k: v for k, v in r.items()

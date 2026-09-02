@@ -50,7 +50,7 @@ def data_centre_coefficients(refresh: bool = False) -> dict:
     """
     if DC_CACHE.exists() and not refresh:
         try:
-            return json.loads(DC_CACHE.read_text())
+            return json.loads(DC_CACHE.read_text(encoding="utf-8"))
         except Exception:
             pass
     import bw2data as bd
@@ -70,7 +70,7 @@ def data_centre_coefficients(refresh: bool = False) -> dict:
         "fixed_kgco2e_per_year": fixed / years,
     }
     OUT_DIR.mkdir(exist_ok=True)
-    DC_CACHE.write_text(json.dumps(out, indent=2))
+    DC_CACHE.write_text(json.dumps(out, indent=2), encoding="utf-8")
     return out
 
 
@@ -198,8 +198,15 @@ def resample(series: dc_model.Series, freq_hours: float) -> dc_model.Series:
 def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
                tank_design: str | None = None, h2_colour: str | None = None,
                cost_case: str = "central", horizon_years: float = 25.0,
-               size_mw_it: float = 7.31, pue: float = 1.15) -> dc_model.Tech:
-    """Resolve every coefficient the LP needs. Touches Brightway only via caches."""
+               size_mw_it: float = 7.31, pue: float = 1.15,
+               solar_basis: str | None = None) -> dc_model.Tech:
+    """Resolve every coefficient the LP needs. Touches Brightway only via caches.
+
+    ``solar_basis`` selects the inventory behind solar's embodied carbon and
+    defaults to ``renewables.SOLAR_EMBODIED_BASIS`` — IEA PVPS rather than
+    ecoinvent, whose GB PV activity is a 2008 plant. Pass ``"ecoinvent"`` to
+    reproduce results from before that default changed.
+    """
     import dashboard_config as cfg
     from optimisation import battery as batt
     from optimisation import electrolysers as ely
@@ -215,7 +222,9 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
     ely.assert_no_double_count(uses_capital_per_mw=True, uses_foreground_fixed=False)
 
     tank_design = tank_design or cfg.TANK_DESIGN
-    emb = ren.apply_case(ren.decompose_all(), cost_case).set_index("technology")
+    solar_basis = solar_basis or ren.SOLAR_EMBODIED_BASIS
+    emb = ren.apply_case(ren.decompose_all(), cost_case,
+                         solar_basis=solar_basis).set_index("technology")
     ann = tc.annualised_table()
 
     def gen_cost(asset):
@@ -303,7 +312,7 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
         dc_other_gwp_per_mwh=0.0,
         horizon_years=horizon_years,
         labels={"site": getattr(site, "key", site), "ely_tech": ely_tech, "tank_design": tank_design,
-                "h2_colour": h2_colour, "cost_case": cost_case},
+                "h2_colour": h2_colour, "cost_case": cost_case, "solar_basis": solar_basis},
     )
 
 
@@ -315,7 +324,7 @@ def _bought_h2_gwp(activity_code: str) -> float:
     cache = {}
     if _H2_GWP_CACHE.exists():
         try:
-            cache = json.loads(_H2_GWP_CACHE.read_text())
+            cache = json.loads(_H2_GWP_CACHE.read_text(encoding="utf-8"))
         except Exception:
             pass
     if activity_code in cache:
@@ -328,7 +337,7 @@ def _bought_h2_gwp(activity_code: str) -> float:
     score = H.run_lca_score(act, bg.gwp_method())
     cache[activity_code] = score
     OUT_DIR.mkdir(exist_ok=True)
-    _H2_GWP_CACHE.write_text(json.dumps(cache, indent=2))
+    _H2_GWP_CACHE.write_text(json.dumps(cache, indent=2), encoding="utf-8")
     return score
 
 

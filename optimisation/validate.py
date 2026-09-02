@@ -386,7 +386,7 @@ def write_doc(site, start, end, size_mw, series):
         "  anything.",
         "* **No unit commitment.** The LP may run an electrolyser at 1 % of rating.",
     ]
-    DOC.write_text("\n".join(lines) + "\n")
+    DOC.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 if __name__ == "__main__":

@@ -6,13 +6,14 @@ tell a converged answer from a plausible one. Whether the LP itself is right is
 test_dc_model's job.
 """
 import json
+import pathlib
 import sys
 
 import numpy as np
 import pandas as pd
 import pytest
 
-sys.path.insert(0, "/Users/louis/lca-ai-project/ukelectrolyserlca")
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 from optimisation import dc_model as M
 from optimisation import thresholds as T
 

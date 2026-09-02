@@ -89,12 +89,15 @@ def build(cost_case: str = "central") -> pd.DataFrame:
     ren_df = ren.build(cost_case)
     ren_src = "ecoinvent 3.9.1 apos capital exchange, decomposed; DESNZ/Arup 2024 lifetime"
     for _, r in ren_df.iterrows():
+        solar = r["technology"] == "solar_pv"
         rows.append(_row(
             r["technology"], "MW" if "wind" in r["technology"] else "MWp",
             r["capital_kgco2e_per_MW"], calendar=r["study_lifetime_years"],
-            source=ren_src, grade="derived",
-            note="ecoinvent GB PV is a 2012 multi-Si plant — a conservative upper bound"
-                 if r["technology"] == "solar_pv" else ""))
+            source=(f"{r['embodied_basis_label']}; DESNZ/Arup 2024 lifetime"
+                    if solar else ren_src),
+            grade="derived",
+            note=("solar is not scored on ecoinvent — its GB activity is a 2008 plant. "
+                  f"Basis: {r['embodied_basis']}. See SOURCES.md" if solar else "")))
 
     # --- battery --------------------------------------------------------
     be = batt.embodied_components()
@@ -201,7 +204,10 @@ def run(cost_case: str = "central"):
     OUT_DIR.mkdir(exist_ok=True)
     out = df.copy()
     out.attrs.clear()
-    with CSV_PATH.open("w") as fh:
+    # Explicit utf-8: Python on Windows defaults this handle to cp1252, which
+    # writes an em-dash in a note as 0x97 and makes load()'s read_csv — which
+    # defaults to utf-8 — fail on the file this function just wrote.
+    with CSV_PATH.open("w", encoding="utf-8") as fh:
         fh.write(f"# built_at,{datetime.now(timezone.utc).isoformat(timespec='seconds')}\n")
         fh.write(f"# cost_case,{cost_case}\n")
         out.to_csv(fh, index=False)

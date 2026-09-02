@@ -145,16 +145,100 @@ not depend on how much it happens to generate.
 |---|---|---|---|---|
 | Onshore wind | 658 t CO₂e/MW | 26.2 % over 20 y | 5.6 g CO₂e/kWh (was 14.5) | transcribed / derived |
 | Offshore wind | 890 t CO₂e/MW | 30.0 % over 20 y | 5.7 g CO₂e/kWh (was 17.1) | transcribed / derived |
-| Solar PV | 2,303 t CO₂e/MWp | 11.0 % over 30 y | 56.7 g CO₂e/kWh (was 79.8) | transcribed / derived |
+| Solar PV | **1,048 t CO₂e/MWp** (IEA PVPS) | — | **25.8 g CO₂e/kWh** | transcribed / derived |
+| Solar PV, ecoinvent basis | 2,303 t CO₂e/MWp | 11.0 % over 30 y | 56.7 g CO₂e/kWh (was 79.8) | transcribed / derived |
 
-Capital scores are **transcribed** from ecoinvent 3.9.1 apos (`market for wind
-turbine, 2MW, onshore` + its network connection; `market for photovoltaic
-plant, 570kWp, multi-Si, on open ground`). The restatement is **derived**,
-using DESNZ/Arup load factors and lifetimes from `tech_costs.py`.
+Wind capital scores are **transcribed** from ecoinvent 3.9.1 apos (`market for
+wind turbine, 2MW, onshore` + its network connection). The restatement is
+**derived**, using DESNZ/Arup load factors and lifetimes from `tech_costs.py`.
 
 **Verification built in.** `check_reconstruction()` re-amortises the per-MW
 figure back over ecoinvent's own implied lifetime output and fails unless it
-reproduces ecoinvent's published per-kWh score exactly. All three pass.
+reproduces ecoinvent's published per-kWh score exactly. All three pass — it is
+anchored on `ecoinvent_capital_kgco2e_per_MW`, which every row keeps whatever
+basis is in force, so substituting solar's basis does not retire the check.
+
+### Solar is not scored on ecoinvent — `renewables.SOLAR_EMBODIED_BASES`
+
+ecoinvent 3.9.1's GB open-ground PV activity is the 570 kWp **Solarpark El
+Tesoro**, Alcolea del Río, Andalusia, **installed 2008** — the dataset's own
+comment says so; the "2012" this register carried previously was the citation's
+URL access date. It holds 4,401.7 m² of panel for 570 kWp, i.e. 129.5 W/m² or a
+**12.95 % module**, against 21–23 % for a module built today. 95.5 % of its
+burden is in the two exchanges that scale with panel area (panel 72.0 %,
+mounting 23.5 %), so the vintage is essentially the whole number.
+
+Neither obvious fix works. The plant inventory is **byte-identical in ecoinvent
+3.10.1** — verified exchange by exchange against the copy in the `hypt`
+Brightway project — so upgrading moves only the background. And GB has just
+three PV activities in either version, of which the other two are 3 kWp
+slanted-roof systems of the same vintage.
+
+So solar's default basis is **IEA PVPS Task 12**, the standard reference for PV
+LCA, on the same IPCC 2021 GWP100 method used throughout this study.
+
+| Basis | Source | g CO₂e/kWh at source basis | t CO₂e/MWp | Grade |
+|---|---|---|---|---|
+| `iea_pvps_2023_mono_si` *(default)* | IEA PVPS T12 2023 update, mono-Si, 20.9 % module, data 2020–2023 | 35.8 | 1,048 | transcribed |
+| `ecoinvent` | ecoinvent 3.9.1 apos, as above | 79.8 | 2,303 | transcribed |
+
+Two bases, and `ecoinvent` exists only to reproduce runs from before this
+default changed. IEA PVPS's multi-Si figure is **not** offered as a basis — see
+below for why it is evidence rather than a scenario.
+
+Source: Stucki M., Götz M., de Wild-Scholten M. & Frischknecht R. (2024),
+*Environmental Life Cycle Assessment of Electricity from PV systems — 2023 data
+update*, IEA PVPS Task 12, May 2024. Reference system: 1 kWh AC from a 3 kWp
+rooftop array, in-plane irradiation 1,331 kWh/m², **annual yield 976 kWh/kWp**
+including 0.7 %/a degradation, 30 y panel / 15 y inverter.
+
+**Why the transfer is clean.** A published per-kWh figure carries its author's
+yield and lifetime, so it is turned back into t CO₂e/MWp before `restate()` puts
+it on this study's own yield — the **derived** half. That works here because IEA
+PVPS's 976 kWh/kWp sits within 10 % of the DESNZ GB solar load factor (12.2 % =
+1,069 kWh/kWp), so no irradiance correction is needed. Most PV harmonisations
+normalise to 1,700 kWh/m²/yr and would need a large one.
+
+**Why mono-Si, and why multi-Si is evidence rather than an option.** `cap_solar`
+is a decision variable for a plant that does not exist yet, so the question is
+what would actually be built. IEA PVPS record multi-Si market share below 3 % in
+2022 and ~1 % in 2023 — they could not even update its parameters for want of
+current data. Offering it as a basis would let the study be run on a technology
+nobody deploys, failing the test on exactly the ground ecoinvent fails it, so it
+is deliberately absent from `SOLAR_EMBODIED_BASES`.
+
+Its **number** is kept here, because it is what shows this correction is not
+merely an efficiency story. Hold the technology fixed at multi-Si and update
+only the manufacturing — thinner wafers, lower kerf loss, less electricity and
+heat per m² — and IEA PVPS's 2023 figure is **43.6 g CO₂e/kWh = 1,277 t
+CO₂e/MWp**, still 0.55× ecoinvent's 2,303. Most of the gap is manufacturing
+vintage, not module efficiency. That is the answer to a reviewer who suspects
+the technology was switched in order to flatter the result: switching
+technology accounts for 1,277 → 1,048, and the vintage for 2,303 → 1,277.
+
+**Corroboration.** IEA PVPS track the same Swiss mono-Si rooftop system across
+editions: 121 (1996) → 76 (2007, 14.0 % module) → 43 (2020) → 36 g CO₂e/kWh
+(2023, 20.9 %). ecoinvent's 2008 / 12.95 % plant restating to 57 g/kWh sits
+exactly where its vintage predicts once ground-mount and this study's longer
+life are allowed for — so the ecoinvent figure is *correct for its vintage*,
+which is both its defence and the case against using it. Independently,
+NREL/TP-7A40-87372 (Smith et al., March 2024) puts US utility-scale PV at 10–36
+g CO₂e/kWh across six supply-chain and end-of-life cases, built on ecoinvent 3.9
+with 20.3 % PERC modules.
+
+**Caveats, stated.** IEA PVPS's reference is a **3 kWp rooftop** array, so
+ground-mount swaps roof rails for heavier steel; NREL's utility-scale range
+brackets the figure, so the error is real but small and points upward. And this
+is the one coefficient in the study not scored on ecoinvent 3.9.1 apos — IEA
+PVPS use the UVEK LCI database in SimaPro. Both are IPCC 2021 GWP100, but the
+backgrounds differ.
+
+**No UK source exists for this.** POSTnote 383 *Carbon Footprint of Electricity
+Generation* is from June 2011; the DESNZ GHG Conversion Factors cover
+operational emissions only, with no capital goods for generation assets; the
+DESNZ/Arup cost reports carry no inventories; and the UK Solar Roadmap (June
+2025) is deployment and planning policy. This is the same pattern as the
+hydrogen chain — the UK publishes costs and tariffs, not inventories.
 
 **Why it matters.** ecoinvent's GB onshore wind assumes 45,918 kWh/kW over
 its life; DESNZ/Arup give 116,815 kWh/kW — **2.5× more**. Charging embodied
@@ -162,10 +246,9 @@ carbon per kWh at ecoinvent's rate overstates it by that factor. Notebooks 4.1
 and 4.3 charge wind per kWh generated and so carry ecoinvent's assumption:
 fine for a fixed plant, wrong once capacity is a decision variable.
 
-**Known limitation.** ecoinvent's GB PV dataset is a **2012** multi-Si plant,
-so 56.7 g CO₂e/kWh sits well above current literature (~20–40 g/kWh). It is a
-conservative upper bound, not a current figure. Wind, being mostly steel and
-concrete, is far less affected.
+**Wind is unaffected by the PV vintage problem** above: ecoinvent's turbine is
+mostly steel and concrete and ages far more slowly than a PV module. Its
+datasets stay the basis for both onshore and offshore.
 
 ---
 

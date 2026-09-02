@@ -3,11 +3,12 @@
 Fast — pure geometry against the packaged coastline, no network and no
 Brightway.
 """
+import pathlib
 import sys
 
 import numpy as np
 
-sys.path.insert(0, "/Users/louis/lca-ai-project/ukelectrolyserlca")
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 from optimisation import gb_map, sites
 
 

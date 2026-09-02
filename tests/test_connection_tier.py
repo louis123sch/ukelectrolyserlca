@@ -4,10 +4,11 @@ Slow — it solves several LPs and needs Brightway and a Renewables.ninja token,
 so the fast suite skips it. Run it directly, or with RUN_SLOW=1 under pytest.
 """
 import os
+import pathlib
 import sys, numpy as np
 
 import pytest
-sys.path.insert(0, "/Users/louis/lca-ai-project/ukelectrolyserlca")
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 import lca_helpers as H; H.setup_brightway()
 from optimisation import dc_inputs as I, dc_model as M, dc_pareto as P
 

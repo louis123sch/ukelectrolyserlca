@@ -66,7 +66,7 @@ DEFAULT_STEP_LON = 0.08          # ~5.2 km at 55 degrees N
 @lru_cache(maxsize=1)
 def outline() -> dict:
     """The UK + Ireland coastline as a GeoJSON FeatureCollection."""
-    return json.loads(DATA.read_text())
+    return json.loads(DATA.read_text(encoding="utf-8"))
 
 
 def _rings(iso: str) -> list[np.ndarray]:

@@ -24,20 +24,52 @@ checked against ecoinvent's own per-kWh score, which it reproduces exactly.
 Every number in this module is listed in ``SOURCES.md`` alongside its
 source and provenance grade (transcribed / derived / assumed).
 
-Known limitation
-----------------
-ecoinvent 3.9.1's GB open-ground PV dataset describes a **2012** multi-Si
-plant. Its embodied carbon restates to ~57 g CO2e/kWh, against ~20-40 g/kWh
-in current literature, because module efficiency and the carbon intensity of
-module-manufacturing grids have both improved a lot since. PV's embodied
-figure here is therefore a conservative upper bound. Wind is far less
-affected, being mostly steel and concrete.
+Solar is not scored on ecoinvent, and why
+-----------------------------------------
+ecoinvent 3.9.1's GB open-ground PV activity is the 570 kWp Solarpark El
+Tesoro in Andalusia, **installed in 2008**, carrying 4,401.7 m2 of panel for
+570 kWp - a 129.5 W/m2, **12.95 %** module. It restates to 57 g CO2e/kWh,
+about ten times onshore wind, which is not a defensible basis for a plant that
+has not been built yet. 95.5 % of that burden is in the two exchanges that
+scale with panel area, so the vintage is the whole story.
+
+The obvious fixes are both closed. Upgrading the database does nothing: the
+plant inventory is byte-identical in ecoinvent 3.10.1, so only the background
+would move. And no other GB PV activity exists at utility scale - the only
+alternatives are 3 kWp slanted-roof systems of the same vintage.
+
+So the default basis for solar is **IEA PVPS Task 12**, the standard reference
+for PV LCA, whose 2023 data update uses the same IPCC 2021 GWP100 method this
+study uses throughout: 35.8 g CO2e/kWh for mono-Si at 976 kWh/kWp/year over 30
+years, which is 1,048 kg CO2e/kWp of embodied carbon against ecoinvent's
+2,303. Their reference yield sits within 10 % of the DESNZ GB solar load
+factor, so the figure transfers with no irradiance correction - unusual, and
+the reason this substitution is clean rather than a fudge.
+
+Mono-Si, and not the like-for-like multi-Si IEA PVPS also publish, because
+``cap_solar`` is a *decision variable* for a plant that does not exist yet, so
+the question is what would actually be built. IEA PVPS record multi-Si market
+share falling below 3 % in 2022 and to ~1 % in 2023 - they could not update
+its parameters for want of current data. That is the same argument this module
+already makes about not inheriting ecoinvent's yield for a sized asset, and it
+is why multi-Si is not offered as a basis: it would fail the test on exactly
+the ground ecoinvent fails it. Its number is kept in SOURCES.md as evidence,
+where it answers the reviewer who suspects the technology was switched to
+flatter the result.
+
+So there are two bases, and the second exists only to reproduce older runs.
+Pass ``solar_basis="ecoinvent"`` for that; both live in
+``SOLAR_EMBODIED_BASES``. Wind and offshore wind are untouched, being mostly
+steel and concrete and ageing far more slowly than a PV module.
 
 Sources
 -------
 embodied carbon   ecoinvent 3.9.1 apos, IPCC 2021 GWP100. Activities are the
-                  GB per-kWh generation datasets and the capital "unit"
+wind, offshore    GB per-kWh generation datasets and the capital "unit"
                   exchanges they draw on.
+embodied carbon   IEA PVPS Task 12, "Environmental Life Cycle Assessment of
+solar             Electricity from PV systems - 2023 data update", Stucki M.,
+                  Goetz M., de Wild-Scholten M. & Frischknecht R., May 2024.
 load factor,      DESNZ/Arup 2024 Cost of Electricity reports, via
 lifetime          ``tech_costs.py``. See SOURCES.md.
 
@@ -73,6 +105,63 @@ ECOINVENT_LIFETIME_YEARS = {
 }
 
 HOURS_PER_YEAR = 8760.0
+
+# IEA PVPS Task 12, 2023 data update (May 2024). The reference system its
+# per-kWh results are quoted against. TRANSCRIBED.
+IEA_PVPS_REFERENCE = {
+    "yield_kwh_per_kwp_year": 976.0,   # includes linear degradation at 0.7 %/a
+    "lifetime_years": 30.0,            # panel; inverter replaced at 15 y
+    "in_plane_irradiation_kwh_per_m2": 1331.0,
+    "system": "3 kWp rooftop, 1 kWh AC at the grid connection point",
+    "method": "IPCC 2021 GWP100",
+}
+
+# Where solar's embodied carbon comes from. ``gco2e_per_kwh`` of None means
+# "use the figure decomposed out of ecoinvent" - see solar_capital_kgco2e_per_mw.
+SOLAR_EMBODIED_BASES = {
+    "iea_pvps_2023_mono_si": {
+        "gco2e_per_kwh": 35.8, "module_efficiency": 0.209,
+        "data_reference_period": "2020-2023",
+        "label": "IEA PVPS Task 12 2023 update, mono-Si",
+        "grade": "transcribed",
+    },
+    # IEA PVPS also publish multi-Si at 43.6 g CO2e/kWh (1,277 t CO2e/MWp).
+    # Deliberately not offered as a basis: at ~1 % of the 2023 market it fails
+    # the same test ecoinvent fails, since cap_solar is capacity that has not
+    # been built yet. Its value is as *evidence* rather than as a scenario —
+    # holding the technology fixed and updating only the manufacturing still
+    # takes 2,303 t/MWp to 1,277, which is what shows this correction is not
+    # merely an efficiency story. Recorded in SOURCES.md.
+    "ecoinvent": {
+        "gco2e_per_kwh": None, "module_efficiency": 0.1295,
+        "data_reference_period": "2008 plant",
+        "label": "ecoinvent 3.9.1 apos, GB 570 kWp open ground, multi-Si",
+        "grade": "transcribed",
+    },
+}
+SOLAR_EMBODIED_BASIS = "iea_pvps_2023_mono_si"
+if SOLAR_EMBODIED_BASIS not in SOLAR_EMBODIED_BASES:
+    raise ValueError(f"SOLAR_EMBODIED_BASIS must be one of {list(SOLAR_EMBODIED_BASES)}")
+
+
+def solar_capital_kgco2e_per_mw(basis: str, ecoinvent_value: float) -> float:
+    """Embodied carbon per MWp under one basis, in this module's own units.
+
+    A published per-kWh figure carries its author's yield and lifetime, so it
+    has to be turned back into a per-capacity number before ``restate()`` can
+    put it on this study's yield. That is what the reference system in
+    ``IEA_PVPS_REFERENCE`` is for.
+
+    The unit step looks like a missing conversion and is not: g/kWh x
+    kWh/kWp/year x years gives g per kWp, and g/kWp and kg/MWp are the same
+    number, since both scale by 1000 in numerator and denominator.
+    """
+    spec = SOLAR_EMBODIED_BASES[basis]
+    if spec["gco2e_per_kwh"] is None:
+        return ecoinvent_value
+    return (spec["gco2e_per_kwh"]
+            * IEA_PVPS_REFERENCE["yield_kwh_per_kwp_year"]
+            * IEA_PVPS_REFERENCE["lifetime_years"])
 
 
 def _gwp_method(bd):
@@ -120,6 +209,10 @@ def decompose(tech, ei, H, method):
         "capital_per_kWh": capital_per_kwh,
         "capital_share": capital_per_kwh / total_per_kwh,
         "capital_kgco2e_per_MW": capital_per_mw,
+        # Held separately so it survives whatever basis apply_case selects.
+        # check_reconstruction anchors on this one, so the guarantee that the
+        # decomposition rebuilds ecoinvent exactly is never quietly retired.
+        "ecoinvent_capital_kgco2e_per_MW": capital_per_mw,
         "ecoinvent_lifetime_kWh_per_kW": lifetime_kwh_per_kw,
         "ecoinvent_lifetime_years": ei_life,
         "ecoinvent_implied_load_factor": implied_lf,
@@ -130,12 +223,17 @@ def decompose(tech, ei, H, method):
 def restate(row, load_factor, lifetime_years):
     """Per-kWh embodied burden at this study's own yield, not ecoinvent's."""
     lifetime_kwh_per_kw = load_factor * HOURS_PER_YEAR * lifetime_years
+    eco_per_mw = row.get("ecoinvent_capital_kgco2e_per_MW", row["capital_kgco2e_per_MW"])
     per_kwh = row["capital_kgco2e_per_MW"] / 1000.0 / lifetime_kwh_per_kw
     return {
         "study_load_factor": load_factor,
         "study_lifetime_years": lifetime_years,
         "study_lifetime_kWh_per_kW": lifetime_kwh_per_kw,
         "restated_kgco2e_per_kWh": per_kwh,
+        # What ecoinvent's own capital restates to at the same yield. Where a
+        # non-ecoinvent basis is in force this separates the two effects: this
+        # column moves only with yield, restated_kgco2e_per_kWh with both.
+        "ecoinvent_restated_kgco2e_per_kWh": eco_per_mw / 1000.0 / lifetime_kwh_per_kw,
         "ratio_to_ecoinvent": per_kwh / row["ecoinvent_per_kWh"],
     }
 
@@ -164,7 +262,7 @@ def decompose_all(use_cache: bool = True, refresh: bool = False):
         return _MEMO
     if use_cache and CACHE_PATH.exists():
         try:
-            cached = json.loads(CACHE_PATH.read_text())
+            cached = json.loads(CACHE_PATH.read_text(encoding="utf-8"))
             if sorted(r["technology"] for r in cached) == sorted(TECHNOLOGIES):
                 _MEMO = cached
                 return _MEMO
@@ -179,12 +277,12 @@ def decompose_all(use_cache: bool = True, refresh: bool = False):
     rows = [decompose(tech, ei, H, method) for tech in TECHNOLOGIES]
 
     OUT_DIR.mkdir(exist_ok=True)
-    CACHE_PATH.write_text(json.dumps(rows, indent=2))
+    CACHE_PATH.write_text(json.dumps(rows, indent=2), encoding="utf-8")
     _MEMO = rows
     return rows
 
 
-def apply_case(rows, case="central"):
+def apply_case(rows, case="central", solar_basis=None):
     """The cheap half: restate per-kWh burden at a scenario's LF and lifetime.
 
     ``case`` is the **cost** case. Load factor and lifetime are taken from the
@@ -193,8 +291,20 @@ def apply_case(rows, case="central"):
     ``tech_costs.INVERSE_CASE``). Reading them directly here would make the
     same scenario label mean opposite things in the two modules — and would
     give the "low" case the *highest* embodied carbon per kWh.
+
+    ``solar_basis`` picks which inventory supplies solar's embodied carbon,
+    defaulting to ``SOLAR_EMBODIED_BASIS``. This is the seam the module
+    docstring describes: everything downstream reads ``capital_kgco2e_per_MW``,
+    so selecting a basis here reaches the LP, the sizing optimiser and the
+    dashboard without any of them needing to know a choice was made. Each row
+    carries ``embodied_basis`` so a result can say which one it used.
     """
     import optimisation.tech_costs as tc
+
+    basis = solar_basis or SOLAR_EMBODIED_BASIS
+    if basis not in SOLAR_EMBODIED_BASES:
+        raise ValueError(
+            f"solar_basis must be one of {list(SOLAR_EMBODIED_BASES)}, got {basis!r}")
 
     technical_case = tc.INVERSE_CASE[case]
     out = []
@@ -203,6 +313,19 @@ def apply_case(rows, case="central"):
         params, _src, _note = tc.TECHNOLOGIES[row["technology"]]
         row["cost_case"] = case
         row["technical_case"] = technical_case
+        # Tolerate a cache written before this column existed.
+        row.setdefault("ecoinvent_capital_kgco2e_per_MW", row["capital_kgco2e_per_MW"])
+        if row["technology"] == "solar_pv":
+            spec = SOLAR_EMBODIED_BASES[basis]
+            row["capital_kgco2e_per_MW"] = solar_capital_kgco2e_per_mw(
+                basis, row["ecoinvent_capital_kgco2e_per_MW"])
+            row["embodied_basis"] = basis
+            row["embodied_basis_label"] = spec["label"]
+            row["embodied_basis_grade"] = spec["grade"]
+        else:
+            row["embodied_basis"] = "ecoinvent"
+            row["embodied_basis_label"] = "ecoinvent 3.9.1 apos"
+            row["embodied_basis_grade"] = "transcribed"
         row.update(restate(row,
                            tc._value(params, "net_load_factor", technical_case),
                            tc._value(params, "operating_lifetime", technical_case)))
@@ -210,17 +333,23 @@ def apply_case(rows, case="central"):
     return pd.DataFrame(out)
 
 
-def build(case="central"):
-    return apply_case(decompose_all(), case)
+def build(case="central", solar_basis=None):
+    return apply_case(decompose_all(), case, solar_basis=solar_basis)
 
 
 def check_reconstruction(df):
-    """Capital + consumables must rebuild ecoinvent's own per-kWh score."""
+    """Capital + consumables must rebuild ecoinvent's own per-kWh score.
+
+    Anchored on ``ecoinvent_capital_kgco2e_per_MW`` rather than the column the
+    LP consumes, so the check still means what it says under a substituted
+    basis: it verifies the *decomposition*, which is ecoinvent's either way.
+    """
     problems = []
     for _, r in df.iterrows():
         if r["capital_share"] > 1.0001:
             problems.append(f"{r.technology}: capital share {r.capital_share:.3f} > 1")
-        implied = r["capital_kgco2e_per_MW"] / 1000.0 / r["ecoinvent_lifetime_kWh_per_kW"]
+        eco_per_mw = r.get("ecoinvent_capital_kgco2e_per_MW", r["capital_kgco2e_per_MW"])
+        implied = eco_per_mw / 1000.0 / r["ecoinvent_lifetime_kWh_per_kW"]
         if abs(implied - r["capital_per_kWh"]) / r["capital_per_kWh"] > 0.001:
             problems.append(
                 f"{r.technology}: per-MW capital does not re-amortise back to "
@@ -230,12 +359,15 @@ def check_reconstruction(df):
     return f"OK — {len(df)} technologies re-amortise back to ecoinvent exactly"
 
 
-def run(case="central"):
-    df = build(case)
+def run(case="central", solar_basis=None):
+    basis = solar_basis or SOLAR_EMBODIED_BASIS
+    df = build(case, solar_basis=basis)
     print("=" * 96)
     print(f"RENEWABLE GENERATION — embodied carbon per MW installed  (cost case: {case})")
     print("=" * 96)
     print(check_reconstruction(df))
+    print(f"Solar embodied basis: {SOLAR_EMBODIED_BASES[basis]['label']} "
+          f"[{basis}, {SOLAR_EMBODIED_BASES[basis]['grade']}]")
 
     print()
     print("ecoinvent's per-kWh datasets, taken apart")
@@ -245,8 +377,10 @@ def run(case="central"):
     print(f"{'':<16}{'kg CO2e':>11}{'share':>10}{'t CO2e/MW':>16}"
           f"{'kWh/kW':>12}{'LF':>10}")
     for _, r in df.iterrows():
+        # Always ecoinvent's own capital here: this table is the decomposition,
+        # not the basis in force. Solar's substituted figure is reported below.
         print(f"{r.technology:<16}{r.ecoinvent_per_kWh:>11.5f}"
-              f"{r.capital_share:>10.1%}{r.capital_kgco2e_per_MW/1000:>16,.0f}"
+              f"{r.capital_share:>10.1%}{r.ecoinvent_capital_kgco2e_per_MW/1000:>16,.0f}"
               f"{r.ecoinvent_lifetime_kWh_per_kW:>12,.0f}"
               f"{r.ecoinvent_implied_load_factor:>10.1%}")
 
@@ -274,12 +408,23 @@ def run(case="central"):
           f"{w.restated_kgco2e_per_kWh*1000:.1f} g CO2e/kWh.")
     pv = df[df.technology == "solar_pv"].iloc[0]
     print()
-    print(f"  Solar PV restates to {pv.restated_kgco2e_per_kWh*1000:.0f} g CO2e/kWh, roughly ten times wind and")
-    print("  high against modern literature (~20-40 g/kWh). That is a dataset vintage")
-    print("  issue, not an arithmetic one: ecoinvent 3.9.1's GB open-ground PV is a")
-    print("  2012 multi-Si plant, and both module efficiency and the carbon intensity")
-    print("  of the grids that make modules have improved substantially since. Treat")
-    print("  it as a conservative upper bound on PV's embodied carbon.")
+    print(f"  Solar PV is not scored on ecoinvent. Its GB open-ground activity is the")
+    print(f"  570 kWp Solarpark El Tesoro, installed 2008, at a {SOLAR_EMBODIED_BASES['ecoinvent']['module_efficiency']:.2%} module — it")
+    print(f"  restates to {pv.ecoinvent_restated_kgco2e_per_kWh*1000:.0f} g CO2e/kWh, about ten times wind. The inventory is")
+    print("  byte-identical in ecoinvent 3.10.1 and no other GB PV activity exists at")
+    print("  utility scale, so the database cannot fix it.")
+    print()
+    print(f"  Basis in force: {SOLAR_EMBODIED_BASES[basis]['label']}")
+    print(f"    {pv.capital_kgco2e_per_MW/1000:>10,.0f} t CO2e/MWp  "
+          f"(ecoinvent: {pv.ecoinvent_capital_kgco2e_per_MW/1000:,.0f})")
+    print(f"    {pv.capital_kgco2e_per_MW/pv.study_lifetime_years:>10,.0f} kg CO2e/MWp/year  — this is what the LP charges")
+    print(f"    {pv.restated_kgco2e_per_kWh*1000:>10.1f} g CO2e/kWh at {pv.study_load_factor:.1%} over "
+          f"{pv.study_lifetime_years:.0f} y  (ecoinvent: {pv.ecoinvent_restated_kgco2e_per_kWh*1000:.1f})")
+    w2 = df[df.technology == "onshore_wind"].iloc[0]
+    print(f"    {pv.restated_kgco2e_per_kWh/w2.restated_kgco2e_per_kWh:>10.1f}x onshore wind per kWh  "
+          f"(on ecoinvent: {pv.ecoinvent_restated_kgco2e_per_kWh/w2.restated_kgco2e_per_kWh:.1f}x)")
+    print()
+    print("  Other bases: " + ", ".join(k for k in SOLAR_EMBODIED_BASES if k != basis))
     print()
     print("  Notebooks 4.1 and 4.3 charge wind per kWh generated, so they carry")
     print("  ecoinvent's yield assumption. That is defensible for a fixed plant but")

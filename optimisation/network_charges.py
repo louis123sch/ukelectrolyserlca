@@ -144,11 +144,11 @@ def _cache(name: str, fetch):
     path = CACHE_DIR / f"{name}.json"
     if path.exists():
         try:
-            return json.loads(path.read_text()), True
+            return json.loads(path.read_text(encoding="utf-8")), True
         except Exception:
             pass
     records = fetch()
-    path.write_text(json.dumps(records, indent=2))
+    path.write_text(json.dumps(records, indent=2), encoding="utf-8")
     return records, False
 
 
