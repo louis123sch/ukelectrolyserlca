@@ -191,6 +191,14 @@
     "region_name": "South Scotland",
     "tnuos_zone": 2
   },
+  "56.85,-4.0": {
+    "carbon_api_region": 1,
+    "outcode": "PH18",
+    "place": "Perth and Kinross",
+    "postcode": null,
+    "region_name": "North Scotland",
+    "tnuos_zone": 1
+  },
   "57.15,-3.52": {
     "carbon_api_region": 1,
     "outcode": "PH25",

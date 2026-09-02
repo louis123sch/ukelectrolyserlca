@@ -39,6 +39,7 @@ import lca_helpers as H
 from optimisation import baseline_grid, battery, gb_map, h2_prices, profiles, renewables, tech_costs
 from optimisation import dc_architectures as A
 from optimisation import dc_inputs, dc_job, dc_model, dc_pareto, dc_runner, sites
+from optimisation import thresholds as TH
 
 # Streamlit keeps imported modules in sys.modules across reruns, so edits to
 # optimisation/*.py would otherwise need a full app restart to show up. These
@@ -51,7 +52,7 @@ from optimisation import dc_inputs, dc_job, dc_model, dc_pareto, dc_runner, site
 # forget precisely because it never appears at this page's own call sites.
 for _mod in (tech_costs, renewables, h2_prices, battery, baseline_grid,
              gb_map, sites, profiles, dc_model, dc_inputs, dc_pareto, A, dc_runner,
-             dc_job):
+             TH, dc_job):
     importlib.reload(_mod)
 
 st.set_page_config(page_title="Data Centre Optimiser", layout="wide")
@@ -1066,9 +1067,243 @@ st.caption(
 
 
 # =============================================================================
-# 6. The numbers behind the answer
+# 6. How far from hydrogen
 # =============================================================================
-st.header("6. The numbers behind the answer")
+st.header("6. How far from hydrogen?")
+st.markdown(
+    "An asset sized to zero says *not at these prices*. This asks the follow-on "
+    "question — **how far would a price have to move before it was worth "
+    "building?** — by moving one input at a time and re-solving until hydrogen "
+    "first carries a stated share of the load.\n\n"
+    "It is a separate run because it costs roughly nine solves **per input**, "
+    "against one sweep for the answer above. It inherits every setting from the "
+    "result on screen rather than reading the boxes above, so a threshold can "
+    "never quote itself against a configuration you have since changed."
+)
+
+_thr_run_folder = None
+if summary and st.session_state.get("dc_out_root"):
+    _thr_run_folder = Path(st.session_state["dc_out_root"]) / summary["key"]
+
+if not summary:
+    st.info("Solve something first — a threshold is measured against a result.")
+elif _thr_run_folder is None or not (_thr_run_folder / "config.json").exists():
+    st.info(
+        "This answer came from a cache written before the page recorded its own "
+        "settings. Press **Optimise** with *Ignore cache* ticked to make it "
+        "re-runnable, and this section will open."
+    )
+else:
+    _inherited = None
+    try:
+        _inherited = TH.from_run(_thr_run_folder)
+    except Exception as _exc:
+        st.warning(f"Could not read that run's settings back: `{_exc}`")
+
+    if _inherited is not None:
+        _scen = _inherited["scenario"]
+        _knobs_all = TH.applicable_knobs(_scen)
+        _h2_knobs = [k for k in _knobs_all
+                     if k in ("h2_price", "ely_capex", "fc_capex", "tank_capex",
+                              "h2_chain")]
+
+        # Does hydrogen even appear in what was solved? Without a fuel cell
+        # there is nothing to measure a share through, and every knob would
+        # come back not_applicable at the cost of a solve each.
+        if not _h2_knobs:
+            st.info(
+                "The run above has no hydrogen in it — nothing to find a "
+                "threshold for. Tick an electrolyser, a store and a fuel cell "
+                "in section 3, or bring in a priced colour, and re-solve."
+            )
+        else:
+            _c = _inherited["config"]
+            st.caption(
+                f"Inheriting from **{summary['label']}** at {summary['site_name']} · "
+                f"{_c['size_mw_it']:g} MW IT · PUE {_c['pue']:g} · "
+                f"{_c['start']} to {_c['end']} · {_c['cost_case']} costs · "
+                f"{_c.get('resample_hours') or 0.5:g} h steps."
+            )
+
+            _stale_ok = True
+            if _inherited["stale"]:
+                st.warning(
+                    "**"
+                    + ", ".join(f"`{k}`" for k in _inherited["stale_keys"])
+                    + "** changed since that front was solved, so a threshold "
+                      "found now would be annotating a result that no longer "
+                      "exists. Re-solve section 4 first, or tick below to "
+                      "proceed anyway."
+                )
+                _stale_ok = st.checkbox(
+                    "Run against the stale result anyway", value=False)
+
+            k1, k2 = st.columns([3, 2])
+            with k1:
+                _pick = st.multiselect(
+                    "Inputs to find a threshold in", _knobs_all,
+                    default=_h2_knobs,
+                    format_func=lambda k: TH.KNOBS[k].label,
+                    help="Only the inputs this configuration can actually "
+                         "answer are listed. `h2_chain` moves the electrolyser, "
+                         "store and fuel cell together — usually the only one "
+                         "that reaches a threshold, because no single link "
+                         "carries the chain alone.")
+            with k2:
+                _entry = st.slider(
+                    "Counts as hydrogen at this share of load (%)", 0.5, 10.0,
+                    TH.ENTRY_SHARE * 100, step=0.5, format="%.1f",
+                    help="The first MW enters at zero volume, so a bare "
+                         "'capacity above zero' test lands in a band where the "
+                         "optimiser is indifferent. A share bisects cleanly.")
+                _coarse = st.checkbox(
+                    "Coarser steps (2 h)",
+                    value=bool((_c.get("resample_hours") or 0.5) < 2),
+                    help="Roughly 4x faster. The study's own measurement puts "
+                         "2 h steps at about 1.2 % on carbon against 30 min — "
+                         "fine for locating a threshold, too coarse to quote "
+                         "the build at it.")
+
+            if _pick:
+                st.caption(
+                    f"**~{TH.estimate_solves(_pick)} LP solves** "
+                    f"({len(_pick)} input{'s' if len(_pick) > 1 else ''} "
+                    f"x ~9 each, measured). Cached per input, so a re-run that "
+                    "changes nothing is free."
+                )
+
+            _tjob = dc_job.active("thresholds")
+            _trunning = bool(_tjob and _tjob["state"] in ("starting", "running"))
+            t1, t2, _ = st.columns([1, 1, 3])
+            with t1:
+                _tlaunch = st.button(
+                    "Find thresholds", type="primary",
+                    disabled=(not _pick) or _trunning or not _stale_ok,
+                    help="A threshold sweep is already running — stop it, or wait."
+                    if _trunning else None)
+            with t2:
+                _trefresh = st.checkbox("Ignore cache", value=False,
+                                        key="thr_refresh", disabled=_trunning)
+
+            if _tlaunch:
+                _kw = dict(_inherited["kwargs"])
+                _site = _kw.pop("site")
+                if _coarse:
+                    _kw["resample_hours"] = 2.0
+                dc_job.start(
+                    kind="thresholds", scenario=_scen, site=_site,
+                    out_root=Path(st.session_state["dc_out_root"]),
+                    label=f"thresholds — {summary['label']}",
+                    total=TH.estimate_solves(_pick) + len(_pick),
+                    knobs=list(_pick), target_share=_entry / 100.0,
+                    refresh=_trefresh, **_kw)
+                st.rerun()
+
+            # --- the sweep's own status panel, same protocol as section 4 ----
+            if _tjob:
+                if _trunning:
+                    _box = st.container(border=True)
+                    _box.markdown(f"**Searching — {_tjob['label']}**")
+                    _n = int(_tjob.get("done") or 0)
+                    _tot = max(int(_tjob.get("total") or 1), _n + 1)
+                    _box.progress(_n / _tot,
+                                  text=f"solve {_n} of ~{_tot} — {_tjob.get('tag', '')}")
+                    _box.caption(
+                        "Detached, like the optimiser itself — leave the page "
+                        "and come back. Each input's result is written the "
+                        "moment it is found, so a sweep stopped halfway keeps "
+                        "what it already answered."
+                    )
+                    _b1, _b2, _ = _box.columns([1, 1, 3])
+                    if _b1.button("Stop", key="thr_stop"):
+                        dc_job.cancel(_tjob["folder"])
+                        st.rerun()
+                    _b2.button("Refresh", key="thr_refresh_btn")
+                elif _tjob["state"] not in ("done",):
+                    st.error(
+                        f"**The threshold sweep "
+                        f"{'was cancelled' if _tjob.get('tag') == 'cancelled' else _tjob['state']}.**\n\n"
+                        + (f"`{_tjob['error']}`" if _tjob.get("error") else
+                           "Its process is gone. Anything it had already found "
+                           "is still shown below."))
+                    if st.button("Dismiss", key="thr_dismiss"):
+                        dc_job.clear_pointer("thresholds")
+                        st.rerun()
+
+            # --- results, read from disk so they outlive the session ---------
+            _found = TH.load_run(
+                Path(st.session_state["dc_out_root"]) / "_thresholds", _scen.key)
+            if _found:
+                st.subheader("What would have to change")
+                for _r in sorted(_found, key=lambda r: (r["status"] != "found",
+                                                        r["knob"])):
+                    (st.success if _r["status"] == "found" else st.info)(
+                        TH.describe(_r))
+
+                _tdf = pd.DataFrame(TH.records(_found))
+                _show = _tdf[["knob_label", "unit", "today", "threshold",
+                              "needs", "status", "solves"]].rename(columns={
+                    "knob_label": "Input", "unit": "Unit", "today": "Today",
+                    "threshold": "Threshold", "needs": "Move required",
+                    "status": "Result", "solves": "Solves"})
+                st.dataframe(_show, width="stretch", hide_index=True)
+                _download(_tdf, "hydrogen_thresholds.csv",
+                          "Download these thresholds as CSV")
+
+                with st.expander("Every re-solve behind them"):
+                    st.caption(
+                        "The path to a threshold is worth as much as the "
+                        "threshold: it says whether hydrogen arrives gradually "
+                        "or all at once. In this study it has always been a "
+                        "cliff."
+                    )
+                    _pickc = st.selectbox(
+                        "Input", [r["knob"] for r in _found],
+                        format_func=lambda k: TH.KNOBS[k].label, key="thr_curve")
+                    _cr = next(r for r in _found if r["knob"] == _pickc)
+                    _cf = TH.curve_frame(_cr)
+                    if not _cf.empty:
+                        _cf = _cf.assign(
+                            share_pct=_cf["h2_share_of_load"].clip(lower=0) * 100)
+                        _chart = alt.Chart(_cf).mark_line(point=True).encode(
+                            x=alt.X("value:Q", title=f"{TH.KNOBS[_pickc].label} "
+                                                     f"({TH.KNOBS[_pickc].unit})"),
+                            y=alt.Y("share_pct:Q", title="H₂ share of load (%)"),
+                            tooltip=[alt.Tooltip("value:Q", format=".4g"),
+                                     alt.Tooltip("share_pct:Q", format=".2f",
+                                                 title="% of load"),
+                                     alt.Tooltip("cost_GBP_per_MWh:Q", format=".2f"),
+                                     alt.Tooltip("gwp_g_per_kWh:Q", format=".1f"),
+                                     alt.Tooltip("cap_ely:Q", format=".3f"),
+                                     alt.Tooltip("cap_fc:Q", format=".3f")],
+                        ).properties(height=260)
+                        st.altair_chart(_chart, width="stretch")
+                        st.dataframe(
+                            _cf[["value", "share_pct", "cap_ely", "cap_tank",
+                                 "cap_fc", "cap_batt_e", "cost_GBP_per_MWh",
+                                 "gwp_g_per_kWh"]],
+                            width="stretch", hide_index=True)
+                    if _cr.get("knob_note"):
+                        st.caption(_cr["knob_note"])
+                    if not _cr.get("monotone", True):
+                        st.warning(
+                            "Hydrogen's share did not move consistently with "
+                            "this input, so the value above is one step among "
+                            "several rather than *the* tipping point. Read the "
+                            "curve."
+                        )
+                st.caption(
+                    "Perfect foresight applies here too, and doubly: these say "
+                    "what would have to be true for hydrogen to be worth "
+                    "**building**, not what an operator without a year's "
+                    "forecast would achieve."
+                )
+
+
+# =============================================================================
+# 7. The numbers behind the answer
+# =============================================================================
+st.header("7. The numbers behind the answer")
 st.caption(
     "Every coefficient the optimiser above just used, on the **"
     f"{cost_case}** cost case you chose in section 1. These are produced by the "

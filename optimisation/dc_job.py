@@ -56,7 +56,20 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 RUNS = ROOT / "optimisation_outputs" / "dc_runs"
-POINTER = RUNS / "_active_job.json"
+
+# Two kinds of job, and two pointers. A threshold sweep runs *after* a front and
+# reports against it, so if they shared one pointer the sweep would erase the
+# page's memory of the answer it is annotating. Separate pointers let both be
+# alive, or finished, or lost, independently.
+POINTER = RUNS / "_active_job.json"                     # kind "front"
+THRESHOLD_POINTER = RUNS / "_active_threshold_job.json"  # kind "thresholds"
+KINDS = ("front", "thresholds")
+
+
+def pointer_for(kind: str) -> Path:
+    if kind not in KINDS:
+        raise ValueError(f"kind must be one of {KINDS}, got {kind!r}")
+    return POINTER if kind == "front" else THRESHOLD_POINTER
 
 REQUEST = "request.json"
 STATUS = "status.json"
@@ -102,17 +115,29 @@ def _alive(pid: int | None) -> bool:
 # -----------------------------------------------------------------------------
 # The page's side
 # -----------------------------------------------------------------------------
-def folder_for(out_root, scenario_key: str) -> Path:
-    return Path(out_root) / scenario_key
+def folder_for(out_root, scenario_key: str, kind: str = "front") -> Path:
+    """Where a job of this kind keeps its request, status, log and result.
+
+    A threshold sweep lives under ``_thresholds/`` beside the scenario folders
+    rather than inside one, so its own knob files sit with it and neither job
+    can overwrite the other's ``status.json``. The underscore keeps it out of
+    ``dc_runner.load_results``, which globs ``*/summary.json``.
+    """
+    root = Path(out_root)
+    return (root / scenario_key if kind == "front"
+            else root / "_thresholds" / scenario_key)
 
 
-def start(*, scenario, site, out_root, label: str, total: int, **kw) -> dict:
+def start(*, scenario, site, out_root, label: str, total: int,
+          kind: str = "front", **kw) -> dict:
     """Launch a detached solve and return its first status.
 
-    ``kw`` is passed to ``dc_runner.run_one`` unchanged, so this stays a thin
-    wrapper rather than a second copy of that signature.
+    ``kw`` is passed straight to ``dc_runner.run_one`` (kind "front") or to
+    ``thresholds.sweep`` (kind "thresholds"), so this stays a thin wrapper
+    rather than a second copy of either signature. Everything in it must be
+    JSON-safe — the ``Site`` is rebuilt by the child from coordinates.
     """
-    folder = folder_for(out_root, scenario.key)
+    folder = folder_for(out_root, scenario.key, kind)
     folder.mkdir(parents=True, exist_ok=True)
     _write_json(folder / REQUEST, {
         "scenario": asdict(scenario),
@@ -124,10 +149,11 @@ def start(*, scenario, site, out_root, label: str, total: int, **kw) -> dict:
                  "connection_limit_mw": site.connection_limit_mw,
                  "transmission_connected": site.transmission_connected},
         "out_root": str(out_root),
+        "kind": kind,
         "kw": kw,
     })
     status = {"state": "starting", "label": label, "site_name": site.name,
-              "folder": str(folder), "done": 0, "total": int(total),
+              "folder": str(folder), "kind": kind, "done": 0, "total": int(total),
               "tag": "starting up", "started": _now(), "heartbeat": _now(),
               "pid": None}
     _write_json(folder / STATUS, status)
@@ -143,7 +169,8 @@ def start(*, scenario, site, out_root, label: str, total: int, **kw) -> dict:
     status["pid"] = proc.pid
     status["state"] = "running"
     _write_json(folder / STATUS, status)
-    _write_json(POINTER, {"folder": str(folder), "started": status["started"]})
+    _write_json(pointer_for(kind),
+                {"folder": str(folder), "kind": kind, "started": status["started"]})
     return status
 
 
@@ -181,16 +208,19 @@ def _mtime(p: Path) -> float:
         return time.time()
 
 
-def active() -> dict | None:
-    """The job the pointer names, whatever page or session started it."""
-    ptr = _read_json(POINTER)
+def active(kind: str = "front") -> dict | None:
+    """The job of this kind the pointer names, whatever session started it."""
+    ptr = _read_json(pointer_for(kind))
     if not ptr:
         return None
-    return read(ptr["folder"])
+    s = read(ptr["folder"])
+    if s is not None:
+        s.setdefault("kind", kind)
+    return s
 
 
-def clear_pointer():
-    POINTER.unlink(missing_ok=True)
+def clear_pointer(kind: str = "front"):
+    pointer_for(kind).unlink(missing_ok=True)
 
 
 def cancel(folder) -> bool:
@@ -221,7 +251,7 @@ def summary(folder) -> dict | None:
 def _run(folder: Path):
     import lca_helpers as H
     from optimisation import dc_architectures as A
-    from optimisation import dc_runner, sites
+    from optimisation import sites
 
     req = _read_json(folder / REQUEST) or {}
     status = _read_json(folder / STATUS) or {}
@@ -244,8 +274,13 @@ def _run(folder: Path):
         scenario = A.Scenario(**req["scenario"])
         site = sites.resolve(**req["site"])
         stage("building the half-hourly series")
-        result = dc_runner.run_one(scenario, site=site, out_root=Path(req["out_root"]),
-                                   progress=tick, notice=stage, **req["kw"])
+        if req.get("kind", "front") == "thresholds":
+            result = _run_thresholds(folder, scenario, site, req, tick, stage)
+        else:
+            from optimisation import dc_runner
+            result = dc_runner.run_one(scenario, site=site,
+                                       out_root=Path(req["out_root"]),
+                                       progress=tick, notice=stage, **req["kw"])
     except BaseException as exc:              # SystemExit and KeyboardInterrupt too
         status.update(state="failed", tag="failed", heartbeat=_now(),
                       error=f"{type(exc).__name__}: {exc}",
@@ -259,17 +294,52 @@ def _run(folder: Path):
     _write_json(folder / STATUS, status)
 
 
+def _run_thresholds(folder: Path, scenario, site, req, tick, stage) -> dict:
+    """One threshold sweep, written where the page will look for it.
+
+    ``run_one`` writes its own ``summary.json``; ``thresholds.sweep`` writes one
+    file per knob instead, so this assembles the summary the job protocol needs.
+    Its ``config_hash`` is the hash of the searches it contains, which is what
+    lets ``read`` recognise a child that died between the last knob and its
+    final status line.
+    """
+    import hashlib
+    from optimisation import thresholds as T
+
+    kw = dict(req["kw"])
+    knobs = tuple(kw.pop("knobs"))
+    results = T.sweep(scenario, knobs, site=site,
+                      out_root=Path(req["out_root"]) / "_thresholds",
+                      progress=tick, notice=stage, **kw)
+    summary = {
+        "kind": "thresholds",
+        "scenario": scenario.key, "label": scenario.label,
+        "site": site.key, "site_name": site.name,
+        "knobs": list(knobs),
+        "results": results,
+        "table": T.records(results),
+        "solve_seconds": sum(r.get("solve_seconds", 0.0) for r in results),
+        "cached": all(r.get("cached") for r in results),
+        "config_hash": hashlib.sha256(
+            "|".join(r.get("config_hash", "") for r in results).encode()
+        ).hexdigest()[:16],
+    }
+    _write_json(folder / SUMMARY, summary)
+    return summary
+
+
 def run():
     """Self-test. Exercises the plumbing — the file protocol, not the LP."""
-    print(f"Job pointer: {POINTER}")
-    a = active()
-    if a is None:
-        print("No job has been started, or its folder is gone.")
-    else:
-        print(f"Active job: {a['state']} — {a.get('label')} at {a.get('site_name')}, "
-              f"{a.get('done')}/{a.get('total')} ({a.get('tag')})")
+    for kind in KINDS:
+        print(f"{kind:11} pointer: {pointer_for(kind)}")
+        a = active(kind)
+        if a is None:
+            print(f"{'':11} no job started, or its folder is gone.")
+        else:
+            print(f"{'':11} {a['state']} — {a.get('label')} at {a.get('site_name')}, "
+                  f"{a.get('done')}/{a.get('total')} ({a.get('tag')})")
     print("\nStatuses on disk:")
-    for st_path in sorted(RUNS.glob(f"*/*/{STATUS}")):
+    for st_path in sorted(RUNS.glob(f"**/{STATUS}")):
         s = read(st_path.parent) or {}
         print(f"  {s.get('state','?'):8} {s.get('done')}/{s.get('total')}  "
               f"{st_path.parent.relative_to(RUNS)}")
