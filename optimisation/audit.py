@@ -83,7 +83,7 @@ DIRECT_BOUND: dict[str, tuple[str, ...]] = {
 # Variables that are accounting devices rather than kit, so an objective may
 # reasonably ignore them.
 NOT_ASSETS = {"unserved", "fc_bop_units", "fc_stack_units", "soc", "tank",
-              "exp", "imp", "ch", "dis", "h2_fc", "h2_buy",
+              "exp", "imp", "ch", "dis", "h2_fc", "h2_buy", "h2_buy_2",
               "p_wind", "p_offshore", "p_solar", "p_ely", "p_fc"}
 
 

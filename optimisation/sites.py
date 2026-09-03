@@ -573,26 +573,40 @@ def build_grid_series(carbon_api_region: int, start="2025-01-01 00:00:00",
     # to see them. A build started on the optimiser's behalf did not choose
     # them, so it puts the file back: a run that silently rewrote the project's
     # config would be a worse surprise than a slow one.
+    overrides = {
+        "GRID_DATA_SOURCE": "carbon_api",
+        "CARBON_API_SCOPE": "regional_auto",
+        "CARBON_API_REGION_ID_OVERRIDE": int(carbon_api_region),
+        "GRID_TIME_MODE": "range",
+        "GRID_RANGE_START": start,
+        "GRID_RANGE_END": end,
+        "RUN_GRID_SCENARIO_LCA": True,
+        "RUN_PRICE_NOTEBOOK_FROM_DASHBOARD": bool(with_prices),
+        "RUN_FOREGROUND_NOTEBOOK_FROM_DASHBOARD": build_foreground,
+    }
     config = CONFIG_PATH.read_text(encoding="utf-8")
     try:
-        result = run_lca({
-            "GRID_DATA_SOURCE": "carbon_api",
-            "CARBON_API_SCOPE": "regional_auto",
-            "CARBON_API_REGION_ID_OVERRIDE": int(carbon_api_region),
-            "GRID_TIME_MODE": "range",
-            "GRID_RANGE_START": start,
-            "GRID_RANGE_END": end,
-            "RUN_GRID_SCENARIO_LCA": True,
-            "RUN_PRICE_NOTEBOOK_FROM_DASHBOARD": bool(with_prices),
-            "RUN_FOREGROUND_NOTEBOOK_FROM_DASHBOARD": build_foreground,
-        }, timeout_s=timeout_s)
+        result = run_lca(overrides, timeout_s=timeout_s)
+        # One retry, and only for a run that died without saying why — the
+        # notebook process disappearing mid-fetch rather than a cell raising.
+        # A cell that raised will raise again and retrying only wastes the
+        # window twice; a killed process usually will not, and the API cache
+        # means the second attempt resumes rather than restarting. This is
+        # worth doing because the cost of not doing it is asymmetric: the
+        # whole optimiser run above is thrown away for a fault that had
+        # nothing to do with it.
+        if not result.success and result.crashed:
+            print("The notebook process died without reporting an error "
+                  f"(exit {result.returncode}). Retrying once — the API cache "
+                  "means it resumes from where it stopped.")
+            result = run_lca(overrides, timeout_s=timeout_s)
     finally:
         if restore_config:
             CONFIG_PATH.write_text(config, encoding="utf-8")
     if not result.success:
         raise RuntimeError(
             f"The pipeline run for region {carbon_api_region} failed.\n"
-            + (result.error_text or "")[-2000:])
+            + (result.error_text or "")[-4000:])
     have = available_grid_regions()
     if carbon_api_region not in have:
         raise RuntimeError(

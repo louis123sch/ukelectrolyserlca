@@ -27,6 +27,26 @@ RUNS_DIR = REPO_DIR / "_streamlit_runs"
 PLOTS_DIR = RUNS_DIR / "plots"
 RUNNER_NOTEBOOK = "1.dashboard_lca_adaptive.ipynb"
 
+# A console window for the notebook child, and what it costs to let one open.
+#
+# The Streamlit page runs a solve through optimisation/dc_job.py, which spawns
+# it DETACHED_PROCESS — deliberately, so nothing aimed at the server's console
+# can reach it. A detached process has no console of its own, so when it starts
+# a console-subsystem child like nbconvert, Windows allocates that child a
+# *brand new console window*: a blank black one titled with this environment's
+# python.exe path, sitting on the desktop for the length of the build.
+#
+# It is not merely untidy. Everything attached to that console receives
+# CTRL_CLOSE_EVENT when its window is closed, so closing what looks like a
+# stray terminal kills nbconvert instantly — non-zero exit, no traceback, and
+# no "[NbConvertApp] ERROR", because the notebook never failed. That is exactly
+# how a region 14 build died mid-fetch after 65 seconds and took the whole
+# optimiser run above it down with an error that named nothing.
+#
+# Nothing needs the console: stdout and stderr are already pipes.
+_NO_WINDOW = ({"creationflags": subprocess.CREATE_NO_WINDOW}
+              if sys.platform == "win32" else {})
+
 OUTPUT_DIRS = [
     "custom_grid_lca_outputs",
     "blended_wind_grid_lca_outputs",
@@ -89,6 +109,14 @@ class RunResult:
     executed_notebook: Path | None = None
     config_backup: Path | None = None
     plots: list[tuple[str, Path]] = field(default_factory=list)
+    returncode: int | None = None
+    # True when nbconvert exited non-zero without reporting a reason of its
+    # own — the process died rather than the notebook failing. A cell that
+    # raises always leaves "[NbConvertApp] ERROR" and a traceback behind, so
+    # its absence is the distinguishing evidence. Callers use it to decide
+    # whether retrying could possibly help: a notebook that raised will raise
+    # again, a process that was killed may well not.
+    crashed: bool = False
 
 
 def _extract_notebook_log(nb_path: Path, max_chars: int = 20000) -> str:
@@ -248,6 +276,7 @@ def run_lca(overrides: dict, secrets: dict | None = None, timeout_s: int = 1800)
             errors="replace",
             timeout=timeout_s + 60,
             env=env,
+            **_NO_WINDOW,
         )
     except subprocess.TimeoutExpired as exc:
         return RunResult(
@@ -259,11 +288,29 @@ def run_lca(overrides: dict, secrets: dict | None = None, timeout_s: int = 1800)
     new_files = _new_or_changed(before, output_dirs)
 
     if proc.returncode != 0 or not executed_path.exists():
+        # Both streams, always, and the exit code with them. Reporting only
+        # stderr's tail is how a failed region-14 build arrived as nothing but
+        # nbconvert's banner and an unrelated zmq warning: the notebook's own
+        # traceback, when there is one, and the exit code that says whether
+        # there could have been one, were both thrown away before anyone saw
+        # them.
+        crashed = "[NbConvertApp] ERROR" not in (proc.stderr or "")
+        parts = [f"nbconvert exited {proc.returncode}"
+                 + ("" if executed_path.exists() else
+                    f", and wrote no {executed_path.name}")
+                 + ("."if not crashed else
+                    " without reporting an error of its own, which means the "
+                    "process died rather than the notebook failing.")]
+        for name, text in (("stderr", proc.stderr), ("stdout", proc.stdout)):
+            if (text or "").strip():
+                parts.append(f"--- {name} ---\n{text[-6000:]}")
         return RunResult(
             success=False,
-            error_text=(proc.stderr or proc.stdout or "nbconvert failed with no output")[-8000:],
+            error_text="\n".join(parts),
             new_files=new_files,
             config_backup=backup_path,
+            returncode=proc.returncode,
+            crashed=crashed,
         )
 
     log_text = _extract_notebook_log(executed_path)

@@ -1,0 +1,55 @@
+{
+  "data": {
+    "regionid": 14,
+    "dnoregion": "UKPN South East",
+    "shortname": "South East England",
+    "data": [
+      {
+        "from": "2025-12-30T23:30Z",
+        "to": "2025-12-31T00:00Z",
+        "intensity": {
+          "forecast": 104,
+          "index": "moderate"
+        },
+        "generationmix": [
+          {
+            "fuel": "biomass",
+            "perc": 0
+          },
+          {
+            "fuel": "coal",
+            "perc": 0
+          },
+          {
+            "fuel": "imports",
+            "perc": 62.2
+          },
+          {
+            "fuel": "gas",
+            "perc": 13.4
+          },
+          {
+            "fuel": "nuclear",
+            "perc": 0
+          },
+          {
+            "fuel": "other",
+            "perc": 0
+          },
+          {
+            "fuel": "hydro",
+            "perc": 0.4
+          },
+          {
+            "fuel": "solar",
+            "perc": 0
+          },
+          {
+            "fuel": "wind",
+            "perc": 24
+          }
+        ]
+      }
+    ]
+  }
+}

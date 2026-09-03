@@ -179,6 +179,50 @@ if GREEN_H2_ELECTRICITY_BASIS not in GREEN_H2_ELECTRICITY_BASES:
 ECOINVENT_GB_LV_GCO2E_PER_KWH = 311.21970194853005
 LEGACY_GREEN_H2_GWP_KGCO2E_PER_KG = 17.00093068911594
 
+# --- delivering it: what separates the two green rows ----------------------
+# Green hydrogen is renewable however the electricity reaches the electrolyser,
+# but reaching it *over the grid* is not free, and the two terms that make it
+# costly are ones ecoinvent separates from generation itself:
+#
+#   losses   1.063495 kWh must be generated per kWh delivered at low voltage,
+#            a 6.35 % gross-up, accumulated over the HV -> MV -> LV chain.
+#   network  8.2125 g CO2e per kWh delivered, being the transmission and
+#            distribution infrastructure: LV distribution 5.932, MV
+#            transmission 1.583, HV transmission 0.655, network maintenance
+#            0.019, SF6 switchgear leakage 0.025.
+#
+# Behind the meter the electrolyser sits on the generator's own terminals and
+# pays neither. That is the entire carbon difference between the two green
+# rows — a *delivery* difference, not a generation one, since the source is
+# renewable in both. Both are derived from ecoinvent 3.9.1 apos's GB
+# `market for electricity, low voltage` by contribution analysis, and
+# ``check_grid_delivery()`` re-derives them from the live database.
+GRID_DELIVERY_LOSS_GROSS_UP = 1.063495
+GRID_DELIVERY_NETWORK_GCO2E_PER_KWH = 8.2125
+# The variant in h2_prices_recommended.csv that takes delivery over the grid.
+GREEN_GRID_DELIVERED_VARIANT = "grid-connected electrolyser"
+
+# Default supply mix. A buyer contracting for green hydrogen on the open market
+# gets a portfolio, not one plant: some of it made behind a generator's meter,
+# some by electrolysers taking renewable power over the network. Both are green —
+# the source is renewable either way — so the mix moves price and delivery burden
+# together and nothing else.
+#
+# ASSUMED. 50:50 is a neutral prior, not a market observation: no GB breakdown of
+# green hydrogen production by connection type is published, and at the current
+# scale of the GB electrolyser fleet any such split would be dominated by a
+# handful of projects. It is exposed as ``green_h2_grid_share`` on
+# ``build_tech()`` precisely so it can be swept rather than trusted.
+# 0.0 is all behind the meter, 1.0 all grid-connected.
+GREEN_H2_GRID_SHARE = 0.5
+
+
+def _resolve_grid_share(grid_share: float | None) -> float:
+    share = GREEN_H2_GRID_SHARE if grid_share is None else float(grid_share)
+    if not 0.0 <= share <= 1.0:
+        raise ValueError(f"green_h2_grid_share must be in [0, 1], got {share!r}")
+    return share
+
 # UK Low Carbon Hydrogen Standard, 20 gCO2e/MJ LHV x 120 MJ/kg. A compliance
 # ceiling, never a coefficient: the standard excludes capital goods and so sets
 # renewable electricity to 0.0 gCO2e/kWh, zero-rating precisely the term being
@@ -187,7 +231,100 @@ LEGACY_GREEN_H2_GWP_KGCO2E_PER_KG = 17.00093068911594
 LCHS_CEILING_KGCO2E_PER_KG = 2.400
 
 
-def green_h2_gwp_per_kg(basis: str | None = None) -> float:
+def _reject_grid_basis(basis: str) -> None:
+    """The grid is not a way of making green hydrogen, and never a basis here."""
+    if basis in ("ecoinvent_gb_grid", "gb_grid", "grid"):
+        raise ValueError(
+            "The GB grid mix is not a basis for green hydrogen — green is "
+            "defined by renewable input, and this pairing charged grid "
+            "generation carbon against a renewable price. Grid electrolysis is "
+            "already modelled as the 'grid_h2' architecture, where the LP "
+            "supplies the electricity carbon from its own half-hourly dispatch. "
+            "For a seller who takes RENEWABLE power over the network, pass "
+            "grid_delivered=True, which adds the network's losses and embodied "
+            "carbon without changing the source. To reproduce a pre-fix run, "
+            "use LEGACY_GREEN_H2_GWP_KGCO2E_PER_KG directly.")
+
+
+def check_grid_delivery(tol_frac: float = 0.02) -> dict:
+    """Re-derive the delivery constants from the live database.
+
+    Same contract as ``check_against_inventory()``: the constants above are kept
+    hard-coded so this module runs without Brightway, and this fails the run if
+    they have drifted from the activities they were taken from.
+    """
+    import bw2calc as bc
+    import bw2data as bd
+
+    import lca_helpers as H
+    from optimisation import electrolysers as ely
+
+    H.setup_brightway()
+    method = ely._gwp_method(bd)
+    ei = bd.Database("ecoinvent-3.9.1-apos")
+    lv = next(a for a in ei if a["name"] == "market for electricity, low voltage"
+              and a.get("location") == "GB")
+    lca = bc.LCA({lv: 1}, method)
+    lca.lci()
+    lca.lcia()
+    rev = {v: k for k, v in lca.activity_dict.items()}
+
+    gen_kwh = network = 0.0
+    for idx, amount in enumerate(lca.supply_array):
+        if abs(amount) < 1e-14:
+            continue
+        act = bd.get_activity(rev[idx])
+        name = act["name"]
+        # Generation is every leaf that produces a kWh; the loss gross-up is
+        # simply how much of it the chain draws to deliver one.
+        if act.get("unit") == "kilowatt hour" and name.startswith("electricity production"):
+            gen_kwh += amount
+        # Take the market rows only: each sits at the top of its own sub-tree,
+        # so construction and maintenance are counted once between them.
+        elif name.startswith("market for") and (
+                "network, electricity" in name
+                or name.startswith("market for sulfur hexafluoride")):
+            network += H.run_lca_score(act, method) * amount
+
+    out = {"loss_gross_up": gen_kwh,
+           "network_gco2e_per_kwh": network * 1000.0,
+           "lv_market_gco2e_per_kwh": lca.score * 1000.0}
+    problems = []
+    for key, const in (("loss_gross_up", GRID_DELIVERY_LOSS_GROSS_UP),
+                       ("network_gco2e_per_kwh", GRID_DELIVERY_NETWORK_GCO2E_PER_KWH),
+                       ("lv_market_gco2e_per_kwh", ECOINVENT_GB_LV_GCO2E_PER_KWH)):
+        if abs(out[key] - const) > tol_frac * abs(const):
+            problems.append(f"{key}: constant {const:.6g}, live {out[key]:.6g}")
+    if problems:
+        raise AssertionError("Grid delivery constants have gone stale:\n  "
+                             + "\n  ".join(problems))
+    out["ok"] = True
+    return out
+
+
+def green_h2_electricity_gco2e_per_kwh(basis: str | None = None, *,
+                                       grid_share: float | None = None) -> float:
+    """Carbon intensity of the electricity the seller's electrolyser consumes.
+
+    ``grid_share`` is the fraction of supply taken over the network rather than
+    off a generator's terminals, and defaults to ``GREEN_H2_GRID_SHARE``. That
+    fraction carries the two costs of delivery — the loss gross-up and the
+    network's own embodied carbon — and neither changes where the electricity
+    came from: green is renewable at any share.
+    """
+    basis = basis or GREEN_H2_ELECTRICITY_BASIS
+    _reject_grid_basis(basis)
+    if basis not in GREEN_H2_ELECTRICITY_BASES:
+        raise ValueError(f"Unknown green H2 electricity basis {basis!r}. "
+                         f"Available: {list(GREEN_H2_ELECTRICITY_BASES)}")
+    share = _resolve_grid_share(grid_share)
+    behind = GREEN_H2_ELECTRICITY_BASES[basis]["gco2e_per_kwh"]
+    delivered = behind * GRID_DELIVERY_LOSS_GROSS_UP + GRID_DELIVERY_NETWORK_GCO2E_PER_KWH
+    return (1.0 - share) * behind + share * delivered
+
+
+def green_h2_gwp_per_kg(basis: str | None = None, *,
+                        grid_share: float | None = None) -> float:
     """kg CO2e per kg of bought green hydrogen, at the seller's gate.
 
     ``foreground_fixed_kgco2e_per_kg`` is everything in the PEM activity that is
@@ -195,26 +332,18 @@ def green_h2_gwp_per_kg(basis: str | None = None) -> float:
     heat — so the electricity term is added once and only once. Do not add
     ``capital_kgco2e_per_kg_h2`` on top of it; that is already inside, and doing
     so inflates the answer by 17.6 %.
+
+    ``grid_share`` mixes the two green supply routes: a seller taking delivery
+    over the network pays for its losses and its embodied carbon, one behind the
+    meter pays for neither. Defaults to ``GREEN_H2_GRID_SHARE``.
     """
     from optimisation import electrolysers as ely
 
-    basis = basis or GREEN_H2_ELECTRICITY_BASIS
-    if basis in ("ecoinvent_gb_grid", "gb_grid", "grid"):
-        raise ValueError(
-            "The GB grid is not a basis for green hydrogen — green is defined "
-            "by renewable input, and this pairing charged grid carbon against a "
-            "behind-the-meter renewable price. Grid electrolysis is already "
-            "modelled as the 'grid_h2' architecture, where the LP supplies the "
-            "electricity carbon from its own half-hourly dispatch. To reproduce "
-            "a pre-fix run, use LEGACY_GREEN_H2_GWP_KGCO2E_PER_KG directly.")
-    if basis not in GREEN_H2_ELECTRICITY_BASES:
-        raise ValueError(f"Unknown green H2 electricity basis {basis!r}. "
-                         f"Available: {list(GREEN_H2_ELECTRICITY_BASES)}")
-    spec = GREEN_H2_ELECTRICITY_BASES[basis]
+    intensity = green_h2_electricity_gco2e_per_kwh(basis, grid_share=grid_share)
     row = next(r for r in ely.decompose_all()
                if r["technology"] == "PEM operation")
     return (row["foreground_fixed_kgco2e_per_kg"]
-            + row["kwh_per_kg"] * spec["gco2e_per_kwh"] / 1000.0)
+            + row["kwh_per_kg"] * intensity / 1000.0)
 
 
 # Non-fuel cost (capex + fixed + variable opex) per kg H2. NESO's blue stack

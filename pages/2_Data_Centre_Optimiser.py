@@ -86,13 +86,21 @@ TDR_AUTO = "Auto — from the load"
 FLAG_CAPS = {"grid": ["cap_grid"], "wind": ["cap_wind"], "solar": ["cap_solar"],
              "battery": ["cap_batt_p", "cap_batt_e"],
              "electrolyser": ["cap_ely"], "tank": ["cap_tank"],
-             "fuel_cell": ["cap_fc"], "buy_h2": []}
+             "fuel_cell": ["cap_fc"], "buy_h2": [], "buy_h2_2": []}
 
 
 @st.cache_resource(show_spinner="Connecting to Brightway…")
 def _connect():
     H.setup_brightway()
     return True
+
+
+@st.cache_data(show_spinner=False)
+def _green_h2_gwp(grid_share: float) -> float:
+    """Bought green H2's gate burden at one supply mix. Cached: it decomposes
+    the PEM foreground, which is a Brightway round trip, and the slider below
+    reruns the page on every notch."""
+    return h2_prices.green_h2_gwp_per_kg(grid_share=grid_share)
 
 
 @st.cache_data(show_spinner=False)
@@ -190,9 +198,16 @@ st.header("1. The data centre")
 
 c1, c2, c3, c4 = st.columns(4)
 with c1:
-    size_mw = st.number_input("IT load (MW)", 0.1, 1000.0, 7.31, step=1.0,
-                              help="7.31 MW is the Zhang et al. foreground's own "
-                                   "continuous draw — the study's baseline case.")
+    size_mw = st.number_input("IT load (MW)", 0.1, 1000.0, 100.0, step=1.0,
+                              help="100 MW is the default — a hyperscale build, "
+                                   "and the scale at which the siting and "
+                                   "connection questions actually bite. It is at "
+                                   "or above `network_charges."
+                                   "TRANSMISSION_MW_ASSUMED`, so the site is "
+                                   "treated as transmission-connected and pays "
+                                   "TNUoS rather than DUoS. Set **7.31** for the "
+                                   "Zhang et al. foreground's own continuous "
+                                   "draw, the study's original reference case.")
 with c2:
     pue = st.number_input("PUE", 1.0, 2.0, 1.50, step=0.05,
                           help="1.50 is the base case. IT load x PUE is the "
@@ -560,10 +575,19 @@ with c3:
         "Electrolyser technology", list(ELY_MAP), key="kit_ely_choice",
         help="One at a time — the LP prices a single electrolyser technology "
              "per solve. Click a selected pill again to deselect it.")
+    # This control used to be single-select, so a session that predates the
+    # change has a bare string sitting in its state where a list now belongs.
+    if isinstance(st.session_state.get("kit_buy_choice"), str):
+        st.session_state["kit_buy_choice"] = [st.session_state["kit_buy_choice"]]
     buy_choice = st.pills(
         "Buy hydrogen instead", list(COLOUR_MAP), key="kit_buy_choice",
+        selection_mode="multi",
         help="Plant-gate price and burden from the Hydrogen table at the "
-             "bottom of this page. One colour at a time, same reason as above.")
+             "bottom of this page. **Both colours can run at once**: they are "
+             "separate contracts with their own price and their own gate "
+             "burden, each with its own variable in the LP, and the sweep "
+             "decides the mix rather than being told it. Buying only the "
+             "cheaper one is then a result, not an assumption.")
     any_hydrogen = bool(ely_choice) or bool(buy_choice)
     if any_hydrogen:
         st.session_state["kit_fuel_cell"] = True
@@ -582,12 +606,52 @@ with c3:
         help="baseload holds a capacity-factor floor; flexible runs on surplus "
              "only; free lets the LP decide.")
 
-f_ely, f_buy = bool(ely_choice), bool(buy_choice)
-ely_tech, colour = ELY_MAP.get(ely_choice), COLOUR_MAP.get(buy_choice)
+# Kept in the pills' own order so the label and the LP's two streams agree, and
+# so ticking the same pair twice gives the same run key and hits the cache.
+buy_colours = [COLOUR_MAP[c] for c in list(COLOUR_MAP) if c in (buy_choice or [])]
+colour = buy_colours[0] if buy_colours else None
+colour_2 = buy_colours[1] if len(buy_colours) > 1 else None
+
+f_ely, f_buy = bool(ely_choice), bool(buy_colours)
+ely_tech = ELY_MAP.get(ely_choice)
 
 flags = {"grid": True, "wind": f_wind, "offshore_wind": False, "solar": f_solar,
          "battery": f_batt, "electrolyser": f_ely, "tank": f_tank,
-         "fuel_cell": f_fc, "buy_h2": f_buy}
+         "fuel_cell": f_fc, "buy_h2": f_buy, "buy_h2_2": colour_2 is not None}
+
+# --- how bought green hydrogen reaches its electrolyser ----------------------
+# Only asked when green is actually being bought: it is the one colour whose
+# price table carries two rows, and the only input on this page whose effect is
+# purely a delivery question rather than a generation one.
+green_share = None
+if "green" in buy_colours:
+    green_share = st.slider(
+        "Bought green H₂ — share taken over the grid", 0.0, 1.0,
+        float(h2_prices.GREEN_H2_GRID_SHARE), step=0.05, format="%.2f",
+        help="Where the *seller's* electrolyser gets its renewable electricity. "
+             "**0.00** is all behind a generator's meter; **1.00** is all taken "
+             "over the network. Green is renewable either way — the source does "
+             "not change — so this moves two delivery terms and nothing else: "
+             f"a {h2_prices.GRID_DELIVERY_LOSS_GROSS_UP:.4g}x gross-up for "
+             "network losses and "
+             f"{h2_prices.GRID_DELIVERY_NETWORK_GCO2E_PER_KWH:.4g} gCO₂e/kWh of "
+             "transmission and distribution infrastructure, plus the UK network "
+             "fees and taxes that separate the two green rows of "
+             "`h2_prices_recommended.csv`. The default "
+             f"{h2_prices.GREEN_H2_GRID_SHARE:.0%} is an **assumed** neutral "
+             "prior, not a market observation — no GB breakdown of green "
+             "hydrogen by connection type is published — which is exactly why "
+             "it is a slider.")
+    _g_gwp, _g_lo, _g_hi = (_green_h2_gwp(green_share), _green_h2_gwp(0.0),
+                            _green_h2_gwp(1.0))
+    st.caption(
+        f"At {green_share:.0%} over the grid, bought green hydrogen carries "
+        f"**{_g_gwp:.3f} kg CO₂e/kg** at the seller's gate "
+        f"({_g_lo:.3f} all behind the meter, {_g_hi:.3f} all grid-connected). "
+        f"The UK Low Carbon Hydrogen Standard ceiling is "
+        f"{h2_prices.LCHS_CEILING_KGCO2E_PER_KG:.3f}, on a basis that "
+        "zero-rates renewable electricity and excludes capital goods, so it is "
+        "a compliance line rather than a comparison.")
 
 # --- what this combination can and cannot do --------------------------------
 problems, warnings = [], []
@@ -649,13 +713,15 @@ kit_on = [k for k in A.ASSET_FLAGS if flags[k]]
 LABELS = {"grid": "grid", "wind": "wind", "solar": "solar", "battery": "battery",
           "electrolyser": f"{ely_choice} electrolyser" if ely_choice else "electrolyser",
           "tank": "H₂ storage", "fuel_cell": "fuel cell",
-          "buy_h2": f"bought {colour} H₂"}
+          "buy_h2": f"bought {colour} H₂",
+          "buy_h2_2": f"bought {colour_2} H₂"}
 label = " + ".join(LABELS[k] for k in kit_on) or "nothing"
 
 scenario = A.Scenario(
     n=0, architecture="custom", label=label, assets=flags,
     ely_tech=ely_tech if f_ely else None,
     h2_colour=colour if f_buy else None,
+    h2_colour_2=colour_2,
     strategy=strategy if f_ely else "free",
 )
 
@@ -683,6 +749,7 @@ if launch:
         resample_hours=(resample or None), points=int(points),
         cost_case=cost_case, horizon_years=horizon,
         unserved_fraction=unserved, gwp_target_kg_per_year=gwp_target,
+        green_h2_grid_share=green_share,
         connection_headroom=headroom, refresh=refresh,
         # Always: it is a few MB, and a run whose dispatch was not kept cannot
         # be asked about later without solving it again.

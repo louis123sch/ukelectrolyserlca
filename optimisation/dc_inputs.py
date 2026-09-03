@@ -198,9 +198,12 @@ def resample(series: dc_model.Series, freq_hours: float) -> dc_model.Series:
 def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
                tank_design: str | None = None, h2_colour: str | None = None,
                cost_case: str = "central", horizon_years: float = 25.0,
-               size_mw_it: float = 7.31, pue: float = 1.15,
+               size_mw_it: float = 100.0, pue: float = 1.15,
                solar_basis: str | None = None, h2_variant: str | None = None,
-               green_h2_basis: str | None = None) -> dc_model.Tech:
+               green_h2_basis: str | None = None,
+               green_h2_grid_share: float | None = None,
+               h2_colour_2: str | None = None,
+               h2_variant_2: str | None = None) -> dc_model.Tech:
     """Resolve every coefficient the LP needs. Touches Brightway only via caches.
 
     ``solar_basis`` selects the inventory behind solar's embodied carbon and
@@ -214,9 +217,21 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
     activity. Pass ``"ecoinvent_gb_grid"`` to reproduce results from before that
     default changed. It has no effect on any other colour.
 
-    ``h2_variant`` picks between rows of one colour in
-    ``h2_prices_recommended.csv`` where there is more than one; only green has
-    two, and they differ in price, not in carbon.
+    ``green_h2_grid_share`` is the fraction of bought green hydrogen taken over
+    the network rather than from behind a generator's meter, and defaults to
+    ``h2_prices.GREEN_H2_GRID_SHARE`` (0.5). It blends the two green price rows
+    and their delivery burdens together, since both are renewable and differ only
+    in how the electricity reaches the seller's electrolyser.
+
+    ``h2_variant`` pins one row of ``h2_prices_recommended.csv`` instead of
+    blending; only green has two. Passing it overrides ``green_h2_grid_share``.
+
+    ``h2_colour_2`` is a second bought colour, priced on its own row and given
+    its own LP variable, so a site can hold a cheap dirty contract and an
+    expensive clean one at the same time and let the sweep decide the mix. It
+    must differ from ``h2_colour``: two streams of one colour are the same
+    commodity at the same price, and the split between them would be arbitrary.
+    ``h2_variant_2`` pins its row the way ``h2_variant`` pins the first.
     """
     import dashboard_config as cfg
     from optimisation import battery as batt
@@ -273,33 +288,55 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
     fcc = hc.fuel_cell_costs()
     fcr = fcc[fcc.case == cost_case].iloc[0]
 
-    # bought hydrogen
-    h2_price = h2_gwp = 0.0
-    if h2_colour:
+    # bought hydrogen — one stream per colour bought, priced independently
+    def resolve_bought(colour: str | None, variant: str | None):
+        """(GBP/kg, kgCO2e/kg, variant label) for one purchased colour."""
+        if not colour:
+            return 0.0, 0.0, variant
         rec = pd.read_csv(OUT_DIR / "h2_prices_recommended.csv")
-        row = rec[rec.colour == h2_colour]
+        row = rec[rec.colour == colour]
         if row.empty:
-            raise ValueError(f"Unknown H2 colour {h2_colour!r}. "
+            raise ValueError(f"Unknown H2 colour {colour!r}. "
                              f"Available: {sorted(rec.colour.unique())}")
-        if h2_variant is not None:
-            row = row[row.variant == h2_variant]
+        if variant is not None:
+            row = row[row.variant == variant]
             if row.empty:
                 raise ValueError(
-                    f"Unknown variant {h2_variant!r} for colour {h2_colour!r}. "
-                    f"Available: {sorted(rec[rec.colour == h2_colour].variant)}")
-        elif len(row) > 1:
-            # Green carries two rows, and the choice was previously made by an
-            # undocumented .iloc[0] that left the second unreachable. The
-            # default is deliberate and is the same one headline_prices() makes:
-            # behind the meter is the configuration this study's own electrolyser
-            # sees, and the only one where a renewable electricity claim needs no
-            # certificate to stand up. The difference between the two rows is
-            # cost, not carbon — 2.77 EUR/kg of UK network fees and taxes — so
-            # this selects a price, not an emissions basis.
-            row = row.iloc[[0]]
-        h2_variant = str(row.iloc[0].variant)
-        h2_price = float(row.iloc[0][cost_case])
-        h2_gwp = _bought_h2_gwp(row.iloc[0].activity_code, green_h2_basis)
+                    f"Unknown variant {variant!r} for colour {colour!r}. "
+                    f"Available: {sorted(rec[rec.colour == colour].variant)}")
+        grid_variant = h2_prices.GREEN_GRID_DELIVERED_VARIANT
+        if len(row) > 1 and grid_variant in list(row.variant):
+            # Green is bought as a portfolio, not from one plant: some behind a
+            # generator's meter, some over the network. Both are renewable, so
+            # the share moves price and delivery burden together and nothing
+            # else. Previously an undocumented .iloc[0] took the first row and
+            # left the second unreachable.
+            share = h2_prices._resolve_grid_share(green_h2_grid_share)
+            behind = row[row.variant != grid_variant].iloc[0]
+            delivered = row[row.variant == grid_variant].iloc[0]
+            return (((1.0 - share) * float(behind[cost_case])
+                     + share * float(delivered[cost_case])),
+                    _bought_h2_gwp(behind.activity_code, green_h2_basis,
+                                   grid_share=share),
+                    f"{1.0 - share:.0%} behind the meter / "
+                    f"{share:.0%} grid-connected")
+        # One row: either a colour with a single variant, or green pinned to
+        # one of its two by an explicit variant.
+        one = row.iloc[0]
+        return (float(one[cost_case]),
+                _bought_h2_gwp(one.activity_code, green_h2_basis,
+                               grid_share=(1.0 if str(one.variant) == grid_variant
+                                           else 0.0)),
+                str(one.variant))
+
+    h2_price, h2_gwp, h2_variant = resolve_bought(h2_colour, h2_variant)
+    h2_price_2, h2_gwp_2, h2_variant_2 = resolve_bought(h2_colour_2, h2_variant_2)
+    if h2_colour and h2_colour_2 == h2_colour:
+        raise ValueError(
+            f"Both bought-hydrogen streams are {h2_colour!r}. Two streams of "
+            "the same colour are the same commodity at the same price, so the "
+            "split between them is arbitrary and the result says nothing. Pick "
+            "two different colours, or leave the second one unset.")
 
     dc = data_centre_coefficients()
     scale_dc = (size_mw_it * pue) / dc["reference_mw"]
@@ -340,19 +377,25 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
         batt_leakage_per_hour=batt.STANDING_LOSS_PER_HOUR,
         fc_kg_h2_per_mwh=d["h2_kg_per_MWh"],
         bought_h2_gbp_per_kg=h2_price, bought_h2_gwp_per_kg=h2_gwp,
+        bought_h2_2_gbp_per_kg=h2_price_2, bought_h2_2_gwp_per_kg=h2_gwp_2,
         dc_fixed_gwp_per_year=dc["fixed_kgco2e_per_year"] * scale_dc,
         dc_other_gwp_per_mwh=0.0,
         horizon_years=horizon_years,
         labels={"site": getattr(site, "key", site), "ely_tech": ely_tech, "tank_design": tank_design,
                 "h2_colour": h2_colour, "cost_case": cost_case, "solar_basis": solar_basis,
-                "h2_variant": h2_variant, "green_h2_basis": green_h2_basis},
+                "h2_variant": h2_variant, "green_h2_basis": green_h2_basis,
+                "h2_colour_2": h2_colour_2, "h2_variant_2": h2_variant_2,
+                "green_h2_grid_share": (
+                    h2_prices._resolve_grid_share(green_h2_grid_share)
+                    if "green" in (h2_colour, h2_colour_2) else None)},
     )
 
 
 _H2_GWP_CACHE = OUT_DIR / "bought_h2_gwp_cache.json"
 
 
-def _bought_h2_gwp(activity_code: str, green_basis: str | None = None) -> float:
+def _bought_h2_gwp(activity_code: str, green_basis: str | None = None, *,
+                   grid_share: float | None = None) -> float:
     """kg CO2e per kg of purchased hydrogen, from its own foreground activity.
 
     Green is assembled rather than scored whole. Its activity links 54 kWh/kg to
@@ -364,7 +407,7 @@ def _bought_h2_gwp(activity_code: str, green_basis: str | None = None) -> float:
     from optimisation import h2_prices
 
     if activity_code == h2_prices.INVENTORY["green"]["code"]:
-        return h2_prices.green_h2_gwp_per_kg(green_basis)
+        return h2_prices.green_h2_gwp_per_kg(green_basis, grid_share=grid_share)
 
     cache = {}
     if _H2_GWP_CACHE.exists():

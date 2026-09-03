@@ -63,6 +63,14 @@
     "region_name": "South England",
     "tnuos_zone": 13
   },
+  "51.3,1.2": {
+    "carbon_api_region": 14,
+    "outcode": "CT3",
+    "place": "Canterbury",
+    "postcode": "CT3 1SQ",
+    "region_name": "South East England",
+    "tnuos_zone": 11
+  },
   "51.482,-3.179": {
     "carbon_api_region": 7,
     "outcode": "CF10",
@@ -132,6 +140,22 @@
     "outcode": "NR3",
     "place": "Norwich",
     "postcode": "NR3 1FH",
+    "region_name": "East England",
+    "tnuos_zone": 9
+  },
+  "52.85,1.04": {
+    "carbon_api_region": 10,
+    "outcode": "NR24",
+    "place": "North Norfolk",
+    "postcode": "NR24 2SF",
+    "region_name": "East England",
+    "tnuos_zone": 9
+  },
+  "52.95,1.04": {
+    "carbon_api_region": 10,
+    "outcode": "NR25",
+    "place": "North Norfolk",
+    "postcode": "NR25 7TF",
     "region_name": "East England",
     "tnuos_zone": 9
   },
@@ -206,6 +230,14 @@
     "postcode": null,
     "region_name": "South Scotland",
     "tnuos_zone": 2
+  },
+  "55.35,-5.68": {
+    "carbon_api_region": 1,
+    "outcode": "PA28",
+    "place": "Argyll and Bute",
+    "postcode": "PA28 6RN",
+    "region_name": "North Scotland",
+    "tnuos_zone": 1
   },
   "55.7,-6.48": {
     "carbon_api_region": 1,

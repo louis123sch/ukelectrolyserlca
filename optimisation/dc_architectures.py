@@ -57,9 +57,10 @@ STRATEGIES = ("baseload", "flexible", "free")
 # A named architecture is one particular subset of these; a custom one is any
 # subset at all, which is what the Streamlit page hands over.
 ASSET_FLAGS = ("grid", "wind", "offshore_wind", "solar", "battery",
-               "electrolyser", "tank", "fuel_cell", "buy_h2")
+               "electrolyser", "tank", "fuel_cell", "buy_h2", "buy_h2_2")
 _SHORT = dict(grid="g", wind="w", offshore_wind="o", solar="s", battery="b",
-              electrolyser="e", tank="t", fuel_cell="f", buy_h2="x")
+              electrolyser="e", tank="t", fuel_cell="f", buy_h2="x",
+              buy_h2_2="y")
 
 
 def custom(flags: dict, *, grid_limit_mw=None, offshore=False,
@@ -116,6 +117,10 @@ class Scenario:
     label: str
     ely_tech: str | None = None
     h2_colour: str | None = None
+    # A second bought colour, priced independently of the first. Only the
+    # custom architecture uses it — the named ones each make a statement about
+    # one colour, and blending two inside them would destroy that.
+    h2_colour_2: str | None = None
     strategy: str = "free"
     tank_design: str | None = None
     note: str = ""
@@ -132,6 +137,8 @@ class Scenario:
             bits.append(self.ely_tech.split()[0].lower())
         if self.h2_colour:
             bits.append(self.h2_colour)
+        if self.h2_colour_2:
+            bits.append(self.h2_colour_2)
         if self.strategy != "free" or not self.h2_colour:
             bits.append(self.strategy)
         return "_".join(bits)

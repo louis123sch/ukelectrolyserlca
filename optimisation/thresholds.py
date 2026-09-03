@@ -146,10 +146,14 @@ class Knob:
 
 KNOBS: dict[str, Knob] = {k.name: k for k in (
     Knob("h2_price", "Bought hydrogen price", "GBP/kg",
-         ("bought_h2_gbp_per_kg",), "absolute", "down", 0.05, 40.0, ("buy_h2",),
+         ("bought_h2_gbp_per_kg", "bought_h2_2_gbp_per_kg"), "absolute", "down",
+         0.05, 40.0, ("buy_h2",),
          note="Price only. The carbon intensity of bought hydrogen stays on its "
               "colour's own foreground activity — sweeping the price must not "
-              "silently make the hydrogen cleaner too."),
+              "silently make the hydrogen cleaner too. Where a scenario buys "
+              "two colours, both are set to the swept price: this asks what "
+              "bought hydrogen has to cost, and leaving one colour pinned "
+              "would only measure how fast the LP switches to it."),
     Knob("ely_capex", "Electrolyser annualised cost", "x today",
          ("cost_ely",), "multiplier", "down", 0.01, 1.0, ("electrolyser",)),
     Knob("fc_capex", "Fuel cell annualised cost", "x today",
@@ -241,7 +245,9 @@ def _probe(series, assets, tech, knob, value, *, strategy, unserved_fraction,
     row.update({
         "value": float(value),
         "h2_share_of_load": max(fc_mwh / demand_mwh, 0.0) if demand_mwh else 0.0,
-        "h2_bought_kg_per_year": float(V["h2_buy"].solution.sum()) * series_v.annual_scale,
+        "h2_bought_kg_per_year": (float(V["h2_buy"].solution.sum())
+                                  + float(V["h2_buy_2"].solution.sum()))
+                                 * series_v.annual_scale,
         "h2_made_kg_per_year": (
             float(V["p_ely"].solution.sum()) * series_v.dt_hours * series_v.annual_scale
             * 1000.0 / (tech_v.ely_kwh_per_kg + tech_v.tank_compression_kwh_per_kg)),
@@ -317,11 +323,12 @@ def _bracket_and_bisect(f, knob, base, *, target, rel_tol, max_expand, progress)
 # --------------------------------------------------------------------------
 def find(scenario, knob_name: str, *, site=sites.DEFAULT_PRESET,
          start: str = "2025-01-01", end: str = "2025-12-29",
-         size_mw_it: float = 7.31, pue: float = 1.0,
+         size_mw_it: float = 100.0, pue: float = 1.0,
          resample_hours: float | None = 1.0, cost_case: str = "central",
          horizon_years: float = 25.0, unserved_fraction: float = 0.0,
          connection_headroom: float | None = None,
          h2_colour: str | None = None,
+         green_h2_grid_share: float | None = None,
          gwp_limit_kg_per_year: float | None = None,
          target_share: float = ENTRY_SHARE, rel_tol: float = REL_TOL,
          max_expand: int = 12, out_root: Path | None = None,
@@ -352,6 +359,8 @@ def find(scenario, knob_name: str, *, site=sites.DEFAULT_PRESET,
                      "ely_tech": scenario.ely_tech, "strategy": scenario.strategy,
                      "tank_design": scenario.tank_design, "assets": scenario.assets},
         "h2_colour": colour,
+        "h2_colour_2": scenario.h2_colour_2,
+        "green_h2_grid_share": green_h2_grid_share,
         "site": {"key": site.key, "lat": site.lat, "lon": site.lon,
                  "tnuos_zone": site.tnuos_zone, "tdr_band": site.tdr_band,
                  "connection_limit_mw": site.connection_limit_mw},
@@ -381,7 +390,8 @@ def find(scenario, knob_name: str, *, site=sites.DEFAULT_PRESET,
         scenario, site=site, start=start, end=end, size_mw_it=size_mw_it, pue=pue,
         resample_hours=resample_hours, cost_case=cost_case,
         horizon_years=horizon_years, connection_headroom=connection_headroom,
-        h2_colour=colour, notice=notice))
+        h2_colour=colour, green_h2_grid_share=green_h2_grid_share,
+        notice=notice))
 
     missing = [f for f in knob.needs if not getattr(assets, f)]
     if missing:
@@ -429,7 +439,8 @@ def find(scenario, knob_name: str, *, site=sites.DEFAULT_PRESET,
 
 
 def prepare(scenario, *, site, start, end, size_mw_it, pue, resample_hours,
-            cost_case, horizon_years, connection_headroom, h2_colour, notice=None):
+            cost_case, horizon_years, connection_headroom, h2_colour,
+            green_h2_grid_share=None, notice=None):
     """Series, assets, tech and meta for one scenario — built once, swept many.
 
     Split out because every knob on a scenario shares them, and rebuilding the
@@ -445,6 +456,8 @@ def prepare(scenario, *, site, start, end, size_mw_it, pue, resample_hours,
         series = I.resample(series, resample_hours)
     tech = I.build_tech(site, meta, ely_tech=scenario.ely_tech or "PEM operation",
                         tank_design=scenario.tank_design, h2_colour=h2_colour,
+                        h2_colour_2=scenario.h2_colour_2,
+                        green_h2_grid_share=green_h2_grid_share,
                         cost_case=cost_case, horizon_years=horizon_years,
                         size_mw_it=size_mw_it, pue=pue)
     assets = A.architecture(scenario.architecture, offshore=site.offshore_wind,
@@ -455,6 +468,8 @@ def prepare(scenario, *, site, start, end, size_mw_it, pue, resample_hours,
     # Supplying a colour is what unlocks it — see find(h2_colour=...).
     if h2_colour is None and assets.buy_h2:
         assets = replace(assets, buy_h2=False)
+    if scenario.h2_colour_2 is None and assets.buy_h2_2:
+        assets = replace(assets, buy_h2_2=False)
     return series, assets, tech, meta
 
 
@@ -534,6 +549,10 @@ def from_run(run_folder) -> dict:
             "unserved_fraction": cfg.get("unserved_fraction", 0.0),
             "connection_headroom": site_cfg.get("connection_headroom"),
             "h2_colour": scenario.h2_colour,
+            # The share the front was actually solved at, not the module
+            # default: a threshold annotating that front has to price bought
+            # green hydrogen the same way the front did.
+            "green_h2_grid_share": cfg.get("green_h2_grid_share"),
         },
         "config": cfg,
         "stale": bool(moved),
@@ -577,12 +596,13 @@ def sweep(scenario, knobs=DEFAULT_KNOBS, *, progress=None, **kw) -> list[dict]:
     prep = prepare(
         scenario, site=site,
         start=kw.get("start", "2025-01-01"), end=kw.get("end", "2025-12-29"),
-        size_mw_it=kw.get("size_mw_it", 7.31), pue=kw.get("pue", 1.0),
+        size_mw_it=kw.get("size_mw_it", 100.0), pue=kw.get("pue", 1.0),
         resample_hours=kw.get("resample_hours", 1.0),
         cost_case=kw.get("cost_case", "central"),
         horizon_years=kw.get("horizon_years", 25.0),
         connection_headroom=kw.get("connection_headroom"),
         h2_colour=kw.get("h2_colour") or scenario.h2_colour,
+        green_h2_grid_share=kw.get("green_h2_grid_share"),
         notice=kw.get("notice"))
     out = []
     for name in knobs:

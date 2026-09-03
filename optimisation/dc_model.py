@@ -104,6 +104,13 @@ class Assets:
     tank: bool = False
     fuel_cell: bool = False
     buy_h2: bool = False
+    # A second bought-hydrogen contract, running alongside the first. Two
+    # colours at once is a real purchasing position rather than a modelling
+    # convenience: a cheap dirty one and an expensive clean one are different
+    # commodities, and what mix of them is right is exactly the question the
+    # cost/carbon sweep answers. With one colour this stays off and nothing
+    # about the model changes.
+    buy_h2_2: bool = False
 
     grid_limit_mw: float | None = None
     allow_export: bool = False
@@ -141,6 +148,12 @@ class Tech:
     # data centre itself, constant across options
     dc_fixed_gwp_per_year: float; dc_other_gwp_per_mwh: float
     horizon_years: float
+    # The second bought colour. It sits down here rather than beside its
+    # sibling above only because a dataclass cannot put a defaulted field
+    # before an undefaulted one, and the default is what keeps every existing
+    # single-colour Tech literal constructing unchanged.
+    bought_h2_2_gbp_per_kg: float = 0.0
+    bought_h2_2_gwp_per_kg: float = 0.0
     labels: dict = field(default_factory=dict)
 
 
@@ -183,12 +196,23 @@ def build_model(series: Series, assets: Assets, tech: Tech, *,
     """
     import linopy
 
-    if assets.buy_h2 and tech.bought_h2_gbp_per_kg <= 0:
-        raise ValueError(
-            "This architecture may buy hydrogen but no colour was priced, so "
-            "bought_h2_gbp_per_kg is 0 — the LP would buy free, zero-carbon "
-            "hydrogen and every result would be nonsense. Set h2_colour on the "
-            "scenario, or lock buy_h2 off.")
+    # The bought-hydrogen streams, in the order the UI shows them. Each is a
+    # separate contract with its own price and its own gate burden, so each
+    # gets its own variable; the tank does not care which one filled it.
+    bought = (("h2_buy", assets.buy_h2,
+               tech.bought_h2_gbp_per_kg, tech.bought_h2_gwp_per_kg,
+               "buy_h2", "h2_colour"),
+              ("h2_buy_2", assets.buy_h2_2,
+               tech.bought_h2_2_gbp_per_kg, tech.bought_h2_2_gwp_per_kg,
+               "buy_h2_2", "h2_colour_2"))
+    for var, on, gbp, _gwp, flag, colour_key in bought:
+        if on and gbp <= 0:
+            raise ValueError(
+                f"This architecture may buy hydrogen on the {var!r} stream but "
+                f"no colour was priced, so its £/kg is 0 — the LP would buy "
+                f"free, zero-carbon hydrogen and every result would be "
+                f"nonsense. Set {colour_key} on the scenario, or lock {flag} "
+                f"off.")
 
     n, dt = series.n, series.dt_hours
     t = pd.RangeIndex(n, name="t")
@@ -230,6 +254,7 @@ def build_model(series: Series, assets: Assets, tech: Tech, *,
         "soc": flow(assets.battery, "soc"),
         "p_ely": flow(assets.electrolyser, "p_ely"),
         "h2_buy": flow(assets.buy_h2, "h2_buy"),
+        "h2_buy_2": flow(assets.buy_h2_2, "h2_buy_2"),
         "tank": flow(assets.tank, "tank"),
         "h2_fc": flow(assets.fuel_cell, "h2_fc"),
         "p_fc": flow(assets.fuel_cell, "p_fc"),
@@ -274,7 +299,8 @@ def build_model(series: Series, assets: Assets, tech: Tech, *,
     keep_h = 1.0 - tech.tank_leakage_per_hour * dt
     m.add_constraints(
         V["tank"] - keep_h * V["tank"].roll(t=1)
-        - kg_per_mwh_in * dt * V["p_ely"] - V["h2_buy"] + V["h2_fc"] == 0, name="tank_soc")
+        - kg_per_mwh_in * dt * V["p_ely"] - V["h2_buy"] - V["h2_buy_2"]
+        + V["h2_fc"] == 0, name="tank_soc")
     m.add_constraints(V["tank"] - V["cap_tank"] <= 0, name="tank_cap")
 
     # --- (9) grid --------------------------------------------------------
@@ -330,6 +356,7 @@ def build_model(series: Series, assets: Assets, tech: Tech, *,
         + tech.cost_grid_per_mw_year * V["cap_grid"]
         + scale * (price * V["imp"] * dt).sum()
         + scale * (tech.bought_h2_gbp_per_kg * V["h2_buy"]).sum()
+        + scale * (tech.bought_h2_2_gbp_per_kg * V["h2_buy_2"]).sum()
         + scale * (VOLL_GBP_PER_MWH * V["unserved"] * dt).sum()
         - scale * (price * V["exp"] * dt).sum()
     )
@@ -349,6 +376,7 @@ def build_model(series: Series, assets: Assets, tech: Tech, *,
         + scale * (tech.gwp_fc_maint_per_mwh * V["p_fc"] * dt).sum()
         + scale * (ci * V["imp"] * dt).sum()
         + scale * (tech.bought_h2_gwp_per_kg * V["h2_buy"]).sum()
+        + scale * (tech.bought_h2_2_gwp_per_kg * V["h2_buy_2"]).sum()
         + scale * (tech.ely_variable_gwp_per_kg * kg_per_mwh_in * V["p_ely"] * dt).sum()
     )
 
@@ -474,8 +502,20 @@ def contributions(V, obj, series, tech, assets) -> dict:
     cap = {k: float(V[k].solution) for k in
            ("cap_wind", "cap_offshore", "cap_solar", "cap_batt_p", "cap_batt_e",
             "cap_ely", "cap_tank", "cap_fc")}
-    ser = {k: V[k].solution.values for k in ("imp", "p_ely", "p_fc", "h2_buy", "unserved")}
+    ser = {k: V[k].solution.values for k in
+           ("imp", "p_ely", "p_fc", "h2_buy", "h2_buy_2", "unserved")}
     kg_per_mwh_in = 1000.0 / (tech.ely_kwh_per_kg + tech.tank_compression_kwh_per_kg)
+
+    # Two bought colours are two line items, not one: the whole reason for
+    # buying both is that they differ in price and in burden, and a single
+    # merged row would hide exactly the trade being made. Named by colour where
+    # build_tech recorded one, so the reader knows which is which.
+    def bought_row(key: str, fallback: str) -> str:
+        colour = (tech.labels or {}).get(key)
+        return f"bought H2 ({colour})" if colour else fallback
+
+    buy_1, buy_2 = (bought_row("h2_colour", "bought H2"),
+                    bought_row("h2_colour_2", "bought H2, second colour"))
 
     gwp = {
         "wind": tech.gwp_wind * cap["cap_wind"],
@@ -490,7 +530,8 @@ def contributions(V, obj, series, tech, assets) -> dict:
     }
     gwp_op = {
         "grid import": scale * float((series.grid_gwp_per_mwh * ser["imp"] * dt).sum()),
-        "bought H2": scale * tech.bought_h2_gwp_per_kg * float(ser["h2_buy"].sum()),
+        buy_1: scale * tech.bought_h2_gwp_per_kg * float(ser["h2_buy"].sum()),
+        buy_2: scale * tech.bought_h2_2_gwp_per_kg * float(ser["h2_buy_2"].sum()),
         "electrolyser consumables": scale * tech.ely_variable_gwp_per_kg
                                     * kg_per_mwh_in * float((ser["p_ely"] * dt).sum()),
         "fuel cell maintenance": scale * tech.gwp_fc_maint_per_mwh
@@ -509,7 +550,8 @@ def contributions(V, obj, series, tech, assets) -> dict:
     }
     cost_op = {
         "grid energy + network": scale * float((series.grid_price_per_mwh * ser["imp"] * dt).sum()),
-        "bought H2": scale * tech.bought_h2_gbp_per_kg * float(ser["h2_buy"].sum()),
+        buy_1: scale * tech.bought_h2_gbp_per_kg * float(ser["h2_buy"].sum()),
+        buy_2: scale * tech.bought_h2_2_gbp_per_kg * float(ser["h2_buy_2"].sum()),
         "unserved (VoLL)": scale * VOLL_GBP_PER_MWH * float((ser["unserved"] * dt).sum()),
         "connection fixed": tech.cost_grid_fixed_per_year,
     }
@@ -586,7 +628,8 @@ def serve_stack(df: pd.DataFrame) -> pd.DataFrame:
 def dispatch_frame(V, series) -> pd.DataFrame:
     """The solved dispatch as a tidy half-hourly (or hourly) frame."""
     cols = ("p_wind", "p_offshore", "p_solar", "ch", "dis", "soc", "p_ely",
-            "h2_buy", "tank", "h2_fc", "p_fc", "imp", "exp", "unserved")
+            "h2_buy", "h2_buy_2", "tank", "h2_fc", "p_fc", "imp", "exp",
+            "unserved")
     df = pd.DataFrame({k: V[k].solution.values for k in cols}, index=series.index)
     df.insert(0, "demand", series.demand_mw)
     df["grid_gwp_per_mwh"] = series.grid_gwp_per_mwh

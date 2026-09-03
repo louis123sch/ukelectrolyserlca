@@ -38,7 +38,7 @@ def main(argv=None):
                     help="grid connection cap in MW; omit for unconstrained")
     ap.add_argument("--tdr-band", default=sites.DEFAULT_TDR_BAND,
                     help="TNUoS demand residual band, by agreed capacity")
-    ap.add_argument("--dc-size", type=float, default=7.31, help="IT load, MW")
+    ap.add_argument("--dc-size", type=float, default=100.0, help="IT load, MW")
     ap.add_argument("--pue", type=float, default=1.0,
                     help="1.0 reproduces the Zhang foreground, whose figure is already facility-level")
     ap.add_argument("--start", default="2025-01-01")

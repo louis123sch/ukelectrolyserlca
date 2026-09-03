@@ -159,12 +159,55 @@ is that restated offshore (5.750) comes out *above* restated onshore (5.635)
 despite ecoinvent's offshore being 18 % dirtier per kWh — the 50.5 % load factor
 absorbs the whole difference, inverting the physical ordering.
 
-**The two green price rows are a cost distinction, not a carbon one.** £8.33/kg
-is £4.93 plus €2.77/kg of UK network fees and taxes; both describe renewable
-production, so both carry the same coefficient. `build_tech(h2_variant=...)`
-selects between them, and the default is the behind-the-meter row — the
-configuration in which a renewable electricity claim needs no certificate to
-stand up. Previously an undocumented `.iloc[0]` made the second row unreachable.
+**The two green rows differ in delivery, not in source.** Both are renewable —
+that is what makes them green — but taking the power over the network rather than
+off the generator's terminals costs two things, and ecoinvent separates both from
+generation:
+
+| Term | Value | Source |
+|---|---|---|
+| Loss gross-up | **1.063495** kWh generated per kWh delivered (+6.35 %) | Cumulative generation drawn by GB `market for electricity, low voltage` over the HV → MV → LV chain |
+| Network embodied carbon | **8.2125** g CO₂e/kWh delivered | LV distribution 5.932, MV transmission 1.583, HV transmission 0.655, maintenance 0.019, SF₆ switchgear leakage 0.025 |
+
+So on the default basis a grid-delivered seller's electricity is
+14.466 × 1.063495 + 8.2125 = **23.597 g CO₂e/kWh**, and its hydrogen
+**1.469 kg CO₂e/kg** against 0.976 behind the meter — a **+50.5 %** delivery
+premium. Behind the meter pays neither term, which is the physical meaning of
+"directly connected". `check_grid_delivery()` re-derives both constants from the
+live database and fails the run if they drift, on the same contract as
+`check_against_inventory()`.
+
+**The default is a 50:50 mix of the two, not one or the other.** A buyer
+contracting on the open market gets a portfolio, not one plant.
+`build_tech(green_h2_grid_share=...)` sets the fraction taken over the network
+and defaults to `h2_prices.GREEN_H2_GRID_SHARE` = 0.5, blending price and delivery
+burden together so the two can never be mismatched; `h2_variant=` pins a single
+row instead. Previously an undocumented `.iloc[0]` made the second row
+unreachable.
+
+| grid share | electricity g/kWh | kg CO₂e/kg | £/kg | kg CO₂e/MWh |
+|---|---|---|---|---|
+| 0.00 — all behind the meter | 14.466 | 0.9762 | 4.93 | 61.66 |
+| **0.50 — default** | **19.031** | **1.2228** | **6.63** | **77.23** |
+| 1.00 — all grid-connected | 23.597 | 1.4693 | 8.33 | 92.81 |
+
+The share is **ASSUMED**, and is the weakest input in this section: no GB
+breakdown of green hydrogen production by connection type is published, and at
+the current size of the GB electrolyser fleet any such split would be dominated by
+a handful of projects. 50:50 is a neutral prior, exposed as a parameter precisely
+so it can be swept rather than trusted.
+
+Both effects run the same way, which is the reassuring part: £8.33/kg is £4.93
+plus €2.77/kg of UK network fees and taxes, and the grid-connected route pays more
+carbon for the same structural reason it pays more money — it is a network user.
+The cost gap decomposes as taxes £1.36, grid fees £1.06, electricity £0.99
+(£43.4/MWh direct-connected against £61.7/MWh from the grid), CAPEX −£0.01. That
+last figure is the caveat: EHO's CAPEX is €2.771 against €2.761, i.e. **the same
+utilisation is assumed for both configurations**, when a behind-the-meter
+electrolyser is limited to its generator's 24–38 % load factor. CAPEX is 49 % of
+the behind-the-meter total, so rescaling it alone gives £5.69/kg at CF 0.38,
+£6.54 at 0.30 and £7.55 at 0.24 — £4.93/kg and strictly matched dedicated wind
+are probably not available at the same time.
 
 **LCHS is a ceiling, never a value.** The UK Low Carbon Hydrogen Standard's
 20 g CO₂e/MJ LHV × 120 MJ/kg = **2.400 kg CO₂e/kg** (`LCHS_CEILING_KGCO2E_PER_KG`).

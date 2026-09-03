@@ -86,6 +86,7 @@ def run_one(scenario: A.Scenario, *, site, start: str, end: str,
             points: int, cost_case: str, horizon_years: float,
             unserved_fraction: float, out_root: Path,
             gwp_target_kg_per_year: float | None = None,
+            green_h2_grid_share: float | None = None,
             save_dispatch: bool = False, refresh: bool = False,
             progress=None, notice=None) -> dict:
     """Solve one configuration's Pareto front and write it to disk.
@@ -114,6 +115,10 @@ def run_one(scenario: A.Scenario, *, site, start: str, end: str,
         "points": points, "cost_case": cost_case, "horizon_years": horizon_years,
         "unserved_fraction": unserved_fraction,
         "gwp_target_kg_per_year": gwp_target_kg_per_year,
+        # In the hash, not just in build_tech's arguments: the share moves both
+        # the price and the burden of bought green hydrogen, so a cached run at
+        # a different share is a different answer.
+        "green_h2_grid_share": green_h2_grid_share,
         "coefficients": _coefficient_identity(),
     }
     h = config_hash(cfg)
@@ -155,6 +160,8 @@ def run_one(scenario: A.Scenario, *, site, start: str, end: str,
         series = I.resample(series, resample_hours)
     tech = I.build_tech(site, meta, ely_tech=scenario.ely_tech or "PEM operation",
                         tank_design=scenario.tank_design, h2_colour=scenario.h2_colour,
+                        h2_colour_2=scenario.h2_colour_2,
+                        green_h2_grid_share=green_h2_grid_share,
                         cost_case=cost_case, horizon_years=horizon_years,
                         size_mw_it=size_mw_it, pue=pue)
     # The ceiling the band was read from is the ceiling the LP is held to.
@@ -164,13 +171,15 @@ def run_one(scenario: A.Scenario, *, site, start: str, end: str,
                             offshore=site.offshore_wind,
                             grid_limit_mw=meta["connection_limit_mw"],
                             flags=scenario.assets)
+    # An architecture that *may* buy hydrogen still needs a priced colour on
+    # each stream it unlocks. Without one the LP buys it free and carbon-free;
+    # see the guard in dc_model.build_model. Locking the unpriced stream off is
+    # the right default: the scenario builds its own hydrogen instead.
+    from dataclasses import replace as _replace
     if scenario.h2_colour is None and assets.buy_h2:
-        # An architecture that *may* buy hydrogen still needs a priced colour.
-        # Without one the LP buys it free and carbon-free; see the guard in
-        # dc_model.build_model. Locking it off is the right default: the
-        # scenario builds its own hydrogen instead.
-        from dataclasses import replace as _replace
         assets = _replace(assets, buy_h2=False)
+    if scenario.h2_colour_2 is None and assets.buy_h2_2:
+        assets = _replace(assets, buy_h2_2=False)
     result = P.front(series, assets, tech, points=points,
                      ely_strategy=scenario.strategy,
                      unserved_fraction=unserved_fraction,
@@ -192,7 +201,9 @@ def run_one(scenario: A.Scenario, *, site, start: str, end: str,
     summary = {
         "key": scenario.key, "n": scenario.n, "label": scenario.label,
         "architecture": scenario.architecture, "ely_tech": scenario.ely_tech,
-        "h2_colour": scenario.h2_colour, "strategy": scenario.strategy,
+        "h2_colour": scenario.h2_colour, "h2_colour_2": scenario.h2_colour_2,
+        "green_h2_grid_share": tech.labels.get("green_h2_grid_share"),
+        "strategy": scenario.strategy,
         "site": site.key, "site_name": site.name,
         "lat": site.lat, "lon": site.lon,
         "carbon_api_region": site.carbon_api_region, "tnuos_zone": site.tnuos_zone,
@@ -230,10 +241,11 @@ def _worker(args):
 
 
 def run_matrix(scenarios=None, *, site=sites.DEFAULT_PRESET, start="2025-01-01",
-               end="2025-12-29", size_mw_it=7.31, pue=1.0,
+               end="2025-12-29", size_mw_it=100.0, pue=1.0,
                resample_hours=1.0, points=12, cost_case="central",
                horizon_years=25.0, unserved_fraction=0.0,
                gwp_target_kg_per_year=None, connection_headroom=None,
+               green_h2_grid_share=None,
                out_root: Path | None = None, workers=None,
                save_dispatch=False, refresh=False, progress=print) -> pd.DataFrame:
     """Solve every configuration, in parallel, and return the comparison table."""
@@ -246,6 +258,7 @@ def run_matrix(scenarios=None, *, site=sites.DEFAULT_PRESET, start="2025-01-01",
               resample_hours=resample_hours, points=points, cost_case=cost_case,
               horizon_years=horizon_years, unserved_fraction=unserved_fraction,
               gwp_target_kg_per_year=gwp_target_kg_per_year,
+              green_h2_grid_share=green_h2_grid_share,
               connection_headroom=connection_headroom, out_root=out_root, save_dispatch=save_dispatch, refresh=refresh)
 
     results, t0 = [], time.time()
@@ -304,7 +317,8 @@ def comparison_table(summaries) -> pd.DataFrame:
                 "n": s["n"], "key": s["key"], "label": s["label"],
                 "architecture": s["architecture"], "strategy": s["strategy"],
                 "ely": (s["ely_tech"] or "-").split()[0],
-                "h2_colour": s["h2_colour"] or "-",
+                "h2_colour": " + ".join(
+                    c for c in (s["h2_colour"], s.get("h2_colour_2")) if c) or "-",
                 "point": point, "degenerate": s["degenerate"],
                 "cost_m_GBP_per_year": p["cost_GBP_per_year"] / 1e6,
                 "gwp_t_per_year": p["gwp_kgco2e_per_year"] / 1000.0,
