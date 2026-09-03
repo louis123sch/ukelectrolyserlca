@@ -199,13 +199,24 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
                tank_design: str | None = None, h2_colour: str | None = None,
                cost_case: str = "central", horizon_years: float = 25.0,
                size_mw_it: float = 7.31, pue: float = 1.15,
-               solar_basis: str | None = None) -> dc_model.Tech:
+               solar_basis: str | None = None, h2_variant: str | None = None,
+               green_h2_basis: str | None = None) -> dc_model.Tech:
     """Resolve every coefficient the LP needs. Touches Brightway only via caches.
 
     ``solar_basis`` selects the inventory behind solar's embodied carbon and
     defaults to ``renewables.SOLAR_EMBODIED_BASIS`` — IEA PVPS rather than
     ecoinvent, whose GB PV activity is a 2008 plant. Pass ``"ecoinvent"`` to
     reproduce results from before that default changed.
+
+    ``green_h2_basis`` selects the electricity the *seller* of bought green
+    hydrogen is assumed to run on, and defaults to
+    ``h2_prices.GREEN_H2_ELECTRICITY_BASIS`` — ecoinvent's GB onshore wind
+    activity. Pass ``"ecoinvent_gb_grid"`` to reproduce results from before that
+    default changed. It has no effect on any other colour.
+
+    ``h2_variant`` picks between rows of one colour in
+    ``h2_prices_recommended.csv`` where there is more than one; only green has
+    two, and they differ in price, not in carbon.
     """
     import dashboard_config as cfg
     from optimisation import battery as batt
@@ -218,11 +229,15 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
     from optimisation import renewables as ren
     from optimisation import tech_costs as tc
 
-    # The guard this whole design exists to make explicit.
+    # The guard this whole design exists to make explicit. Bought green H2 does
+    # use the foreground's fixed figure, and that is not a violation: it charges
+    # the *seller's* electrolyser per kg purchased, while capital_kgco2e_per_MW
+    # charges the one the LP builds. Different assets, independent LP variables.
     ely.assert_no_double_count(uses_capital_per_mw=True, uses_foreground_fixed=False)
 
     tank_design = tank_design or cfg.TANK_DESIGN
     solar_basis = solar_basis or ren.SOLAR_EMBODIED_BASIS
+    green_h2_basis = green_h2_basis or h2_prices.GREEN_H2_ELECTRICITY_BASIS
     emb = ren.apply_case(ren.decompose_all(), cost_case,
                          solar_basis=solar_basis).set_index("technology")
     ann = tc.annualised_table()
@@ -266,8 +281,25 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
         if row.empty:
             raise ValueError(f"Unknown H2 colour {h2_colour!r}. "
                              f"Available: {sorted(rec.colour.unique())}")
+        if h2_variant is not None:
+            row = row[row.variant == h2_variant]
+            if row.empty:
+                raise ValueError(
+                    f"Unknown variant {h2_variant!r} for colour {h2_colour!r}. "
+                    f"Available: {sorted(rec[rec.colour == h2_colour].variant)}")
+        elif len(row) > 1:
+            # Green carries two rows, and the choice was previously made by an
+            # undocumented .iloc[0] that left the second unreachable. The
+            # default is deliberate and is the same one headline_prices() makes:
+            # behind the meter is the configuration this study's own electrolyser
+            # sees, and the only one where a renewable electricity claim needs no
+            # certificate to stand up. The difference between the two rows is
+            # cost, not carbon — 2.77 EUR/kg of UK network fees and taxes — so
+            # this selects a price, not an emissions basis.
+            row = row.iloc[[0]]
+        h2_variant = str(row.iloc[0].variant)
         h2_price = float(row.iloc[0][cost_case])
-        h2_gwp = _bought_h2_gwp(row.iloc[0].activity_code)
+        h2_gwp = _bought_h2_gwp(row.iloc[0].activity_code, green_h2_basis)
 
     dc = data_centre_coefficients()
     scale_dc = (size_mw_it * pue) / dc["reference_mw"]
@@ -312,15 +344,28 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
         dc_other_gwp_per_mwh=0.0,
         horizon_years=horizon_years,
         labels={"site": getattr(site, "key", site), "ely_tech": ely_tech, "tank_design": tank_design,
-                "h2_colour": h2_colour, "cost_case": cost_case, "solar_basis": solar_basis},
+                "h2_colour": h2_colour, "cost_case": cost_case, "solar_basis": solar_basis,
+                "h2_variant": h2_variant, "green_h2_basis": green_h2_basis},
     )
 
 
 _H2_GWP_CACHE = OUT_DIR / "bought_h2_gwp_cache.json"
 
 
-def _bought_h2_gwp(activity_code: str) -> float:
-    """kg CO2e per kg of purchased hydrogen, from its own foreground activity."""
+def _bought_h2_gwp(activity_code: str, green_basis: str | None = None) -> float:
+    """kg CO2e per kg of purchased hydrogen, from its own foreground activity.
+
+    Green is assembled rather than scored whole. Its activity links 54 kWh/kg to
+    ecoinvent's GB grid market, which is the wrong electricity for a commodity
+    defined by being made from renewables — see
+    ``h2_prices.GREEN_H2_ELECTRICITY_BASES``. Every other colour is scored whole,
+    because a fossil producer really is on the grid its activity links to.
+    """
+    from optimisation import h2_prices
+
+    if activity_code == h2_prices.INVENTORY["green"]["code"]:
+        return h2_prices.green_h2_gwp_per_kg(green_basis)
+
     cache = {}
     if _H2_GWP_CACHE.exists():
         try:

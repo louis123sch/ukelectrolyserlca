@@ -93,6 +93,86 @@ tables disagree by more than half a penny.
 pyrolysis; this study's MP-E inventory uses 10.29 kWh/kg. This study's
 turquoise is therefore cheaper and cleaner than theirs by construction.
 
+### Bought green hydrogen is assembled, not scored — `h2_prices.GREEN_H2_ELECTRICITY_BASES`
+
+Green hydrogen is defined by its input: a third party makes it from renewable
+electricity and sells it on. Scoring `pem_op_hermesmann_1kg_h2` whole charged it
+**17.001 kg CO₂e/kg** — dirtier than grey SMR — because that activity links its
+54 kWh/kg to ecoinvent's GB *grid* market at **311.22 g CO₂e/kWh** (scored
+directly; the value obtained by subtracting the non-electricity burden agrees to
+9.5 × 10⁻⁹). At that figure green was strictly Pareto-dominated on both cost and
+carbon by all three other colours, so no objective weight and no ε-limit could
+select it: every bought-green run was dead code the solver discarded.
+
+Two things make this a propagation rather than a new judgement. **76 % of that
+311 g/kWh comes from one dataset** — `electricity production, natural gas,
+conventional power plant`, parameterised on 2012 IEA data and given a 39.5 % GB
+share while ecoinvent's own GB CCGT gets zero — and `lca_helpers.py` already
+refuses that dataset for this study's own grid. And grid-connected electrolysis
+is already modelled properly as the `grid_h2` architecture, where the LP charges
+electricity carbon from its own half-hourly dispatch; the bought row was a
+worse-modelled duplicate of it carrying a renewable price tag.
+
+The coefficient is therefore assembled as
+`foreground_fixed_kgco2e_per_kg + kwh_per_kg × I`, both terms from
+`electrolysers_embodied.csv`. `foreground_fixed` (0.19507) already contains the
+seller's electrolyser capital good, so `capital_kgco2e_per_kg_h2` must **not** be
+added on top — doing so inflates the answer by 17.6 %. This is not a violation of
+`assert_no_double_count`: it charges the *seller's* electrolyser per kg bought,
+while `capital_kgco2e_per_MW` charges the one the LP builds.
+
+| Basis | I (g CO₂e/kWh) | kg CO₂e/kg H₂ | Grade | Source |
+|---|---|---|---|---|
+| **`ecoinvent_onshore`** — default | **14.466** | **0.976** | transcribed | This study's own `electricity production, wind, 1-3MW turbine, onshore` GB activity, unrestated — `renewables_embodied.csv`, column `ecoinvent_per_kWh` |
+| `iea_2025_onshore_harmonised` | 11.76 | 0.830 | transcribed | IEA, *Life Cycle Upstream Emission Factors 2025*, onshore wind median: ~50 estimates harmonised on **AR6 GWP100**, the same characterisation vintage as this study's IPCC 2021 method |
+| `study_onshore_restated` | 5.635 | 0.499 | derived | `renewables.py` restated at 38.1 % LF / 35 y. **Parity sensitivity only, never a purchase basis** |
+
+**Every basis is renewable, and the grid is not among them.** There is no
+grid-carbon green hydrogen: offered as a peer of the wind options, ecoinvent's GB
+grid figure would let a caller pair behind-the-meter renewable pricing with grid
+carbon, which is the incoherence this section exists to remove.
+`green_h2_gwp_per_kg()` refuses it by name. The value survives as
+`ECOINVENT_GB_LV_GCO2E_PER_KWH` (311.220) and
+`LEGACY_GREEN_H2_GWP_KGCO2E_PER_KG` (17.001) for provenance and for reproducing
+pre-fix runs — deliberate friction, since reproducing a known-wrong number should
+not be a keyword argument away.
+
+**Why ecoinvent's own turbine and not the harmonised median.** It keeps the
+"ecoinvent 3.9.1 apos throughout" claim intact — solar is already the one
+departure — and it is the conservative end, which is the right direction for a
+commodity being bought rather than built. It is corroborated four ways: IPCC AR5's
+"infrastructure and supply chain typical" 15, ClimateXChange's mean 15, ZHAW
+2025's European average 14.9, and both harmonised interquartile ranges. Rejecting
+ecoinvent's 2008 PV plant while keeping its turbine is the position
+`renewables.py` already states — a turbine is steel and concrete and ages far
+more slowly than a PV module.
+
+**Why not this study's own restated 5.635.** Re-amortising at a 38.1 % load
+factor and 35-year life is right for a wind farm *the LP builds* and wrong for a
+seller's, whose load factor and asset life the buyer does not control. It also
+fails on its own terms: it lands **below IPCC AR5's reported onshore minimum of
+7.0**, `restate()` returns capital only so it omits the 0.131 g/kWh O&M residual
+(full scope 5.766) and is not comparable with published ranges that include it,
+and the 38.1 % figure is a DESNZ/Arup *new-build project* assumption against a UK
+fleet average of 24.1 %, where ecoinvent's implied 26.2 % is within 9 %. The tell
+is that restated offshore (5.750) comes out *above* restated onshore (5.635)
+despite ecoinvent's offshore being 18 % dirtier per kWh — the 50.5 % load factor
+absorbs the whole difference, inverting the physical ordering.
+
+**The two green price rows are a cost distinction, not a carbon one.** £8.33/kg
+is £4.93 plus €2.77/kg of UK network fees and taxes; both describe renewable
+production, so both carry the same coefficient. `build_tech(h2_variant=...)`
+selects between them, and the default is the behind-the-meter row — the
+configuration in which a renewable electricity claim needs no certificate to
+stand up. Previously an undocumented `.iloc[0]` made the second row unreachable.
+
+**LCHS is a ceiling, never a value.** The UK Low Carbon Hydrogen Standard's
+20 g CO₂e/MJ LHV × 120 MJ/kg = **2.400 kg CO₂e/kg** (`LCHS_CEILING_KGCO2E_PER_KG`).
+It cannot supply a coefficient: the standard excludes capital goods and therefore
+sets renewable electricity to 0.0 g CO₂e/kWh, zero-rating precisely the term
+being estimated here. As a bound it is worth quoting — every basis above clears
+it, and the status quo failed it by 7.1×.
+
 ---
 
 ## Battery storage

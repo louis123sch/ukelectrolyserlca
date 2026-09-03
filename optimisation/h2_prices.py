@@ -111,6 +111,112 @@ INVENTORY = {
                   "direct_co2_kg_per_kg": 0.0},
 }
 
+# --- the electricity behind bought green hydrogen --------------------------
+# Green hydrogen is defined by what goes into it: a third party makes it from
+# renewable electricity and sells it on. Its burden is therefore that seller's
+# plant, cradle to gate, and the only free term is the carbon intensity of the
+# electricity the seller runs on.
+#
+# Scoring ``pem_op_hermesmann_1kg_h2`` whole gets this wrong, because the
+# activity's 54 kWh/kg is linked to ecoinvent's GB *grid* market. That charged
+# bought green 17.001 kg CO2e/kg — dirtier than grey SMR, and dirtier than the
+# LP plugging its own electrolyser into the grid, the 1 % gap being nothing but
+# the seller's amortised capital. Grid electrolysis is a real configuration,
+# but the study already models it properly as ``grid_h2``, where the LP supplies
+# the electricity carbon from its own half-hourly dispatch instead of from one
+# stale annual average. The bought row was a worse-modelled duplicate of it.
+#
+# 76 % of that 311 g/kWh comes from a single dataset, "electricity production,
+# natural gas, conventional power plant", which ``lca_helpers.py`` already
+# refuses to use for this study's own grid. The refusal was never propagated
+# here; this is that propagation, not a new judgement.
+#
+# The default is ecoinvent's own GB onshore wind activity, unmodified — same
+# database, version and method as every other coefficient in the study, and
+# conservative against the harmonised literature (IPCC AR5's "infrastructure and
+# supply chain typical" 15, ClimateXChange's mean 15, ZHAW 2025's European
+# average 14.9 all sit beside it). ``renewables.py`` restates that same activity
+# down to 5.635 g/kWh at this study's 38.1 % load factor and 35-year life. That
+# restatement is right for a wind farm the LP builds and wrong for a seller's,
+# whose load factor and asset life the buyer does not control; it also lands
+# below IPCC AR5's reported onshore minimum of 7.0 and is capital-only in scope.
+# It stays selectable as a parity sensitivity, never as a purchase basis.
+GREEN_H2_ELECTRICITY_BASES = {
+    "ecoinvent_onshore": {
+        "gco2e_per_kwh": 14.465892541442467,
+        "label": "ecoinvent 3.9.1 apos, GB onshore wind 1-3MW turbine, as scored",
+        "grade": "transcribed",
+        "note": "the study's own generation activity, unrestated — see "
+                "renewables_embodied.csv, column ecoinvent_per_kWh",
+    },
+    "iea_2025_onshore_harmonised": {
+        "gco2e_per_kwh": 11.76,
+        "label": "IEA, Life Cycle Upstream Emission Factors 2025, onshore wind median",
+        "grade": "transcribed",
+        "note": "~50 estimates harmonised on AR6 GWP100, the same "
+                "characterisation vintage as this study's IPCC 2021 method",
+    },
+    "study_onshore_restated": {
+        "gco2e_per_kwh": 5.634870431035291,
+        "label": "renewables.py restated GB onshore wind, 38.1 % LF / 35 y",
+        "grade": "derived",
+        "note": "own-build parity sensitivity only. Below IPCC AR5's reported "
+                "onshore minimum, and capital-only in scope (the full-scope "
+                "figure is 5.766) — not comparable with published ranges",
+    },
+}
+GREEN_H2_ELECTRICITY_BASIS = "ecoinvent_onshore"
+if GREEN_H2_ELECTRICITY_BASIS not in GREEN_H2_ELECTRICITY_BASES:
+    raise ValueError("GREEN_H2_ELECTRICITY_BASIS must be one of "
+                     f"{list(GREEN_H2_ELECTRICITY_BASES)}")
+
+# Every basis above is renewable, and deliberately so: there is no grid-carbon
+# green hydrogen. The grid figure below is kept for provenance and for
+# reproducing pre-fix runs, but it is *not* a basis and must not be selectable
+# as one — offered as a peer of the wind options it would let a caller pair
+# behind-the-meter renewable pricing with grid carbon, which is the exact
+# incoherence this whole section exists to remove.
+ECOINVENT_GB_LV_GCO2E_PER_KWH = 311.21970194853005
+LEGACY_GREEN_H2_GWP_KGCO2E_PER_KG = 17.00093068911594
+
+# UK Low Carbon Hydrogen Standard, 20 gCO2e/MJ LHV x 120 MJ/kg. A compliance
+# ceiling, never a coefficient: the standard excludes capital goods and so sets
+# renewable electricity to 0.0 gCO2e/kWh, zero-rating precisely the term being
+# estimated above. Used by ``validate.py`` as an upper bound, and worth quoting
+# for what it says about the grid-connected case rather than the green one.
+LCHS_CEILING_KGCO2E_PER_KG = 2.400
+
+
+def green_h2_gwp_per_kg(basis: str | None = None) -> float:
+    """kg CO2e per kg of bought green hydrogen, at the seller's gate.
+
+    ``foreground_fixed_kgco2e_per_kg`` is everything in the PEM activity that is
+    not electricity — the seller's electrolyser capital good *plus* its water and
+    heat — so the electricity term is added once and only once. Do not add
+    ``capital_kgco2e_per_kg_h2`` on top of it; that is already inside, and doing
+    so inflates the answer by 17.6 %.
+    """
+    from optimisation import electrolysers as ely
+
+    basis = basis or GREEN_H2_ELECTRICITY_BASIS
+    if basis in ("ecoinvent_gb_grid", "gb_grid", "grid"):
+        raise ValueError(
+            "The GB grid is not a basis for green hydrogen — green is defined "
+            "by renewable input, and this pairing charged grid carbon against a "
+            "behind-the-meter renewable price. Grid electrolysis is already "
+            "modelled as the 'grid_h2' architecture, where the LP supplies the "
+            "electricity carbon from its own half-hourly dispatch. To reproduce "
+            "a pre-fix run, use LEGACY_GREEN_H2_GWP_KGCO2E_PER_KG directly.")
+    if basis not in GREEN_H2_ELECTRICITY_BASES:
+        raise ValueError(f"Unknown green H2 electricity basis {basis!r}. "
+                         f"Available: {list(GREEN_H2_ELECTRICITY_BASES)}")
+    spec = GREEN_H2_ELECTRICITY_BASES[basis]
+    row = next(r for r in ely.decompose_all()
+               if r["technology"] == "PEM operation")
+    return (row["foreground_fixed_kgco2e_per_kg"]
+            + row["kwh_per_kg"] * spec["gco2e_per_kwh"] / 1000.0)
+
+
 # Non-fuel cost (capex + fixed + variable opex) per kg H2. NESO's blue stack
 # at 2025/6 % is 0.511 + 0.185 + 0.029 = 0.725 GBP/kg for ATR+CCS.
 BLUE_NONFUEL_GBP_PER_KG = 0.725
