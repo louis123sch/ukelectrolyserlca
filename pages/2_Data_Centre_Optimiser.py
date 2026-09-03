@@ -167,7 +167,12 @@ def _tail(path, lines: int = 40) -> str:
 
 def _download(df: pd.DataFrame, name: str, label: str | None = None):
     st.download_button(label or f"Download {name}",
-                       df.to_csv(index=False).encode("utf-8"),
+                       # utf-8-sig, not utf-8: these tables are full of £, ₂ and
+                       # CO₂e, and Excel on a Windows machine reads a BOM-less
+                       # CSV as cp1252 — every one of them arrives as mojibake.
+                       # The BOM is what tells it otherwise, and every other
+                       # reader skips it.
+                       df.to_csv(index=False).encode("utf-8-sig"),
                        file_name=name, mime="text/csv", key=f"dl_{name}")
 
 

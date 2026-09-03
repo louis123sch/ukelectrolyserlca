@@ -431,6 +431,37 @@ def _as_datetime(value, *, end_of_day=False) -> str:
 
 BUILD_LOCK = ROOT / "optimisation_outputs" / ".grid_build.lock"
 
+# Notebook 2 builds the foreground inventories from ecoinvent and the published
+# parameters — there is no API behind it, so unlike the grid series it cannot be
+# fetched, only made. dashboard_config keeps it off ("only on first setup ...
+# because it can be slower than the other steps"), which is right once it exists
+# and wrong the first time: notebook 3.1 scores the data centre against the
+# half-hourly mix and looks that activity up by name, so a grid build cannot
+# succeed before it has been made once.
+_FOREGROUND_TIMEOUT_S = 5400
+
+
+def _dc_foreground_missing() -> bool:
+    """Is the data centre foreground genuinely absent?
+
+    The project has to be opened first. ``bd.databases`` on a process that has
+    not opened one returns an empty list rather than raising, so "cannot tell"
+    is indistinguishable from "missing" — and guessing "missing" bolts the whole
+    of notebook 2 onto a build that did not need it. ``setup_brightway`` is
+    idempotent and every real caller has already run it.
+
+    False whenever the question still cannot be answered: the build then fails
+    with a clear message, which is better than a silent four-minute detour.
+    """
+    try:
+        import bw2data as bd
+        import dashboard_config as cfg
+        import lca_helpers as H
+        H.setup_brightway()
+        return cfg.DC_FOREGROUND_DB not in bd.databases
+    except Exception:
+        return False
+
 # One exclusive lock, taken two ways. Both ``flock`` and ``msvcrt.locking`` are
 # held by the *handle*, so the OS hands the lock back when a holder dies — which
 # an O_EXCL lock file does not. That matters here more than the portability: a
@@ -517,6 +548,9 @@ def build_grid_series(carbon_api_region: int, start="2025-01-01 00:00:00",
     like everything else, and a window outside what ``price_outputs/`` holds
     fails on price after paying for the grid build. Left off by default because
     the common case (a 2025 window) already has its prices on disk.
+
+    Notebook 2 is run first, but only when its database is genuinely absent —
+    see ``_dc_foreground_missing``.
     """
     if carbon_api_region not in CARBON_API_REGIONS:
         raise ValueError(f"Region must be 1-14, got {carbon_api_region}")
@@ -527,6 +561,13 @@ def build_grid_series(carbon_api_region: int, start="2025-01-01 00:00:00",
           + (" (with prices)" if with_prices else "") + ".")
     print("This scores the GB fuel mix against ecoinvent for every half-hour "
           "and takes a while.")
+    build_foreground = _dc_foreground_missing()
+    if build_foreground:
+        # Same principle as the window itself: if it is not there, build it.
+        print("The data centre foreground database does not exist yet, so "
+              "notebook 2 runs first. That is a one-off — every later build "
+              "skips it — and it makes this one considerably slower.")
+        timeout_s = max(int(timeout_s), _FOREGROUND_TIMEOUT_S)
     # run_lca patches dashboard_config.py in place and leaves it patched — the
     # Setup LCA page's contract, where the user chose those values and expects
     # to see them. A build started on the optimiser's behalf did not choose
@@ -543,6 +584,7 @@ def build_grid_series(carbon_api_region: int, start="2025-01-01 00:00:00",
             "GRID_RANGE_END": end,
             "RUN_GRID_SCENARIO_LCA": True,
             "RUN_PRICE_NOTEBOOK_FROM_DASHBOARD": bool(with_prices),
+            "RUN_FOREGROUND_NOTEBOOK_FROM_DASHBOARD": build_foreground,
         }, timeout_s=timeout_s)
     finally:
         if restore_config:

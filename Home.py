@@ -15,7 +15,7 @@ import streamlit as st
 
 import dashboard_config as cfg
 import lca_helpers as H
-from backend.runner import latest_plots
+from backend.runner import REPO_DIR, latest_plots
 
 st.set_page_config(page_title="UK Electrolyser LCA", layout="wide")
 st.title("UK Electrolyser LCA")
@@ -72,7 +72,14 @@ st.header("Latest results")
 
 
 def _latest_csv(folder: str, pattern: str = "*.csv"):
-    p = Path(folder)
+    # Anchored to the repo, not the working directory. cfg.*_OUTPUT_DIR are
+    # bare names, and everything that writes them is REPO_DIR-relative
+    # (backend.runner runs the notebook with cwd=REPO_DIR). Streamlit does not
+    # chdir to the script, so launching the app from anywhere else — a
+    # shortcut, a .bat, or `streamlit run <path>\Home.py` typed from your home
+    # directory — left all three columns permanently reading "No results yet"
+    # while the files sat in the repo.
+    p = REPO_DIR / folder
     if not p.exists():
         return None
     files = sorted(p.glob(pattern), key=lambda f: f.stat().st_mtime, reverse=True)

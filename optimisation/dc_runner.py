@@ -254,6 +254,14 @@ def run_matrix(scenarios=None, *, site=sites.DEFAULT_PRESET, start="2025-01-01",
             results.append(_worker((s, kw)))
             _report(results[-1], len(results), len(scenarios), progress)
     else:
+        # Windows caps a process pool at 61 workers (63 handles minus the
+        # result queue and the wakeup reader) and raises ValueError above that,
+        # before a single LP is solved. The same --workers that runs on the
+        # study's other machine should degrade here, not abort.
+        if workers and sys.platform == "win32" and workers > 61:
+            print(f"Windows caps a process pool at 61 workers; using 61 "
+                  f"rather than the {workers} asked for.")
+            workers = 61
         with ProcessPoolExecutor(max_workers=workers) as pool:
             futures = {pool.submit(_worker, (s, kw)): s for s in scenarios}
             for i, fut in enumerate(as_completed(futures), 1):

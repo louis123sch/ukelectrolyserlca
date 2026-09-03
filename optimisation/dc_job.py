@@ -93,12 +93,36 @@ def _now() -> str:
 
 # os.replace is atomic on POSIX no matter who else holds the destination open.
 # Windows refuses it outright — PermissionError, WinError 5 — while any other
-# handle is open on it, and the page opens status.json every time it polls. The
-# child writes a status line after every LP, so losing that race would raise
-# inside its own progress tick and kill a twenty-minute solve over telemetry.
-# The reader holds the file for microseconds; retrying across it always wins.
-_REPLACE_TRIES = 12
-_REPLACE_PAUSE = 0.02
+# handle is open on the destination, and status.json has a writer (the child,
+# after every LP) and a reader (the page, on every rerun) going at once.
+#
+# The conflict is SYMMETRIC, which is the part that is easy to get wrong: the
+# reader's own open fails inside the same window. Neither side may treat losing
+# the race as an answer. A writer that gives up raises inside the child's
+# progress tick and kills a twenty-minute solve over telemetry; a reader that
+# gives up returns None, which ``read`` and ``active`` report to the page as
+# "no job at all" — the Solving panel disappears, the auto-refresh loop stops,
+# and the Optimise button re-enables while the solve is still going, so the
+# next click starts a second child writing over the first one's files.
+#
+# Measured here with one writer and three readers over six seconds: a 12 x 20 ms
+# budget still lost it 21 times on the write side and 60 on the read side. Both
+# sides now retry to a deadline instead.
+_SHARING_DEADLINE = 2.0
+_SHARING_PAUSE = 0.005
+
+
+def _despite_sharing(operation):
+    """Run a file operation across the window in which another process holds
+    the file open. Re-raises only once the deadline is genuinely spent."""
+    deadline = time.monotonic() + _SHARING_DEADLINE
+    while True:
+        try:
+            return operation()
+        except PermissionError:
+            if time.monotonic() >= deadline:
+                raise
+            time.sleep(_SHARING_PAUSE)
 
 
 def _write_json(path: Path, payload: dict):
@@ -106,20 +130,16 @@ def _write_json(path: Path, payload: dict):
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
-    for attempt in range(_REPLACE_TRIES):
-        try:
-            tmp.replace(path)
-            return
-        except PermissionError:
-            if attempt == _REPLACE_TRIES - 1:
-                raise
-            time.sleep(_REPLACE_PAUSE)
+    _despite_sharing(lambda: tmp.replace(path))
 
 
 def _read_json(path: Path) -> dict | None:
+    """None means no job here — genuinely absent, or genuinely not JSON. A file
+    that is merely being swapped in at this instant is neither."""
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
+        return json.loads(_despite_sharing(
+            lambda: path.read_text(encoding="utf-8")))
+    except (OSError, ValueError):
         return None
 
 
@@ -274,6 +294,16 @@ def start(*, scenario, site, out_root, label: str, total: int,
     rather than a second copy of either signature. Everything in it must be
     JSON-safe — the ``Site`` is rebuilt by the child from coordinates.
     """
+    # The page disables the button while a job is alive, but a widget is not a
+    # guarantee: a single lost poll re-enables it, and two children writing one
+    # folder's status.json and summary.json corrupt both runs. Refuse here too,
+    # where the answer comes from the pointer file rather than from a rerun.
+    live = active(kind)
+    if live and live.get("state") in ("starting", "running"):
+        raise RuntimeError(
+            f"A {kind} job is already running in {live['folder']}. "
+            "Stop it before starting another.")
+
     folder = folder_for(out_root, scenario.key, kind)
     folder.mkdir(parents=True, exist_ok=True)
     _write_json(folder / REQUEST, {

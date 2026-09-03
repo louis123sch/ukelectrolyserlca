@@ -23,6 +23,14 @@
     "region_name": "South West England",
     "tnuos_zone": 14
   },
+  "50.3,-5.04": {
+    "carbon_api_region": 11,
+    "outcode": "TR4",
+    "place": "Cornwall",
+    "postcode": "TR4 9AF",
+    "region_name": "South West England",
+    "tnuos_zone": 14
+  },
   "50.4,-3.52": {
     "carbon_api_region": 11,
     "outcode": "TQ5",

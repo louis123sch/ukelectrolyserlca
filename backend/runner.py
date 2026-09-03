@@ -227,6 +227,12 @@ def run_lca(overrides: dict, secrets: dict | None = None, timeout_s: int = 1800)
     # a plain "Agg" backend renders plt.show() a no-op and silently produces
     # zero images, which is otherwise very easy to hit by accident.
     env["MPLBACKEND"] = "module://matplotlib_inline.backend_inline"
+    # Decoding this pipe as UTF-8 below is only half the bargain: nbconvert
+    # writes to it through *its* locale codec, and stdout is a pipe rather than
+    # a terminal, so on Windows that is cp1252. Relaying a notebook line
+    # containing the pipeline's own "═" separator then kills nbconvert itself
+    # with UnicodeEncodeError. Both ends have to agree.
+    env["PYTHONIOENCODING"] = "utf-8"
 
     try:
         proc = subprocess.run(

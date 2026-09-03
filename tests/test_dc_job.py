@@ -180,19 +180,69 @@ def test_a_status_write_survives_the_page_reading_it(tmp_path, monkeypatch):
     """os.replace is refused on Windows while any other handle is open on the
     destination. The child writes a status line after every LP and the page
     opens that file on every rerun, so an unretried replace killed the solve."""
-    monkeypatch.setattr(dc_job, "_REPLACE_PAUSE", 0.0)
     target = tmp_path / dc_job.STATUS
     dc_job._write_json(target, {"state": "running", "done": 0})
     with open(target, "r", encoding="utf-8") as reader_holding_it_open:
         reader_holding_it_open.read(1)
-        # One try is all a single blocked attempt gets; the retry is the fix.
-        monkeypatch.setattr(dc_job, "_REPLACE_TRIES", 1)
+        # With the deadline spent, a blocked write is a real failure again.
+        monkeypatch.setattr(dc_job, "_SHARING_DEADLINE", 0.0)
         if sys.platform == "win32":
             with pytest.raises(PermissionError):
                 dc_job._write_json(target, {"state": "running", "done": 1})
-    monkeypatch.setattr(dc_job, "_REPLACE_TRIES", 12)
+    monkeypatch.undo()
     dc_job._write_json(target, {"state": "running", "done": 2})
     assert json.loads(target.read_text(encoding="utf-8"))["done"] == 2
+
+
+def test_neither_side_of_the_status_swap_loses_the_race(tmp_path):
+    """The conflict is symmetric, and the reader losing it is the worse half:
+    _read_json returning None reads to the page as "no job", which hides the
+    Solving panel, stops the auto-refresh, and re-enables Optimise mid-solve."""
+    import threading
+    target = tmp_path / dc_job.STATUS
+    dc_job._write_json(target, {"state": "running", "done": 0})
+    stop = threading.Event()
+    write_failures, reads_as_no_job = [], []
+
+    def write():
+        n = 0
+        while not stop.is_set():
+            n += 1
+            try:
+                dc_job._write_json(target, {"state": "running", "done": n})
+            except OSError as exc:
+                write_failures.append(exc)
+
+    def poll():
+        while not stop.is_set():
+            if dc_job._read_json(target) is None:
+                reads_as_no_job.append(1)
+
+    threads = [threading.Thread(target=write)] + [
+        threading.Thread(target=poll) for _ in range(3)]
+    for t in threads:
+        t.start()
+    time.sleep(2.0)
+    stop.set()
+    for t in threads:
+        t.join()
+    assert not write_failures, f"{len(write_failures)} status writes lost the race"
+    assert not reads_as_no_job, f"{len(reads_as_no_job)} polls saw no job at all"
+
+
+def test_a_second_solve_cannot_be_launched_over_a_live_one(tmp_path, monkeypatch):
+    """The disabled button is a widget, not a guarantee — one lost poll
+    re-enables it, and two children in one folder corrupt both runs."""
+    monkeypatch.setattr(dc_job, "POINTER", tmp_path / "_active_job.json")
+    folder = tmp_path / "job"
+    folder.mkdir()
+    _status(folder, started=dc_job._now())          # this test's pid: alive
+    dc_job._write_json(dc_job.POINTER, {"folder": str(folder), "kind": "front",
+                                        "started": dc_job._now()})
+    assert dc_job.active("front")["state"] == "running"
+    with pytest.raises(RuntimeError, match="already running"):
+        dc_job.start(scenario=None, site=None, out_root=tmp_path,
+                     label="second", total=1)
 
 
 def test_a_lost_run_does_not_claim_the_previous_runs_answer(tmp_path):
