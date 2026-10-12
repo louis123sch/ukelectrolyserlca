@@ -943,11 +943,49 @@ else:
         ("Grid import", "import_MWh_per_year", lambda v: f"{v:,.0f} MWh/yr"),
         ("Unserved", "unserved_MWh_per_year", lambda v: f"{v:,.1f} MWh/yr"),
     ]
+
+    # Bought hydrogen is a mass flow with no capacity behind it, so it has no
+    # row in either sizing table above — which left a build that buys two
+    # colours with nothing anywhere saying how much of each it bought. Named
+    # from the colours the *run* was solved with, not from the tick-boxes as
+    # they stand now, for the same reason the rest of this section is.
+    _kg = lambda v: f"{v:,.0f} kg/yr"
+    for _key, _colour in (("h2_bought_kg_per_year", summary.get("h2_colour")),
+                          ("h2_bought_2_kg_per_year", summary.get("h2_colour_2"))):
+        if _colour:
+            metric_defs.append((f"Bought {_colour} H₂", _key, _kg))
+    if any("h2_to_fuel_cell_kg_per_year" in p for p in cols.values()):
+        metric_defs.append(("H₂ burnt in the fuel cell",
+                            "h2_to_fuel_cell_kg_per_year", _kg))
+
+    # "—", not 0, for a key a cached result predates: a run solved before these
+    # rows existed did buy hydrogen, and printing a confident zero for it would
+    # be worse than admitting the number was never recorded.
     metric_rows = [
-        {"Metric": mname, **{colname: fmt(p.get(key, 0.0)) for colname, p in cols.items()}}
+        {"Metric": mname,
+         **{colname: (fmt(p[key]) if key in p else "—")
+            for colname, p in cols.items()}}
         for mname, key, fmt in metric_defs
     ]
     st.dataframe(pd.DataFrame(metric_rows), width="stretch", hide_index=True)
+    if summary.get("h2_colour"):
+        _bought_note = (
+            "**Bought hydrogen is a purchase, not a built asset**, so it has no "
+            "row in the two tables above — its volume is here instead. ")
+        if summary.get("h2_colour_2"):
+            _bought_note += (
+                f"The two colours are separate contracts: the sweep chooses how "
+                f"much of each to buy, so **{summary['h2_colour']} at zero and "
+                f"{summary['h2_colour_2']} carrying the load is a result** — "
+                "the cheaper colour losing on carbon, or the dearer one not "
+                "earning its price — rather than a colour having been switched "
+                "off.")
+        if summary.get("green_h2_grid_share") is not None:
+            _bought_note += (
+                f" Green was priced at "
+                f"{float(summary['green_h2_grid_share']):.0%} of supply taken "
+                "over the grid rather than from behind a generator's meter.")
+        st.caption(_bought_note)
 
     if any(p.get("unserved_MWh_per_year", 0.0) > 1e-3 for p in cols.values()):
         st.warning(

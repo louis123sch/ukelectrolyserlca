@@ -293,3 +293,161 @@ def test_buying_hydrogen_without_a_price_is_refused(series, tech):
     a = M.Assets(grid=True, fuel_cell=True, buy_h2=True, grid_limit_mw=None)
     with pytest.raises(ValueError, match="no colour was priced"):
         M.build_model(series, a, free_h2, objective="cost")
+
+
+# =============================================================================
+# Generation step-up transformers
+# =============================================================================
+def _window(days, phase=0.0, seed=7):
+    """A synthetic series of a given length and season.
+
+    ``phase`` shifts the wind pattern so a short window can be windy or calm,
+    which is what makes the LP build a genuinely different amount of wind.
+    """
+    n = int(days * 24 / DT)
+    rng = np.random.default_rng(seed)
+    idx = pd.date_range("2025-01-01", periods=n, freq="30min")
+    hours = np.arange(n) * DT
+    return M.Series(
+        index=idx, dt_hours=DT,
+        demand_mw=np.full(n, 7.31),
+        cf_wind=np.clip(0.35 + 0.3 * np.sin(hours / 37 + phase)
+                        + 0.1 * rng.standard_normal(n), 0, 1),
+        cf_solar=np.clip(0.5 * np.sin(np.pi * ((hours % 24) - 6) / 12), 0, 1),
+        grid_gwp_per_mwh=250 + 120 * np.sin(hours / 11) + 20 * rng.standard_normal(n),
+        grid_price_per_mwh=95 + 40 * np.sin(hours / 13) + 10 * rng.standard_normal(n),
+    )
+
+
+def test_transformer_term_is_per_year_whatever_the_window(tech):
+    """The coefficient is an annual capital charge, so it must not move with
+    how long a window the LP was solved over.
+
+    Everything operational in ``gwp`` is multiplied by ``series.annual_scale``
+    and everything capital is not. That is the whole mechanism, and it is one
+    edit away from being wrong in either direction — a term moved inside the
+    scaled block would read 26x high on a two-week window and 122x high on a
+    three-day one. Solved across four window lengths and two seasons, the
+    charge per MW built must come out identical every time.
+    """
+    import dataclasses
+    COEF_W, COEF_S = 278.7, 184.2
+    t2 = dataclasses.replace(tech, gwp_tx_wind_per_mw=COEF_W,
+                             gwp_tx_solar_per_mwp=COEF_S)
+    assets = M.Assets(grid=True, wind=True, solar=True)
+
+    built, implied = [], []
+    for days, phase in ((3, 0.0), (7, 0.0), (14, 0.0), (28, 0.0), (14, np.pi)):
+        s = _window(days, phase)
+        scale = s.annual_scale
+        assert scale > 1.5, "window is not shorter than a year, so nothing is tested"
+
+        V, obj = _solve(s, t2, assets, objective="gwp")
+        cap_w = float(V["cap_wind"].solution) + float(V["cap_offshore"].solution)
+        cap_s = float(V["cap_solar"].solution)
+        row = M.contributions(V, obj, s, t2, assets)["gwp_embodied"][
+            "generation step-up transformers"]
+        expected = COEF_W * cap_w + COEF_S * cap_s
+
+        # It is the annual charge on what was built...
+        assert row == pytest.approx(expected, rel=1e-9), (
+            f"{days}d window: the term is not coefficient x capacity")
+        # ...and emphatically not the window total grossed up to a year, which
+        # is what it would be if the term were moved inside the scaled block.
+        assert abs(row - scale * expected) > 1e-6, (
+            f"{days}d window: the term has been annualised a second time "
+            f"(scale={scale:.1f})")
+
+        built.append(cap_w)
+        # Net of solar, the charge per MW of wind must be the coefficient
+        # itself — in every window, whatever got built.
+        implied.append((row - COEF_S * cap_s) / cap_w if cap_w > 1e-9 else np.nan)
+
+    assert max(built) > 1e-6, "no window built wind, so the test proves nothing"
+    # The windows must genuinely differ, or invariance is vacuous.
+    assert max(built) / min(built) > 1.05, (
+        f"every window built the same wind ({built}) — this cannot detect a "
+        "window-dependent charge")
+    assert implied == pytest.approx([COEF_W] * len(implied), rel=1e-9), (
+        f"the per-MW charge moved with the window: {implied}")
+
+
+def test_step_up_transformers_are_charged_on_capacity(series, tech):
+    """The term must reach the objective and scale with MW, not with MWh.
+
+    Constructed on a modified Tech rather than the shared fixture so the rest
+    of this file keeps testing the model it was written against.
+    """
+    import dataclasses
+    t2 = dataclasses.replace(tech, gwp_tx_wind_per_mw=230.2,
+                             gwp_tx_solar_per_mwp=184.2)
+    assets = M.Assets(grid=True, wind=True, solar=True)
+    V, obj = _solve(series, t2, assets, objective="gwp")
+
+    built = float(V["cap_wind"].solution)
+    assert built > 1e-6, "min-GWP built no wind, so the test proves nothing"
+
+    row = M.contributions(V, obj, series, t2, assets)["gwp_embodied"][
+        "generation step-up transformers"]
+    expected = (230.2 * (built + float(V["cap_offshore"].solution))
+                + 184.2 * float(V["cap_solar"].solution))
+    assert abs(row - expected) < 1e-6
+
+    # And it is genuinely in the objective, not only in the report: the same
+    # build costed with a zero coefficient is cleaner by exactly this much.
+    t0 = dataclasses.replace(tech, gwp_tx_wind_per_mw=0.0, gwp_tx_solar_per_mwp=0.0)
+    _, obj0 = _solve(series, t0, assets, objective="gwp")
+    assert M.totals(obj)["gwp_kgco2e_per_year"] > M.totals(obj0)["gwp_kgco2e_per_year"]
+
+
+def test_wind_and_solar_are_both_on_real_transformer_bills():
+    """The gap this used to guard is closed: both are now real inventories.
+
+    Wind carries the per-turbine step-ups from Leng's bill of materials; solar
+    carries the inverter-station units from IEA PVPS T12-33:2026. This test
+    replaces one that asserted solar was still on an invented plant-rated unit
+    scaled off ecoinvent's 280 g electronics dataset — that basis survives only
+    to reproduce pre-2026 runs, and must never be what the LP charges.
+    """
+    import dashboard_config as cfg
+    from optimisation import transformers as tx
+    if not tx.CACHE_PATH.exists():
+        pytest.skip("transformer_decomposition_cache.json not built — "
+                    "run `python optimisation/transformers.py` first")
+    d = tx.decompose()
+    wind = tx.kgco2e_per_mw_year("onshore_wind")
+    solar = tx.kgco2e_per_mw_year("solar_pv")
+    s = d["solar"]
+
+    # Both read the foreground; neither is a scaled dataset.
+    assert d["wind"]["code"] == tx.WIND_CODE
+    assert s["code"] == tx.SOLAR_CODE
+    assert s["database"] == cfg.TRANSFORMER_FOREGROUND_DB
+    assert solar == pytest.approx(s["kgco2e_per_MWp"] / d["asset_life_years"])
+
+    # ...and specifically NOT the invented unit, which is what used to be here.
+    legacy = (d["solar_legacy"]["kgco2e_per_MVA"] * tx.SOLAR_MVA_PER_MWP
+              / d["asset_life_years"])
+    assert solar != pytest.approx(legacy)
+
+    # The unit must be wound for the voltage the site actually collects at,
+    # stepping up from the inverter's low-voltage terminals. This is the whole
+    # reason it is the right transformer for this chain.
+    assert s["primary_kV"] == pytest.approx(d["site_collection_kV"])
+    lo, _hi = d["medium_voltage_band_kV"]
+    assert s["secondary_kV"] < lo
+
+    # The count is read off the reference plant, not derived from a DC/AC ratio.
+    assert s["units_per_MWp"] == pytest.approx(
+        s["units_per_plant"] / s["reference_plant_MWp"])
+
+    # The transcribed bill must still rebuild IEA PVPS's own stated unit mass.
+    # This is the guard on the hardboard unit correction: the workbook cell
+    # reads 36.96 m3, which is ~47 t and 1000x too large.
+    bill = sum(s["materials_kg_per_unit"].values()) + cfg.UPV_TX_FIBREBOARD_KG
+    assert bill == pytest.approx(cfg.UPV_TX_STATED_TOTAL_KG, abs=1.0)
+
+    # Two independent sources for step-ups of comparable rating should land in
+    # the same place. Solar carries factory energy that wind does not, so it is
+    # the higher of the two, but only just.
+    assert 0.8 < solar / wind < 1.5

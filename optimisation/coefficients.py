@@ -93,6 +93,11 @@ def build(cost_case: str = "central") -> pd.DataFrame:
         rows.append(_row(
             r["technology"], "MW" if "wind" in r["technology"] else "MWp",
             r["capital_kgco2e_per_MW"], calendar=r["study_lifetime_years"],
+            # Non-capital consumables (lubricating oil, water) ecoinvent
+            # reports per kWh, not per MW - blank where capital is already
+            # full-scope (solar's default IEA basis), so wind/offshore is not
+            # capital-only against a full-scope solar figure. See renewables.py.
+            throughput=(r["residual_per_kWh"] * 1000.0 if r["capital_only"] else None),
             source=(f"{r['embodied_basis_label']}; DESNZ/Arup 2024 lifetime"
                     if solar else ren_src),
             grade="derived",

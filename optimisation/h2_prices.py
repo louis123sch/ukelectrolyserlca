@@ -3,9 +3,12 @@ Hydrogen purchase price by colour.
 =============================================================================
 
 Hydrogen is **bought**, not self-produced: every colour is a delivered £/kg
-that the data centre pays. Transport is out of scope (production is assumed
-co-located — see ``ASSUMPTIONS.md``), so these are plant-gate prices with no
-delivery leg added.
+that the data centre pays. These are plant-gate prices plus one leg of
+delivery: the compression that puts the hydrogen on a road trailer, which the
+seller pays for and the buyer therefore does too. Road *haulage* itself remains
+out of scope — ``ASSUMPTIONS.md`` excludes it on the grounds that production is
+co-located with use, which is true of the hydrogen this study makes and not of
+the hydrogen it buys. Registered in ``DATA_GAPS.md``.
 
 Each colour is tied to the Brightway activity that supplies its *emissions*,
 so a price and its LCA can never drift apart.
@@ -344,6 +347,135 @@ def green_h2_gwp_per_kg(basis: str | None = None, *,
                if r["technology"] == "PEM operation")
     return (row["foreground_fixed_kgco2e_per_kg"]
             + row["kwh_per_kg"] * intensity / 1000.0)
+
+
+# --- getting it onto the trailer: compression -------------------------------
+# Every bought colour arrives from somebody else's plant, and until now nothing
+# charged for putting it into a vessel that could travel. The tank balance in
+# ``dc_model`` takes ``h2_buy`` at coefficient 1.0, while self-produced hydrogen
+# is charged ``h2_storage.compression_kwh_per_kg`` from the electrolyser's
+# delivery pressure up to the tank's. So building paid a parasitic that buying
+# did not, which is one-directional and favoured the purchase.
+#
+# The compression happens at the **seller's** gate, not here. A tube trailer
+# arrives at 200 bar and decants into a 28 bar tank on pressure difference
+# alone, so this is a term in the purchased coefficient and in the purchased
+# price — not a compressor added to the buyer's own plant, and not a new
+# variable in the LP.
+#
+# Trailer pressure. 200 bar is the conventional Type I steel tube trailer, and
+# it is also this study's own second tank design, so the two hydrogen pressures
+# in the study are one number rather than two. Composite trailers run 350-500
+# bar; sweep ``BOUGHT_H2_TRAILER_PRESSURE_BAR`` to see it, which moves the
+# energy by +29 % at 350 bar and +48 % at 500 bar.
+BOUGHT_H2_TRAILER_PRESSURE_BAR = 200.0
+
+# Pressure each production route delivers at, before that compression.
+#
+# green      Not listed here. Taken from
+#            ``electrolysers.DELIVERY_PRESSURE_BAR["PEM operation"]`` — 30 bar,
+#            TRANSCRIBED there — rather than restated, so the seller's plant and
+#            the buyer's own PEM cannot drift apart.
+# blue/grey  20 bar. ASSUMED. Steam reformers run at 15-30 bar and the PSA that
+#            purifies the product operates just below its feed pressure, so
+#            product hydrogen leaves at roughly reformer pressure. The
+#            Hermesmann inventories are SimaPro exports of mass and energy flows
+#            and state no pressure. 20 bar is the low end of that range, which
+#            charges more compression rather than less — the honest direction
+#            for a term being added to close an omission.
+# turquoise  20 bar. ASSUMED, and the weakest of the four: molten-media methane
+#            pyrolysis is generally near-atmospheric, and at 1 bar this term
+#            would be 2.3x larger. It is held at parity with the other
+#            thermochemical routes rather than given a large invented penalty,
+#            because the turquoise row is already a constructed blend. If
+#            turquoise is ever load-bearing in a result, price this properly
+#            first. Registered in ``DATA_GAPS.md``.
+BOUGHT_H2_PRODUCTION_PRESSURE_BAR = {
+    "grey": 20.0,
+    "blue": 20.0,
+    "turquoise": 20.0,
+}
+BOUGHT_H2_PRODUCTION_PRESSURE_ASSUMED = {"grey", "blue", "turquoise"}
+
+
+def bought_h2_production_pressure_bar(colour: str) -> float:
+    """Pressure a bought colour leaves its producer's plant at, in bar."""
+    if colour == "green":
+        from optimisation import electrolysers as ely
+        return ely.DELIVERY_PRESSURE_BAR["PEM operation"]
+    if colour not in BOUGHT_H2_PRODUCTION_PRESSURE_BAR:
+        raise ValueError(f"Unknown H2 colour {colour!r}. Available: "
+                         f"{sorted(INVENTORY)}")
+    return BOUGHT_H2_PRODUCTION_PRESSURE_BAR[colour]
+
+
+def bought_h2_compression_kwh_per_kg(colour: str) -> float:
+    """Electricity to compress one kg of bought hydrogen onto the trailer.
+
+    Uses ``h2_storage.compression_kwh_per_kg`` rather than a second correlation,
+    so the buyer's own compression and the seller's are the same thermodynamics:
+    isothermal minimum scaled to a real multistage machine.
+    """
+    from optimisation import h2_storage as h2s
+    return h2s.compression_kwh_per_kg(bought_h2_production_pressure_bar(colour),
+                                      BOUGHT_H2_TRAILER_PRESSURE_BAR)
+
+
+def bought_h2_compression_gco2e_per_kwh(colour: str, basis: str | None = None,
+                                        *, grid_share: float | None = None) -> float:
+    """Carbon intensity of the electricity driving the seller's compressor.
+
+    Green runs on whatever its own electrolyser runs on — the same renewable
+    basis, and the same ``grid_share`` delivery treatment. Pricing a green
+    producer's compressor off the GB grid would reintroduce exactly the
+    incoherence ``GREEN_H2_ELECTRICITY_BASES`` exists to remove: a plant defined
+    by being behind a renewable meter cannot compress on grid power.
+
+    Every other colour is a fossil plant already scored whole against the GB
+    grid its own activity links to, so its compressor takes the same grid.
+    """
+    if colour == "green":
+        return green_h2_electricity_gco2e_per_kwh(basis, grid_share=grid_share)
+    if colour not in INVENTORY:
+        raise ValueError(f"Unknown H2 colour {colour!r}. Available: "
+                         f"{sorted(INVENTORY)}")
+    return ECOINVENT_GB_LV_GCO2E_PER_KWH
+
+
+def bought_h2_compression_kgco2e_per_kg(colour: str, basis: str | None = None,
+                                        *, grid_share: float | None = None) -> float:
+    """kg CO2e per kg of bought hydrogen, for trailer compression alone.
+
+    Small for green and not for the rest, which is the whole point of keeping
+    the intensity colour-specific: at the default bases this is 0.017 kg/kg on
+    green against 0.976 of production (1.8 %), and 0.451 kg/kg on blue against
+    3.118 (14.5 %). ``DATA_GAPS.md`` previously carried ~0.761 kg/kg as the
+    expected size of this term for green; that figure assumed the seller
+    compressed on *grid* electricity, which no green producer does.
+    """
+    return (bought_h2_compression_kwh_per_kg(colour)
+            * bought_h2_compression_gco2e_per_kwh(colour, basis,
+                                                  grid_share=grid_share)
+            / 1000.0)
+
+
+def bought_h2_compression_gbp_per_kg(colour: str, case: str = "central") -> float:
+    """GBP per kg of bought hydrogen, for trailer compression alone.
+
+    Charged so that compression does not join the study's existing list of
+    things paid for in carbon and free in cost — see ``DATA_GAPS.md``, where
+    that asymmetry is a standing finding of ``audit.py``. Electricity only, at
+    the price the producer is already assumed to pay elsewhere in this module.
+
+    **The compressor's capital is not included**, and no public per-kg figure
+    for a hydrogen loading compressor was found. This is therefore a floor on
+    the cost while the carbon term above is complete, so the two are not
+    symmetrical and the residual bias still favours buying, just less of it.
+    """
+    if case not in CASES:
+        raise ValueError(f"case must be one of {CASES}, got {case!r}")
+    return (bought_h2_compression_kwh_per_kg(colour)
+            * PRODUCER_ELEC_GBP_PER_MWH[case] / 1000.0)
 
 
 # Non-fuel cost (capex + fixed + variable opex) per kg H2. NESO's blue stack

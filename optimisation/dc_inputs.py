@@ -34,7 +34,9 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 OUT_DIR = ROOT / "optimisation_outputs"
-DC_CACHE = OUT_DIR / "dc_facility_decomposition_cache.json"
+# v2: split by driver and net of the standby generator, so a v1 file is not
+# merely stale but the wrong shape.
+DC_CACHE = OUT_DIR / "dc_facility_decomposition_v2_cache.json"
 
 from optimisation import dc_model, sites
 
@@ -42,32 +44,52 @@ DISCOUNT_RATE = 0.06        # as sizing.Electrolyser; see ASSUMPTIONS.md
 
 
 def data_centre_coefficients(refresh: bool = False) -> dict:
-    """The facility's own burden: fixed per year, plus non-electricity per MWh.
+    """The facility's own burden, split by what each part actually scales with.
 
     Constant across every architecture — the same building is being powered
     each way — so it shifts every result by the same amount and never changes a
     ranking. Reported separately for exactly that reason.
+
+    Two drivers, because they do not move together. Shell, servers and UPS scale
+    with **installed IT capacity**; water, water treatment and refrigerant scale
+    with **delivered energy** and so follow PUE. Charging both on facility draw,
+    as this module used to, shrank the concrete whenever the chiller improved.
+
+    The standby diesel generator is scored and reported but **excluded**: this
+    study makes backup a decision variable, so importing it would charge every
+    architecture for a machine the optimiser may already have built as a fuel
+    cell. See ASSUMPTIONS.md §7.
     """
     if DC_CACHE.exists() and not refresh:
         try:
             return json.loads(DC_CACHE.read_text(encoding="utf-8"))
         except Exception:
             pass
-    import bw2data as bd
     import lca_helpers as H
     import dashboard_config as cfg
     from optimisation import baseline_grid as bg
 
     H.setup_brightway()
     method = bg.gwp_method()
-    _dc, fixed, kwh, _n = bg.decompose_data_centre(method)
+    _dc, groups, kwh = bg.decompose_data_centre_by_driver(method)
     years = float(cfg.DC_OPERATION_YEARS)
+    pue_ref = float(cfg.DC_REFERENCE_PUE)
+
+    facility_mw = kwh / years / dc_model.HOURS_PER_YEAR / 1000.0
+    reference_it_mw = facility_mw / pue_ref
     out = {
-        "fixed_kgco2e_over_life": fixed,
         "electricity_kwh_over_life": kwh,
         "operation_years": years,
-        "reference_mw": kwh / years / dc_model.HOURS_PER_YEAR / 1000.0,
-        "fixed_kgco2e_per_year": fixed / years,
+        "reference_pue": pue_ref,
+        "reference_facility_mw": facility_mw,
+        "reference_it_mw": reference_it_mw,
+        "it_kgco2e_over_life": groups["it"],
+        "it_kgco2e_per_year": groups["it"] / years,
+        "it_kgco2e_per_mw_it_year": groups["it"] / years / reference_it_mw,
+        "energy_kgco2e_over_life": groups["energy"],
+        "energy_kgco2e_per_mwh": groups["energy"] / (kwh / 1000.0),
+        "backup_kgco2e_per_year_excluded": groups["backup"] / years,
+        "charged_kgco2e_per_year_at_reference": (groups["it"] + groups["energy"]) / years,
     }
     OUT_DIR.mkdir(exist_ok=True)
     DC_CACHE.write_text(json.dumps(out, indent=2), encoding="utf-8")
@@ -94,6 +116,11 @@ def build_series(site, start: str, end: str, size_mw_it: float,
     from optimisation import profiles
 
     site = sites.get(site)
+    # tilt/azimuth are left unset so profiles.fetch_solar_cf takes them from
+    # dashboard_config. Before this, they were hard-coded defaults in that
+    # function's signature that this call never passed, so every data centre run
+    # silently used a 35-degree array while the embodied carbon was charged for
+    # a 20-degree one.
     df, meta = profiles.build(site.lat, site.lon, start, end, token=token,
                               carbon_api_region=site.carbon_api_region,
                               auto_build=auto_build, on_progress=on_progress)
@@ -242,6 +269,7 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
     from optimisation import h2_prices
     from optimisation import h2_storage as h2s
     from optimisation import renewables as ren
+    from optimisation import transformers as tx
     from optimisation import tech_costs as tc
 
     # The guard this whole design exists to make explicit. Bought green H2 does
@@ -263,7 +291,9 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
 
     def gen_gwp(asset):
         r = emb.loc[asset]
-        return float(r.capital_kgco2e_per_MW / r.study_lifetime_years)
+        # Capital annuity plus, for wind/offshore, the non-capital residual
+        # ecoinvent reports per kWh - see renewables.apply_case.
+        return float(r.annual_kgco2e_per_MW)
 
     # battery
     bc = batt.cost_components()[cost_case]
@@ -290,9 +320,17 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
 
     # bought hydrogen — one stream per colour bought, priced independently
     def resolve_bought(colour: str | None, variant: str | None):
-        """(GBP/kg, kgCO2e/kg, variant label) for one purchased colour."""
+        """(GBP/kg, kgCO2e/kg, variant label) for one purchased colour.
+
+        Both figures are delivered to the buyer's tank, not plant-gate: the
+        seller's trailer compression is added to each, since ``dc_model`` takes
+        ``h2_buy`` into the tank at coefficient 1.0 while self-produced hydrogen
+        pays its own compression through ``tank_compression_kwh_per_kg``.
+        """
         if not colour:
             return 0.0, 0.0, variant
+        compression_gbp = h2_prices.bought_h2_compression_gbp_per_kg(
+            colour, cost_case)
         rec = pd.read_csv(OUT_DIR / "h2_prices_recommended.csv")
         row = rec[rec.colour == colour]
         if row.empty:
@@ -315,7 +353,8 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
             behind = row[row.variant != grid_variant].iloc[0]
             delivered = row[row.variant == grid_variant].iloc[0]
             return (((1.0 - share) * float(behind[cost_case])
-                     + share * float(delivered[cost_case])),
+                     + share * float(delivered[cost_case])
+                     + compression_gbp),
                     _bought_h2_gwp(behind.activity_code, green_h2_basis,
                                    grid_share=share),
                     f"{1.0 - share:.0%} behind the meter / "
@@ -323,7 +362,7 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
         # One row: either a colour with a single variant, or green pinned to
         # one of its two by an explicit variant.
         one = row.iloc[0]
-        return (float(one[cost_case]),
+        return (float(one[cost_case]) + compression_gbp,
                 _bought_h2_gwp(one.activity_code, green_h2_basis,
                                grid_share=(1.0 if str(one.variant) == grid_variant
                                            else 0.0)),
@@ -339,7 +378,9 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
             "two different colours, or leave the second one unset.")
 
     dc = data_centre_coefficients()
-    scale_dc = (size_mw_it * pue) / dc["reference_mw"]
+    # PUE reaches the facility only through demand, which the energy-driven part
+    # is charged against. The IT-driven part must not move with it.
+    scale_it = size_mw_it / dc["reference_it_mw"]
 
     return dc_model.Tech(
         gwp_wind=gen_gwp("onshore_wind"), gwp_offshore=gen_gwp("offshore_wind"),
@@ -352,6 +393,14 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
         gwp_fc_stack_per_mw=d["stack_kgco2e_per_MW"],
         gwp_fc_maint_per_mwh=d["maintenance_kgco2e_per_MWh"],
         gwp_grid_per_mw=gc.kgco2e_per_mw_year(),
+        # The step-up between generator terminals and the site collection
+        # network — 690 V (LOW) up to medium voltage, which is where the data
+        # centre draws. Wind is the real per-turbine units from Leng's bill of
+        # materials, built as a foreground activity in notebook 2; solar is
+        # still the old invented plant-rated unit on ecoinvent's electronics
+        # transformer. The two are NOT on one basis: see transformers.py.
+        gwp_tx_wind_per_mw=tx.kgco2e_per_mw_year("onshore_wind"),
+        gwp_tx_solar_per_mwp=tx.kgco2e_per_mw_year("solar_pv"),
         fc_bop_calendar_years=d["bop_calendar_lifetime_years"],
         fc_bop_duty_hours=d["bop_duty_lifetime_hours"],
         fc_stack_duty_hours=d["stack_lifetime_hours"],
@@ -378,8 +427,8 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
         fc_kg_h2_per_mwh=d["h2_kg_per_MWh"],
         bought_h2_gbp_per_kg=h2_price, bought_h2_gwp_per_kg=h2_gwp,
         bought_h2_2_gbp_per_kg=h2_price_2, bought_h2_2_gwp_per_kg=h2_gwp_2,
-        dc_fixed_gwp_per_year=dc["fixed_kgco2e_per_year"] * scale_dc,
-        dc_other_gwp_per_mwh=0.0,
+        dc_fixed_gwp_per_year=dc["it_kgco2e_per_year"] * scale_it,
+        dc_other_gwp_per_mwh=dc["energy_kgco2e_per_mwh"],
         horizon_years=horizon_years,
         labels={"site": getattr(site, "key", site), "ely_tech": ely_tech, "tank_design": tank_design,
                 "h2_colour": h2_colour, "cost_case": cost_case, "solar_basis": solar_basis,
@@ -396,18 +445,38 @@ _H2_GWP_CACHE = OUT_DIR / "bought_h2_gwp_cache.json"
 
 def _bought_h2_gwp(activity_code: str, green_basis: str | None = None, *,
                    grid_share: float | None = None) -> float:
-    """kg CO2e per kg of purchased hydrogen, from its own foreground activity.
+    """kg CO2e per kg of purchased hydrogen, delivered to the buyer's tank.
 
-    Green is assembled rather than scored whole. Its activity links 54 kWh/kg to
-    ecoinvent's GB grid market, which is the wrong electricity for a commodity
-    defined by being made from renewables — see
-    ``h2_prices.GREEN_H2_ELECTRICITY_BASES``. Every other colour is scored whole,
-    because a fossil producer really is on the grid its activity links to.
+    Two terms.
+
+    **Production**, at the seller's gate. Green is assembled rather than scored
+    whole: its activity links 54 kWh/kg to ecoinvent's GB grid market, which is
+    the wrong electricity for a commodity defined by being made from renewables
+    — see ``h2_prices.GREEN_H2_ELECTRICITY_BASES``. Every other colour is scored
+    whole, because a fossil producer really is on the grid its activity links to.
+
+    **Compression** onto the road trailer that brings it here. Self-produced
+    hydrogen pays a compression parasitic to enter the tank and bought hydrogen
+    paid none, which favoured buying; see
+    ``h2_prices.bought_h2_compression_kgco2e_per_kg``. Added outside the cache
+    below, because for green it depends on the electricity basis and the grid
+    share while the cached production score does not.
     """
     from optimisation import h2_prices
 
-    if activity_code == h2_prices.INVENTORY["green"]["code"]:
-        return h2_prices.green_h2_gwp_per_kg(green_basis, grid_share=grid_share)
+    colour = next((c for c, v in h2_prices.INVENTORY.items()
+                   if v["code"] == activity_code), None)
+    if colour is None:
+        raise ValueError(
+            f"No H2 colour maps to activity {activity_code!r}. "
+            f"h2_prices.INVENTORY holds {sorted(h2_prices.INVENTORY)}; a new "
+            f"colour must be added there so its compression can be charged.")
+    compression = h2_prices.bought_h2_compression_kgco2e_per_kg(
+        colour, green_basis, grid_share=grid_share)
+
+    if colour == "green":
+        return (h2_prices.green_h2_gwp_per_kg(green_basis, grid_share=grid_share)
+                + compression)
 
     cache = {}
     if _H2_GWP_CACHE.exists():
@@ -416,7 +485,7 @@ def _bought_h2_gwp(activity_code: str, green_basis: str | None = None, *,
         except Exception:
             pass
     if activity_code in cache:
-        return cache[activity_code]
+        return cache[activity_code] + compression
     import bw2data as bd
     import lca_helpers as H
     from optimisation import baseline_grid as bg
@@ -426,13 +495,20 @@ def _bought_h2_gwp(activity_code: str, green_basis: str | None = None, *,
     cache[activity_code] = score
     OUT_DIR.mkdir(exist_ok=True)
     _H2_GWP_CACHE.write_text(json.dumps(cache, indent=2), encoding="utf-8")
-    return score
+    return score + compression
 
 
 if __name__ == "__main__":
     dc = data_centre_coefficients()
     print("Data centre facility, from its own foreground:")
-    print(f"  reference load        {dc['reference_mw']:.3f} MW continuous")
-    print(f"  fixed burden          {dc['fixed_kgco2e_per_year'] / 1000:,.0f} t CO2e/yr")
+    print(f"  reference facility    {dc['reference_facility_mw']:.3f} MW continuous "
+          f"at PUE {dc['reference_pue']:.2f}")
+    print(f"  reference IT load     {dc['reference_it_mw']:.3f} MW")
+    print(f"  IT-driven burden      {dc['it_kgco2e_per_year'] / 1000:,.0f} t CO2e/yr "
+          f"({dc['it_kgco2e_per_mw_it_year'] / 1000:,.1f} t per MW IT)")
+    print(f"  energy-driven burden  {dc['energy_kgco2e_per_mwh']:.3f} kg CO2e/MWh")
+    print(f"  charged at reference  {dc['charged_kgco2e_per_year_at_reference'] / 1000:,.0f} t CO2e/yr")
+    print(f"  standby genset        {dc['backup_kgco2e_per_year_excluded'] / 1000:,.0f} t CO2e/yr "
+          f"EXCLUDED — backup is a decision variable here")
     print(f"  lifetime electricity  {dc['electricity_kwh_over_life'] / 1e9:.2f} TWh "
           f"over {dc['operation_years']:.0f} y")

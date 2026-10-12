@@ -82,6 +82,18 @@ ENERGY_VARS = {
 # of throughput. Both are left blank rather than given a number that would
 # invite a comparison it cannot support.
 
+# Hydrogen mass through each stream over a year, in kg. Bought hydrogen is a
+# flow with no capacity behind it, so it appears in neither table above — and
+# without these it was possible to solve a build that buys two colours and
+# find no number anywhere saying how much of each it bought, which is the only
+# reason for offering two. Every one of these is already a per-step mass in the
+# LP, so the conversion is the annual scale and nothing else.
+MASS_VARS = {
+    "h2_bought_kg_per_year": "h2_buy",
+    "h2_bought_2_kg_per_year": "h2_buy_2",
+    "h2_to_fuel_cell_kg_per_year": "h2_fc",
+}
+
 
 def _energy(V, series, name):
     """Annualised MWh through one flow variable."""
@@ -94,6 +106,8 @@ def _extract(V, obj, series, tag):
     row.update({k: float(V[k].solution) for k in CAPACITY_VARS})
     row.update({f"{k}_MWh_per_year": _energy(V, series, flow)
                 for k, flow in ENERGY_VARS.items()})
+    row.update({k: float(V[flow].solution.sum()) * series.annual_scale
+                for k, flow in MASS_VARS.items()})
     mwh = float(series.demand_mw.sum() * series.dt_hours) * series.annual_scale
     row.update({
         "cost_GBP_per_year": tot["cost_GBP_per_year"],

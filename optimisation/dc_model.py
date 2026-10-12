@@ -154,6 +154,18 @@ class Tech:
     # single-colour Tech literal constructing unchanged.
     bought_h2_2_gbp_per_kg: float = 0.0
     bought_h2_2_gwp_per_kg: float = 0.0
+    # Generation step-up transformers: the voltage change between a generator's
+    # terminals and the site collection network, which none of the generation
+    # inventories in this study contains. A turbine generates at 690 V, which is
+    # LOW voltage; the data centre draws at MEDIUM, so the step is compulsory —
+    # 100 MW at 690 V is 83,674 A. Wind is one transformer per TURBINE (fifty on
+    # a 100 MW farm), which is why it scales exactly with cap_wind. Solar is
+    # still one invented plant-rated unit and is the smaller of the two.
+    # Carbon only: DESNZ/Arup capex already reaches the point of connection, so
+    # a cost term would double count. See transformers.py. Defaulted so a Tech
+    # written before they existed still constructs.
+    gwp_tx_wind_per_mw: float = 0.0
+    gwp_tx_solar_per_mwp: float = 0.0
     labels: dict = field(default_factory=dict)
 
 
@@ -373,6 +385,12 @@ def build_model(series: Series, assets: Assets, tech: Tech, *,
         # MW either — neither objective can, leaving its size to the solver's
         # stopping vertex. See grid_connection.py.
         + tech.gwp_grid_per_mw * V["cap_grid"]
+        # Step-up transformers, on capacity rather than output: a transformer is
+        # sized to the peak MVA it must pass and does not care how many hours a
+        # year that happens. Solar is charged per MWp against an AC-rated asset,
+        # which is why its coefficient already carries the DC:AC ratio.
+        + tech.gwp_tx_wind_per_mw * (V["cap_wind"] + V["cap_offshore"])
+        + tech.gwp_tx_solar_per_mwp * V["cap_solar"]
         + scale * (tech.gwp_fc_maint_per_mwh * V["p_fc"] * dt).sum()
         + scale * (ci * V["imp"] * dt).sum()
         + scale * (tech.bought_h2_gwp_per_kg * V["h2_buy"]).sum()
@@ -527,6 +545,12 @@ def contributions(V, obj, series, tech, assets) -> dict:
         "fuel cell": (tech.gwp_fc_bop_per_mw * float(V["fc_bop_units"].solution)
                       + tech.gwp_fc_stack_per_mw * float(V["fc_stack_units"].solution)),
         "grid connection": tech.gwp_grid_per_mw * float(V["cap_grid"].solution),
+        # Its own line rather than folded into wind and solar: it is a different
+        # asset, on a different life, and the only one whose coefficient depends
+        # on whether the capacity it serves is rated AC or DC.
+        "generation step-up transformers": (
+            tech.gwp_tx_wind_per_mw * (cap["cap_wind"] + cap["cap_offshore"])
+            + tech.gwp_tx_solar_per_mwp * cap["cap_solar"]),
     }
     gwp_op = {
         "grid import": scale * float((series.grid_gwp_per_mwh * ser["imp"] * dt).sum()),
@@ -558,7 +582,9 @@ def contributions(V, obj, series, tech, assets) -> dict:
     mwh = float(series.demand_mw.sum() * dt) * scale
     return {
         "gwp_embodied": gwp, "gwp_operational": gwp_op,
-        "gwp_facility": {"data centre itself": tech.dc_fixed_gwp_per_year},
+        "gwp_facility": {"data centre, IT capacity": tech.dc_fixed_gwp_per_year,
+                         "data centre, cooling consumables":
+                             tech.dc_other_gwp_per_mwh * mwh},
         "cost_capital": cost, "cost_operational": cost_op,
         "demand_MWh_per_year": mwh,
         "totals": totals(obj),

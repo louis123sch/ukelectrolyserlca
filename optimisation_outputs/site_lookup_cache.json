@@ -63,6 +63,14 @@
     "region_name": "South England",
     "tnuos_zone": 13
   },
+  "51.3,-0.128": {
+    "carbon_api_region": 14,
+    "outcode": "CR5",
+    "place": "Croydon",
+    "postcode": "CR5 1BN",
+    "region_name": "South East England",
+    "tnuos_zone": 11
+  },
   "51.3,1.2": {
     "carbon_api_region": 14,
     "outcode": "CT3",
@@ -276,6 +284,14 @@
     "outcode": "IV63",
     "place": "Highland",
     "postcode": "IV63 7YW",
+    "region_name": "North Scotland",
+    "tnuos_zone": 1
+  },
+  "57.478,-4.225": {
+    "carbon_api_region": 1,
+    "outcode": "IV1",
+    "place": "Highland",
+    "postcode": "IV1 1HY",
     "region_name": "North Scotland",
     "tnuos_zone": 1
   },

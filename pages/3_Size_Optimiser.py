@@ -119,7 +119,11 @@ with c2:
     end = st.date_input("End", dt.date(2025, 3, 31))
 with c3:
     turbine = st.text_input("Turbine", cfg.NINJA_TURBINE)
-    tilt = st.number_input("PV tilt (degrees)", 0.0, 90.0, 35.0, step=5.0)
+    tilt = st.number_input("PV tilt (degrees)", 0.0, 90.0, cfg.PV_TILT_DEG,
+                           step=5.0,
+                           help="Defaults to dashboard_config.PV_TILT_DEG, the "
+                                "tilt of the mounting structure whose embodied "
+                                "carbon renewables.py charges.")
 
 st.caption(
     "Wind and solar profiles come from Renewables.ninja at these coordinates and "

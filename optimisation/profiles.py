@@ -79,14 +79,31 @@ def fetch_wind_cf(lat, lon, start, end, turbine="Vestas V90 2000",
     return df, hit
 
 
-def fetch_solar_cf(lat, lon, start, end, tilt=35.0, azim=180.0,
-                   system_loss=0.10, tracking=0, dataset="merra2", token=None):
+def fetch_solar_cf(lat, lon, start, end, tilt=None, azim=None,
+                   system_loss=None, tracking=None, dataset="merra2", token=None):
     """Hourly PV capacity factor at a site, per kWp. Cached.
 
     Renewables.ninja's PV endpoint, the counterpart to the wind one
-    ``lca_helpers`` already wraps. Defaults are a fixed south-facing array at
-    35 degrees, which is a conventional GB utility-scale choice.
+    ``lca_helpers`` already wraps.
+
+    The array geometry comes from ``dashboard_config`` rather than from this
+    signature. It used to be four hard-coded defaults here — tilt 35, azimuth
+    180, 10 % loss, no tracking — which ``dc_inputs.build_series`` never passed,
+    so the data centre model silently took them and could not override them.
+    They were also absent from ASSUMPTIONS.md, and 35 degrees was described here
+    as "a conventional GB utility-scale choice", which it is not: GB
+    utility-scale is 20-25 degrees, and 35 is closer to a domestic roof pitch.
+
+    ``cfg.PV_TILT_DEG`` is 20 degrees, matching the pile-driven table whose
+    embodied carbon ``renewables.py`` charges — so the plant being paid for and
+    the plant being generated from are the same one. Tilt is part of the cache
+    key, so changing it fetches fresh series rather than reusing the old ones.
     """
+    import dashboard_config as cfg
+    tilt = cfg.PV_TILT_DEG if tilt is None else tilt
+    azim = cfg.PV_AZIMUTH_DEG if azim is None else azim
+    system_loss = cfg.PV_SYSTEM_LOSS if system_loss is None else system_loss
+    tracking = cfg.PV_TRACKING if tracking is None else tracking
     args = {"lat": round(float(lat), 4), "lon": round(float(lon), 4),
             "start": str(start), "end": str(end), "tilt": float(tilt),
             "azim": float(azim), "loss": float(system_loss),
@@ -347,7 +364,7 @@ def load_grid_and_price(start, end, *, carbon_api_region: int | None = None,
 
 
 def build(lat, lon, start, end, *, turbine="Vestas V90 2000",
-          hub_height_m=80.0, tilt=35.0, azim=180.0, token=None,
+          hub_height_m=80.0, tilt=None, azim=None, token=None,
           carbon_api_region: int | None = None, auto_build: bool = True,
           on_progress=None):
     """Everything the dispatch needs, aligned on one half-hourly index.

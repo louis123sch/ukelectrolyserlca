@@ -1,0 +1,2433 @@
+{
+ "_source": "Smith, B.L., Sekar, A., Mirletz, H., Heath, G. & Margolis, R. (2024), An Updated Life Cycle Assessment of Utility-Scale Solar Photovoltaic Systems Installed in the United States, NREL/TP-7A40-87372, Appendix A. Transcribed in optimisation/data/smith-nrel-2024-life-cycle-inventory.md.",
+ "_verification": "290 of 290 scientific-notation values in Appendix A present in the transcription; 251 rows association-checked against the PDF text, 249 clean (the 2 flagged are zero-GWP elementary flows).",
+ "_scope": "fixed tilt; no end-of-life; no construction transport; O&M included minus tracker actuator and minus the step-up transformer (charged by transformers.py); SE Asia import supply chain.",
+ "_system_model": "ecoinvent 3.9.1 apos - Smith published on cut-off, so his INVENTORY is used and rescored here, never his results.",
+ "tables": {
+  "A1": {
+   "reference_product": "silica sand",
+   "reference_amount": 92500.0,
+   "reference_unit": "t",
+   "technosphere": [
+    {
+     "flow": "building, hall",
+     "amount": 48.4,
+     "unit": "m2",
+     "activity": "building construction, hall",
+     "location": "RoW",
+     "reference_product": "building, hall",
+     "waste": false,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "conveyor belt",
+     "amount": 9.15,
+     "unit": "m",
+     "activity": "market for conveyor belt",
+     "location": "GLO",
+     "reference_product": "conveyor belt",
+     "waste": false,
+     "note": "preference order"
+    },
+    {
+     "flow": "diesel",
+     "amount": 31600.0,
+     "unit": "kg",
+     "activity": "diesel production, petroleum refinery operation",
+     "location": "RoW",
+     "reference_product": "diesel",
+     "waste": false,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "electricity, medium voltage",
+     "amount": 262000.0,
+     "unit": "kWh",
+     "activity": "market group for electricity, medium voltage",
+     "location": "CN",
+     "note": "SE Asia import supply chain"
+    },
+    {
+     "flow": "gravel/sand quarry infrastructure",
+     "amount": 0.00457,
+     "unit": "Item(s)",
+     "activity": "gravel/sand quarry construction",
+     "location": "RoW",
+     "reference_product": "gravel/sand quarry infrastructure",
+     "waste": false,
+     "note": "preference order"
+    },
+    {
+     "flow": "heat, district or industrial, other than natural gas",
+     "amount": 18500000.0,
+     "unit": "MJ",
+     "activity": "heat production, heavy fuel oil, at industrial furnace 1MW",
+     "location": "RoW",
+     "reference_product": "heat, district or industrial, other than natural gas",
+     "waste": false,
+     "note": "preference order"
+    },
+    {
+     "flow": "heavy fuel oil",
+     "amount": 5250.0,
+     "unit": "kg",
+     "activity": "heavy fuel oil production, petroleum refinery operation",
+     "location": "RoW",
+     "reference_product": "heavy fuel oil",
+     "waste": false,
+     "note": "preference order"
+    },
+    {
+     "flow": "industrial machine, heavy, unspecified",
+     "amount": 1080.0,
+     "unit": "kg",
+     "activity": "industrial machine production, heavy, unspecified",
+     "location": "RoW",
+     "reference_product": "industrial machine, heavy, unspecified",
+     "waste": false,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "lime, packed",
+     "amount": 2720.0,
+     "unit": "kg",
+     "activity": "lime production, milled, packed",
+     "location": "RoW",
+     "reference_product": "lime, packed",
+     "waste": false,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "lubricating oil",
+     "amount": 118.0,
+     "unit": "kg",
+     "activity": "lubricating oil production",
+     "location": "RoW",
+     "reference_product": "lubricating oil",
+     "waste": false,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "steel, unalloyed",
+     "amount": 1250.0,
+     "unit": "kg",
+     "activity": "steel production, converter, unalloyed",
+     "location": "RoW",
+     "reference_product": "steel, unalloyed",
+     "waste": false,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "synthetic rubber",
+     "amount": 192.0,
+     "unit": "kg",
+     "activity": "synthetic rubber production",
+     "location": "RoW",
+     "reference_product": "synthetic rubber",
+     "waste": false,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "transport, freight, light commercial vehicle",
+     "amount": 1490.0,
+     "unit": "t*km",
+     "activity": "transport, freight, light commercial vehicle",
+     "location": "RoW",
+     "reference_product": "transport, freight, light commercial vehicle",
+     "waste": false,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "transport, freight, lorry, unspecified",
+     "amount": 10100.0,
+     "unit": "t*km",
+     "activity": "market group for transport, freight, lorry, unspecified",
+     "location": "GLO",
+     "reference_product": "transport, freight, lorry, unspecified",
+     "waste": false,
+     "note": "preference order"
+    }
+   ],
+   "biosphere": [],
+   "chain_links": [],
+   "skipped": [
+    {
+     "flow": "sand, quartz",
+     "amount": 100000.0,
+     "reason": "mangled cell, provider names a different flow"
+    },
+    {
+     "flow": "Water, process and cooling, unspecified natural origin",
+     "amount": 133000.0,
+     "reason": "mangled cell, provider names a different flow"
+    },
+    {
+     "flow": "Water, process, unspecified natural origin",
+     "amount": 971000.0,
+     "reason": "mangled cell, provider names a different flow"
+    }
+   ]
+  },
+  "A2": {
+   "reference_product": "silicon, metallurgical grade",
+   "reference_amount": 1.0,
+   "reference_unit": "kg",
+   "technosphere": [
+    {
+     "flow": "charcoal",
+     "amount": 0.17,
+     "unit": "kg",
+     "activity": "market for charcoal",
+     "location": "GLO",
+     "reference_product": "charcoal",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "coke",
+     "amount": 23.1,
+     "unit": "MJ",
+     "activity": "market for coke",
+     "location": "GLO",
+     "reference_product": "coke",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "electric arc furnace converter",
+     "amount": 1e-11,
+     "unit": "Item(s)",
+     "activity": "market for electric arc furnace converter",
+     "location": "GLO",
+     "reference_product": "electric arc furnace converter",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "electricity, medium voltage",
+     "amount": 13.0,
+     "unit": "kWh",
+     "activity": "market group for electricity, medium voltage",
+     "location": "CN",
+     "note": "SE Asia import supply chain"
+    },
+    {
+     "flow": "graphite",
+     "amount": 0.1,
+     "unit": "kg",
+     "activity": "market for graphite",
+     "location": "GLO",
+     "reference_product": "graphite",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "oxygen, liquid",
+     "amount": 0.02,
+     "unit": "kg",
+     "activity": "market for oxygen, liquid",
+     "location": "RoW",
+     "reference_product": "oxygen, liquid",
+     "waste": false,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "petroleum coke",
+     "amount": 0.5,
+     "unit": "kg",
+     "activity": "market for petroleum coke",
+     "location": "GLO",
+     "reference_product": "petroleum coke",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "transport, freight train",
+     "amount": 0.069,
+     "unit": "t*km",
+     "activity": "market for transport, freight train",
+     "location": "US",
+     "reference_product": "transport, freight train",
+     "waste": false,
+     "note": "stated US"
+    },
+    {
+     "flow": "transport, freight, lorry, unspecified",
+     "amount": 0.156,
+     "unit": "t*km",
+     "activity": "market group for transport, freight, lorry, unspecified",
+     "location": "GLO",
+     "reference_product": "transport, freight, lorry, unspecified",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "wood chips, wet, measured as dry mass",
+     "amount": 0.00325,
+     "unit": "kg",
+     "activity": "market for wood chips, wet, measured as dry mass",
+     "location": "RoW",
+     "reference_product": "wood chips, wet, measured as dry mass",
+     "waste": false,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "slag from metallurgical grade silicon production",
+     "amount": 0.025,
+     "unit": "kg",
+     "activity": "market for slag from metallurgical grade silicon production",
+     "location": "GLO",
+     "reference_product": "slag from metallurgical grade silicon production",
+     "waste": true,
+     "note": "stated GLO"
+    }
+   ],
+   "biosphere": [
+    {
+     "flow": "antimony",
+     "amount": 7.85e-09,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "Antimony"
+    },
+    {
+     "flow": "arsenic",
+     "amount": 9.42e-09,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "Arsenic"
+    },
+    {
+     "flow": "boron",
+     "amount": 2.79e-07,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "Boron"
+    },
+    {
+     "flow": "cadmium",
+     "amount": 3.14e-10,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "Cadmium"
+    },
+    {
+     "flow": "calcium",
+     "amount": 7.75e-07,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "Calcium"
+    },
+    {
+     "flow": "carbon dioxide, biogenic",
+     "amount": 1.61,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "Carbon dioxide, non-fossil"
+    },
+    {
+     "flow": "carbon dioxide, fossil",
+     "amount": 3.58,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 1.0,
+     "ecoinvent_flow": "Carbon dioxide, fossil"
+    },
+    {
+     "flow": "carbon monoxide, fossil",
+     "amount": 0.00138,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "Carbon monoxide, fossil"
+    },
+    {
+     "flow": "carbon monoxide, land transformation",
+     "amount": 0.00062,
+     "unit": "kg",
+     "matched": false,
+     "gwp100": null,
+     "ecoinvent_flow": null
+    },
+    {
+     "flow": "chlorine",
+     "amount": 7.85e-08,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "Chlorine"
+    },
+    {
+     "flow": "chromium III",
+     "amount": 7.85e-09,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "Chromium III"
+    },
+    {
+     "flow": "cyanide",
+     "amount": 6.87e-06,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "Cyanide"
+    },
+    {
+     "flow": "fluorine",
+     "amount": 3.88e-08,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "Fluorine"
+    },
+    {
+     "flow": "heat, waste",
+     "amount": 71.3,
+     "unit": "MJ",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "Heat, waste"
+    },
+    {
+     "flow": "hydrogen fluoride",
+     "amount": 0.0005,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "Hydrogen fluoride"
+    },
+    {
+     "flow": "hydrogen sulfide",
+     "amount": 0.0005,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "Hydrogen sulfide"
+    },
+    {
+     "flow": "iron",
+     "amount": 3.88e-06,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "Iron"
+    },
+    {
+     "flow": "lead",
+     "amount": 3.44e-07,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "Lead"
+    },
+    {
+     "flow": "mercury",
+     "amount": 7.85e-09,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "Mercury"
+    },
+    {
+     "flow": "nitrogen oxides",
+     "amount": 0.00974,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "Nitrogen oxides"
+    },
+    {
+     "flow": "NMVOC, non-methane volatile organic compounds, unspecified origin",
+     "amount": 9.6e-05,
+     "unit": "kg",
+     "matched": false,
+     "gwp100": null,
+     "ecoinvent_flow": null
+    },
+    {
+     "flow": "particulates, >10 \u03bcm",
+     "amount": 0.00775,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "Particulate Matter, > 10 um"
+    },
+    {
+     "flow": "potassium",
+     "amount": 6.2e-05,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "Potassium"
+    },
+    {
+     "flow": "silicon",
+     "amount": 0.00751,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "Silicon"
+    },
+    {
+     "flow": "sodium",
+     "amount": 7.75e-07,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "Sodium"
+    },
+    {
+     "flow": "sulfur dioxide",
+     "amount": 0.0122,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "Sulfur dioxide"
+    },
+    {
+     "flow": "tin",
+     "amount": 7.85e-09,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "Tin"
+    }
+   ],
+   "chain_links": [
+    {
+     "flow": "silica sand",
+     "amount": 0.0027,
+     "amount_as_printed": 2.7,
+     "unit": "t",
+     "unit_as_printed": "kg",
+     "unit_scale": 0.001,
+     "table": "A1"
+    }
+   ],
+   "skipped": []
+  },
+  "A3": {
+   "reference_product": "silicon, solar grade",
+   "reference_amount": 1.0,
+   "reference_unit": "kg",
+   "technosphere": [
+    {
+     "flow": "chlorine, gaseous",
+     "amount": 0.215,
+     "unit": "kg",
+     "activity": "market for chlorine, gaseous",
+     "location": "RoW",
+     "reference_product": "chlorine, gaseous",
+     "waste": false,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "electricity, high voltage",
+     "amount": 72.0,
+     "unit": "kWh",
+     "activity": "market group for electricity, high voltage",
+     "location": "CN",
+     "note": "SE Asia import supply chain"
+    },
+    {
+     "flow": "graphite",
+     "amount": 0.0054,
+     "unit": "kg",
+     "activity": "market for graphite",
+     "location": "GLO",
+     "reference_product": "graphite",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "heat, district or industrial, natural gas",
+     "amount": 70.0,
+     "unit": "MJ",
+     "activity": "heat production, natural gas, at industrial furnace >100kW",
+     "location": "RoW",
+     "reference_product": "heat, district or industrial, natural gas",
+     "waste": false,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "hydrogen, liquid",
+     "amount": 0.0536,
+     "unit": "kg",
+     "activity": "market for hydrogen, liquid",
+     "location": "RoW",
+     "reference_product": "hydrogen, liquid",
+     "waste": false,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "nitrogen, liquid",
+     "amount": 12.9,
+     "unit": "kg",
+     "activity": "market for nitrogen, liquid",
+     "location": "RoW",
+     "reference_product": "nitrogen, liquid",
+     "waste": false,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "quicklime, milled, packed",
+     "amount": 0.58,
+     "unit": "kg",
+     "activity": "market for quicklime, milled, packed",
+     "location": "RoW",
+     "reference_product": "quicklime, milled, packed",
+     "waste": false,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "silicone factory",
+     "amount": 1e-11,
+     "unit": "Item(s)",
+     "activity": "market for silicone factory",
+     "location": "GLO",
+     "reference_product": "silicone factory",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "sodium hydroxide, without water, in 50% solution state",
+     "amount": 0.35,
+     "unit": "kg",
+     "activity": "market for sodium hydroxide, without water, in 50% solution state",
+     "location": "GLO",
+     "reference_product": "sodium hydroxide, without water, in 50% solution state",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "transport, freight train",
+     "amount": 3.65,
+     "unit": "t*km",
+     "activity": "market for transport, freight train",
+     "location": "US",
+     "reference_product": "transport, freight train",
+     "waste": false,
+     "note": "stated US"
+    },
+    {
+     "flow": "transport, freight, lorry, unspecified",
+     "amount": 2.87,
+     "unit": "t*km",
+     "activity": "market group for transport, freight, lorry, unspecified",
+     "location": "GLO",
+     "reference_product": "transport, freight, lorry, unspecified",
+     "waste": false,
+     "note": "stated GLO"
+    }
+   ],
+   "biosphere": [
+    {
+     "flow": "AOX, adsorbable organic halogen as Cl",
+     "amount": 1.26e-05,
+     "unit": "kg",
+     "matched": false,
+     "gwp100": null,
+     "ecoinvent_flow": null
+    },
+    {
+     "flow": "BOD5, biological oxygen demand",
+     "amount": 0.000205,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "BOD5, Biological Oxygen Demand"
+    },
+    {
+     "flow": "chloride",
+     "amount": 0.036,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "Chloride"
+    },
+    {
+     "flow": "COD, chemical oxygen demand",
+     "amount": 0.00202,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "COD, Chemical Oxygen Demand"
+    },
+    {
+     "flow": "copper, ion",
+     "amount": 1.02e-07,
+     "unit": "kg",
+     "matched": false,
+     "gwp100": null,
+     "ecoinvent_flow": null
+    },
+    {
+     "flow": "DOC, dissolved organic carbon",
+     "amount": 0.00091,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "DOC, Dissolved Organic Carbon"
+    },
+    {
+     "flow": "heat, waste",
+     "amount": 396.0,
+     "unit": "MJ",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "Heat, waste"
+    },
+    {
+     "flow": "iron, ion",
+     "amount": 5.61e-06,
+     "unit": "kg",
+     "matched": false,
+     "gwp100": null,
+     "ecoinvent_flow": null
+    },
+    {
+     "flow": "nitrogen",
+     "amount": 0.000208,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "Nitrogen"
+    },
+    {
+     "flow": "phosphate",
+     "amount": 2.8e-06,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "Phosphate"
+    },
+    {
+     "flow": "sodium, ion",
+     "amount": 0.0338,
+     "unit": "kg",
+     "matched": false,
+     "gwp100": null,
+     "ecoinvent_flow": null
+    },
+    {
+     "flow": "TOC, total organic carbon",
+     "amount": 0.00091,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "TOC, Total Organic Carbon"
+    },
+    {
+     "flow": "zinc, ion",
+     "amount": 1.96e-06,
+     "unit": "kg",
+     "matched": false,
+     "gwp100": null,
+     "ecoinvent_flow": null
+    }
+   ],
+   "chain_links": [
+    {
+     "flow": "silicon, metallurgical grade",
+     "amount": 1.26,
+     "amount_as_printed": 1.26,
+     "unit": "kg",
+     "unit_as_printed": "kg",
+     "unit_scale": 1.0,
+     "table": "A2"
+    }
+   ],
+   "skipped": []
+  },
+  "A4": {
+   "reference_product": "silicon, single crystal, Czochralski",
+   "reference_amount": 1.0,
+   "reference_unit": "kg",
+   "technosphere": [
+    {
+     "flow": "acetone, liquid",
+     "amount": 0.049,
+     "unit": "kg",
+     "activity": "market for acetone, liquid",
+     "location": "RoW",
+     "reference_product": "acetone, liquid",
+     "waste": false,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "argon, liquid",
+     "amount": 0.046,
+     "unit": "kg",
+     "activity": "market for argon, liquid",
+     "location": "RoW",
+     "reference_product": "argon, liquid",
+     "waste": false,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "ceramic tile",
+     "amount": 0.062,
+     "unit": "kg",
+     "activity": "market for ceramic tile",
+     "location": "GLO",
+     "reference_product": "ceramic tile",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "electricity, medium voltage",
+     "amount": 38.4,
+     "unit": "kWh",
+     "activity": "market group for electricity, medium voltage",
+     "location": "CN",
+     "note": "SE Asia import supply chain"
+    },
+    {
+     "flow": "hydrochloric acid, without water, in 30% solution state",
+     "amount": 0.000438,
+     "unit": "kg",
+     "activity": "hydrochloric acid production, from the reaction of hydrogen with chlorine",
+     "location": "RoW",
+     "reference_product": "hydrochloric acid, without water, in 30% solution state",
+     "waste": false,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "hydrogen fluoride",
+     "amount": 0.00351,
+     "unit": "kg",
+     "activity": "market for hydrogen fluoride",
+     "location": "RoW",
+     "reference_product": "hydrogen fluoride",
+     "waste": false,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "lime, hydrated, packed",
+     "amount": 0.022,
+     "unit": "kg",
+     "activity": "market for lime, hydrated, packed",
+     "location": "RoW",
+     "reference_product": "lime, hydrated, packed",
+     "waste": false,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "nitric acid, without water, in 50% solution state",
+     "amount": 0.00778,
+     "unit": "kg",
+     "activity": "market for nitric acid, without water, in 50% solution state",
+     "location": "RoW",
+     "reference_product": "nitric acid, without water, in 50% solution state",
+     "waste": false,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "silicone factory",
+     "amount": 5e-12,
+     "unit": "Item(s)",
+     "activity": "market for silicone factory",
+     "location": "GLO",
+     "reference_product": "silicone factory",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "sodium hydroxide, without water, in 50% solution state",
+     "amount": 0.00478,
+     "unit": "kg",
+     "activity": "market for sodium hydroxide, without water, in 50% solution state",
+     "location": "GLO",
+     "reference_product": "sodium hydroxide, without water, in 50% solution state",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "transport, freight train",
+     "amount": 1.41,
+     "unit": "t*km",
+     "activity": "market for transport, freight train",
+     "location": "US",
+     "reference_product": "transport, freight train",
+     "waste": false,
+     "note": "stated US"
+    },
+    {
+     "flow": "transport, freight, lorry, unspecified",
+     "amount": 1.13,
+     "unit": "t*km",
+     "activity": "market group for transport, freight, lorry, unspecified",
+     "location": "GLO",
+     "reference_product": "transport, freight, lorry, unspecified",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "water, completely softened",
+     "amount": 0.0684,
+     "unit": "kg",
+     "activity": "market for water, completely softened",
+     "location": "US",
+     "reference_product": "water, completely softened",
+     "waste": false,
+     "note": "stated US"
+    },
+    {
+     "flow": "waste, from silicon wafer production, inorganic",
+     "amount": 0.1,
+     "unit": "kg",
+     "activity": "market for waste, from silicon wafer production, inorganic",
+     "location": "GLO",
+     "reference_product": "waste, from silicon wafer production, inorganic",
+     "waste": true,
+     "note": "stated GLO"
+    }
+   ],
+   "biosphere": [
+    {
+     "flow": "BOD5, biological oxygen demand",
+     "amount": 0.13,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "BOD5, Biological Oxygen Demand"
+    },
+    {
+     "flow": "COD, chemical oxygen demand",
+     "amount": 0.13,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "COD, Chemical Oxygen Demand"
+    },
+    {
+     "flow": "DOC, dissolved organic carbon",
+     "amount": 0.0405,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "DOC, Dissolved Organic Carbon"
+    },
+    {
+     "flow": "fluoride",
+     "amount": 0.00237,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "Fluoride"
+    },
+    {
+     "flow": "heat, waste",
+     "amount": 115.0,
+     "unit": "MJ",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "Heat, waste"
+    },
+    {
+     "flow": "hydrocarbons, unspecified",
+     "amount": 0.0228,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "Hydrocarbons, unspecified"
+    },
+    {
+     "flow": "hydroxide",
+     "amount": 0.00742,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "Hydroxide"
+    },
+    {
+     "flow": "nitrogen",
+     "amount": 0.0091,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "Nitrogen"
+    },
+    {
+     "flow": "TOC, total organic carbon",
+     "amount": 0.0405,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "TOC, Total Organic Carbon"
+    },
+    {
+     "flow": "water",
+     "amount": 0.3,
+     "unit": "m3",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "Water"
+    },
+    {
+     "flow": "water",
+     "amount": 2.2,
+     "unit": "m3",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "Water"
+    }
+   ],
+   "chain_links": [
+    {
+     "flow": "silicon, solar grade",
+     "amount": 1.03,
+     "amount_as_printed": 1.03,
+     "unit": "kg",
+     "unit_as_printed": "kg",
+     "unit_scale": 1.0,
+     "table": "A3"
+    }
+   ],
+   "skipped": [
+    {
+     "flow": "Water, cooling, unspecified natural origin",
+     "amount": 2.33,
+     "reason": "mangled cell, provider names a different flow"
+    }
+   ]
+  },
+  "A5": {
+   "reference_product": "single-Si wafer, photovoltaic",
+   "reference_amount": 1.0,
+   "reference_unit": "m2",
+   "technosphere": [
+    {
+     "flow": "acrylic binder, with water, in 54% solution state",
+     "amount": 0.002,
+     "unit": "kg",
+     "activity": "market for acrylic binder, with water, in 54% solution state",
+     "location": "RoW",
+     "reference_product": "acrylic binder, with water, in 54% solution state",
+     "waste": false,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "alkylbenzene sulfonate, linear, petrochemical",
+     "amount": 0.034,
+     "unit": "kg",
+     "activity": "market for alkylbenzene sulfonate, linear, petrochemical",
+     "location": "GLO",
+     "reference_product": "alkylbenzene sulfonate, linear, petrochemical",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "brass",
+     "amount": 0.00745,
+     "unit": "kg",
+     "activity": "market for brass",
+     "location": "RoW",
+     "reference_product": "brass",
+     "waste": false,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "citric acid",
+     "amount": 0.187,
+     "unit": "kg",
+     "activity": "market for citric acid",
+     "location": "GLO",
+     "reference_product": "citric acid",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "electricity, medium voltage",
+     "amount": 2.35,
+     "unit": "kWh",
+     "activity": "market group for electricity, medium voltage",
+     "location": "CN",
+     "note": "SE Asia import supply chain"
+    },
+    {
+     "flow": "glass wool mat",
+     "amount": 0.0106,
+     "unit": "kg",
+     "activity": "market for glass wool mat",
+     "location": "GLO",
+     "reference_product": "glass wool mat",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "heat, district or industrial, natural gas",
+     "amount": 1.8,
+     "unit": "MJ",
+     "activity": "heat production, natural gas, at industrial furnace >100kW",
+     "location": "RoW",
+     "reference_product": "heat, district or industrial, natural gas",
+     "waste": false,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "hydrogen peroxide, without water, in 50% solution state",
+     "amount": 0.0253,
+     "unit": "kg",
+     "activity": "hydrogen peroxide production, product in 50% solution state",
+     "location": "RoW",
+     "reference_product": "hydrogen peroxide, without water, in 50% solution state",
+     "waste": false,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "potassium hydroxide",
+     "amount": 0.00381,
+     "unit": "kg",
+     "activity": "market for potassium hydroxide",
+     "location": "GLO",
+     "reference_product": "potassium hydroxide",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "sodium hydroxide, without water, in 50% solution state",
+     "amount": 0.015,
+     "unit": "kg",
+     "activity": "market for sodium hydroxide, without water, in 50% solution state",
+     "location": "GLO",
+     "reference_product": "sodium hydroxide, without water, in 50% solution state",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "steel, low-alloyed, hot rolled",
+     "amount": 0.000896,
+     "unit": "kg",
+     "activity": "market for steel, low-alloyed, hot rolled",
+     "location": "GLO",
+     "reference_product": "steel, low-alloyed, hot rolled",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "wafer factory",
+     "amount": 2e-06,
+     "unit": "Item(s)",
+     "activity": "market for wafer factory",
+     "location": "GLO",
+     "reference_product": "wafer factory",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "water, completely softened",
+     "amount": 21.7,
+     "unit": "kg",
+     "activity": "market for water, completely softened",
+     "location": "US",
+     "reference_product": "water, completely softened",
+     "waste": false,
+     "note": "stated US"
+    },
+    {
+     "flow": "wire drawing, steel",
+     "amount": 0.000896,
+     "unit": "kg",
+     "activity": "market for wire drawing, steel",
+     "location": "GLO",
+     "reference_product": "wire drawing, steel",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "waste, from silicon wafer production",
+     "amount": 0.02,
+     "unit": "kg",
+     "activity": "market for waste, from silicon wafer production",
+     "location": "GLO",
+     "reference_product": "waste, from silicon wafer production",
+     "waste": true,
+     "note": "stated GLO"
+    }
+   ],
+   "biosphere": [
+    {
+     "flow": "AOX, adsorbable organic halogen as Cl",
+     "amount": 0.000501,
+     "unit": "kg",
+     "matched": false,
+     "gwp100": null,
+     "ecoinvent_flow": null
+    },
+    {
+     "flow": "BOD5, biological oxygen demand",
+     "amount": 0.0296,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "BOD5, Biological Oxygen Demand"
+    },
+    {
+     "flow": "COD, chemical oxygen demand",
+     "amount": 0.0296,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "COD, Chemical Oxygen Demand"
+    },
+    {
+     "flow": "copper, ion",
+     "amount": 6.05e-05,
+     "unit": "kg",
+     "matched": false,
+     "gwp100": null,
+     "ecoinvent_flow": null
+    },
+    {
+     "flow": "DOC, dissolved organic carbon",
+     "amount": 0.0111,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "DOC, Dissolved Organic Carbon"
+    },
+    {
+     "flow": "heat, waste",
+     "amount": 8.0,
+     "unit": "MJ",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "Heat, waste"
+    },
+    {
+     "flow": "nitrogen",
+     "amount": 0.00994,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "Nitrogen"
+    },
+    {
+     "flow": "TOC, total organic carbon",
+     "amount": 0.0111,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "TOC, Total Organic Carbon"
+    },
+    {
+     "flow": "water",
+     "amount": 0.00975,
+     "unit": "m3",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "Water"
+    },
+    {
+     "flow": "water",
+     "amount": 0.0553,
+     "unit": "m3",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "Water"
+    }
+   ],
+   "chain_links": [
+    {
+     "flow": "silicon, single crystal, Czochralski process, photovoltaics",
+     "amount": 0.595,
+     "amount_as_printed": 0.595,
+     "unit": "kg",
+     "unit_as_printed": "kg",
+     "unit_scale": 1.0,
+     "table": "A4"
+    }
+   ],
+   "skipped": []
+  },
+  "A6": {
+   "reference_product": "trimethylaluminum, purified",
+   "reference_amount": 18.0,
+   "reference_unit": "kg",
+   "technosphere": [
+    {
+     "flow": "aluminium chloride",
+     "amount": 1.34,
+     "unit": "kg",
+     "activity": "aluminium chloride production",
+     "location": "GLO",
+     "reference_product": "aluminium chloride",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "aluminium, wrought alloy",
+     "amount": 21.6,
+     "unit": "kg",
+     "activity": "market for aluminium, wrought alloy",
+     "location": "GLO",
+     "reference_product": "aluminium, wrought alloy",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "electricity, medium voltage",
+     "amount": 5.57,
+     "unit": "kWh",
+     "activity": "market group for electricity, medium voltage",
+     "location": "CN",
+     "note": "SE Asia import supply chain"
+    },
+    {
+     "flow": "helium",
+     "amount": 0.12,
+     "unit": "kg",
+     "activity": "market for helium",
+     "location": "GLO",
+     "reference_product": "helium",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "methylchloride",
+     "amount": 60.9,
+     "unit": "kg",
+     "activity": "market for methylchloride",
+     "location": "RoW",
+     "reference_product": "methylchloride",
+     "waste": false,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "nitrogen, liquid",
+     "amount": 0.825,
+     "unit": "kg",
+     "activity": "market for nitrogen, liquid",
+     "location": "RoW",
+     "reference_product": "nitrogen, liquid",
+     "waste": false,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "paraffin",
+     "amount": 0.153,
+     "unit": "kg",
+     "activity": "market for paraffin",
+     "location": "GLO",
+     "reference_product": "paraffin",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "sodium",
+     "amount": 33.0,
+     "unit": "kg",
+     "activity": "market for sodium",
+     "location": "GLO",
+     "reference_product": "sodium",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "fly ash and scrubber sludge",
+     "amount": 3.8,
+     "unit": "kg",
+     "activity": "treatment of fly ash and scrubber sludge, hazardous waste incineration",
+     "location": "RoW",
+     "reference_product": "fly ash and scrubber sludge",
+     "waste": true,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "hazardous waste, for incineration",
+     "amount": 107.0,
+     "unit": "kg",
+     "activity": "treatment of hazardous waste, hazardous waste incineration",
+     "location": "RoW",
+     "reference_product": "hazardous waste, for incineration",
+     "waste": true,
+     "note": "stated RoW"
+    }
+   ],
+   "biosphere": [],
+   "chain_links": [],
+   "skipped": []
+  },
+  "A7": {
+   "reference_product": "photovoltaic cell, single-Si wafer",
+   "reference_amount": 1.0,
+   "reference_unit": "m2",
+   "technosphere": [
+    {
+     "flow": "ammonia, anhydrous, liquid",
+     "amount": 0.0165,
+     "unit": "kg",
+     "activity": "market for ammonia, anhydrous, liquid",
+     "location": "RoW",
+     "reference_product": "ammonia, anhydrous, liquid",
+     "waste": false,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "calcium chloride",
+     "amount": 0.0207,
+     "unit": "kg",
+     "activity": "market for calcium chloride",
+     "location": "RoW",
+     "reference_product": "calcium chloride",
+     "waste": false,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "electricity, medium voltage",
+     "amount": 6.03,
+     "unit": "kWh",
+     "activity": "market for electricity, medium voltage",
+     "location": "TH",
+     "note": "SE Asia import supply chain"
+    },
+    {
+     "flow": "heat, district or industrial, natural gas",
+     "amount": 3.55,
+     "unit": "MJ",
+     "activity": "heat production, natural gas, at industrial furnace >100kW",
+     "location": "RoW",
+     "reference_product": "heat, district or industrial, natural gas",
+     "waste": false,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "hydrochloric acid, without water, in 30% solution state",
+     "amount": 0.0681,
+     "unit": "kg",
+     "activity": "market for hydrochloric acid, without water, in 30% solution state",
+     "location": "RoW",
+     "reference_product": "hydrochloric acid, without water, in 30% solution state",
+     "waste": false,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "hydrogen fluoride",
+     "amount": 0.0747,
+     "unit": "kg",
+     "activity": "market for hydrogen fluoride",
+     "location": "RoW",
+     "reference_product": "hydrogen fluoride",
+     "waste": false,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "metallization paste, back side",
+     "amount": 0.00102,
+     "unit": "kg",
+     "activity": "market for metallization paste, back side",
+     "location": "RoW",
+     "reference_product": "metallization paste, back side",
+     "waste": false,
+     "note": "preference order"
+    },
+    {
+     "flow": "metallization paste, back side, aluminium",
+     "amount": 0.00901,
+     "unit": "kg",
+     "activity": "market for metallization paste, back side, aluminium",
+     "location": "RoW",
+     "reference_product": "metallization paste, back side, aluminium",
+     "waste": false,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "metallization paste, front side",
+     "amount": 0.00348,
+     "unit": "kg",
+     "activity": "market for metallization paste, front side",
+     "location": "RoW",
+     "reference_product": "metallization paste, front side",
+     "waste": false,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "nitric acid, without water, in 50% solution state",
+     "amount": 0.0822,
+     "unit": "kg",
+     "activity": "market for nitric acid, without water, in 50% solution state",
+     "location": "RoW",
+     "reference_product": "nitric acid, without water, in 50% solution state",
+     "waste": false,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "nitrogen, liquid",
+     "amount": 2.62,
+     "unit": "kg",
+     "activity": "market for nitrogen, liquid",
+     "location": "RoW",
+     "reference_product": "nitrogen, liquid",
+     "waste": false,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "nitrous oxide",
+     "amount": 0.00766,
+     "unit": "kg",
+     "activity": "market for nitrous oxide",
+     "location": "GLO",
+     "reference_product": "nitrous oxide",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "oxygen, liquid",
+     "amount": 0.334,
+     "unit": "kg",
+     "activity": "market for oxygen, liquid",
+     "location": "RoW",
+     "reference_product": "oxygen, liquid",
+     "waste": false,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "phosphorus oxychloride",
+     "amount": 0.000182,
+     "unit": "kg",
+     "activity": "market for phosphorus oxychloride",
+     "location": "RoW",
+     "reference_product": "phosphorus oxychloride",
+     "waste": false,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "photovoltaic cell factory",
+     "amount": 4e-07,
+     "unit": "Item(s)",
+     "activity": "market for photovoltaic cell factory",
+     "location": "GLO",
+     "reference_product": "photovoltaic cell factory",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "potassium hydroxide",
+     "amount": 0.151,
+     "unit": "kg",
+     "activity": "market for potassium hydroxide",
+     "location": "GLO",
+     "reference_product": "potassium hydroxide",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "propane",
+     "amount": 0.0414,
+     "unit": "kg",
+     "activity": "market for propane",
+     "location": "GLO",
+     "reference_product": "propane",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "silicon tetrahydride",
+     "amount": 0.00283,
+     "unit": "kg",
+     "activity": "market for silicon tetrahydride",
+     "location": "GLO",
+     "reference_product": "silicon tetrahydride",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "solvent, organic",
+     "amount": 0.0123,
+     "unit": "kg",
+     "activity": "market for solvent, organic",
+     "location": "GLO",
+     "reference_product": "solvent, organic",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "sulfuric acid",
+     "amount": 0.0206,
+     "unit": "kg",
+     "activity": "sulfuric acid production",
+     "location": "RoW",
+     "reference_product": "sulfuric acid",
+     "waste": false,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "transport, freight train",
+     "amount": 1.52,
+     "unit": "t*km",
+     "activity": "market for transport, freight train",
+     "location": "RoW",
+     "reference_product": "transport, freight train",
+     "waste": false,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "transport, freight, lorry, unspecified",
+     "amount": 0.274,
+     "unit": "t*km",
+     "activity": "market group for transport, freight, lorry, unspecified",
+     "location": "GLO",
+     "reference_product": "transport, freight, lorry, unspecified",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "transport, freight, sea, container ship",
+     "amount": 1.57,
+     "unit": "t*km",
+     "activity": "transport, freight, sea, container ship",
+     "location": "GLO",
+     "reference_product": "transport, freight, sea, container ship",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "water, completely softened",
+     "amount": 23.2,
+     "unit": "kg",
+     "activity": "market for water, completely softened",
+     "location": "RoW",
+     "reference_product": "water, completely softened",
+     "waste": false,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "water, deionised",
+     "amount": 39.4,
+     "unit": "kg",
+     "activity": "water production, deionised",
+     "location": "RoW",
+     "reference_product": "water, deionised",
+     "waste": false,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "waste, from silicon wafer production, inorganic",
+     "amount": 0.00641,
+     "unit": "kg",
+     "activity": "market for waste, from silicon wafer production, inorganic",
+     "location": "GLO",
+     "reference_product": "waste, from silicon wafer production, inorganic",
+     "waste": true,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "wastewater from PV cell production",
+     "amount": 0.0132,
+     "unit": "m3",
+     "activity": "market for wastewater from PV cell production",
+     "location": "RoW",
+     "reference_product": "wastewater from PV cell production",
+     "waste": true,
+     "note": "stated RoW"
+    }
+   ],
+   "biosphere": [
+    {
+     "flow": "aluminium",
+     "amount": 0.000773,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "Aluminium"
+    },
+    {
+     "flow": "ethane, hexafluoro-, HFC-116",
+     "amount": 0.000119,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 12400.0,
+     "ecoinvent_flow": "Ethane, hexafluoro-, HFC-116"
+    },
+    {
+     "flow": "heat, waste",
+     "amount": 51.8,
+     "unit": "MJ",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "Heat, waste"
+    },
+    {
+     "flow": "hydrogen chloride",
+     "amount": 0.000266,
+     "unit": "kg",
+     "matched": false,
+     "gwp100": null,
+     "ecoinvent_flow": null
+    },
+    {
+     "flow": "hydrogen fluoride",
+     "amount": 4.85e-06,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "Hydrogen fluoride"
+    },
+    {
+     "flow": "lead",
+     "amount": 3.48e-07,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "Lead"
+    },
+    {
+     "flow": "methane, tetrafluoro-, R-14",
+     "amount": 0.000248,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 7380.0,
+     "ecoinvent_flow": "Methane, tetrafluoro-, R-14"
+    },
+    {
+     "flow": "nitrogen oxides",
+     "amount": 5e-05,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "Nitrogen oxides"
+    },
+    {
+     "flow": "NMVOC, non-methane volatile organic compounds, unspecified origin",
+     "amount": 0.194,
+     "unit": "kg",
+     "matched": false,
+     "gwp100": null,
+     "ecoinvent_flow": null
+    },
+    {
+     "flow": "particulates, <2.5 \u03bcm",
+     "amount": 0.00266,
+     "unit": "kg",
+     "matched": false,
+     "gwp100": null,
+     "ecoinvent_flow": null
+    },
+    {
+     "flow": "silicon",
+     "amount": 7.27e-05,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "Silicon"
+    },
+    {
+     "flow": "silver",
+     "amount": 6.6e-06,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "Silver"
+    },
+    {
+     "flow": "water",
+     "amount": 0.0168,
+     "unit": "m3",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "Water"
+    },
+    {
+     "flow": "water",
+     "amount": 0.277,
+     "unit": "m3",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "Water"
+    }
+   ],
+   "chain_links": [
+    {
+     "flow": "single-Si wafer, photovoltaic",
+     "amount": 1.02,
+     "amount_as_printed": 1.02,
+     "unit": "m2",
+     "unit_as_printed": "m2",
+     "unit_scale": 1.0,
+     "table": "A5"
+    },
+    {
+     "flow": "trimethylaluminum",
+     "amount": 0.000288,
+     "amount_as_printed": 0.000288,
+     "unit": "kg",
+     "unit_as_printed": "kg",
+     "unit_scale": 1.0,
+     "table": "A6"
+    }
+   ],
+   "skipped": [
+    {
+     "flow": "Water, cooling, unspecified natural origin",
+     "amount": 0.231,
+     "reason": "mangled cell, provider names a different flow"
+    }
+   ]
+  },
+  "A8": {
+   "reference_product": "photovoltaic panel",
+   "reference_amount": 1.0,
+   "reference_unit": "m2",
+   "technosphere": [
+    {
+     "flow": "adipic acid",
+     "amount": 0.000369,
+     "unit": "kg",
+     "activity": "market for adipic acid",
+     "location": "GLO",
+     "reference_product": "adipic acid",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "aluminium alloy, AlMg3",
+     "amount": 1.51,
+     "unit": "kg",
+     "activity": "market for aluminium alloy, AlMg3",
+     "location": "GLO",
+     "reference_product": "aluminium alloy, AlMg3",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "copper, cathode",
+     "amount": 0.148,
+     "unit": "kg",
+     "activity": "market for copper, cathode",
+     "location": "GLO",
+     "reference_product": "copper, cathode",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "corrugated board box",
+     "amount": 0.763,
+     "unit": "kg",
+     "activity": "market for corrugated board box",
+     "location": "RoW",
+     "reference_product": "corrugated board box",
+     "waste": false,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "diode, auxilliaries and energy use",
+     "amount": 0.00281,
+     "unit": "kg",
+     "activity": "diode production, auxilliaries and energy use",
+     "location": "GLO",
+     "reference_product": "diode, auxilliaries and energy use",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "electricity, medium voltage",
+     "amount": 3.32,
+     "unit": "kWh",
+     "activity": "market for electricity, medium voltage",
+     "location": "TH",
+     "note": "SE Asia import supply chain"
+    },
+    {
+     "flow": "ethylvinylacetate, foil",
+     "amount": 0.793,
+     "unit": "kg",
+     "activity": "market for ethylvinylacetate, foil",
+     "location": "GLO",
+     "reference_product": "ethylvinylacetate, foil",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "EUR-flat pallet",
+     "amount": 0.05,
+     "unit": "Item(s)",
+     "activity": "EUR-flat pallet production",
+     "location": "RoW",
+     "reference_product": "EUR-flat pallet",
+     "waste": false,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "glass fibre reinforced plastic, polyamide, injection moulded",
+     "amount": 0.188,
+     "unit": "kg",
+     "activity": "market for glass fibre reinforced plastic, polyamide, injection moulded",
+     "location": "GLO",
+     "reference_product": "glass fibre reinforced plastic, polyamide, injection moulded",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "lead",
+     "amount": 0.0108,
+     "unit": "kg",
+     "activity": "market for lead",
+     "location": "GLO",
+     "reference_product": "lead",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "lubricating oil",
+     "amount": 0.00161,
+     "unit": "kg",
+     "activity": "market for lubricating oil",
+     "location": "RoW",
+     "reference_product": "lubricating oil",
+     "waste": false,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "metal working, average for aluminium product manufacturing",
+     "amount": 1.51,
+     "unit": "kg",
+     "activity": "market for metal working, average for aluminium product manufacturing",
+     "location": "GLO",
+     "reference_product": "metal working, average for aluminium product manufacturing",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "packaging film, low density polyethylene",
+     "amount": 0.0401,
+     "unit": "kg",
+     "activity": "market for packaging film, low density polyethylene",
+     "location": "GLO",
+     "reference_product": "packaging film, low density polyethylene",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "photovoltaic panel factory",
+     "amount": 4e-06,
+     "unit": "Item(s)",
+     "activity": "market for photovoltaic panel factory",
+     "location": "GLO",
+     "reference_product": "photovoltaic panel factory",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "polyethylene terephthalate, granulate, amorphous",
+     "amount": 0.281,
+     "unit": "kg",
+     "activity": "market for polyethylene terephthalate, granulate, amorphous",
+     "location": "GLO",
+     "reference_product": "polyethylene terephthalate, granulate, amorphous",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "polyethylene, high density, granulate",
+     "amount": 0.0242,
+     "unit": "kg",
+     "activity": "market for polyethylene, high density, granulate",
+     "location": "GLO",
+     "reference_product": "polyethylene, high density, granulate",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "polyethylene, low density, granulate",
+     "amount": 0.0548,
+     "unit": "kg",
+     "activity": "market for polyethylene, low density, granulate",
+     "location": "GLO",
+     "reference_product": "polyethylene, low density, granulate",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "polyvinylfluoride, film",
+     "amount": 0.0451,
+     "unit": "kg",
+     "activity": "market for polyvinylfluoride, film",
+     "location": "GLO",
+     "reference_product": "polyvinylfluoride, film",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "silicone product",
+     "amount": 0.144,
+     "unit": "kg",
+     "activity": "market for silicone product",
+     "location": "RoW",
+     "reference_product": "silicone product",
+     "waste": false,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "solar glass, low-iron",
+     "amount": 8.0,
+     "unit": "kg",
+     "activity": "market for solar glass, low-iron",
+     "location": "GLO",
+     "reference_product": "solar glass, low-iron",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "tempering, flat glass",
+     "amount": 8.0,
+     "unit": "kg",
+     "activity": "market for tempering, flat glass",
+     "location": "GLO",
+     "reference_product": "tempering, flat glass",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "tin",
+     "amount": 0.0104,
+     "unit": "kg",
+     "activity": "market for tin",
+     "location": "GLO",
+     "reference_product": "tin",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "transport, freight train",
+     "amount": 16.6,
+     "unit": "t*km",
+     "activity": "market for transport, freight train",
+     "location": "RoW",
+     "reference_product": "transport, freight train",
+     "waste": false,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "transport, freight, lorry, unspecified",
+     "amount": 2.99,
+     "unit": "t*km",
+     "activity": "market group for transport, freight, lorry, unspecified",
+     "location": "GLO",
+     "reference_product": "transport, freight, lorry, unspecified",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "wire drawing, copper",
+     "amount": 0.148,
+     "unit": "kg",
+     "activity": "market for wire drawing, copper",
+     "location": "GLO",
+     "reference_product": "wire drawing, copper",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "municipal solid waste",
+     "amount": 0.0934,
+     "unit": "kg",
+     "activity": "market for municipal solid waste",
+     "location": "RoW",
+     "reference_product": "municipal solid waste",
+     "waste": true,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "waste mineral oil",
+     "amount": 0.00161,
+     "unit": "kg",
+     "activity": "market for waste mineral oil",
+     "location": "RoW",
+     "reference_product": "waste mineral oil",
+     "waste": true,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "waste plastic, mixture",
+     "amount": 0.0248,
+     "unit": "kg",
+     "activity": "market for waste plastic, mixture",
+     "location": "RoW",
+     "reference_product": "waste plastic, mixture",
+     "waste": true,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "waste polyvinylfluoride",
+     "amount": 0.000902,
+     "unit": "kg",
+     "activity": "market for waste polyvinylfluoride",
+     "location": "RoW",
+     "reference_product": "waste polyvinylfluoride",
+     "waste": true,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "waste, from silicon wafer production",
+     "amount": 0.00352,
+     "unit": "kg",
+     "activity": "market for waste, from silicon wafer production",
+     "location": "GLO",
+     "reference_product": "waste, from silicon wafer production",
+     "waste": true,
+     "note": "stated GLO"
+    }
+   ],
+   "biosphere": [
+    {
+     "flow": "carbon dioxide, fossil",
+     "amount": 0.0218,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 1.0,
+     "ecoinvent_flow": "Carbon dioxide, fossil"
+    },
+    {
+     "flow": "heat, waste",
+     "amount": 13.4,
+     "unit": "MJ",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "Heat, waste"
+    },
+    {
+     "flow": "NMVOC, non-methane volatile organic compounds, unspecified origin",
+     "amount": 0.00806,
+     "unit": "kg",
+     "matched": false,
+     "gwp100": null,
+     "ecoinvent_flow": null
+    },
+    {
+     "flow": "water",
+     "amount": 0.0279,
+     "unit": "kg",
+     "matched": true,
+     "gwp100": 0.0,
+     "ecoinvent_flow": "Water"
+    }
+   ],
+   "chain_links": [
+    {
+     "flow": "photovoltaic cell, single-Si wafer",
+     "amount": 0.9,
+     "amount_as_printed": 0.9,
+     "unit": "m2",
+     "unit_as_printed": "m2",
+     "unit_scale": 1.0,
+     "table": "A7"
+    }
+   ],
+   "skipped": [
+    {
+     "flow": "Water, cooling, unspecified natural origin",
+     "amount": 0.0716,
+     "reason": "mangled cell, provider names a different flow"
+    }
+   ]
+  },
+  "A10": {
+   "reference_product": "inverter, 2.7 MWac",
+   "reference_amount": 1.0,
+   "reference_unit": "Items",
+   "technosphere": [
+    {
+     "flow": "aluminium, wrought alloy",
+     "amount": 80.0,
+     "unit": "kg",
+     "activity": "market for aluminium, wrought alloy",
+     "location": "GLO",
+     "reference_product": "aluminium, wrought alloy",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "cable, network cable, category 5, without plugs",
+     "amount": 940.0,
+     "unit": "m",
+     "activity": "market for cable, network cable, category 5, without plugs",
+     "location": "GLO",
+     "reference_product": "cable, network cable, category 5, without plugs",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "cable, three-conductor cable",
+     "amount": 61.0,
+     "unit": "m",
+     "activity": "market for cable, three-conductor cable",
+     "location": "GLO",
+     "reference_product": "cable, three-conductor cable",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "capacitor, electrolyte type, >2 cm height",
+     "amount": 5.0,
+     "unit": "kg",
+     "activity": "market for capacitor, electrolyte type, > 2cm height",
+     "location": "GLO",
+     "reference_product": "capacitor, electrolyte type, > 2cm height",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "capacitor, film type, for through-hole mounting",
+     "amount": 50.0,
+     "unit": "kg",
+     "activity": "market for capacitor, film type, for through-hole mounting",
+     "location": "GLO",
+     "reference_product": "capacitor, film type, for through-hole mounting",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "concrete slab",
+     "amount": 1.1,
+     "unit": "m3",
+     "activity": "market for concrete slab",
+     "location": "RoW",
+     "reference_product": "concrete slab",
+     "waste": false,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "copper, cathode",
+     "amount": 430.0,
+     "unit": "kg",
+     "activity": "market for copper, cathode",
+     "location": "GLO",
+     "reference_product": "copper, cathode",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "glass fibre reinforced plastic, polyamide, injection moulded",
+     "amount": 30.0,
+     "unit": "kg",
+     "activity": "market for glass fibre reinforced plastic, polyamide, injection moulded",
+     "location": "GLO",
+     "reference_product": "glass fibre reinforced plastic, polyamide, injection moulded",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "inductor, ring core choke type",
+     "amount": 650.0,
+     "unit": "kg",
+     "activity": "market for inductor, ring core choke type",
+     "location": "GLO",
+     "reference_product": "inductor, ring core choke type",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "integrated circuit, logic type",
+     "amount": 0.2,
+     "unit": "kg",
+     "activity": "market for integrated circuit, logic type",
+     "location": "GLO",
+     "reference_product": "integrated circuit, logic type",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "lubricating oil",
+     "amount": 1.0,
+     "unit": "kg",
+     "activity": "market for lubricating oil",
+     "location": "RoW",
+     "reference_product": "lubricating oil",
+     "waste": false,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "printed wiring board, through- hole mounted, unspecified, Pb free",
+     "amount": 3.0,
+     "unit": "kg",
+     "activity": "market for printed wiring board, through-hole mounted, unspecified, Pb free",
+     "location": "GLO",
+     "reference_product": "printed wiring board, through-hole mounted, unspecified, Pb free",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "reinforcing steel",
+     "amount": 1200.0,
+     "unit": "kg",
+     "activity": "market for reinforcing steel",
+     "location": "GLO",
+     "reference_product": "reinforcing steel",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "transformer, high voltage use",
+     "amount": 100.0,
+     "unit": "kg",
+     "activity": "market for transformer, high voltage use",
+     "location": "GLO",
+     "reference_product": "transformer, high voltage use",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "transistor, wired, big size, through-hole mounting",
+     "amount": 0.3,
+     "unit": "kg",
+     "activity": "market for transistor, wired, big size, through-hole mounting",
+     "location": "GLO",
+     "reference_product": "transistor, wired, big size, through-hole mounting",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "fan, for power supply unit, desktop computer",
+     "amount": 0.2,
+     "unit": "kg",
+     "activity": "market for fan, for power supply unit, desktop computer",
+     "location": "GLO",
+     "reference_product": "fan, for power supply unit, desktop computer",
+     "waste": false,
+     "note": "stated GLO"
+    }
+   ],
+   "biosphere": [],
+   "chain_links": [],
+   "skipped": []
+  },
+  "A12": {
+   "reference_product": "electrical balance-of-system",
+   "reference_amount": 1.0,
+   "reference_unit": "m2",
+   "technosphere": [
+    {
+     "flow": "aluminium, wrought alloy",
+     "amount": 0.4,
+     "unit": "kg",
+     "activity": "market for aluminium, wrought alloy",
+     "location": "GLO",
+     "reference_product": "aluminium, wrought alloy",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "epoxy resin, liquid",
+     "amount": 4.9e-05,
+     "unit": "kg",
+     "activity": "market for epoxy resin, liquid",
+     "location": "RoW",
+     "reference_product": "epoxy resin, liquid",
+     "waste": false,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "nylon 6",
+     "amount": 0.0064,
+     "unit": "kg",
+     "activity": "market for nylon 6",
+     "location": "RoW",
+     "reference_product": "nylon 6",
+     "waste": false,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "polycarbonate",
+     "amount": 6.1e-05,
+     "unit": "kg",
+     "activity": "market for polycarbonate",
+     "location": "GLO",
+     "reference_product": "polycarbonate",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "polyvinylchloride, bulk polymerised",
+     "amount": 0.11,
+     "unit": "kg",
+     "activity": "market for polyvinylchloride, bulk polymerised",
+     "location": "GLO",
+     "reference_product": "polyvinylchloride, bulk polymerised",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "wire drawing, copper",
+     "amount": 0.4,
+     "unit": "kg",
+     "activity": "market for wire drawing, copper",
+     "location": "GLO",
+     "reference_product": "wire drawing, copper",
+     "waste": false,
+     "note": "stated GLO"
+    }
+   ],
+   "biosphere": [],
+   "chain_links": [],
+   "skipped": []
+  },
+  "A13": {
+   "reference_product": "fence",
+   "reference_amount": 1.0,
+   "reference_unit": "m2",
+   "technosphere": [
+    {
+     "flow": "concrete, 25MPa",
+     "amount": 2.9e-05,
+     "unit": "m3",
+     "activity": "market for concrete, 25MPa",
+     "location": "RoW",
+     "reference_product": "concrete, 25MPa",
+     "waste": false,
+     "note": "stated RoW"
+    },
+    {
+     "flow": "section bar rolling, steel",
+     "amount": 0.046,
+     "unit": "kg",
+     "activity": "market for section bar rolling, steel",
+     "location": "GLO",
+     "reference_product": "section bar rolling, steel",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "steel, low-alloyed",
+     "amount": 0.099,
+     "unit": "kg",
+     "activity": "market for steel, low-alloyed",
+     "location": "GLO",
+     "reference_product": "steel, low-alloyed",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "wire drawing, steel",
+     "amount": 0.053,
+     "unit": "kg",
+     "activity": "market for wire drawing, steel",
+     "location": "GLO",
+     "reference_product": "wire drawing, steel",
+     "waste": false,
+     "note": "stated GLO"
+    },
+    {
+     "flow": "zinc coat, coils",
+     "amount": 0.0033,
+     "unit": "m2",
+     "activity": "market for zinc coat, coils",
+     "location": "GLO",
+     "reference_product": "zinc coat, coils",
+     "waste": false,
+     "note": "stated GLO"
+    }
+   ],
+   "biosphere": [],
+   "chain_links": [],
+   "skipped": []
+  }
+ }
+}

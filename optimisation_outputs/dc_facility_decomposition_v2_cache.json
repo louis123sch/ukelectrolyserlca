@@ -1,0 +1,14 @@
+{
+  "electricity_kwh_over_life": 1600000000.0,
+  "operation_years": 25.0,
+  "reference_pue": 1.4,
+  "reference_facility_mw": 7.30593607305936,
+  "reference_it_mw": 5.218525766470972,
+  "it_kgco2e_over_life": 20501842.65795671,
+  "it_kgco2e_per_year": 820073.7063182683,
+  "it_kgco2e_per_mw_it_year": 157146.62397323817,
+  "energy_kgco2e_over_life": 2893863.421236304,
+  "energy_kgco2e_per_mwh": 1.80866463827269,
+  "backup_kgco2e_per_year_excluded": 32467.97972467819,
+  "charged_kgco2e_per_year_at_reference": 935828.2431677204
+}

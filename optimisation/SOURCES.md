@@ -216,6 +216,57 @@ sets renewable electricity to 0.0 g CO₂e/kWh, zero-rating precisely the term
 being estimated here. As a bound it is worth quoting — every basis above clears
 it, and the status quo failed it by 7.1×.
 
+### Bought hydrogen is compressed onto a trailer — `h2_prices.bought_h2_compression_*`
+
+Hydrogen this study *makes* pays a compression parasitic to enter the tank —
+`h2_storage.compression_kwh_per_kg`, from the electrolyser's delivery pressure to
+the vessel's. Hydrogen it *buys* paid none: `dc_model`'s tank balance takes
+`h2_buy` at coefficient 1.0. The omission was one-directional and it favoured
+buying, so it is now charged for every colour.
+
+It is charged at the **seller's** gate, not the buyer's. A tube trailer arrives
+at 200 bar and decants into a 28 bar vessel on pressure difference alone, so this
+is a term in the purchased coefficient and the purchased price, not a compressor
+added to the LP.
+
+| Input | Value | Grade | Source |
+|---|---|---|---|
+| Trailer pressure | **200 bar** | transcribed | Conventional Type I steel tube trailer, and the same pressure as this study's own second `TANK_DESIGNS` entry, so the two hydrogen pressures in the study are one number. Composite trailers run 350–500 bar: +29 % and +48 % on the energy |
+| Green outlet pressure | 30 bar | transcribed | Read from `electrolysers.DELIVERY_PRESSURE_BAR["PEM operation"]` rather than restated, so the seller's plant and the buyer's own PEM cannot drift apart |
+| Grey / blue / turquoise outlet | 20 bar | **assumed** | Steam reformers run at 15–30 bar and the PSA purifying the product works just below its feed pressure. The Hermesmann inventories are SimaPro exports of mass and energy flows and state no pressure. 20 bar is the low end, which charges *more* compression — the honest direction for a term closing an omission |
+| Specific work | `h2_storage.compression_kwh_per_kg` | derived | Isothermal minimum scaled to a real multistage machine; the same function the buyer's own compression uses, so the two sides are one thermodynamics |
+| Compressor electricity price | £40 / 80 / 120 per MWh | assumed | `PRODUCER_ELEC_GBP_PER_MWH`, already used for grey and turquoise |
+
+Resulting terms, at the default bases:
+
+| Colour | kWh/kg | I (g CO₂e/kWh) | kg CO₂e/kg | % of production | £/kg |
+|---|---|---|---|---|---|
+| green | 1.194 | 19.03 | **0.023** | +1.9 % | 0.096 |
+| blue | 1.450 | 311.22 | **0.451** | +14.5 % | 0.116 |
+| grey | 1.450 | 311.22 | 0.451 | +4.3 % | 0.116 |
+| turquoise | 1.450 | 311.22 | 0.451 | +8.3 % | 0.116 |
+
+**The intensity is colour-specific, and that is the whole point.** Green's
+compressor runs on whatever its electrolyser runs on — the same renewable basis
+and the same `grid_share` treatment — because a plant defined by sitting behind a
+renewable meter cannot compress on grid power. Pricing it off the GB grid would
+reintroduce exactly the incoherence `GREEN_H2_ELECTRICITY_BASES` exists to
+remove. Every other colour is a fossil plant already scored whole against the GB
+grid its own activity links to, so its compressor takes that grid.
+
+The consequence is the opposite of what was expected. `DATA_GAPS.md` carried
+**~0.761 kg CO₂e/kg** as this term's likely size for green — which would have
+been 78 % of production and might have re-dominated the row. That figure assumed
+a *grid*-powered compressor. Charged coherently, green's compression is **0.023**,
+and it is **blue** that the term actually moves, at 14.5 %.
+
+**Not included: the compressor's own capital**, in either objective, and no
+public per-kg figure for a hydrogen loading compressor was found. The carbon term
+is complete and the cost term is a floor, so a residual bias toward buying
+remains — smaller, and now in one place rather than two.
+
+---
+
 ---
 
 ## Battery storage
@@ -300,13 +351,83 @@ slanted-roof systems of the same vintage.
 So solar's default basis is **IEA PVPS Task 12**, the standard reference for PV
 LCA, on the same IPCC 2021 GWP100 method used throughout this study.
 
-| Basis | Source | g CO₂e/kWh at source basis | t CO₂e/MWp | Grade |
+| Basis | Source | g CO₂e/kWh at this study's yield | t CO₂e/MWp | Grade |
 |---|---|---|---|---|
-| `iea_pvps_2023_mono_si` *(default)* | IEA PVPS T12 2023 update, mono-Si, 20.9 % module, data 2020–2023 | 35.8 | 1,048 | transcribed |
-| `ecoinvent` | ecoinvent 3.9.1 apos, as above | 79.8 | 2,303 | transcribed |
+| `smith_2024_upv_fixed_tilt` *(default)* | Smith et al. 2024 (NREL/TP-7A40-87372) utility-scale inventory, fixed tilt, **rescored on ecoinvent 3.9.1 apos** | **22.0** | **895** | derived |
+| `iea_pvps_2023_mono_si` | IEA PVPS T12 2023 update, mono-Si, 20.9 % module — a **3 kWp ROOFTOP** system | 25.8 | 1,048 | transcribed |
+| `ecoinvent` | ecoinvent 3.9.1 apos, as above | 56.7 | 2,303 | transcribed |
 
-Two bases, and `ecoinvent` exists only to reproduce runs from before this
-default changed. IEA PVPS's multi-Si figure is **not** offered as a basis — see
+Three bases. `ecoinvent` exists only to reproduce runs from before the rooftop
+default arrived; `iea_pvps_2023_mono_si` only to reproduce runs from before the
+utility-scale rebuild.
+
+### Why the default is now a rebuild rather than a citation
+
+`cap_solar` is a utility-scale MWp. The basis it replaces is quoted, in IEA
+PVPS's own words, against *"1 kWh AC … produced with a 3 kWp PV system, rooftop
+mounted"* — so a solar farm was priced with roof rails, a domestic string
+inverter, and **no** perimeter fence, **no** plant-scale site cabling and **no**
+land. It was also the one coefficient in the study not on ecoinvent 3.9.1 apos:
+IEA PVPS use UVEK in SimaPro under **recycled-content** allocation, a different
+system model, which `SOURCES.md` had not previously recorded.
+
+Smith publishes on ecoinvent **cut-off**, so his results cannot simply be
+relabelled — APOS and cut-off differ precisely where recycled content matters,
+which for a PV plant is the aluminium, steel and copper. His **inventory** is
+therefore taken and rescored in this project, which makes the answer apos by
+construction, exactly as the wind transformer and the data centre are. His
+process names are ecoinvent-native, so 93 % resolve with no decision at all.
+
+**Verification.** 290 of 290 scientific-notation values in Appendix A appear in
+the transcription; 251 rows were association-checked against the PDF text and
+249 are clean, the two flagged being zero-GWP flows. Of 79 biosphere rows,
+exactly **four** carry a non-zero GWP100 factor — the silicon-smelting CO₂ and
+the two fluorinated cell gases, CF₄ at 7,380 and C₂F₆ at 12,400 — and all four
+are included. The module lands at **684 kg CO₂e/kWdc**, and Smith states his
+average-import module sits *above* the 630 kg CO₂e/kW EPEAT low-carbon
+threshold: his own published result, reproduced from his inventory, on a
+different system model.
+
+| per MWp | t CO₂e |
+|---|---|
+| module (A1–A8) | 683.8 |
+| fixed-tilt mounting (IEA PVPS T12-33:2026) | 148.6 |
+| electrical balance of system | 30.8 |
+| inverters | 11.7 |
+| fence | 1.3 |
+| installation energy | 1.3 |
+| O&M, 30 y prorated to 38 y | 17.8 |
+| **total** | **895.3** |
+
+**Four substitutions, each stated.** Smith's system is single-axis **tracked**;
+GB utility-scale is fixed tilt, so Table A9 is replaced by IEA PVPS T12-33:2026
+`Z-PV-239`, a pile-driven steel table at 20°. That makes the mounting *heavier*,
+not lighter — 9.730 against 9.618 kg/m² of structure — because a fixed table
+needs more clamps and fasteners per m² than a torque tube; the module frame is
+untouched, being 1.51 kg/m² of AlMg3 inside the module. The **transformer** is
+excluded because `transformers.py` already charges the step-up, and Smith's A11
+is unusable regardless at 19,796 kg/MVA, ~9× the measured specific mass at that
+rating. The **inverter count** comes from Smith's stated DC/AC of 1.34, not from
+his Table A14 count, which implies 1.75 — the two are inconsistent in the
+source. **O&M** keeps his replacement *fraction* (30 % of the installed count
+over 30 years, Mason's 10 %/decade) rather than his absolute count, since our
+inverter count differs.
+
+**Excluded, with direction.** End-of-life, as everywhere in this study.
+Construction transport — the sea leg alone is 201 t·km/m² for this import
+chain, so the figure **understates by roughly 1.5 %**. Supply chain is the SE
+Asia import case: China's national grid for the silicon chain, Thailand for cell
+fabrication and module assembly.
+
+**The O&M prorating cancels in the objective.** Since `restate()` gives
+`annual = capital_total / life` and `capital_total = capital + om30 × life/30`,
+the annual charge is `capital/life + om30/30`. The O&M term is life-independent
+once annualised, so the 30 → 38 year scaling moves only the reported per-kWh
+columns, never the LP.
+
+Issues knowingly parked are listed in `data/UPV-DEFERRED-ISSUES.md`; the frozen
+bill is `data/upv_smith_bill.json`, and the parsing heuristics that produced it
+ran once and are not shipped. IEA PVPS's multi-Si figure is **not** offered as a basis — see
 below for why it is evidence rather than a scenario.
 
 Source: Stucki M., Götz M., de Wild-Scholten M. & Frischknecht R. (2024),
@@ -375,6 +496,236 @@ datasets stay the basis for both onshore and offshore.
 
 ---
 
+## Generation step-up transformers — embodied carbon per MW connected
+`transformers.py`, inventory built in `2.tech_lca_foreground.ipynb`
+
+A wind turbine generates at **690 V**, which is *low* voltage — below the 1 kV
+boundary ecoinvent itself draws. The data centre draws at *medium* voltage,
+1–24 kV, because that is what `market for electricity, medium voltage` describes
+and what the Zhang foreground is authored against. Something must bridge them,
+and it is **not optional**:
+
+| | at 690 V | at 20 kV |
+|---|---|---|
+| one 2 MW turbine | 1,673 A | 58 A |
+| a 100 MW farm | **83,674 A** | 2,887 A |
+
+So every turbine carries its own transformer at the foot of its tower — **one
+per turbine, not one per farm**, and a 100 MW farm has fifty.
+
+**No inventory in this study contains them.** Checked exchange by exchange:
+`wind turbine construction, 2MW, onshore` lists its own parts in its comment
+("Rotor, Nacelle, Electronics, Tower, Foundation") with no transformer among
+them; its only electrical item is **438.7 kg** of `electronics, for control
+units`, against the 3–5 t a 2 MW turbine transformer weighs; its stated
+component masses (rotor 37 t, nacelle 61 t, tower 165 t) account for the
+materials without leaving room for one; and it says outright that it excludes
+the grid connection, which is a separate dataset of cable and trench (253.8 kg
+copper, 1,375.7 kg HDPE, 1,398.7 m³ excavation).
+
+**And ecoinvent cannot supply the asset.** It has **four** transformer
+activities, which are two products with a market and a production each, and both
+are electronics — by ecoinvent's own comments, *"a typical high voltage use
+transformer **in electronic modules** has an average weight of **280 g** … used
+in the information and communication technology"*, and **30 g** for the
+low-voltage one. Their compositions match: 0.50 kg ferrite, 0.31 kg epoxy and
+0.51 kg injection moulding per kg, against **5 g of steel**. There is no
+`substation` activity, no `switchgear` activity, and no power transformer at any
+rating. Until this rewrite wind scaled that 280 g component up by a factor of
+**205,000**; rebuilding a real transformer's bill of materials gives 177.3 t
+CO₂e against 306.2 t on that dataset, with the manufacturer declaring 147.4 t,
+so the old basis ran about **2×** high. Nobody who has looked at this used
+ecoinvent's transformer — Leng built theirs from materials, Teffera built theirs
+from materials, and Vestas scaled a real ABB EPD.
+
+So the transformer is assembled from a published bill of materials, exactly as
+the hydrogen tank is, and for the same reason.
+
+### The inventory
+
+> H. Leng, X. Zhou, J. Chen, D. Chen, M. Li, Y. Lin, Z. Yue, N. Zhong, "Life
+> Cycle Assessment of an Onshore Wind Farm: Carbon Emission Evaluation and
+> Mitigation Pathway Design", *Processes* **14**(7), 1045 (2026), Supplementary
+> Table S1. PowerChina Huadong Engineering. ISO 14040/14044.
+
+Their Gaoyou farm in Jiangsu is **fifty 2 MW turbines, 100 MW**, each with its
+own `S11-2200/35` box transformer. Table S1 gives the materials for all fifty as
+one bill, transcribed into `dashboard_config.TX_LENG_BOX_KG`:
+
+| material | all fifty | per MW | ecoinvent process | grade |
+|---|---|---|---|---|
+| Steel | 163,500 kg | 1,635 kg | `steel, low-alloyed` + `sheet rolling, steel` | transcribed |
+| Iron *(core)* | 53,300 kg | 533 kg | same as steel | **assumed** |
+| Copper | 46,800 kg | 468 kg | `copper, cathode` + `wire drawing, copper` | transcribed |
+| Transformer oil | 17,600 kg | 176 kg | `lubricating oil` | transcribed |
+| Silicon dioxide | 1,143 kg | 11.4 kg | `silica sand` | **assumed** proxy |
+| **total** | **282,343 kg** | **2,823 kg** | | |
+
+Scored on ecoinvent 3.9.1 apos at IPCC 2021 GWP100 and amortised over this
+study's own 35-year life:
+
+| capacity variable | kg CO₂e per unit per year | basis |
+|---|---|---|
+| `cap_wind`, `cap_offshore` (MW) | **278.7** | Leng turbine step-ups |
+| `cap_solar` (MWp) | **296.0** | IEA PVPS T12-33:2026 inverter-station step-ups |
+
+278.7 is **1.45 %** of onshore wind's 19,244 kg CO₂e/MW/year.
+
+*"Iron" is the one judgement.* Leng lists Steel and Iron separately and does not
+say what the second is. Read here as core steel, since a transformer contains no
+cast iron and Teffera's equivalent inventory is steel and copper only. Scoring
+it as cast iron instead moves the answer **4 %**.
+
+### Why it is per MW, and why that scales exactly
+
+Sizing needs no power factor. Leng states the transformer content of a 100 MW
+farm directly and `cap_wind` is in MW of exactly that kind, so the ratio is read
+off rather than derived. One unit per turbine means **30 MW and 1,000 MW carry
+the same figure per MW**.
+
+The plant-rated basis this replaces did *not* scale. Specific mass falls with
+rating — **2,566 kg/MVA at 2.2 MVA, 1,434 at 40, 715 at 100**, all measured from
+the sources above — so one flat number taken from a single farm size was out by
+up to **14 %** across a tenfold range of build.
+
+### Independently checked
+
+Teffera et al. (2021), *Int J LCA* 26:76–96, Table 5 — three Ethiopian farms
+totalling 324 MW, reported per kWh rather than in tonnes. Converted onto this
+study's basis their turbine-level transformers are **228–333 kg CO₂e/MW/year**,
+the range being which of their two capacity factors the inventory is built on
+(they publish design factors of 0.34–0.36 and realised ones of 0.17–0.32, and do
+not say which). Leng's 278.7 sits inside that band. Two teams, two countries, two
+reporting formats, one answer. Teffera also resolves the "Iron" question above,
+and adds aluminium and porcelain bushings that Leng omits — so Leng errs low.
+
+Their transformer sizing corroborates a third time: Leng's grid-end unit is
+`XZ11-**100000**/110`, i.e. 100 MVA for 100 MW; Teffera's farms are 2 × 63 MVA
+for 120.2 MW (1.048) and 55 MVA for 51 MW (1.078). Vestas' 60 MVA for a 100.8 MW
+plant (0.595) is the outlier.
+
+### What is deliberately not counted
+
+**No grid-export transformer.** Leng's farm also has that 100 MVA unit stepping
+up to 110 kV, and it is not taken. This study's generation is **behind the
+meter**: there is nothing to export into, and the one transformation between the
+site and the outside world is the grid intake, which `cap_grid` already pays for
+through `grid_connection.py`. Charging it would bill the site for a voltage
+change it does not make.
+
+**No step between the collection network and the data centre.** Both sit in the
+medium-voltage band, so the chain closes. `dashboard_config.TX_SITE_COLLECTION_KV`
+= **20 kV** states this as a number rather than as the phrase "the same bus", and
+`transformers.check()` refuses a value outside the band. Leng's units are wound
+for 35 kV, above it; a 20 kV unit of the same rating carries less insulation and
+is lighter, so taking their mass **errs high** — the safe direction, and it
+covers any residual step.
+
+**No switchgear, protection or civils.** Absent here and absent from
+`grid_connection.py`, so it is a level shift rather than a bias. Teffera puts MV
+plus HV switchgear at 0.61 t/MW against a plant transformer's 1.08 t/MW — real
+but small, and the insulating-gas term is already carried for imported power,
+since ecoinvent's medium-voltage market allocates high-voltage switchgear SF₆ to
+medium-voltage demand. Registered in DATA_GAPS.md.
+
+**No manufacturing energy.** Leng's own published figures (342 t CO₂e for the
+grid-end unit, 1,793 t for the fifty box transformers) are higher than this
+rebuild because they add factory electricity on the Chinese grid. Materials only
+is consistent with every other foreground here, and it makes this the lower of
+the two available numbers.
+
+**Charged on capacity, never on output**, and **carbon only** — DESNZ/Arup capex
+is plant-plus-connection-to-the-point-of-connection, so a £/MW charge would
+double count. See ASSUMPTIONS §4.
+
+**Losses are not charged here**, and that is not the omission it looks like. Two
+manufacturer EPDs put a transformer's life-cycle GWP at ~99 % use phase, but in
+this study the lost kWh is generated by plant the LP has already sized. Its right
+home is an efficiency on the availability constraints, which is not implemented
+and remains the largest open item in this chain.
+
+### Solar's inverter-station step-ups — IEA PVPS Task 12 (2026)
+
+`solar_pv` used to keep an *invented* plant-rated unit on the electronics
+dataset, with **no per-inverter-station transformers at all**. That is now
+closed, from a source that did not exist when the wind side was written:
+
+> Götz, M., Deuber, R., Gazbour, N., Brailovsky, P.H., Nold, S.,
+> Marchand-Lasserre, M., Frischknecht, R., Khan, A.A., Bovo, G. & Stucki, M.
+> (2026), *Life Cycle Inventories of Photovoltaic Systems*, IEA PVPS Task 12,
+> Report **T12-33:2026**, July 2026. DOI 10.69766/WJTE1771. **Table 49**
+> (the unit) and **Table 50** (four per 10 MWp plant).
+
+The workbook is shipped at
+`optimisation/data/IEA-PVPS-T12-33-2026-LCI-PV-SupplyChains.xlsx`.
+
+| material, per 2.5 MVA unit | kg | note |
+|---|---|---|
+| steel, converter, unalloyed | 2,079.8 | GOES core base metal |
+| MG-silicon | 73.2 | the core's alloying input |
+| lubricating oil | 1,060.0 | |
+| aluminium, wrought | 618.0 | windings — **aluminium**, not copper |
+| steel, low-alloyed | 1,734.5 | tank, frame, fittings |
+| kraft paper | 34.1 | ASSUMED proxy: ecoinvent has no *unbleached* kraft |
+| epoxy, copper, chromium steel, rubber, paint | 33.4 | |
+| hardboard pressboard | 46.9 | **unit correction, below** |
+| **total** | **5,680** | = the report's own stated figure |
+
+**Two things make this better than the wind side, not merely equal to it.**
+
+*The voltage is exact.* The unit is wound **20 / 0.4 kV** — that is
+`TX_SITE_COLLECTION_KV` and the inverter's LV terminals, the same two numbers.
+Leng's wind units are wound for 35 kV, so their mass has to be taken as erring
+high (above); here no adjustment is applied at all.
+
+*The count is read off, not derived.* Table 50 is titled *"10 MW utility-scale
+electrical BoS including 4 units 2.5 MW transformers"* → 0.4 units/MWp. This
+retires both ASSUMED constants the old solar path needed, `SOLAR_DC_AC_RATIO`
+and `POWER_FACTOR`.
+
+It also resolves the *"Iron"* judgement that is wind's one soft spot. The core
+is grain-oriented electrical steel; no LCI database carries a GOES dataset, so
+the report disaggregates it into converter-route steel + MG-silicon + hot and
+cold rolling + annealing, and states why converter rather than EAF steel (GOES
+composition limits cannot be met from scrap).
+
+**A unit error in the source workbook, corrected.** The hardboard cell reads
+**36.96 m³**. At ~1,270 kg/m³ that is ~47 **tonnes** — eight times the whole
+transformer, and it would have dominated the score. The report's own stated
+total proves the intent: 5,633.04 kg of transcribed materials + 0.03696 m³
+(46.9 kg) = 5,679.9 kg against a stated ~5,680 kg. The cell is dm³ mislabelled
+as m³. `dashboard_config.upv_tx_check()` and `transformers.check()` both guard
+the reconciliation, so restoring the literal value fails loudly rather than
+silently inside the LCA.
+
+**Two sources, two technologies, one answer.** Solar's **296.0** against wind's
+**278.7** kg CO₂e per unit of capacity per year, for step-ups of comparable
+rating (2.5 and 2.2 MVA) transcribed by different teams from different
+countries. The one asymmetry is deliberate and stated: **solar carries factory
+electricity and heat and wind does not**, because Leng publish theirs and this
+study excludes it. Process energy is ~6 % of the solar unit, so materials-only
+the two land within ~1 % of each other — which is what makes the agreement a
+corroboration rather than a coincidence. It also means **wind now errs low
+relative to solar**, and that is the direction to fix next.
+
+The legacy basis gave 184.2, i.e. **1.61× off**. It carried two errors that
+partly cancelled: the electronics dataset runs high for a given mass, while a
+40 MVA specific mass under-counts a 2.5 MVA unit by ~1.6×. It survives only as
+`transformers.SOLAR_BASIS = "legacy"`, to reproduce pre-2026 runs.
+
+**Sources.** Leng et al. (2026), *Processes* 14(7) 1045 —
+<https://doi.org/10.3390/pr14071045>. Teffera et al. (2021), *Int J LCA* 26:76–96
+— <https://doi.org/10.1007/s11367-020-01834-5>. Vestas, *LCA of Electricity
+Production from an onshore V136-4.2MW Wind Plant* (2018), critically reviewed to
+ISO/TS 14071. Götz et al. (2026), *Life Cycle Inventories of Photovoltaic
+Systems*, IEA PVPS Task 12 Report T12-33:2026 — DOI 10.69766/WJTE1771, Tables 49
+and 50 (solar step-ups). Legacy solar basis:
+Hitachi Energy S.p.A., *Environmental Product Declaration*, 40 MVA power
+transformers (Monselice), EPDItaly rev. 3, 2022 —
+<https://www.epditaly.it/wp-content/uploads/2016/12/EPD_40MVA_Hitachi_rev3-11.03.2022-29.04.2022bis.pdf>.
+ABB, *Environmental Product Declaration, Power transformer TrafoStar 500 MVA*,
+S-P 00020 —
+<https://library.e.abb.com/public/566748ad75116903c1256d630042f1af/ProductdeclarationStarTrafo500.pdf>.
 ## Hydrogen chain — embodied carbon per unit of capacity
 `electrolysers.py`, `fuel_cell.py`, `h2_storage.py`, assembled by `coefficients.py`
 

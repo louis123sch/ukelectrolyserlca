@@ -1,8 +1,8 @@
-# built_at,2026-09-02T11:41:59+00:00
+# built_at,2026-09-03T15:27:52+00:00
 # cost_case,central
 asset,capacity_unit,capital_kgco2e_per_capacity_unit,calendar_lifetime_years,duty_lifetime_hours,variable_kgco2e_per_unit,variable_output_unit,throughput_kgco2e_per_MWh,source,grade,note
-onshore_wind,MW,658235.1354532151,35.0,,,,,"ecoinvent 3.9.1 apos capital exchange, decomposed; DESNZ/Arup 2024 lifetime",derived,
-offshore_wind,MW,890286.9757754836,35.0,,,,,"ecoinvent 3.9.1 apos capital exchange, decomposed; DESNZ/Arup 2024 lifetime",derived,
+onshore_wind,MW,658235.1354532151,35.0,,,,0.13103363686519515,"ecoinvent 3.9.1 apos capital exchange, decomposed; DESNZ/Arup 2024 lifetime",derived,
+offshore_wind,MW,890286.9757754836,35.0,,,,0.21964685453892963,"ecoinvent 3.9.1 apos capital exchange, decomposed; DESNZ/Arup 2024 lifetime",derived,
 solar_pv,MWp,1048223.9999999999,38.0,,,,,"IEA PVPS Task 12 2023 update, mono-Si; DESNZ/Arup 2024 lifetime",derived,solar is not scored on ecoinvent — its GB activity is a 2008 plant. Basis: iea_pvps_2023_mono_si. See SOURCES.md
 battery_power,MW,31861.72,15.0,,,,,"ecoinvent 3.9.1 apos (LFP pack, 500 kW inverter); Modo Energy asset life",derived,power conversion system
 battery_energy,MWh,98200.17021276595,15.0,,,,,"ecoinvent 3.9.1 apos (LFP pack, 500 kW inverter); Modo Energy asset life",derived,LFP pack; container/racking/HVAC still missing — see DATA_GAPS.md

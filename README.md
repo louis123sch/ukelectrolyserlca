@@ -143,7 +143,8 @@ Three companion documents carry the reasoning rather than the numbers:
 grade (transcribed / derived / assumed);
 [ASSUMPTIONS.md](optimisation/ASSUMPTIONS.md) records the scope decisions and
 what each one costs you; [DATA_GAPS.md](optimisation/DATA_GAPS.md) tracks what
-is still open.
+is still open. [TODO.md](TODO.md) is the worklist that sits on top of them —
+what to do next and in what order, as opposed to what is known.
 
 Each module carries self-checks that fail loudly rather than returning a
 plausible wrong number — coefficients are re-read from Brightway and compared

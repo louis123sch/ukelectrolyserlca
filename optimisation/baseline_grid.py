@@ -41,6 +41,25 @@ from dashboard_config import DC_FOREGROUND_DB, DC_OPERATION_YEARS
 
 DC_CODE = "dc_zhang_virginia_baseline_25y"
 
+# What each non-electricity exchange scales with. Building shell, IT hardware and
+# the UPS track installed IT capacity and do not move when cooling improves;
+# water, water treatment and refrigerant track delivered energy and so follow
+# PUE. The standby generator is its own group because this study excludes it.
+DC_DRIVERS = (
+    ("it",     "market for computer, laptop"),
+    ("it",     "market for concrete"),
+    ("it",     "market for reinforcing steel"),
+    ("it",     "market for steel, low-alloyed"),
+    ("it",     "market for copper, cathode"),
+    ("it",     "market for aluminium alloy"),
+    ("it",     "market for polyurethane, rigid foam"),
+    ("it",     "market for battery, Li-ion"),
+    ("energy", "market group for tap water"),
+    ("energy", "market for sodium hypochlorite"),
+    ("energy", "market for refrigerant"),
+    ("backup", "market for diesel, burned in diesel-electric generating set"),
+)
+
 # Cached full-year outputs of the existing pipeline. Both are half-hourly and
 # cover 2025-01-01 to 2025-12-29.
 #
@@ -76,13 +95,51 @@ def decompose_data_centre(method):
     """Split the data centre into a fixed burden and its electricity demand.
 
     Returns (fixed_kgco2e_over_life, electricity_kwh_over_life, n_exchanges).
-    Every electricity exchange is swept up, including the construction and
-    demolition ones — together 0.006 % of the total, and GB-appropriate anyway
-    once the facility is notionally sited in GB.
+    The foreground has exactly one electricity exchange — IT plus cooling and
+    auxiliaries, 1.60e9 kWh over the life — because its boundary is material
+    production and operation only.
     """
     dc = bd.get_activity((DC_FOREGROUND_DB, DC_CODE))
     fixed, kwh, n = H.run_non_electricity_lca(dc, method)
     return dc, fixed, kwh, n
+
+
+def decompose_data_centre_by_driver(method, tolerance=1e-4):
+    """Split the facility's non-electricity burden by what each part scales with.
+
+    Returns ``(activity, groups, electricity_kwh_over_life)``. ``groups`` holds
+    kg CO2e over the whole life under ``it`` (scales with installed IT
+    capacity), ``energy`` (scales with delivered MWh, so it follows PUE) and
+    ``backup`` (the standby diesel generator, scored so that excluding it is
+    visible rather than silent).
+
+    An unclassified exchange is fatal: a foreground rebuild that adds or renames
+    one must fail loudly rather than land in the wrong driver.
+    """
+    dc = bd.get_activity((DC_FOREGROUND_DB, DC_CODE))
+    groups = {"it": 0.0, "energy": 0.0, "backup": 0.0}
+    kwh = 0.0
+    for exc in dc.technosphere():
+        if H.is_any_electricity_exchange(exc):
+            kwh += float(exc["amount"])
+            continue
+        name = exc.input["name"]
+        kind = next((k for k, prefix in DC_DRIVERS if name.startswith(prefix)), None)
+        if kind is None:
+            raise ValueError(
+                f"Unclassified data centre exchange {name!r}. Update DC_DRIVERS "
+                "before trusting any facility coefficient.")
+        groups[kind] += H.run_lca_score(exc.input, method) * float(exc["amount"])
+
+    # Scoring exchange by exchange must rebuild the single-LCA figure; the
+    # residual is bw2calc solver noise, as in electrolysers.py.
+    fixed, _kwh, _n = H.run_non_electricity_lca(dc, method)
+    rebuilt = sum(groups.values())
+    if abs(rebuilt - fixed) > tolerance * abs(fixed):
+        raise AssertionError(
+            f"data centre driver split failed: rebuilt {rebuilt:,.3f} vs "
+            f"{fixed:,.3f} kg CO2e ({abs(rebuilt - fixed) / abs(fixed):.1e} relative)")
+    return dc, groups, kwh
 
 
 def load_grid_and_prices():

@@ -1,0 +1,70 @@
+{
+  "basis": "leng_wind_iea_pvps_2026_solar",
+  "solar_basis": "iea_pvps_2026",
+  "asset_life_years": 35.0,
+  "site_collection_kV": 20.0,
+  "turbine_terminal_V": 690.0,
+  "medium_voltage_band_kV": [
+    1.0,
+    24.0
+  ],
+  "wind": {
+    "database": "transformer foreground",
+    "code": "wind_turbine_stepup_per_mw",
+    "source": "Leng et al. 2026, Processes 14(7) 1045, Table S1",
+    "farm_MW": 100.0,
+    "n_turbines": 50,
+    "unit_rating_MVA": 2.2,
+    "materials_kg_per_MW": {
+      "steel": 1635.0,
+      "iron": 533.0,
+      "copper": 468.0,
+      "oil": 176.0,
+      "silica": 11.43
+    },
+    "kg_per_MW": 2823.43,
+    "kgco2e_per_MW": 9755.281228486365,
+    "kgco2e_per_MW_year": 278.72232081389615
+  },
+  "solar": {
+    "database": "transformer foreground",
+    "code": "solar_inverter_stepup_per_mwp",
+    "source": "IEA PVPS Task 12, Report T12-33:2026 (July 2026), Tables 49 and 50",
+    "unit_rating_MVA": 2.5,
+    "primary_kV": 20.0,
+    "secondary_kV": 0.4,
+    "reference_plant_MWp": 10.0,
+    "units_per_plant": 4,
+    "units_per_MWp": 0.4,
+    "materials_kg_per_unit": {
+      "steel_converter": 2079.8,
+      "mg_silicon": 73.202,
+      "oil": 1060.0,
+      "aluminium": 618.0,
+      "steel_lowalloy": 1734.52,
+      "kraft_paper": 34.11,
+      "epoxy": 15.0,
+      "copper": 2.1,
+      "chromium_steel": 2.5,
+      "rubber": 0.2,
+      "paint": 13.61
+    },
+    "kg_per_unit": 5679.942,
+    "kg_per_MWp": 2271.9768,
+    "kgco2e_per_MWp": 10359.464074795136,
+    "kgco2e_per_MWp_year": 295.9846878512896
+  },
+  "solar_legacy": {
+    "activity": "market for transformer, high voltage use",
+    "kgco2e_per_kg": 5.335821201865254,
+    "kg_per_MVA": 1434.5,
+    "kgco2e_per_MVA": 7654.235514075707,
+    "MVA_per_MWp": 0.8421052631578947,
+    "kgco2e_per_MWp_year": 184.16205748152075
+  },
+  "per_MW_year": {
+    "onshore_wind": 278.72232081389615,
+    "offshore_wind": 278.72232081389615,
+    "solar_pv": 295.9846878512896
+  }
+}

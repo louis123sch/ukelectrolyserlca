@@ -250,7 +250,9 @@ class Coefficients:
 
         def em_of(asset):
             row = emb.loc[asset]
-            return float(row.capital_kgco2e_per_MW / row.study_lifetime_years)
+            # Capital annuity plus, for wind/offshore, the non-capital residual
+            # ecoinvent reports per kWh - see renewables.apply_case.
+            return float(row.annual_kgco2e_per_MW)
 
         bc = batt_mod.cost_components()[cost_case]
         crf_b = batt_mod.capital_recovery_factor(

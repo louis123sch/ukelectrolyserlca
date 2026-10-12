@@ -245,9 +245,11 @@ def _probe(series, assets, tech, knob, value, *, strategy, unserved_fraction,
     row.update({
         "value": float(value),
         "h2_share_of_load": max(fc_mwh / demand_mwh, 0.0) if demand_mwh else 0.0,
-        "h2_bought_kg_per_year": (float(V["h2_buy"].solution.sum())
-                                  + float(V["h2_buy_2"].solution.sum()))
-                                 * series_v.annual_scale,
+        # Its own name, because ``_extract`` already reports the two bought
+        # streams separately and reusing its key for the sum would give a
+        # probe row and a front row the same column meaning two things.
+        "h2_bought_total_kg_per_year": (row["h2_bought_kg_per_year"]
+                                        + row["h2_bought_2_kg_per_year"]),
         "h2_made_kg_per_year": (
             float(V["p_ely"].solution.sum()) * series_v.dt_hours * series_v.annual_scale
             * 1000.0 / (tech_v.ely_kwh_per_kg + tech_v.tank_compression_kwh_per_kg)),

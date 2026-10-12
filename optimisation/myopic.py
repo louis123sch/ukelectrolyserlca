@@ -153,11 +153,19 @@ def evaluate(df: pd.DataFrame, series: M.Series, tech: M.Tech, caps: dict) -> di
            + tech.gwp_tank * caps.get("cap_tank", 0.0)
            + tech.gwp_fc_bop_per_mw * bop_units
            + tech.gwp_fc_stack_per_mw * stack_units
+           # Step-up transformers, on the same capacities the LP charges them
+           # against — a myopic dispatch builds the same kit, so leaving these
+           # out would make the bracket look cleaner than the LP by an amount
+           # that has nothing to do with foresight.
+           + tech.gwp_tx_wind_per_mw * (caps.get("cap_wind", 0.0)
+                                        + caps.get("cap_offshore", 0.0))
+           + tech.gwp_tx_solar_per_mwp * caps.get("cap_solar", 0.0)
            + scale * float((tech.gwp_fc_maint_per_mwh * df.p_fc * dt).sum())
            + scale * float((series.grid_gwp_per_mwh * df.imp * dt).sum())
            + scale * tech.ely_variable_gwp_per_kg * kg_per_mwh_in
                    * float((df.p_ely * dt).sum())
-           + tech.dc_fixed_gwp_per_year)
+           + tech.dc_fixed_gwp_per_year
+           + tech.dc_other_gwp_per_mwh * float(series.demand_mw.sum() * dt) * scale)
     cost = (tech.cost_wind * caps.get("cap_wind", 0.0)
             + tech.cost_offshore * caps.get("cap_offshore", 0.0)
             + tech.cost_solar * caps.get("cap_solar", 0.0)

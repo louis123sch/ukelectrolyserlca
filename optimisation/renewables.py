@@ -59,8 +59,17 @@ flatter the result.
 
 So there are two bases, and the second exists only to reproduce older runs.
 Pass ``solar_basis="ecoinvent"`` for that; both live in
-``SOLAR_EMBODIED_BASES``. Wind and offshore wind are untouched, being mostly
-steel and concrete and ageing far more slowly than a PV module.
+``SOLAR_EMBODIED_BASES``. Wind and offshore wind are mostly steel and concrete
+and ageing far more slowly than a PV module, so their capital dominates - but
+the boundary still has to match solar's. IEA PVPS's per-kWh figure is a
+**full-scope** footprint (module, BOS, inverter, install, EOL); a capital-only
+wind figure restated on top of it would be comparing different things. So
+``restate()`` adds ecoinvent's own non-capital consumables (lubricating oil,
+water - the ~1 % ``residual_per_kWh`` from ``decompose()``) back on top of
+wind and offshore's restated capital by default, making both technologies
+full-scope. It is skipped only where the capital figure is already full-scope
+itself (solar under its default IEA basis); it still applies under
+``solar_basis="ecoinvent"``, since that basis is capital-only too.
 
 Sources
 -------
@@ -119,6 +128,21 @@ IEA_PVPS_REFERENCE = {
 # Where solar's embodied carbon comes from. ``gco2e_per_kwh`` of None means
 # "use the figure decomposed out of ecoinvent" - see solar_capital_kgco2e_per_mw.
 SOLAR_EMBODIED_BASES = {
+    # The default since the utility-scale rebuild. Not a published figure: a
+    # foreground activity, so it is ecoinvent 3.9.1 apos BY CONSTRUCTION rather
+    # than transcribed off someone else's background and system model.
+    "smith_2024_upv_fixed_tilt": {
+        "gco2e_per_kwh": None, "module_efficiency": 0.203,
+        "data_reference_period": "2022 supply chain, report 2024",
+        "label": ("Smith et al. 2024 (NREL/TP-7A40-87372) utility-scale "
+                  "inventory, fixed tilt, rescored on ecoinvent 3.9.1 apos"),
+        "grade": "derived",
+        "foreground": {
+            "capital_code": "upv_fixed_tilt_plant_per_mwp",
+            "om_code": "upv_fixed_tilt_om30_per_mwp",
+            "om_reference_years": 30.0,
+        },
+    },
     "iea_pvps_2023_mono_si": {
         "gco2e_per_kwh": 35.8, "module_efficiency": 0.209,
         "data_reference_period": "2020-2023",
@@ -139,12 +163,70 @@ SOLAR_EMBODIED_BASES = {
         "grade": "transcribed",
     },
 }
-SOLAR_EMBODIED_BASIS = "iea_pvps_2023_mono_si"
+SOLAR_EMBODIED_BASIS = "smith_2024_upv_fixed_tilt"
 if SOLAR_EMBODIED_BASIS not in SOLAR_EMBODIED_BASES:
     raise ValueError(f"SOLAR_EMBODIED_BASIS must be one of {list(SOLAR_EMBODIED_BASES)}")
 
 
-def solar_capital_kgco2e_per_mw(basis: str, ecoinvent_value: float) -> float:
+UPV_CACHE_PATH = OUT_DIR / "upv_decomposition_cache.json"
+_UPV_MEMO: dict | None = None
+
+
+def upv_decompose(refresh: bool = False) -> dict:
+    """Score the utility-scale PV foreground once, and cache it.
+
+    Mirrors ``transformers.decompose``: the inventory lives in
+    ``2.tech_lca_foreground.ipynb``, this only scores and caches, so the
+    coefficient tests and a Streamlit session can read it without a Brightway
+    connection.
+
+    Two activities, deliberately separate. ``capital`` is the one-off build;
+    ``om30`` is thirty years of operation and maintenance, kept apart so the
+    study's own lifetime can scale it without touching the manufacturing half.
+    """
+    global _UPV_MEMO
+    if refresh:
+        _UPV_MEMO = None
+        UPV_CACHE_PATH.unlink(missing_ok=True)
+    if _UPV_MEMO is not None:
+        return _UPV_MEMO
+    if UPV_CACHE_PATH.exists():
+        try:
+            cached = json.loads(UPV_CACHE_PATH.read_text(encoding="utf-8"))
+            if cached.get("basis") == "smith_2024_upv_fixed_tilt":
+                _UPV_MEMO = cached
+                return _UPV_MEMO
+        except Exception:
+            pass    # a corrupt or stale cache is never fatal — recompute
+
+    import bw2data as bd
+    import lca_helpers as H
+    import dashboard_config as cfg
+
+    H.setup_brightway()
+    method = _gwp_method(bd)
+    spec = SOLAR_EMBODIED_BASES["smith_2024_upv_fixed_tilt"]["foreground"]
+    out = {"basis": "smith_2024_upv_fixed_tilt",
+           "database": cfg.SOLAR_FOREGROUND_DB,
+           "om_reference_years": spec["om_reference_years"]}
+    for key, code in (("capital", spec["capital_code"]), ("om30", spec["om_code"])):
+        try:
+            act = bd.get_activity((cfg.SOLAR_FOREGROUND_DB, code))
+        except Exception:
+            raise RuntimeError(
+                f"{cfg.SOLAR_FOREGROUND_DB!r}/{code!r} is not in this Brightway "
+                "project. Run the utility-scale PV cells in "
+                "2.tech_lca_foreground.ipynb first — the inventory lives there, "
+                "not in this module.") from None
+        out[f"{key}_kgco2e_per_MWp"] = H.run_lca_score(act, method)
+    OUT_DIR.mkdir(exist_ok=True)
+    UPV_CACHE_PATH.write_text(json.dumps(out, indent=2), encoding="utf-8")
+    _UPV_MEMO = out
+    return out
+
+
+def solar_capital_kgco2e_per_mw(basis: str, ecoinvent_value: float,
+                                lifetime_years: float | None = None) -> float:
     """Embodied carbon per MWp under one basis, in this module's own units.
 
     A published per-kWh figure carries its author's yield and lifetime, so it
@@ -157,6 +239,17 @@ def solar_capital_kgco2e_per_mw(basis: str, ecoinvent_value: float) -> float:
     number, since both scale by 1000 in numerator and denominator.
     """
     spec = SOLAR_EMBODIED_BASES[basis]
+    fg = spec.get("foreground")
+    if fg is not None:
+        # Built, not transcribed. Capital is a one-off; O&M is published for 30
+        # years and prorated to this study's life. That prorating is exact
+        # rather than cosmetic, but note it cancels in the annual charge:
+        # annual = capital_total/life = cap/life + om30/30, so the O&M term is
+        # life-independent once annualised and only moves the per-kWh columns.
+        d = upv_decompose()
+        life = float(lifetime_years or d["om_reference_years"])
+        return (d["capital_kgco2e_per_MWp"]
+                + d["om30_kgco2e_per_MWp"] * life / d["om_reference_years"])
     if spec["gco2e_per_kwh"] is None:
         return ecoinvent_value
     return (spec["gco2e_per_kwh"]
@@ -213,6 +306,11 @@ def decompose(tech, ei, H, method):
         # check_reconstruction anchors on this one, so the guarantee that the
         # decomposition rebuilds ecoinvent exactly is never quietly retired.
         "ecoinvent_capital_kgco2e_per_MW": capital_per_mw,
+        # Consumables (lubricating oil, water, ...) ecoinvent reports per kWh
+        # rather than per unit. Added back on top of capital wherever the study
+        # is using a capital-only basis, so wind/offshore are full-scope like
+        # solar's published figure rather than missing this ~1 % tail.
+        "residual_per_kWh": total_per_kwh - capital_per_kwh,
         "ecoinvent_lifetime_kWh_per_kW": lifetime_kwh_per_kw,
         "ecoinvent_lifetime_years": ei_life,
         "ecoinvent_implied_load_factor": implied_lf,
@@ -220,11 +318,19 @@ def decompose(tech, ei, H, method):
     }
 
 
-def restate(row, load_factor, lifetime_years):
-    """Per-kWh embodied burden at this study's own yield, not ecoinvent's."""
+def restate(row, load_factor, lifetime_years, capital_only=True):
+    """Per-kWh embodied burden at this study's own yield, not ecoinvent's.
+
+    ``capital_only`` says whether ``capital_kgco2e_per_MW`` is just the sized
+    capacity or already a full-scope figure (as solar's default IEA basis is).
+    In the former case the non-capital residual ecoinvent reports per kWh is
+    added on top, so the restated total is full-scope either way and solar
+    and wind stop being an apples-to-oranges comparison.
+    """
     lifetime_kwh_per_kw = load_factor * HOURS_PER_YEAR * lifetime_years
     eco_per_mw = row.get("ecoinvent_capital_kgco2e_per_MW", row["capital_kgco2e_per_MW"])
-    per_kwh = row["capital_kgco2e_per_MW"] / 1000.0 / lifetime_kwh_per_kw
+    residual = row.get("residual_per_kWh", 0.0) if capital_only else 0.0
+    per_kwh = row["capital_kgco2e_per_MW"] / 1000.0 / lifetime_kwh_per_kw + residual
     return {
         "study_load_factor": load_factor,
         "study_lifetime_years": lifetime_years,
@@ -233,6 +339,8 @@ def restate(row, load_factor, lifetime_years):
         # What ecoinvent's own capital restates to at the same yield. Where a
         # non-ecoinvent basis is in force this separates the two effects: this
         # column moves only with yield, restated_kgco2e_per_kWh with both.
+        # Deliberately capital-only (no residual) even when capital_only=True,
+        # since it exists to isolate the yield effect, not the scope effect.
         "ecoinvent_restated_kgco2e_per_kWh": eco_per_mw / 1000.0 / lifetime_kwh_per_kw,
         "ratio_to_ecoinvent": per_kwh / row["ecoinvent_per_kWh"],
     }
@@ -263,7 +371,8 @@ def decompose_all(use_cache: bool = True, refresh: bool = False):
     if use_cache and CACHE_PATH.exists():
         try:
             cached = json.loads(CACHE_PATH.read_text(encoding="utf-8"))
-            if sorted(r["technology"] for r in cached) == sorted(TECHNOLOGIES):
+            if (sorted(r["technology"] for r in cached) == sorted(TECHNOLOGIES)
+                    and all("residual_per_kWh" in r for r in cached)):
                 _MEMO = cached
                 return _MEMO
         except Exception:
@@ -315,20 +424,40 @@ def apply_case(rows, case="central", solar_basis=None):
         row["technical_case"] = technical_case
         # Tolerate a cache written before this column existed.
         row.setdefault("ecoinvent_capital_kgco2e_per_MW", row["capital_kgco2e_per_MW"])
+        row.setdefault("residual_per_kWh", 0.0)
+        life = tc._value(params, "operating_lifetime", technical_case)
         if row["technology"] == "solar_pv":
             spec = SOLAR_EMBODIED_BASES[basis]
             row["capital_kgco2e_per_MW"] = solar_capital_kgco2e_per_mw(
-                basis, row["ecoinvent_capital_kgco2e_per_MW"])
+                basis, row["ecoinvent_capital_kgco2e_per_MW"],
+                lifetime_years=life)
             row["embodied_basis"] = basis
             row["embodied_basis_label"] = spec["label"]
             row["embodied_basis_grade"] = spec["grade"]
+            # Full-scope bases need no residual added. The Smith foreground is
+            # full-scope because it carries installation and O&M itself; the
+            # IEA per-kWh figure is full-scope as published. Only the raw
+            # ecoinvent basis is capital-only.
+            capital_only = (spec["gco2e_per_kwh"] is None
+                            and spec.get("foreground") is None)
         else:
             row["embodied_basis"] = "ecoinvent"
             row["embodied_basis_label"] = "ecoinvent 3.9.1 apos"
             row["embodied_basis_grade"] = "transcribed"
+            capital_only = True
+        row["capital_only"] = capital_only
         row.update(restate(row,
                            tc._value(params, "net_load_factor", technical_case),
-                           tc._value(params, "operating_lifetime", technical_case)))
+                           life,
+                           capital_only=capital_only))
+        # What the LP actually charges per MW built per year: the capital
+        # annuity plus, where capital_only, the residual at this study's own
+        # yield - so a capacity charge stays a capacity charge but is no
+        # longer missing wind/offshore's non-capital tail. Equivalent to
+        # restated_kgco2e_per_kWh x this study's own annual generation per MW.
+        row["annual_kgco2e_per_MW"] = (
+            row["restated_kgco2e_per_kWh"] * row["study_load_factor"]
+            * HOURS_PER_YEAR * 1000.0)
         out.append(row)
     return pd.DataFrame(out)
 
@@ -408,11 +537,18 @@ def run(case="central", solar_basis=None):
           f"{w.restated_kgco2e_per_kWh*1000:.1f} g CO2e/kWh.")
     pv = df[df.technology == "solar_pv"].iloc[0]
     print()
-    print(f"  Solar PV is not scored on ecoinvent. Its GB open-ground activity is the")
+    print(f"  Solar PV does not use ecoinvent's own GB PV activity: that is the")
     print(f"  570 kWp Solarpark El Tesoro, installed 2008, at a {SOLAR_EMBODIED_BASES['ecoinvent']['module_efficiency']:.2%} module — it")
     print(f"  restates to {pv.ecoinvent_restated_kgco2e_per_kWh*1000:.0f} g CO2e/kWh, about ten times wind. The inventory is")
     print("  byte-identical in ecoinvent 3.10.1 and no other GB PV activity exists at")
     print("  utility scale, so the database cannot fix it.")
+    if SOLAR_EMBODIED_BASES[basis].get("foreground"):
+        print()
+        print("  The default is therefore a REBUILD, not a citation: Smith et al.")
+        print("  (2024) published a utility-scale inventory on ecoinvent cut-off,")
+        print("  and it is rescored here as a foreground, which makes it ecoinvent")
+        print("  3.9.1 apos by construction. Solar is no longer the one coefficient")
+        print("  in the study on a foreign background and system model.")
     print()
     print(f"  Basis in force: {SOLAR_EMBODIED_BASES[basis]['label']}")
     print(f"    {pv.capital_kgco2e_per_MW/1000:>10,.0f} t CO2e/MWp  "

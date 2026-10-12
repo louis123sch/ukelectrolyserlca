@@ -307,3 +307,256 @@ def test_connection_limit_defaults_to_unconstrained():
     """An invented limit would be the most decision-relevant unsourced number."""
     from optimisation import sites
     assert sites.resolve(51.5074, -0.1278).connection_limit_mw is None
+
+
+# --- bought hydrogen carries the seller's trailer compression --------------
+# The tank balance takes ``h2_buy`` at coefficient 1.0 while self-produced
+# hydrogen pays ``h2_storage.compression_kwh_per_kg`` to enter the same vessel.
+# These guard the term that closed that asymmetry.
+
+def test_every_bought_colour_pays_trailer_compression():
+    from optimisation import h2_prices as hp
+    for colour in hp.INVENTORY:
+        kwh = hp.bought_h2_compression_kwh_per_kg(colour)
+        assert kwh > 0.0, f"{colour} pays no compression"
+        assert hp.bought_h2_compression_kgco2e_per_kg(colour) > 0.0
+        assert hp.bought_h2_compression_gbp_per_kg(colour) > 0.0
+
+
+def test_compression_is_charged_in_both_objectives():
+    """Carbon without cost is the study's standing one-directional bias."""
+    from optimisation import h2_prices as hp
+    for colour in hp.INVENTORY:
+        carbon = hp.bought_h2_compression_kgco2e_per_kg(colour)
+        cost = hp.bought_h2_compression_gbp_per_kg(colour)
+        assert (carbon > 0) == (cost > 0), (
+            f"{colour} is charged compression in one objective and not the "
+            f"other — see audit.py and DATA_GAPS.md")
+
+
+def test_green_compressor_never_runs_on_grid_carbon():
+    """A plant behind a renewable meter cannot compress on grid power.
+
+    This is the same incoherence ``GREEN_H2_ELECTRICITY_BASES`` exists to
+    remove, and the reason DATA_GAPS' pre-fix ~0.761 kg/kg estimate was 33x
+    too high.
+    """
+    from optimisation import h2_prices as hp
+    for share in (0.0, 0.5, 1.0):
+        I = hp.bought_h2_compression_gco2e_per_kwh("green", grid_share=share)
+        assert I < 0.1 * hp.ECOINVENT_GB_LV_GCO2E_PER_KWH, (
+            f"green compressor at grid_share={share} draws {I:.1f} g/kWh — "
+            f"that is grid carbon on a renewable commodity")
+    # fossil colours do take the grid their own activities link to
+    for colour in ("grey", "blue", "turquoise"):
+        assert (hp.bought_h2_compression_gco2e_per_kwh(colour)
+                == hp.ECOINVENT_GB_LV_GCO2E_PER_KWH)
+
+
+def test_compression_uses_the_same_thermodynamics_as_self_production():
+    from optimisation import h2_prices as hp, h2_storage as h2s
+    assert hp.bought_h2_compression_kwh_per_kg("green") == pytest.approx(
+        h2s.compression_kwh_per_kg(30.0, hp.BOUGHT_H2_TRAILER_PRESSURE_BAR))
+
+
+def test_green_outlet_pressure_tracks_the_electrolyser_module():
+    """Not restated, so the seller's PEM and the buyer's cannot drift apart."""
+    from optimisation import h2_prices as hp, electrolysers as ely
+    assert (hp.bought_h2_production_pressure_bar("green")
+            == ely.DELIVERY_PRESSURE_BAR["PEM operation"])
+
+
+def test_assumed_outlet_pressures_are_declared():
+    from optimisation import h2_prices as hp
+    assert hp.BOUGHT_H2_PRODUCTION_PRESSURE_ASSUMED == set(
+        hp.BOUGHT_H2_PRODUCTION_PRESSURE_BAR), (
+        "every hardcoded outlet pressure is unsourced and must say so")
+
+
+def test_compression_moves_blue_far_more_than_green():
+    """The finding that inverted DATA_GAPS' expectation.
+
+    Green buys renewable power for its compressor, so the term is ~2 % of its
+    production burden. Blue buys grid power, so it is ~15 %.
+    """
+    from optimisation import h2_prices as hp
+    green = hp.bought_h2_compression_kgco2e_per_kg("green", grid_share=0.5)
+    blue = hp.bought_h2_compression_kgco2e_per_kg("blue")
+    assert green < 0.05 and blue > 0.4
+    assert blue > 15 * green
+
+
+# =============================================================================
+# Generation step-up transformers
+# =============================================================================
+def test_transformer_coefficient_round_trips():
+    from optimisation import transformers as tx
+    _cached(tx)
+    assert "OK" in tx.check()
+
+
+def test_transformer_mass_is_the_leng_bill_of_materials():
+    """The transcribed numbers, guarded against drift.
+
+    Wind is the fifty S11-2200/35 box transformers on Leng's 100 MW Gaoyou
+    farm — 282,343 kg for 100 MW — read from the foreground activity notebook
+    2 builds, not assembled here.
+    """
+    import dashboard_config as cfg
+    from optimisation import transformers as tx
+    _cached(tx)
+    d = tx.decompose()
+    assert sum(cfg.TX_LENG_BOX_KG.values()) == pytest.approx(282_343.0, abs=1.0)
+    assert d["wind"]["kg_per_MW"] == pytest.approx(2823.43, abs=0.01)
+    assert d["wind"]["database"] == cfg.TRANSFORMER_FOREGROUND_DB
+    assert d["wind"]["kgco2e_per_MW_year"] == pytest.approx(
+        d["wind"]["kgco2e_per_MW"] / cfg.TX_ASSET_LIFE_YEARS)
+
+
+def test_the_site_collects_where_the_data_centre_draws():
+    """Turbines are LOW voltage and the data centre is MEDIUM, so the step-up
+    is compulsory; collecting outside the data centre's band would leave an
+    uncharged transformation in the chain."""
+    from optimisation import transformers as tx
+    _cached(tx)
+    d = tx.decompose()
+    lo, hi = d["medium_voltage_band_kV"]
+    assert d["turbine_terminal_V"] < lo * 1000.0, "turbines must be low voltage"
+    assert lo <= d["site_collection_kV"] <= hi
+
+
+def test_wind_no_longer_scores_ecoinvents_electronics_transformer():
+    """ecoinvent's transformer datasets are 280 g and 30 g electronic parts by
+    its own comments, so wind must read the foreground bill instead. Solar
+    still does not, and that is registered rather than fixed."""
+    from optimisation import transformers as tx
+    _cached(tx)
+    d = tx.decompose()
+    assert tx.LEGACY_ACTIVITY not in str(d["wind"])
+    assert d["solar_legacy"]["activity"] == tx.LEGACY_ACTIVITY
+
+
+def test_transformer_is_a_small_share_of_the_generation_it_connects():
+    """A step-up is real but minor — a coefficient near wind's is a unit error."""
+    from optimisation import transformers as tx
+    _cached(tx)
+    wind_per_mw_year = 19_244.0        # renewables.py, onshore, central case
+    share = tx.kgco2e_per_mw_year("onshore_wind") / wind_per_mw_year
+    assert 0.001 < share < 0.05, f"transformer is {share:.1%} of wind"
+
+
+def test_transformer_is_absent_from_the_cost_objective():
+    """Deliberate, not an omission: DESNZ/Arup capex already reaches the point
+    of connection, so a £/MW transformer charge would double count."""
+    import dataclasses
+    from optimisation import dc_model as M
+    names = {f.name for f in dataclasses.fields(M.Tech)}
+    assert {"gwp_tx_wind_per_mw", "gwp_tx_solar_per_mwp"} <= names
+    assert not {n for n in names if n.startswith("cost_tx")}
+
+
+# =============================================================================
+# Utility-scale PV basis — Smith et al. 2024, rescored on ecoinvent apos
+# =============================================================================
+# The default solar basis used to be a 3 kWp ROOFTOP system, and nothing in this
+# suite noticed when it was swapped for a utility-scale one. These tests exist
+# so the next change to it cannot pass silently.
+
+def test_solar_default_basis_is_the_utility_scale_foreground():
+    """`cap_solar` is a utility-scale MWp and must be priced as one."""
+    from optimisation import renewables as R
+    assert R.SOLAR_EMBODIED_BASIS == "smith_2024_upv_fixed_tilt"
+    spec = R.SOLAR_EMBODIED_BASES[R.SOLAR_EMBODIED_BASIS]
+    # Built, not transcribed: a foreground activity is scored in THIS project,
+    # so the answer is ecoinvent 3.9.1 apos by construction rather than
+    # inherited from another background and system model.
+    assert spec.get("foreground"), "the default basis must be a foreground build"
+    assert spec["gco2e_per_kwh"] is None
+    # The rooftop basis stays selectable, to reproduce runs from before this.
+    assert "iea_pvps_2023_mono_si" in R.SOLAR_EMBODIED_BASES
+
+
+def test_solar_capital_is_build_plus_prorated_om():
+    """Capital = one-off build + O&M prorated from its 30-year reference.
+
+    The prorating cancels in the LP — annual = capital/life = build/life +
+    om30/30 — but it must still be arithmetically right, because it moves the
+    per-kWh columns that get quoted.
+    """
+    from optimisation import renewables as R
+    if not R.UPV_CACHE_PATH.exists():
+        pytest.skip("upv_decomposition_cache.json not built — run the "
+                    "utility-scale PV cells in 2.tech_lca_foreground.ipynb")
+    d = R.upv_decompose()
+    life = 38.0
+    expected = (d["capital_kgco2e_per_MWp"]
+                + d["om30_kgco2e_per_MWp"] * life / d["om_reference_years"])
+    got = R.solar_capital_kgco2e_per_mw("smith_2024_upv_fixed_tilt", 0.0,
+                                        lifetime_years=life)
+    assert got == pytest.approx(expected)
+    # O&M is a real but minor term; a wildly different split means the
+    # foreground was rebuilt wrong.
+    assert 0.005 < d["om30_kgco2e_per_MWp"] / d["capital_kgco2e_per_MWp"] < 0.10
+
+
+def test_solar_is_full_scope_and_not_capital_only():
+    """The foreground carries its own installation and O&M.
+
+    ``capital_only`` adds ecoinvent's non-capital residual back on top. Doing
+    that here would double count, because this basis already includes those
+    stages — unlike the raw ecoinvent basis, which genuinely is capital-only.
+    """
+    from optimisation import renewables as R
+    df = R.apply_case(R.decompose_all(), "central",
+                      solar_basis="smith_2024_upv_fixed_tilt")
+    row = df[df.technology == "solar_pv"].iloc[0]
+    assert row["capital_only"] is False or row["capital_only"] == False  # noqa: E712
+    assert row["embodied_basis"] == "smith_2024_upv_fixed_tilt"
+    # DESNZ/Arup central: 12.2 % net load factor over 38 years.
+    assert row["study_load_factor"] == pytest.approx(0.122)
+    assert row["study_lifetime_years"] == pytest.approx(38.0)
+
+
+def test_utility_scale_beats_rooftop_on_bos_but_not_on_the_module():
+    """The saving is the balance of system, and the module gets WORSE.
+
+    This is the finding that makes the rebuild defensible rather than a
+    convenient reduction: a 3 kWp roof amortises its inverter, cabling and
+    mounting over 3 kW rather than megawatts, so its BOS per kWp is far larger —
+    while the module rises, partly because APOS charges secondary aluminium a
+    share of primary production where recycled-content allocation does not.
+    """
+    from optimisation import renewables as R
+    rows = R.decompose_all()
+    util = R.apply_case(rows, "central", solar_basis="smith_2024_upv_fixed_tilt")
+    roof = R.apply_case(rows, "central", solar_basis="iea_pvps_2023_mono_si")
+    u = util[util.technology == "solar_pv"].iloc[0]["capital_kgco2e_per_MW"]
+    r = roof[roof.technology == "solar_pv"].iloc[0]["capital_kgco2e_per_MW"]
+    assert u < r, "utility-scale should be the lower of the two per MWp"
+    # ...but not by a suspicious margin. A large drop would mean whole stages
+    # went missing rather than the BOS being amortised over more capacity.
+    assert 0.75 < u / r < 0.95
+
+
+def test_solar_module_reproduces_smiths_published_epeat_result():
+    """The transcription's end-to-end check, and the reason to trust it.
+
+    Smith states his average-import module sits ABOVE the 630 kg CO2e/kW EPEAT
+    low-carbon threshold. Rebuilding his inventory on a DIFFERENT system model
+    (apos, where he published cut-off) reproduces that. If this fails, the
+    transcription or the chain wiring has drifted.
+    """
+    import dashboard_config as cfg
+    bd = pytest.importorskip("bw2data")
+    try:
+        act = bd.get_activity((cfg.SOLAR_FOREGROUND_DB, "upv_perc_module"))
+    except Exception:
+        pytest.skip("solar foreground not built in this Brightway project")
+    import lca_helpers as H
+    from optimisation import renewables as R
+    per_m2 = H.run_lca_score(act, R._gwp_method(bd))
+    per_kwdc = per_m2 / (cfg.UPV_PV_W_PER_M2 / 1000.0)
+    assert per_kwdc > 630.0, (
+        f"module is {per_kwdc:,.0f} kg CO2e/kWdc; Smith reports his "
+        "average-import module above the 630 EPEAT threshold")
+    assert per_kwdc < 900.0, "implausibly high — check the chain links"

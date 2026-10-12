@@ -1,0 +1,7 @@
+{
+  "basis": "smith_2024_upv_fixed_tilt",
+  "database": "solar foreground",
+  "om_reference_years": 30.0,
+  "capital_kgco2e_per_MWp": 877518.547395614,
+  "om30_kgco2e_per_MWp": 14053.31622985804
+}
