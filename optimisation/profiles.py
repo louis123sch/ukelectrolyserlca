@@ -137,6 +137,20 @@ def fetch_solar_cf(lat, lon, start, end, tilt=None, azim=None,
     return df, hit
 
 
+def grid_file_is_utc(path: Path) -> bool:
+    """Is this grid series on the UTC clock that price and weather use?
+
+    Files written before the clock fix are London local time and carry no
+    ``clock`` column. They are skipped rather than used, so a window that only
+    they cover is rebuilt instead of being an hour out of step all summer.
+    """
+    try:
+        head = pd.read_csv(path, nrows=1)
+    except Exception:
+        return False
+    return "clock" in head.columns and str(head["clock"].iloc[0]) == "UTC"
+
+
 def _series_index(folder: Path, pattern: str, time_col: str, start, end):
     """Every written CSV that matches, with how much of the window it holds.
 
@@ -156,6 +170,8 @@ def _series_index(folder: Path, pattern: str, time_col: str, start, end):
     # — but which file a run used was not reproducible, and a future pair that
     # disagreed would be picked between silently.
     for path in sorted(folder.glob(pattern)):
+        if folder == GRID_DIR and not grid_file_is_utc(path):
+            continue
         try:
             times = pd.read_csv(path, usecols=[time_col],
                                 parse_dates=[time_col])[time_col].sort_values()

@@ -229,10 +229,17 @@ def bsuos_series(index: pd.DatetimeIndex) -> pd.Series:
 # DUoS
 # =============================================================================
 def duos_band(index: pd.DatetimeIndex) -> pd.Series:
-    """Red / amber / green for every timestamp. See DUOS_BANDS_SIMPLIFIED."""
-    weekday = index.dayofweek < 5
-    hour = index.hour
-    red = weekday & index.month.isin(DUOS_RED_MONTHS) \
+    """Red / amber / green for every timestamp. See DUOS_BANDS_SIMPLIFIED.
+
+    The bands are published on the UK clock; the study's series are naive UTC
+    (see ``grid_build``). So the hour, weekday and month are read after
+    converting to Europe/London — otherwise amber sits an hour early all summer.
+    """
+    clock = pd.DatetimeIndex(index)
+    clock = (clock.tz_localize("UTC") if clock.tz is None else clock).tz_convert("Europe/London")
+    weekday = clock.dayofweek < 5
+    hour = clock.hour
+    red = weekday & clock.month.isin(DUOS_RED_MONTHS) \
         & (hour >= DUOS_RED_HOURS[0]) & (hour < DUOS_RED_HOURS[1])
     amber = weekday & ~red & (
         ((hour >= DUOS_AMBER_HOURS[0][0]) & (hour < DUOS_AMBER_HOURS[0][1]))

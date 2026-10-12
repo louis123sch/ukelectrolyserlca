@@ -58,10 +58,6 @@ Work where a number the study reports is not currently defensible.
       cycle (candidate #1, 387 g/kWh) — the dataset `SOURCES.md` says we
       refuse. Imports are FR/IE/NL 63/7/30, not ⅓ each. Rebuild the series and
       the 16,132 t baseline. `docs/OBJECTIVE_AUDIT.md` §3.5.
-- [ ] **Grid carbon is one hour out of step in BST.** `grid_build.py` (as 3.1 did) writes London local
-      time; Elexon and Renewables.ninja are UTC; `profiles.py:343` joins the
-      naive stamps, so intraday carbon is an hour late seven months a year.
-      Audit §3.5.
 - [ ] **Grid imports carry no network embodied carbon.** The grid series is
       generation only (× `MARKET_LOSS_FACTOR` 1.0316); bought green H₂ is
       charged 8.2125 g/kWh network + a 1.0635 loss gross-up

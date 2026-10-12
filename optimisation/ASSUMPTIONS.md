@@ -106,6 +106,20 @@ about it because nothing connected the wind coordinate to the grid region.
 `require_grid_region()` now refuses the combination outright, and the matrix is
 run at a coordinate genuinely inside region 13.
 
+## 3b. Every half-hourly series is on UTC
+
+Grid carbon, wholesale price and wind/solar are joined on naive UTC timestamps,
+and a requested window is read as UTC. Until 12 Oct 2026 the grid series was
+London local time while price and weather were UTC, so from late March to late
+October intraday grid carbon sat an hour late against everything else (Audit
+§3.5). Every saved grid file was rebuilt on UTC that day and carries a
+`clock = UTC` column; `profiles.py` ignores grid files without it.
+
+Rules published on the UK clock convert from UTC where they are applied: the
+DUoS red/amber/green bands (`network_charges.duos_band`) and Elexon settlement
+periods (`grid_build.normalise_elexon`). The DUoS red band is November-February
+only, so it never moved; amber did, by an hour, all summer.
+
 ## 4. Cost basis
 
 DESNZ/Arup 2024 Cost of Electricity reports, **2023 real prices**, with each

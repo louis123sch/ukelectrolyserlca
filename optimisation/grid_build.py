@@ -30,9 +30,15 @@ Grid carbon, per half-hour
 Output file names and columns match what notebook 3.1 wrote, minus its
 per-hydrogen-technology columns, so every series already on disk still reads.
 
-Known and deliberately unchanged here: the grid series is in London local time
-while Elexon and Renewables.ninja are UTC (TODO.md, "one hour out of step in
-BST"). Fixing it changes every cached file, so it is its own decision.
+Every series is UTC
+--------------------
+Grid, price (Elexon ``startTime``) and weather (Renewables.ninja) are all
+stored as naive UTC timestamps, and a requested window is read as UTC. The
+grid series used to be London local time, which put intraday carbon an hour
+out of step with price and weather for seven months of the year. Files are
+marked with a ``clock`` column; ``profiles.py`` ignores grid files without it,
+so a series in the old basis is rebuilt rather than silently used. Anything
+defined on the UK clock (DUoS time bands) converts from UTC itself.
 
 Run:  python -m optimisation.grid_build 13 2025-06-02 2025-06-09
 """
@@ -55,7 +61,7 @@ PRICE_DIR = ROOT / "price_outputs"
 API_CACHE_DIR = ROOT / "carbon_intensity_api_cache"
 
 CARBON_API_BASE = "https://api.carbonintensity.org.uk"
-LOCAL_TZ = "Europe/London"
+CLOCK = "UTC"                             # written to every grid file; see above
 CARBON_API_MAX_DAYS_PER_REQUEST = 13      # the API refuses longer ranges
 CARBON_API_REQUEST_SLEEP_S = 0.05
 CI_FUELS = ["gas", "coal", "biomass", "nuclear", "hydro", "imports", "other",
@@ -122,16 +128,10 @@ def _carbon_api_get(endpoint: str):
 # -----------------------------------------------------------------------------
 # Time
 # -----------------------------------------------------------------------------
-def _local(value) -> pd.Timestamp:
-    """A naive datetime is UK local time; return it tz-aware."""
+def _utc(value) -> pd.Timestamp:
+    """A naive datetime is UTC; return it tz-aware."""
     ts = pd.Timestamp(value)
-    if ts.tzinfo is not None:
-        return ts.tz_convert(LOCAL_TZ)
-    try:
-        return ts.tz_localize(LOCAL_TZ, nonexistent="shift_forward")
-    except Exception:
-        # Ambiguous autumn-clock-change half-hours: take the first occurrence.
-        return ts.tz_localize(LOCAL_TZ, ambiguous=True, nonexistent="shift_forward")
+    return ts.tz_convert("UTC") if ts.tzinfo is not None else ts.tz_localize("UTC")
 
 
 def _api_z(ts: pd.Timestamp) -> str:
@@ -139,8 +139,8 @@ def _api_z(ts: pd.Timestamp) -> str:
 
 
 def _chunks(start, end_inclusive):
-    """Local-time request windows. ``end_inclusive`` is a half-hour start."""
-    cur, stop = _local(start), _local(end_inclusive) + pd.Timedelta(minutes=30)
+    """UTC request windows. ``end_inclusive`` is a half-hour start."""
+    cur, stop = _utc(start), _utc(end_inclusive) + pd.Timedelta(minutes=30)
     step = pd.Timedelta(days=CARBON_API_MAX_DAYS_PER_REQUEST)
     while cur < stop:
         nxt = min(cur + step, stop)
@@ -194,7 +194,7 @@ def _records(payload, region: int):
 
 
 def fetch_mix(region: int, start, end_inclusive) -> pd.DataFrame:
-    """Half-hourly generation mix for one region, local-time ``DATETIME``."""
+    """Half-hourly generation mix for one region, naive-UTC ``DATETIME``."""
     rows = []
     for lo, hi in _chunks(start, end_inclusive):
         payload = _carbon_api_get(
@@ -202,7 +202,7 @@ def fetch_mix(region: int, start, end_inclusive) -> pd.DataFrame:
         recs, name = _records(payload, region)
         for rec in recs:
             from_utc = pd.to_datetime(rec.get("from"), utc=True)
-            row = {"DATETIME": from_utc.tz_convert(LOCAL_TZ).tz_localize(None),
+            row = {"DATETIME": from_utc.tz_localize(None),
                    "api_scope": "regional_auto", "api_region_id": int(region),
                    "api_region_name": name}
             for fuel in CI_FUELS:
@@ -221,8 +221,8 @@ def fetch_mix(region: int, start, end_inclusive) -> pd.DataFrame:
                            f"{start} to {end_inclusive}.")
     df = (pd.DataFrame(rows).drop_duplicates("DATETIME")
           .sort_values("DATETIME").reset_index(drop=True))
-    lo = _local(start).tz_localize(None)
-    hi = _local(end_inclusive).tz_localize(None)
+    lo = _utc(start).tz_localize(None)
+    hi = _utc(end_inclusive).tz_localize(None)
     df = df[(df["DATETIME"] >= lo) & (df["DATETIME"] <= hi)].copy()
     if df.empty:
         raise RuntimeError("The API returned records, but none inside the requested window.")
@@ -274,8 +274,8 @@ _GRID_COLUMNS = (
 def build_grid(region: int, start, end, out_dir: Path | None = None) -> Path:
     """Fetch, score and write the grid series for ``region`` over [start, end].
 
-    ``start``/``end`` are UK local times (``"YYYY-MM-DD HH:MM:SS"``), ``end``
-    inclusive at half-hour resolution. Returns the CSV path.
+    ``start``/``end`` are UTC (``"YYYY-MM-DD HH:MM:SS"``), ``end`` inclusive
+    at half-hour resolution. Returns the CSV path.
     """
     import lca_helpers as H
     out_dir = Path(out_dir) if out_dir else GRID_DIR
@@ -288,6 +288,7 @@ def build_grid(region: int, start, end, out_dir: Path | None = None) -> Path:
     cols = _GRID_COLUMNS + [f"{c}_perc" for c in H.FUEL_COLS]
     df = df[cols].copy()
     df["grid_data_source"] = "carbon_api"
+    df["clock"] = CLOCK
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / grid_csv_name(region, start, end)
     df.to_csv(path, index=False)
@@ -300,7 +301,7 @@ def build_grid(region: int, start, end, out_dir: Path | None = None) -> Path:
 # Elexon wholesale price
 # -----------------------------------------------------------------------------
 def _fetch_elexon(start, end, provider: str) -> pd.DataFrame:
-    """Market Index Data in chunks. Naive times are sent as UTC (as notebook 5 did)."""
+    """Market Index Data in chunks. Naive times are UTC, like everything else."""
     lo = pd.Timestamp(start).tz_localize(None)
     hi = pd.Timestamp(end).tz_localize(None) + pd.Timedelta(minutes=30)
     chunks, cur = [], lo
@@ -353,8 +354,12 @@ def normalise_elexon(raw: pd.DataFrame) -> pd.DataFrame:
         scol = _first_col(df, ["settlementPeriod", "settlement_period"])
         if dcol is None or scol is None:
             raise ValueError(f"No Elexon time columns. Columns: {list(df.columns)}")
-        dt = (pd.to_datetime(df[dcol], errors="coerce").dt.tz_localize(None)
-              + pd.to_timedelta((pd.to_numeric(df[scol], errors="coerce") - 1) * 30, unit="m"))
+        # Settlement period 1 starts at UK midnight, so count from that instant
+        # in UTC (clock-change days have 46 or 50 periods).
+        midnight = (pd.to_datetime(df[dcol], errors="coerce").dt.tz_localize(None)
+                    .dt.tz_localize("Europe/London").dt.tz_convert("UTC"))
+        dt = (midnight + pd.to_timedelta((pd.to_numeric(df[scol], errors="coerce") - 1) * 30,
+                                         unit="m")).dt.tz_localize(None)
     df["DATETIME"] = dt.dt.floor("30min")
     df = df.dropna(subset=["DATETIME", "price_GBP_per_MWh"])[cols]
     df = df.sort_values(["DATETIME", "provider"]).drop_duplicates(["DATETIME", "provider"], keep="last")

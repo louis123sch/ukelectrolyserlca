@@ -99,6 +99,9 @@ Carbon Intensity API's regional data begins, to yesterday.
 python -m optimisation.grid_build 2 2025-03-03 2025-03-05
 ```
 
+All series are naive UTC — grid, price and weather alike — and a requested
+window is read as UTC (`optimisation/ASSUMPTIONS.md` §3b).
+
 The only notebook a build can still start is `2.tech_lca_foreground.ipynb`,
 and only on a machine where the foreground databases do not exist yet
 (`backend/runner.py` runs it headless).

@@ -118,8 +118,8 @@ Items 1–4 of the original list, done together because they are one change:
   were written by notebook 5 and are now frozen inputs. If NESO's electrolyser
   table needs refreshing, the fetch code is on `archive/electrolyser-lca`.
 
-Not changed, deliberately: the grid series is still London local time while
-prices and weather are UTC (TODO.md). Fixing it changes every cached file.
+The BST clock mismatch was fixed the same day as a follow-up: every series is
+now UTC and every saved grid file was rebuilt (`ASSUMPTIONS.md` §3b).
 
 ### Still open
 
@@ -129,8 +129,6 @@ prices and weather are UTC (TODO.md). Fixing it changes every cached file.
 2. **`price_outputs/`**: the `representative_576days` files and short 2023/2024
    windows came from Setup LCA runs. `profiles.py` refuses representative days
    anyway; worth confirming nothing globs them before deleting.
-3. **The BST clock fix**, now a one-line change in `grid_build.fetch_mix` plus
-   a rebuild of the cached series.
 
 ## Phase 3 — the split
 

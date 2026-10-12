@@ -143,6 +143,12 @@ def decompose_data_centre_by_driver(method, tolerance=1e-4):
 
 def load_grid_and_prices():
     """Half-hourly GB grid emission factor joined to the Elexon price."""
+    from optimisation.profiles import grid_file_is_utc
+    if not grid_file_is_utc(GRID_CSV):
+        raise ValueError(
+            f"{GRID_CSV.name} is on the old London-local clock while prices are "
+            "UTC. Rebuild it: python -m optimisation.grid_build 13 "
+            "'2025-01-01 00:00:00' '2025-12-29 00:00:00'")
     grid = pd.read_csv(GRID_CSV, parse_dates=["datetime"])
     grid = grid.rename(columns={
         "datetime": "DATETIME",

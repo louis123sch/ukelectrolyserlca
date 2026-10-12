@@ -375,11 +375,14 @@ def get(spec, **kw) -> Site:
 # Grid data availability
 # -----------------------------------------------------------------------------
 def available_grid_regions() -> dict[int, list[str]]:
-    """Which Carbon Intensity regions have a cached half-hourly series."""
+    """Which Carbon Intensity regions have a cached half-hourly series (UTC clock)."""
     import re
+    from optimisation.profiles import grid_file_is_utc
     out: dict[int, list[str]] = {}
     folder = ROOT / "custom_grid_lca_outputs"
     for p in sorted(folder.glob("custom_grid_lca_carbon_api_*.csv")):
+        if not grid_file_is_utc(p):
+            continue
         m = re.search(r"_r(\d+)_", p.name)
         if m:
             out.setdefault(int(m.group(1)), []).append(p.name)

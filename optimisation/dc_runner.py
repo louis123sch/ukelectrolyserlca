@@ -74,7 +74,11 @@ def _coefficient_identity() -> dict:
     for name in ("tech_lca_coefficients.csv", "h2_capex.csv"):
         f = ROOT / "optimisation_outputs" / name
         out[name] = hashlib.sha256(f.read_bytes()).hexdigest()[:12] if f.exists() else None
-    for name in ("dc_model.py", "dc_pareto.py", "dc_inputs.py", "dc_architectures.py"):
+    # grid_build/profiles/network_charges decide what the series *mean* (the
+    # UTC clock fix changed every grid file under an unchanged file name), so
+    # they are fingerprinted with the model.
+    for name in ("dc_model.py", "dc_pareto.py", "dc_inputs.py", "dc_architectures.py",
+                 "grid_build.py", "profiles.py", "network_charges.py"):
         f = ROOT / "optimisation" / name
         out[name] = hashlib.sha256(f.read_bytes()).hexdigest()[:12] if f.exists() else None
     return out

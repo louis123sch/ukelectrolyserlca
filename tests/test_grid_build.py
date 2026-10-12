@@ -67,10 +67,42 @@ def test_records_from_the_timeslice_shape():
     assert name == "London" and recs[0]["generationmix"] == _REC["generationmix"]
 
 
-def test_api_times_become_london_local():
-    # 00:00Z on 2 June is 01:00 BST: the series is in local time, as before.
-    assert G._local("2025-06-02 01:00:00").tz_convert("UTC").hour == 0
-    assert G._api_z(G._local("2025-06-02 01:00:00")) == "2025-06-02T00:00Z"
+def test_api_times_stay_utc():
+    # Grid, price and weather share one clock: naive UTC. 00:00Z on 2 June is
+    # 00:00 in the series, not 01:00 BST as the notebook wrote it.
+    assert G._api_z(G._utc("2025-06-02 00:00:00")) == "2025-06-02T00:00Z"
+    payload = {"data": [{"regionid": 13, "shortname": "London", "data": [_REC]}]}
+    recs, _ = G._records(payload, 13)
+    assert pd.to_datetime(recs[0]["from"], utc=True).tz_localize(None) == pd.Timestamp("2025-06-02 00:00")
+
+
+def test_old_local_clock_files_are_ignored(tmp_path):
+    from optimisation import profiles
+    old = tmp_path / "old.csv"
+    pd.DataFrame({"datetime": ["2025-06-02 00:00:00"], "custom_electricity_score": [0.1]}).to_csv(old, index=False)
+    new = tmp_path / "new.csv"
+    pd.DataFrame({"datetime": ["2025-06-02 00:00:00"], "custom_electricity_score": [0.1],
+                  "clock": ["UTC"]}).to_csv(new, index=False)
+    assert not profiles.grid_file_is_utc(old)
+    assert profiles.grid_file_is_utc(new)
+
+
+def test_duos_bands_follow_the_uk_clock():
+    """Amber starts at 07:00 on the UK clock: 06:00 UTC in summer, 07:00 in winter."""
+    from optimisation import network_charges as nc
+    summer = pd.DatetimeIndex(["2025-07-02 05:30", "2025-07-02 06:00"])   # Wednesday, BST
+    winter = pd.DatetimeIndex(["2025-01-08 06:30", "2025-01-08 07:00"])   # Wednesday, GMT
+    assert list(nc.duos_band(summer)) == ["green", "amber"]
+    assert list(nc.duos_band(winter)) == ["green", "amber"]
+    # Red is winter-only, so on GMT it is 16:00-19:00 UTC either way.
+    assert nc.duos_band(pd.DatetimeIndex(["2025-01-08 16:00"])).iloc[0] == "red"
+
+
+def test_settlement_periods_count_from_uk_midnight():
+    raw = pd.DataFrame({"settlementDate": ["2025-07-02"], "settlementPeriod": [1],
+                        "price": [50.0], "dataProvider": ["APXMIDP"]})
+    # SP1 on a BST day starts at 00:00 BST = 23:00 UTC the previous day.
+    assert G.normalise_elexon(raw)["DATETIME"].iloc[0] == pd.Timestamp("2025-07-01 23:00")
 
 
 def test_chunks_cover_the_window_without_gaps():
@@ -95,7 +127,7 @@ def test_score_is_share_times_loss_times_source_score():
 
 
 def test_elexon_settlement_periods_become_times():
-    raw = pd.DataFrame({"settlementDate": ["2025-06-02", "2025-06-02"],
+    raw = pd.DataFrame({"settlementDate": ["2025-01-08", "2025-01-08"],   # GMT day
                         "settlementPeriod": [1, 2], "price": [50.0, 51.0],
                         "dataProvider": ["APXMIDP", "APXMIDP"]})
     out = G.normalise_elexon(raw)
