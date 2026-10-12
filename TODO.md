@@ -62,6 +62,12 @@ Work where a number the study reports is not currently defensible.
       time; Elexon and Renewables.ninja are UTC; `profiles.py:343` joins the
       naive stamps, so intraday carbon is an hour late seven months a year.
       Audit §3.5.
+- [ ] **Grid imports carry no network embodied carbon.** The grid series is
+      generation only (× `MARKET_LOSS_FACTOR` 1.0316); bought green H₂ is
+      charged 8.2125 g/kWh network + a 1.0635 loss gross-up
+      (`h2_prices.GRID_DELIVERY_*`). Small at London's ~250 g/kWh, but about
+      half again on a ~16 g/kWh Scottish grid, and it flatters import against
+      on-site assets. Decide one delivery basis for both. `grid_build.score_mix`.
 - [ ] **The import price carries no levies.** RO/FiT/CfD/CM/AAHEDC ≈ £54/MWh
       plus CCL — about +50 % on the grid-only bill, and it flatters import
       against every on-site asset. `ELECTRICITY_DELIVERED_UPLIFT` cannot reach
