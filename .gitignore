@@ -22,3 +22,7 @@ optimisation_outputs/dc_runs/
 
 # Runtime lock for grid builds — created and removed by sites._build_lock.
 optimisation_outputs/.grid_build.lock
+
+# Carbon Intensity API response cache — refetched on demand by notebook 3.1
+# during a grid build. Kept on disk, not in git (it was 118 MB).
+carbon_intensity_api_cache/

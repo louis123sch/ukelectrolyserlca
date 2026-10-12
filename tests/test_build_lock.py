@@ -82,16 +82,24 @@ def test_the_lock_comes_back_when_its_holder_dies():
 # -----------------------------------------------------------------------------
 # What the build reads back once nbconvert has succeeded
 # -----------------------------------------------------------------------------
-def test_the_executed_notebook_is_read_as_utf8_not_the_locale_codec():
-    """The notebook the build runs carries 1400 bytes cp1252 cannot decode at
-    all, so read_text() with no encoding raised *after* a successful run."""
-    nb = REPO / runner.RUNNER_NOTEBOOK
-    assert nb.exists(), f"{runner.RUNNER_NOTEBOOK} is the notebook run_lca executes"
+def test_the_runner_notebook_exists():
+    assert (REPO / runner.RUNNER_NOTEBOOK).exists(), (
+        f"{runner.RUNNER_NOTEBOOK} is the notebook run_lca executes")
+
+
+def test_the_executed_notebook_is_read_as_utf8_not_the_locale_codec(tmp_path):
+    """The executed notebook carries the child notebooks' box-drawing output,
+    which includes bytes cp1252 cannot decode at all, so read_text() with no
+    encoding raised *after* a successful run. A fixture rather than the real
+    notebook, so the guard does not depend on what that notebook prints."""
+    import json
+    nb = tmp_path / "executed.ipynb"
+    nb.write_text(json.dumps({"cells": [{"cell_type": "code", "outputs": [
+        {"output_type": "stream", "name": "stdout", "text": ["═" * 70 + "\n"]}]}]},
+        ensure_ascii=False), encoding="utf-8")
     undecodable = {0x81, 0x8D, 0x8F, 0x90, 0x9D}
-    assert undecodable & set(nb.read_bytes()), (
-        "this notebook no longer contains bytes cp1252 rejects, so it no longer "
-        "guards the regression — point the test at one that does")
-    assert runner._extract_notebook_log(nb)          # the call that used to raise
+    assert undecodable & set(nb.read_bytes())
+    assert "═" in runner._extract_notebook_log(nb)   # the call that used to raise
 
 
 def test_the_patched_config_survives_a_round_trip(tmp_path, monkeypatch):

@@ -1,11 +1,11 @@
-"""Streamlit "Run LCA" backend.
+"""Notebook runner behind the optimiser's grid builds.
 
 dashboard_config.py is the project's single source of truth for every
 notebook — its own docstring says as much ("Edit this file once, save it,
-restart the notebook kernel, then run"). The Setup-LCA Streamlit page follows
-that same contract instead of inventing a second one: it patches the on-disk
-dashboard_config.py with the values chosen in the form, then runs the same
-1.dashboard_lca_adaptive.ipynb notebook every manual workflow already uses.
+restart the notebook kernel, then run"). ``optimisation.sites.build_grid_series``
+follows that same contract instead of inventing a second one: it patches the
+on-disk dashboard_config.py with the region and window it needs, then runs
+1.build_grid.ipynb, which chains the foreground, grid and price notebooks.
 
 This keeps 100% of the actual LCA science (Carbon Intensity API client, wind
 dispatch logic, Brightway calls) in the tested notebooks/lca_helpers.py — this
@@ -25,7 +25,7 @@ REPO_DIR = Path(__file__).resolve().parent.parent
 CONFIG_PATH = REPO_DIR / "dashboard_config.py"
 RUNS_DIR = REPO_DIR / "_streamlit_runs"
 PLOTS_DIR = RUNS_DIR / "plots"
-RUNNER_NOTEBOOK = "1.dashboard_lca_adaptive.ipynb"
+RUNNER_NOTEBOOK = "1.build_grid.ipynb"
 
 # A console window for the notebook child, and what it costs to let one open.
 #
@@ -49,8 +49,6 @@ _NO_WINDOW = ({"creationflags": subprocess.CREATE_NO_WINDOW}
 
 OUTPUT_DIRS = [
     "custom_grid_lca_outputs",
-    "blended_wind_grid_lca_outputs",
-    "hybrid_wind_grid_lca_outputs",
     "price_outputs",
 ]
 

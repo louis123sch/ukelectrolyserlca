@@ -3,13 +3,13 @@
 MASTER DASHBOARD — single source of truth for the split notebooks.
 =============================================================================
 
-The intended entry point is now:
+The Data Centre Optimiser patches this file with a region and window and runs
 
-    1.dashboard_lca_adaptive.ipynb
+    1.build_grid.ipynb
 
-Edit this file once, save it, restart the notebook kernel, then run the adaptive
-notebook. It will call the selected grid notebook, wind notebook and price
-notebook using the settings below.
+whenever a site needs a grid series that is not on disk yet. To run a build by
+hand: edit this file, save it, restart the notebook kernel, then Run All in that
+notebook. It calls the foreground, grid and price notebooks per the flags below.
 """
 
 # =============================================================================
@@ -33,14 +33,14 @@ RUN_BUILD_FOREGROUND_DATABASE = True
 RUN_REFERENCE_LCA = False
 
 # =============================================================================
-# Adaptive-dashboard orchestration
+# Grid-build orchestration
 # =============================================================================
-# These control what 1.dashboard_lca_adaptive.ipynb runs when you Run All.
+# These control what 1.build_grid.ipynb runs when you Run All.
 # Set RUN_FOREGROUND_NOTEBOOK_FROM_DASHBOARD=True only on first setup or after
 # changing foreground inventories, because it can be slower than the other steps.
 RUN_FOREGROUND_NOTEBOOK_FROM_DASHBOARD = False
 RUN_GRID_NOTEBOOK_FROM_DASHBOARD = True
-RUN_WIND_NOTEBOOK_FROM_DASHBOARD = True
+RUN_WIND_NOTEBOOK_FROM_DASHBOARD = False  # 4.wind_power.ipynb removed on this branch
 RUN_PRICE_NOTEBOOK_FROM_DASHBOARD = False
 
 # =============================================================================

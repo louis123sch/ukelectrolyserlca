@@ -300,7 +300,7 @@ def load_grid_and_price(start, end, *, carbon_api_region: int | None = None,
     net. Price is GB-wide, not regional, so it needs no such filter.
 
     ``auto_build`` builds the window instead of refusing it: it runs the same
-    pipeline notebook the Setup LCA page runs, for this region and these dates,
+    grid-build notebook (``1.build_grid.ipynb``), for this region and these dates,
     then re-reads. On by default — a window nobody has built yet is a wait, not
     an error, the same way wind and solar are already fetched on demand for
     whatever dates are asked for. It builds only what is actually missing, so

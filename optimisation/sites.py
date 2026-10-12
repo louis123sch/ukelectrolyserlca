@@ -502,8 +502,8 @@ def _build_lock(wait_s: float = 6 * 3600, on_progress=None):
 
     ``backend.runner.run_lca`` patches the single tracked ``dashboard_config.py``
     and executes the notebook against it. That was safe while a build was a
-    deliberate act on the Setup LCA page; it is not safe now that any run can
-    start one, because ``dc_runner.run_matrix``'s workers are separate
+    deliberate act on the (since removed) Setup LCA page; it is not safe when
+    any run can start one, because ``dc_runner.run_matrix``'s workers are separate
     processes and two of them building at once would each be running the
     other's config. Waiting is the right behaviour rather than failing: the
     second builder usually wants what the first is already producing.
@@ -539,7 +539,7 @@ def build_grid_series(carbon_api_region: int, start="2025-01-01 00:00:00",
     """Generate the half-hourly grid series for a region, via notebook 3.1.
 
     Wraps ``backend.runner.run_lca``, which patches ``dashboard_config.py`` and
-    executes the pipeline — the same path the Setup LCA page uses. Slow (it
+    executes ``1.build_grid.ipynb`` (foreground if missing, 3.1, optionally 5). Slow (it
     scores the fuel mix against ecoinvent for every half-hour) but it is what
     makes an arbitrary coordinate usable rather than an error.
 
@@ -569,9 +569,9 @@ def build_grid_series(carbon_api_region: int, start="2025-01-01 00:00:00",
               "skips it — and it makes this one considerably slower.")
         timeout_s = max(int(timeout_s), _FOREGROUND_TIMEOUT_S)
     # run_lca patches dashboard_config.py in place and leaves it patched — the
-    # Setup LCA page's contract, where the user chose those values and expects
-    # to see them. A build started on the optimiser's behalf did not choose
-    # them, so it puts the file back: a run that silently rewrote the project's
+    # old Setup LCA page's contract, where the user chose those values and
+    # expected to see them. A build started on the optimiser's behalf did not
+    # choose them, so it puts the file back: a run that silently rewrote the project's
     # config would be a worse surprise than a slow one.
     overrides = {
         "GRID_DATA_SOURCE": "carbon_api",
