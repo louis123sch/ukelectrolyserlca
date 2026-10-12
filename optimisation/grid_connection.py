@@ -74,7 +74,7 @@ def decompose(refresh: bool = False) -> dict:
 
     import bw2data as bd
     import lca_helpers as H
-    import dashboard_config as cfg
+    import dc_config as cfg
     from optimisation import baseline_grid as bg
 
     H.setup_brightway()

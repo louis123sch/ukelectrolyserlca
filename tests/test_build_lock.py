@@ -6,9 +6,10 @@ running on Windows, both of them silent about the real cause:
 
   * ``_build_lock`` imported ``fcntl``, which does not exist there, so the run
     died with ModuleNotFoundError the moment it decided to build; and
-  * the build reads its executed notebook back at the end, and doing that
-    through the locale codec raises on the notebook's own box-drawing output —
-    after nbconvert has already succeeded, throwing the whole build away.
+  * reading an executed notebook back through the locale codec raises on
+    box-drawing output — after nbconvert has already succeeded. Only notebook 2
+    (the one-off foreground build) still goes through nbconvert, but it prints
+    the same separators.
 
 No notebook is executed here. This is the plumbing around it.
 """
@@ -36,8 +37,8 @@ def test_the_lock_can_be_taken_and_released():
 
 
 def test_the_lock_is_exclusive_across_processes():
-    """The reason it exists: run_lca patches the single tracked
-    dashboard_config.py, so two builds at once each run the other's config."""
+    """The reason it exists: dc_runner.run_matrix's workers can find the same
+    window missing at once, and each would fetch it and overwrite the other."""
     holder = subprocess.Popen(
         [sys.executable, "-c",
          f"import sys, time; sys.path.insert(0, {str(REPO)!r});"
@@ -82,13 +83,13 @@ def test_the_lock_comes_back_when_its_holder_dies():
 # -----------------------------------------------------------------------------
 # What the build reads back once nbconvert has succeeded
 # -----------------------------------------------------------------------------
-def test_the_runner_notebook_exists():
-    assert (REPO / runner.RUNNER_NOTEBOOK).exists(), (
-        f"{runner.RUNNER_NOTEBOOK} is the notebook run_lca executes")
+def test_the_foreground_notebook_exists():
+    assert (REPO / runner.FOREGROUND_NOTEBOOK).exists(), (
+        f"{runner.FOREGROUND_NOTEBOOK} is the notebook a first build runs")
 
 
 def test_the_executed_notebook_is_read_as_utf8_not_the_locale_codec(tmp_path):
-    """The executed notebook carries the child notebooks' box-drawing output,
+    """An executed notebook carries box-drawing output,
     which includes bytes cp1252 cannot decode at all, so read_text() with no
     encoding raised *after* a successful run. A fixture rather than the real
     notebook, so the guard does not depend on what that notebook prints."""
@@ -100,17 +101,3 @@ def test_the_executed_notebook_is_read_as_utf8_not_the_locale_codec(tmp_path):
     undecodable = {0x81, 0x8D, 0x8F, 0x90, 0x9D}
     assert undecodable & set(nb.read_bytes())
     assert "═" in runner._extract_notebook_log(nb)   # the call that used to raise
-
-
-def test_the_patched_config_survives_a_round_trip(tmp_path, monkeypatch):
-    """run_lca rewrites the tracked dashboard_config.py in place. Reading it
-    through cp1252 and writing it back happens to be byte-safe today only
-    because it contains none of the five bytes cp1252 cannot decode."""
-    cfg = tmp_path / "dashboard_config.py"
-    original = 'CARBON_API_REGION_ID_OVERRIDE = None\nNOTE = "— ═ ₂ £"\n'
-    cfg.write_text(original, encoding="utf-8")
-    monkeypatch.setattr(runner, "CONFIG_PATH", cfg)
-    monkeypatch.setattr(runner, "RUNS_DIR", tmp_path / "runs")
-    text = runner.CONFIG_PATH.read_text(encoding="utf-8")
-    runner.CONFIG_PATH.write_text(text, encoding="utf-8")
-    assert cfg.read_text(encoding="utf-8") == original

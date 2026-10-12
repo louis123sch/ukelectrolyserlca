@@ -14,9 +14,8 @@ Renewables.ninja rate-limits aggressively, so every fetch is cached to disk
 under ``optimisation_outputs/profile_cache/`` and keyed on its own arguments.
 Deleting a cache file is the way to force a refetch.
 
-Grid and price come from the CSVs the existing pipeline already writes
-(``3.1.custom_grid_carbon_intensity_api.ipynb`` and ``5.prices.ipynb``) rather
-than re-implementing those clients here. If the requested window is not
+Grid and price come from the CSVs ``grid_build.py`` writes, rather than
+fetching inside this module, so a window is built once and reused. If the requested window is not
 covered by what has been written, this module says so rather than silently
 returning a shorter series.
 
@@ -86,7 +85,7 @@ def fetch_solar_cf(lat, lon, start, end, tilt=None, azim=None,
     Renewables.ninja's PV endpoint, the counterpart to the wind one
     ``lca_helpers`` already wraps.
 
-    The array geometry comes from ``dashboard_config`` rather than from this
+    The array geometry comes from ``dc_config`` rather than from this
     signature. It used to be four hard-coded defaults here — tilt 35, azimuth
     180, 10 % loss, no tracking — which ``dc_inputs.build_series`` never passed,
     so the data centre model silently took them and could not override them.
@@ -99,7 +98,7 @@ def fetch_solar_cf(lat, lon, start, end, tilt=None, azim=None,
     the plant being generated from are the same one. Tilt is part of the cache
     key, so changing it fetches fresh series rather than reusing the old ones.
     """
-    import dashboard_config as cfg
+    import dc_config as cfg
     tilt = cfg.PV_TILT_DEG if tilt is None else tilt
     azim = cfg.PV_AZIMUTH_DEG if azim is None else azim
     system_loss = cfg.PV_SYSTEM_LOSS if system_loss is None else system_loss
@@ -227,8 +226,8 @@ def _build_hint(carbon_api_region, start, end) -> str:
         f"\n\nBuild it:\n"
         f"    python -c \"from optimisation import sites; "
         f"sites.ensure_grid_series({region}, '{start}', '{end}')\"\n"
-        "(or press the Build button on the optimiser page). It scores "
-        "the GB fuel mix against ecoinvent for every half-hour, so it is slow.")
+        "(or just run the optimiser: it builds a missing window itself). It scores "
+        "the GB fuel mix against ecoinvent for every half-hour.")
 
 
 def _autobuild(start, end, carbon_api_region, on_progress=None):
@@ -299,9 +298,8 @@ def load_grid_and_price(start, end, *, carbon_api_region: int | None = None,
     checking downstream — this parameter is the actual fix, that check is the
     net. Price is GB-wide, not regional, so it needs no such filter.
 
-    ``auto_build`` builds the window instead of refusing it: it runs the same
-    grid-build notebook (``1.build_grid.ipynb``), for this region and these dates,
-    then re-reads. On by default — a window nobody has built yet is a wait, not
+    ``auto_build`` builds the window instead of refusing it: it calls
+    ``grid_build`` for this region and these dates, then re-reads. On by default — a window nobody has built yet is a wait, not
     an error, the same way wind and solar are already fetched on demand for
     whatever dates are asked for. It builds only what is actually missing, so
     the common case (a window already on disk) costs one directory listing.
@@ -370,8 +368,7 @@ def build(lat, lon, start, end, *, turbine="Vestas V90 2000",
     """Everything the dispatch needs, aligned on one half-hourly index.
 
     Renewables.ninja is hourly; the grid and price series are half-hourly. The
-    hourly capacity factors are forward-filled onto the half-hourly index,
-    matching ``lca_helpers.align_wind_to_grid_timeslices``'s default.
+    hourly capacity factors are forward-filled onto the half-hourly index.
 
     ``carbon_api_region`` should be passed by a caller that has already
     resolved a ``Site`` (it already paid for the lookup and knows the answer).
@@ -427,8 +424,7 @@ def build(lat, lon, start, end, *, turbine="Vestas V90 2000",
 
 
 if __name__ == "__main__":
-    import dashboard_config as cfg
-    df, meta = build(cfg.WIND_LAT, cfg.WIND_LON, "2025-01-01", "2025-03-31")
+    df, meta = build(51.5074, -0.1278, "2025-01-01", "2025-03-31")   # London
     print(json.dumps({k: (str(v) if isinstance(v, pd.Timestamp) else v)
                       for k, v in meta.items()}, indent=2))
     print(df.head())

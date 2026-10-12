@@ -409,7 +409,7 @@ def test_wind_and_solar_are_both_on_real_transformer_bills():
     scaled off ecoinvent's 280 g electronics dataset — that basis survives only
     to reproduce pre-2026 runs, and must never be what the LP charges.
     """
-    import dashboard_config as cfg
+    import dc_config as cfg
     from optimisation import transformers as tx
     if not tx.CACHE_PATH.exists():
         pytest.skip("transformer_decomposition_cache.json not built — "

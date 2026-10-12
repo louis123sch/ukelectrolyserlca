@@ -153,7 +153,7 @@ def decompose(use_cache: bool = True, refresh: bool = False) -> dict:
 
     import bw2data as bd
     import lca_helpers as H
-    import dashboard_config as cfg
+    import dc_config as cfg
 
     H.setup_brightway()
     method = _gwp_method(bd)
@@ -178,7 +178,7 @@ def decompose(use_cache: bool = True, refresh: bool = False) -> dict:
         parts.append({"name": name, "amount": amount, "kind": kind, "kgco2e_per_kwh": score})
 
     # The inventory's own amortisation bases, read back out of the amounts so
-    # they cannot drift from dashboard_config.
+    # they cannot drift from dc_config.
     stack_hours = 1.0 / (stack_units_per_kwh * cfg.FC_RATED_POWER_KW)
     bop_hours = float(cfg.FC_SYSTEM_LIFETIME_H)
 

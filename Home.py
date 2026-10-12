@@ -9,7 +9,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-import dashboard_config as cfg
+import dc_config as cfg
 import lca_helpers as H
 from optimisation import sites
 
@@ -40,7 +40,7 @@ except Exception as exc:
 
 st.header("Grid series on disk")
 st.caption("Half-hourly regional grid carbon the optimiser can use without a build. "
-           "A site in any other region (or window) triggers a build via `1.build_grid.ipynb`.")
+           "A site in any other region (or window) triggers a build (`optimisation/grid_build.py`).")
 have = sites.available_grid_regions()
 st.dataframe(
     pd.DataFrame(

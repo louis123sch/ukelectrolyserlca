@@ -281,7 +281,7 @@ def test_central_london_resolves_to_region_13_zone_12():
 def test_the_repos_own_wind_coordinate_is_not_london():
     """Regression on a pre-existing inconsistency, so it cannot quietly return.
 
-    dashboard_config.WIND_LAT/WIND_LON is a field near St Albans — region 10,
+    The old dashboard_config.WIND_LAT/WIND_LON was a field near St Albans — region 10,
     TNUoS zone 9 — while every cached grid series is region 13. The study as it
     stood paired London's grid intensity and London's £7.41/kW tariff with a
     Hertfordshire wind site. Nothing warned about it because nothing connected
@@ -402,7 +402,7 @@ def test_transformer_mass_is_the_leng_bill_of_materials():
     farm — 282,343 kg for 100 MW — read from the foreground activity notebook
     2 builds, not assembled here.
     """
-    import dashboard_config as cfg
+    import dc_config as cfg
     from optimisation import transformers as tx
     _cached(tx)
     d = tx.decompose()
@@ -546,7 +546,7 @@ def test_solar_module_reproduces_smiths_published_epeat_result():
     (apos, where he published cut-off) reproduces that. If this fails, the
     transcription or the chain wiring has drifted.
     """
-    import dashboard_config as cfg
+    import dc_config as cfg
     bd = pytest.importorskip("bw2data")
     try:
         act = bd.get_activity((cfg.SOLAR_FOREGROUND_DB, "upv_perc_module"))

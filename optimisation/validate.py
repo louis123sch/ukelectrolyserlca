@@ -382,7 +382,7 @@ def write_doc(site, start, end, size_mw, series):
         "  assumed with no UK source and spreads of 4.5x and 2x. No benchmark here",
         "  can validate them — see `DATA_GAPS.md`.",
         "* **One site, one year.** Only the London grid series is cached. Scotland and",
-        "  East England need `3.1` re-run for their regions before their results mean",
+        "  East England need a grid build for their regions before their results mean",
         "  anything.",
         "* **No unit commitment.** The LP may run an electrolyser at 1 % of rating.",
     ]

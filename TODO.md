@@ -53,12 +53,12 @@ Work where a number the study reports is not currently defensible.
       Price it from `steel_kg_per_kg_h2` (Capital Equipment Cost Database).
       Needs a decision on the default design. Plan §3 item 1, §6.3.
 - [ ] **Grid carbon is probably 12–21 % high: gas is scored on the wrong
-      dataset.** Notebook 3.1 `GRID_CANDIDATE_INDEX["GAS"] = 3` picks the GB
+      dataset.** `dc_config.GRID_CANDIDATE_INDEX["GAS"] = 3` picks the GB
       *conventional* gas plant (558 g/kWh) though the query asks for combined
       cycle (candidate #1, 387 g/kWh) — the dataset `SOURCES.md` says we
       refuse. Imports are FR/IE/NL 63/7/30, not ⅓ each. Rebuild the series and
       the 16,132 t baseline. `docs/OBJECTIVE_AUDIT.md` §3.5.
-- [ ] **Grid carbon is one hour out of step in BST.** 3.1 writes London local
+- [ ] **Grid carbon is one hour out of step in BST.** `grid_build.py` (as 3.1 did) writes London local
       time; Elexon and Renewables.ninja are UTC; `profiles.py:343` joins the
       naive stamps, so intraday carbon is an hour late seven months a year.
       Audit §3.5.

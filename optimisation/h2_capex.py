@@ -163,7 +163,7 @@ def fuel_cell_costs():
 
 def tank_costs():
     """£ per kg of hydrogen storage capacity."""
-    import dashboard_config as cfg
+    import dc_config as cfg
     life = float(cfg.TANK_LIFETIME_YEARS)
     crf = capital_recovery_factor(FC_DISCOUNT_RATE, life)
     rows = []

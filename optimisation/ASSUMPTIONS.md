@@ -7,7 +7,7 @@ here so the write-up and the optimiser cannot disagree about them.
 
 Continuous draw of **7,306 kW**. This is not an added assumption: the Zhang et
 al. foreground's own operation exchange is 1.60e9 kWh over a 25-year life,
-which is 7,306 kW continuous. It is where `dashboard_config.SYS_DC_DEMAND_MW
+which is 7,306 kW continuous. It is where the old `dashboard_config.SYS_DC_DEMAND_MW
 = 7.31` came from.
 
 That figure is the **whole facility**, at Zhang's own PUE of 1.4, so the IT load
@@ -28,8 +28,8 @@ harder than it would with a flexible AI training load.
 The data centre foreground is authored in Virginia against `market for
 electricity, medium voltage [US-SERC]`. Rather than re-authoring the
 inventory, that electricity is swapped for the half-hourly GB grid mix from the
-Carbon Intensity API (`3.1.custom_grid_carbon_intensity_api.ipynb`), using
-`lca_helpers.run_lca_with_custom_elec()`.
+Carbon Intensity API (`optimisation/grid_build.py`, originally notebook 3.1),
+by the exact `fixed + Σ kWh×EF` decomposition in `baseline_grid.py`.
 
 The inventory has **exactly one** electricity exchange — IT + cooling/aux,
 1.60e9 kWh over 25 years — and it is the only US-located input in the activity.
@@ -82,7 +82,7 @@ hydrogen" option is now "green hydrogen bought at a price, with its production
 burden and its compression, but no haulage".
 
 Storage compression is still counted where it applies, via
-`dashboard_config.TANK_COMPRESSION_KWH_PER_KG` — zero for the 28 bar design,
+`dc_config.TANK_COMPRESSION_KWH_PER_KG` — zero for the 28 bar design,
 since the electrolyser already delivers at ~30 bar.
 
 ## 3a. The site is a coordinate, and everything follows from it
@@ -94,7 +94,7 @@ bill cannot drift apart from one another. Two real lookups
 the TNUoS zone, checked against presets set independently from published
 sources.
 
-*Consequence, and it is a correction*: `dashboard_config.WIND_LAT / WIND_LON`
+*Consequence, and it is a correction*: the old `dashboard_config.WIND_LAT / WIND_LON`
 (51.7320, -0.3711) is a field near **St Albans** — Carbon Intensity region 10,
 TNUoS zone 9. Every cached grid series in this repo is **region 13, London**,
 TNUoS zone 12. So the study as it previously stood paired London's grid carbon

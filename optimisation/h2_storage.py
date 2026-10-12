@@ -12,7 +12,7 @@ config defines but does not build.
 
 What it adds over reading the activity directly:
 
-1. **Both tank designs**, not just the one ``dashboard_config.TANK_DESIGN``
+1. **Both tank designs**, not just the one ``dc_config.TANK_DESIGN``
    currently selects, so the optimiser can run 28 bar against 200 bar as a
    sensitivity without a foreground rebuild. The as-built design is
    cross-checked against Brightway; the other is scored from its own steel
@@ -56,7 +56,7 @@ inventory         Gandiglio, M., Marocco, P., Bianco, I., Lovera, D.,
                   for a remote off-grid community", Int. J. Hydrogen Energy 47.
                   Table 3 — the as-built 21.6 m3 vessel at Ginostra.
 type I cylinder   ~1 wt% gravimetric capacity, a typical industrial stationary
-                  bottle. DERIVED, not transcribed — see dashboard_config.
+                  bottle. DERIVED, not transcribed — see dc_config.
 embodied carbon   ecoinvent 3.9.1 apos, IPCC 2021 GWP100.
 vessel lifetime   25 years, the paper's own plant life. The tank is never
                   replaced within it.
@@ -168,7 +168,7 @@ def decompose(use_cache: bool = True, refresh: bool = False):
 
     import bw2data as bd
     import lca_helpers as H
-    import dashboard_config as cfg
+    import dc_config as cfg
 
     ei, _bio, _fg, _m = H.setup_brightway()
     method = _gwp_method(bd)
@@ -235,7 +235,7 @@ def check_against_brightway(rows):
     if len(built) != 1:
         raise AssertionError(
             f"expected exactly 1 as-built design, found {len(built)}. "
-            "dashboard_config.TANK_DESIGN does not match TANK_DESIGNS.")
+            "dc_config.TANK_DESIGN does not match TANK_DESIGNS.")
     r = built[0]
     ref = r.get("brightway_kgco2e_per_kg_capacity")
     if ref is None:
@@ -271,7 +271,7 @@ def run():
 
     print("\nAgainst a battery, on the only basis that compares — kWh delivered back")
     print("-" * 100)
-    import dashboard_config as cfg
+    import dc_config as cfg
     from optimisation import battery as batt
     kwh_out_per_kg = cfg.FC_H2_LHV_KWH_PER_KG * cfg.FC_ETA_NET_MEAN
     b_energy = batt.embodied_components()["energy_kgco2e_per_kWh"]

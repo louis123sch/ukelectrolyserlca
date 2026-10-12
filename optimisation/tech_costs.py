@@ -31,15 +31,15 @@ Notes on the numbers
   They are the report's own financing assumption, not necessarily the WACC
   this study should use - see ``DISCOUNT_RATE_OVERRIDE``.
 * "low/medium/high" are the report's own scenario labels. This module exposes
-  them as low/central/high to match ``dashboard_config.COST_CASE``.
+  them as low/central/high to match ``dc_config.COST_CASE``.
 
 Every number in this module is listed in ``SOURCES.md`` alongside its
 source and provenance grade (transcribed / derived / assumed).
 
-The onshore wind block duplicates values already written by
-``5.prices.ipynb`` into ``price_outputs/static_cost_assumptions.csv``.
-``check_against_price_outputs()`` asserts the two agree, so they cannot
-silently drift apart.
+The onshore wind block was transcribed independently a second time by the
+(since retired) ``5.prices.ipynb``, into ``price_outputs/static_cost_assumptions.csv``.
+That file is kept as a frozen cross-check: ``check_against_price_outputs()``
+asserts the two transcriptions agree.
 """
 from pathlib import Path
 
@@ -129,7 +129,7 @@ CASES = ("low", "central", "high")
 
 
 def capital_recovery_factor(rate, lifetime_years):
-    """Annualise a capital sum over its life. Mirrors dashboard_config's."""
+    """Annualise a capital sum over its life. Mirrors dc_config's."""
     rate = float(rate)
     lifetime_years = float(lifetime_years)
     if lifetime_years <= 0:
@@ -220,10 +220,10 @@ def annualised_table():
 
 
 def check_against_price_outputs():
-    """Assert the onshore wind rows agree with 5.prices.ipynb's own output."""
+    """Assert the onshore wind rows agree with the frozen second transcription."""
     path = PRICE_DIR / "static_cost_assumptions.csv"
     if not path.exists():
-        return f"skipped — {path.name} not found (run 5.prices.ipynb)"
+        return f"skipped — {path.name} not found"
     existing = pd.read_csv(path)
     existing = existing[existing["asset"] == "onshore_wind"]
     if existing.empty:
@@ -239,14 +239,14 @@ def check_against_price_outputs():
         for case in CASES:
             a, b = float(row[case]), float(mine.loc[p, case])
             if abs(a - b) > 1e-9:
-                mismatches.append(f"{p}/{case}: prices.ipynb={a} vs PDF={b}")
+                mismatches.append(f"{p}/{case}: static_cost_assumptions={a} vs PDF={b}")
     if mismatches:
         raise AssertionError(
             "onshore wind costs disagree with price_outputs/:\n  "
             + "\n  ".join(mismatches)
         )
     n = len(set(existing["parameter"]) & set(mine.index))
-    return f"OK — {n} onshore wind parameters match 5.prices.ipynb exactly"
+    return f"OK — {n} onshore wind parameters match static_cost_assumptions.csv exactly"
 
 
 def run():

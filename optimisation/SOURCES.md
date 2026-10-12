@@ -25,8 +25,8 @@ Emissions are IPCC 2021 GWP100 on ecoinvent 3.9.1 apos throughout.
 |---|---|---|---|
 | Data centre inventory | 1.60e9 kWh over 25 y; 21,036 t CO₂e fixed | transcribed | Zhang, M., Carbajales-Dale, M., Ma, X., Guo, L., Fan, C. (2025), hyperscale Virginia data centre. Built into `data centre foreground` by `2.tech_lca_foreground.ipynb` |
 | Continuous load | 7,306 kW | derived | 1.60e9 kWh ÷ 25 y ÷ 8760 h — the inventory's own figure, not an added assumption |
-| Grid carbon intensity | half-hourly, mean 0.2369 kg CO₂e/kWh | transcribed | NESO Carbon Intensity API, regional (region 13, London), via `3.1.custom_grid_carbon_intensity_api.ipynb` |
-| Wholesale electricity price | half-hourly, mean £79.83/MWh | transcribed | Elexon BMRS Market Index Data, provider APXMIDP, via `5.prices.ipynb` |
+| Grid carbon intensity | half-hourly, mean 0.2369 kg CO₂e/kWh | transcribed | NESO Carbon Intensity API, regional (region 13, London), via `optimisation/grid_build.py` (originally notebook 3.1) |
+| Wholesale electricity price | half-hourly, mean £79.83/MWh | transcribed | Elexon BMRS Market Index Data, provider APXMIDP, via `optimisation/grid_build.py` (originally notebook 5) |
 | Linear decomposition | `fixed + Σ kWh×EF` | derived | Validated against a full Brightway LCA to 1e-6 by the script itself |
 
 ---
@@ -47,8 +47,8 @@ Hurdle rates are each report's own pre-tax real figure — onshore 5.8 %,
 offshore 6.2 %, solar 5.0 % — not a single project WACC.
 
 **Verification built in.** `check_against_price_outputs()` asserts the onshore
-wind rows still match what `5.prices.ipynb` independently writes to
-`price_outputs/static_cost_assumptions.csv`, so the two cannot drift. The
+wind rows still match the independent transcription the retired `5.prices.ipynb`
+wrote to `price_outputs/static_cost_assumptions.csv` (now a frozen file). The
 LCOE cross-check reproduces each report's own published LCOE to within 8 %;
 the residual is methodological (this module uses a plain CRF annuity, the
 reports use the DESNZ LCOE calculator, which also discounts construction-period
@@ -550,7 +550,7 @@ the hydrogen tank is, and for the same reason.
 
 Their Gaoyou farm in Jiangsu is **fifty 2 MW turbines, 100 MW**, each with its
 own `S11-2200/35` box transformer. Table S1 gives the materials for all fifty as
-one bill, transcribed into `dashboard_config.TX_LENG_BOX_KG`:
+one bill, transcribed into `dc_config.TX_LENG_BOX_KG`:
 
 | material | all fifty | per MW | ecoinvent process | grade |
 |---|---|---|---|---|
@@ -614,7 +614,7 @@ through `grid_connection.py`. Charging it would bill the site for a voltage
 change it does not make.
 
 **No step between the collection network and the data centre.** Both sit in the
-medium-voltage band, so the chain closes. `dashboard_config.TX_SITE_COLLECTION_KV`
+medium-voltage band, so the chain closes. `dc_config.TX_SITE_COLLECTION_KV`
 = **20 kV** states this as a number rather than as the phrase "the same bus", and
 `transformers.check()` refuses a value outside the band. Leng's units are wound
 for 35 kV, above it; a 20 kV unit of the same rating carries less insulation and
@@ -694,7 +694,7 @@ composition limits cannot be met from scrap).
 transformer, and it would have dominated the score. The report's own stated
 total proves the intent: 5,633.04 kg of transcribed materials + 0.03696 m³
 (46.9 kg) = 5,679.9 kg against a stated ~5,680 kg. The cell is dm³ mislabelled
-as m³. `dashboard_config.upv_tx_check()` and `transformers.check()` both guard
+as m³. `dc_config.upv_tx_check()` and `transformers.check()` both guard
 the reconciliation, so restoring the literal value fails loudly rather than
 silently inside the LCA.
 

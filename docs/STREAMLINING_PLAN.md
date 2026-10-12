@@ -90,41 +90,52 @@ is that test split in two); Home and the optimiser page render with no errors,
 Brightway baseline included; a real one-day grid build ran end to end through
 `1.build_grid.ipynb`.
 
-## Phase 2 — proposed, not done
+## Phase 2 — done (12 Oct 2026)
 
-In rough order of payoff:
+Items 1–4 of the original list, done together because they are one change:
 
-1. **Stop scoring electrolysers in the grid build.** 3.1 batch-runs an LCA for
-   every `SELECTED_LCA_TECHS` entry on every half-hour, and raises if none
-   resolve. The DC reads only `custom_electricity_score`. Cutting the per-tech
-   batch should make builds markedly faster. Needs care: the output file name
-   and columns are what `profiles.py`/`sites.py` glob for.
-2. **Replace the notebook-driven build with a module** (`optimisation/grid_build.py`).
-   That removes the nbconvert subprocess, the in-place patching of
-   `dashboard_config.py`, the kernelspec/PATH workaround, the console-window
-   workaround and most of the build-lock rationale. 3.1's API client (≈23 k
-   characters in one cell) and 5's Elexon fetch would move into Python. Biggest
-   change in this list; do it after 1.
-3. **Split `dashboard_config.py`** (854 lines). DC modules read ~50 names from
-   it — DC/FC/tank/transformer/PV settings, `SYS_DC_DEMAND_MW`,
-   `WIND_LAT/LON`. The wind-electrolyser, DC-wind (4.1), Monte Carlo and
-   CSV-grid sections are dead on this branch. Note `WIND_LAT/LON` and
-   `SYS_DC_DEMAND_MW` are still read by DC code despite their names.
-4. **Trim `lca_helpers.py`.** 13 of its 49 functions (~350 lines) are now
-   referenced by nothing on the branch: the wind/split/replacement electricity
-   LCAs, Monte Carlo, the template/biosphere pickers. More falls away after
-   item 2.
-5. **Prune `TODO.md`, `DATA_GAPS.md`, `ASSUMPTIONS.md`** of items that only
+- **Grid builds are a Python module.** `optimisation/grid_build.py` takes a
+  region and window as arguments, fetches the Carbon Intensity API mix and
+  Elexon prices, and scores the mix against ecoinvent with the same closed-form
+  method notebook 3.1 used. It no longer scores the hydrogen technologies per
+  half-hour (the LP never read them). `1.build_grid.ipynb`, `3.1` and `5.prices`
+  are deleted; nothing patches a config file at run time any more.
+  Same file names and columns, minus the per-technology and `wind_lat/lon`
+  columns. Checked: re-building region 14's June week matches the notebook's
+  file to 7e-7 relative on every half-hour and exactly on price; a week now
+  builds in ~10 s instead of ~2 min.
+- **`dashboard_config.py` → `dc_config.py`** (854 → ~560 lines): only what the
+  modules and notebook 2 read. Dropped: the electrolyser/wind/4.x/price-notebook
+  sections, the run-orchestration flags, `WIND_LAT/LON` and `SYS_*` (only
+  docstrings still mentioned them). `GRID_CANDIDATE_INDEX` moved in from 3.1.
+- **`backend/runner.py`** only runs a named notebook (notebook 2, once per
+  machine); config patching, plot extraction and output snapshots are gone.
+- **`lca_helpers.py`** 1,546 → ~480 lines: the electrolyser wind/grid LCAs,
+  custom-activity builders, Monte Carlo, CSV-route loaders and template pickers
+  had no remaining caller. The Renewables.ninja token now comes only from the
+  argument or `.env`/environment (no interactive prompt, no config field).
+- `price_outputs/electrolyser_costs_clean.csv` and `static_cost_assumptions.csv`
+  were written by notebook 5 and are now frozen inputs. If NESO's electrolyser
+  table needs refreshing, the fetch code is on `archive/electrolyser-lca`.
+
+Not changed, deliberately: the grid series is still London local time while
+prices and weather are UTC (TODO.md). Fixing it changes every cached file.
+
+### Still open
+
+1. **Prune `TODO.md`, `DATA_GAPS.md`, `ASSUMPTIONS.md`** of items that only
    concerned the cut pages, and tidy docstrings that still compare to
    `sizing.py` / notebook 4.3 (they are history, not wrong).
-6. **`price_outputs/`**: the `representative_576days` files and short 2023/2024
+2. **`price_outputs/`**: the `representative_576days` files and short 2023/2024
    windows came from Setup LCA runs. `profiles.py` refuses representative days
    anyway; worth confirming nothing globs them before deleting.
+3. **The BST clock fix**, now a one-line change in `grid_build.fetch_mix` plus
+   a rebuild of the cached series.
 
 ## Phase 3 — the split
 
-- Decide whether `dc-optimiser` becomes `main` (and the current `main` is kept
-  as an `archive/electrolyser-lca` branch), or becomes its own repository.
+- Done: `dc-optimiser` became `main`; the previous `main` is kept as the
+  `archive/electrolyser-lca` branch. A separate repository is still an option.
   The cut files are still in history either way; a separate repo with
   `git filter-repo` is the only route to a small clone (`df_fuel_ckan.csv`
   and the API cache are ~180 MB of history).

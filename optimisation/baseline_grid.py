@@ -4,13 +4,12 @@ Baseline 1 — data centre on the GB grid.
 
 The Zhang et al. data centre is authored against ``market for electricity,
 medium voltage [US-SERC]``. This replaces that with the half-hourly GB grid
-mix already produced by ``3.1.custom_grid_carbon_intensity_api.ipynb`` (the
-Carbon Intensity API path), and prices the same electricity at the Elexon
-half-hourly wholesale price from ``5.prices.ipynb``.
+mix built by ``grid_build.py`` from the Carbon Intensity API, and prices the
+same electricity at the Elexon half-hourly wholesale price it also fetches.
 
 The data centre is assumed to run flat at 100%. That is not a new assumption:
 the foreground's own 1.60e9 kWh over 25 years is 7,306 kW continuous, which is
-where ``dashboard_config.SYS_DC_DEMAND_MW = 7.31`` came from.
+where the old ``dashboard_config.SYS_DC_DEMAND_MW = 7.31`` came from.
 
 Emissions are computed as ``fixed + sum_t(kWh_t * EF_t)`` rather than by
 re-solving the LCI per slice. That decomposition is exact — validated against
@@ -37,7 +36,7 @@ sys.path.insert(0, str(ROOT))
 import bw2data as bd
 
 import lca_helpers as H
-from dashboard_config import DC_FOREGROUND_DB, DC_OPERATION_YEARS
+from dc_config import DC_FOREGROUND_DB, DC_OPERATION_YEARS
 
 DC_CODE = "dc_zhang_virginia_baseline_25y"
 
@@ -63,12 +62,12 @@ DC_DRIVERS = (
 # Cached full-year outputs of the existing pipeline. Both are half-hourly and
 # cover 2025-01-01 to 2025-12-29.
 #
-#   GRID_CSV  — written by 3.1.custom_grid_carbon_intensity_api.ipynb from the
+#   GRID_CSV  — written by grid_build.build_grid (originally notebook 3.1) from the
 #               NESO Carbon Intensity API, regional scope, region 13 (London),
-#               resolved from WIND_LAT/WIND_LON. Its custom_electricity_score
+#               (the London reference site). Its custom_electricity_score
 #               column is kg CO2e per kWh delivered, already carrying
-#               dashboard_config.MARKET_LOSS_SHARE.
-#   PRICE_CSV — written by 5.prices.ipynb from Elexon BMRS Market Index Data,
+#               dc_config.MARKET_LOSS_SHARE.
+#   PRICE_CSV — written by grid_build.build_prices (originally notebook 5) from Elexon BMRS Market Index Data,
 #               provider APXMIDP (N2EXMIDP is the documented fallback).
 GRID_CSV = ROOT / "custom_grid_lca_outputs" / (
     "custom_grid_lca_carbon_api_regional_auto_r13_cheap_"

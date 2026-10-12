@@ -201,7 +201,7 @@ def upv_decompose(refresh: bool = False) -> dict:
 
     import bw2data as bd
     import lca_helpers as H
-    import dashboard_config as cfg
+    import dc_config as cfg
 
     H.setup_brightway()
     method = _gwp_method(bd)

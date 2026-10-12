@@ -524,10 +524,10 @@ else:
         "Substituting another region's half-hourly intensities, or another "
         "month's, would give a confident wrong answer about whether renewables "
         "beat the grid here, so the window is built rather than borrowed. "
-        "Building scores the GB fuel mix against ecoinvent for every half-hour: "
-        "a week takes a couple of minutes, a full year considerably longer. It "
-        "happens inside the same detached process as the solve, so you can "
-        "close the tab while it runs.")
+        "Building fetches the region's half-hourly fuel mix from the Carbon "
+        "Intensity API and scores it against ecoinvent: a week takes seconds, "
+        "a full year longer, mostly spent fetching. It happens inside the same "
+        "detached process as the solve, so you can close the tab while it runs.")
     if _status["grid_index"]:
         with st.expander("What is on disk for this region"):
             st.code(profiles.describe_files(_status["grid_index"]))

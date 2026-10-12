@@ -21,7 +21,7 @@ the hydrogen tank and for the same reason — ecoinvent cannot supply the asset,
 so it is assembled from a published bill of materials. This module only scores
 that activity and amortises it. To change what a transformer is made of, edit
 the notebook; to change how long it lasts, edit ``TX_ASSET_LIFE_YEARS`` in
-``dashboard_config.py``. Both are stated once and read here.
+``dc_config.py``. Both are stated once and read here.
 
     database  cfg.TRANSFORMER_FOREGROUND_DB
     code      wind_turbine_stepup_per_mw
@@ -142,7 +142,7 @@ Sources
 wind inventory    Leng, H. et al. (2026), "Life Cycle Assessment of an Onshore
                   Wind Farm: Carbon Emission Evaluation and Mitigation Pathway
                   Design", *Processes* 14(7), 1045, Supplementary Table S1.
-                  Transcribed into dashboard_config.TX_LENG_BOX_KG and built
+                  Transcribed into dc_config.TX_LENG_BOX_KG and built
                   into the foreground by notebook 2.
 cross-check       Teffera, B. et al. (2021), "Life cycle assessment of wind
                   farms in Ethiopia", *Int J LCA* 26:76-96, Table 5.
@@ -203,8 +203,8 @@ _MEMO: dict | None = None
 
 
 def _cfg():
-    """dashboard_config, imported lazily like every other module here does."""
-    import dashboard_config as cfg
+    """dc_config, imported lazily like every other module here does."""
+    import dc_config as cfg
     return cfg
 
 
@@ -247,7 +247,7 @@ def decompose(refresh: bool = False) -> dict:
 
     import bw2data as bd
     import lca_helpers as H
-    import dashboard_config as cfg
+    import dc_config as cfg
     from optimisation import baseline_grid as bg
 
     H.setup_brightway()
@@ -380,7 +380,7 @@ def check(d: dict | None = None) -> str:
                         f"transcribed from ({mass:,.2f} vs {w['kg_per_MW']:,.2f})")
     if abs(sum(cfg.TX_LENG_BOX_KG.values()) / cfg.TX_LENG_FARM_MW
            - w["kg_per_MW"]) > 1e-6:
-        problems.append("the cache no longer matches dashboard_config's bill")
+        problems.append("the cache no longer matches dc_config's bill")
 
     # The site must collect inside the band the data centre draws at, or the
     # chain has an uncharged transformation in it.

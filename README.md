@@ -6,10 +6,9 @@ jointly by a linear program against half-hourly regional grid carbon (Carbon
 Intensity API), wholesale prices (Elexon) and weather (Renewables.ninja), with
 embodied carbon from a Brightway/ecoinvent foreground model.
 
-This branch is the data-centre study on its own. The electrolyser-LCA work it
+This repo is the data-centre study on its own. The electrolyser-LCA work it
 grew out of — the Setup LCA and Size Optimiser pages, the wind/grid electrolyser
-notebooks (`1.dashboard_lca*`, `3.custom_grid`, `4.*`) and their outputs — is
-still on `main`.
+notebooks and their outputs — is kept on the `archive/electrolyser-lca` branch.
 
 ## Streamlit app
 
@@ -76,10 +75,9 @@ others. `optimisation/sites.PRESETS` holds shortcuts for common sites.
 **Any window, anywhere, builds itself.** A run needs a half-hourly grid series
 for its region *and its dates*; if one is not on disk, `sites.ensure_grid_series`
 builds exactly that window before the first LP, the same way Renewables.ninja is
-already fetched on demand for whatever dates are asked for. It is the slow part —
-the GB fuel mix is scored against ecoinvent for every half-hour, a couple of
-minutes per week of window — so it builds only what is genuinely missing, one
-build at a time machine-wide, and puts `dashboard_config.py` back afterwards.
+already fetched on demand for whatever dates are asked for. It builds only what
+is genuinely missing (seconds per week of window once the API responses are
+cached), one build at a time per checkout.
 What it will never do is substitute another region's or another month's
 intensities: `require_grid_region()` and the window check refuse that rather
 than produce a confident wrong answer. Windows run from 2018-05-11, where the
@@ -87,17 +85,25 @@ Carbon Intensity API's regional data begins, to yesterday.
 
 ### How a grid build runs
 
-`backend/runner.py` patches the region and window into `dashboard_config.py`
-(the single config every notebook reads) and executes `1.build_grid.ipynb` via
-`nbconvert`. That notebook only orchestrates: it `%run`s
-`2.tech_lca_foreground.ipynb` if the foreground is missing,
-`3.1.custom_grid_carbon_intensity_api.ipynb` for the grid series, and
-`5.prices.ipynb` when prices for the window are asked for. They share one kernel
-because `5.prices` reads the timeslices `3.1` leaves behind. Results land in
-`custom_grid_lca_outputs/` and `price_outputs/`; raw API responses are cached in
-`carbon_intensity_api_cache/` (gitignored, refetched on demand).
+`optimisation/grid_build.py`, called with a region and a window:
 
-> **A correction this exposed.** `dashboard_config.WIND_LAT / WIND_LON` is a
+1. fetches the region's half-hourly generation mix from the Carbon Intensity
+   API (raw responses cached in `carbon_intensity_api_cache/`, gitignored);
+2. scores each fuel with one ecoinvent GB electricity-production activity
+   (`lca_helpers.TECH_SPECS`, choice in `dc_config.GRID_CANDIDATE_INDEX`) and
+   writes kg CO₂e per kWh delivered to `custom_grid_lca_outputs/`;
+3. when asked, fetches Elexon Market Index prices for the same window into
+   `price_outputs/`.
+
+```bash
+python -m optimisation.grid_build 2 2025-03-03 2025-03-05
+```
+
+The only notebook a build can still start is `2.tech_lca_foreground.ipynb`,
+and only on a machine where the foreground databases do not exist yet
+(`backend/runner.py` runs it headless).
+
+> **A correction this exposed.** The old `dashboard_config.WIND_LAT / WIND_LON` was a
 > field near St Albans — Carbon Intensity region 10, TNUoS zone 9 — while every
 > cached grid series is region 13, zone 12. The study previously paired London's
 > grid intensity and London's £7.41/kW demand tariff with a Hertfordshire wind
@@ -118,7 +124,7 @@ notebook and the Streamlit page will find it.
 
 `optimisation/myopic.py` is the lower bound to the LP's upper one: the same
 build dispatched by a fixed merit order that sees only the current step (the
-rule from the old notebook 4.3, now on `main` only). Section 7 of notebook 6
+rule from the old notebook 4.3, kept on `archive/electrolyser-lca`). Section 7 of notebook 6
 runs both on the same build.
 
 ## `optimisation/`
@@ -135,6 +141,7 @@ own cross-checks and writes CSVs to `optimisation_outputs/`.
 | `dc_runner.py` / `dc_job.py` | cached runs and scenario matrices / detached solves for the page |
 | `thresholds.py` | how far a configuration is from a carbon threshold, knob by knob |
 | `sites.py` / `gb_map.py` | coordinate → region, zone and grid series; building missing windows |
+| `grid_build.py` | fetches and scores a region's half-hourly grid carbon, and Elexon prices, for any window |
 | `profiles.py` | wind, solar, grid intensity and price on one half-hourly index |
 | `baseline_grid.py` | Baseline 1 — the data centre on the GB grid |
 | `grid_connection.py` / `network_charges.py` / `transformers.py` | connection, TNUoS/BSUoS/DUoS, and transformer embodied carbon |
@@ -154,14 +161,22 @@ is still open. [TODO.md](TODO.md) is the worklist on top of them. `docs/` holds
 the overview and commercial brief, the objective audit and the reviewer
 response plan.
 
+## Configuration
+
+`dc_config.py` holds the fixed modelling assumptions: the Brightway project,
+the grid-mix scoring choices and loss factor, and the fuel cell, hydrogen tank,
+transformer and PV inventory parameters notebook 2 builds from. Everything you
+choose per run (load, PUE, site, dates, assets, objective) is an input on the
+page or an argument to the scripts. Nothing edits `dc_config.py` at run time.
+
 ## Notebooks
 
 | Notebook | Role |
 | --- | --- |
-| `1.build_grid.ipynb` | grid-build orchestrator — what the optimiser runs for a missing region/window |
-| `2.tech_lca_foreground.ipynb` | builds the foreground databases |
-| `3.1.custom_grid_carbon_intensity_api.ipynb` | half-hourly regional grid carbon from the Carbon Intensity API |
-| `5.prices.ipynb` | Elexon wholesale prices and techno-economic cost inputs |
+| `2.tech_lca_foreground.ipynb` | builds the foreground databases — run once per machine, or after changing an inventory parameter in `dc_config.py` |
 | `6.datacentre_optimiser.ipynb` | **results of the study** — Pareto fronts, installed mixes, carbon by source, a dispatch week, and the foresight bracket |
 
-The numbering is kept from `main` so references in the docs still line up.
+The numbering is kept from the original sequence so references in the docs
+still line up. `price_outputs/electrolyser_costs_clean.csv` and
+`static_cost_assumptions.csv` were written by the retired `5.prices.ipynb` and
+are now fixed inputs.

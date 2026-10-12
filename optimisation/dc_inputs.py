@@ -66,7 +66,7 @@ def data_centre_coefficients(refresh: bool = False) -> dict:
         except Exception:
             pass
     import lca_helpers as H
-    import dashboard_config as cfg
+    import dc_config as cfg
     from optimisation import baseline_grid as bg
 
     H.setup_brightway()
@@ -117,7 +117,7 @@ def build_series(site, start: str, end: str, size_mw_it: float,
 
     site = sites.get(site)
     # tilt/azimuth are left unset so profiles.fetch_solar_cf takes them from
-    # dashboard_config. Before this, they were hard-coded defaults in that
+    # dc_config. Before this, they were hard-coded defaults in that
     # function's signature that this call never passed, so every data centre run
     # silently used a 35-degree array while the embodied carbon was charged for
     # a 20-degree one.
@@ -260,7 +260,7 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
     commodity at the same price, and the split between them would be arbitrary.
     ``h2_variant_2`` pins its row the way ``h2_variant`` pins the first.
     """
-    import dashboard_config as cfg
+    import dc_config as cfg
     from optimisation import battery as batt
     from optimisation import electrolysers as ely
     from optimisation import fuel_cell as fc
