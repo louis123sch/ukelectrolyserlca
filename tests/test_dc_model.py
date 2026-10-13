@@ -51,12 +51,15 @@ def tech():
         gwp_fc_bop_per_mw=469_040, gwp_fc_stack_per_mw=97_431,
         gwp_fc_maint_per_mwh=3.11,
         gwp_grid_per_mw=333.5,
-        cost_fc_stack_per_mw=308_698.0,
+        # BoP annuity net of its calendar replacement, which cost_fc_bop_per_mw
+        # charges; the old 194_244 was the pre-split *full-system* annuity and
+        # counted the stack twice. Central case of h2_capex.fuel_cell_costs.
+        cost_fc_stack_per_mw=308_698.0, cost_fc_bop_per_mw=1_486_089.0,
         fc_bop_calendar_years=25.0, fc_bop_duty_hours=60_000.0,
-        fc_stack_duty_hours=32_000.0,
+        fc_stack_calendar_years=25.0, fc_stack_duty_hours=32_000.0,
         cost_wind=150_000, cost_offshore=230_000, cost_solar=95_000,
         cost_batt_p=30_000, cost_batt_e=10_000,
-        cost_ely=220_000, cost_tank=64.6, cost_fc=194_244,
+        cost_ely=220_000, cost_tank=64.6, cost_fc=101_391,
         cost_grid_per_mw_year=40_949, cost_grid_fixed_per_year=271_192,
         ely_kwh_per_kg=54.0, ely_variable_gwp_per_kg=0.1072,
         tank_compression_kwh_per_kg=0.0, tank_leakage_per_hour=0.0,
@@ -160,6 +163,15 @@ def test_constants_are_excluded_from_the_objective_but_not_the_total(series, tec
     assert tot["cost_GBP_per_year"] > float(obj["cost"].solution)
 
 
+def test_islanded_builds_pay_no_grid_fixed_charge(series, tech):
+    """The fixed connection charge belongs to the connection; no grid, no charge."""
+    a = M.Assets(grid=False, wind=True, solar=True, battery=True, grid_limit_mw=0.0)
+    m, V, obj = M.build_model(series, a, tech, objective="cost", unserved_fraction=1.0)
+    M.solve(m)
+    assert M.totals(obj)["cost_const_GBP_per_year"] == 0.0
+    assert M.contributions(V, obj, series, tech, a)["cost_operational"]["connection fixed"] == 0.0
+
+
 def test_min_gwp_is_cleaner_and_min_cost_is_cheaper(series, tech):
     """If this fails the Pareto code is wrong. Non-negotiable."""
     _, cheap = _solve(series, tech, ALL, objective="cost")
@@ -187,10 +199,12 @@ def test_epsilon_constraint_binds(series, tech):
 def test_baseload_forces_a_high_capacity_factor(series, tech):
     a = M.Assets(grid=True, electrolyser=True, tank=True, fuel_cell=True,
                  grid_limit_mw=None)
-    V, _ = _solve(series, tech, a, objective="cost", ely_strategy="baseload")
+    m, V, _ = M.build_model(series, a, tech, objective="cost", ely_strategy="baseload")
+    # Forced: on this series a cost solve builds no electrolyser, and a test
+    # that skips whenever that happens never tests the floor at all.
+    m.add_constraints(V["cap_ely"] >= 1.0, name="force_ely")
+    M.solve(m)
     cap = float(V["cap_ely"].solution)
-    if cap < 1e-6:
-        pytest.skip("optimiser declined to build an electrolyser at all")
     cf = V["p_ely"].solution.values.sum() * DT / (cap * series.hours)
     assert cf >= 0.85 - 1e-3, f"baseload CF floor not binding: {cf:.3f}"
 
@@ -236,20 +250,93 @@ def test_unknown_strategy_is_refused(series, tech):
 # =============================================================================
 # Fuel cell replacement rule
 # =============================================================================
-def test_fuel_cell_replacement_counts_take_the_binding_limit(series, tech):
-    a = M.Assets(grid=True, fuel_cell=True, buy_h2=True, grid_limit_mw=None)
-    V, _ = _solve(series, tech, a, objective="gwp")
+# A grid held below demand makes the fuel cell run flat out on bought hydrogen
+# (duty binds); an unlimited grid with a forced 1 MW fuel cell leaves it idle
+# (calendar binds). Both are forced, so neither case can quietly skip.
+DUTY_FC = M.Assets(grid=True, fuel_cell=True, buy_h2=True, grid_limit_mw=5.0)
+IDLE_FC = M.Assets(grid=True, fuel_cell=True, buy_h2=True, grid_limit_mw=None)
+
+
+def _solve_fc(series, tech, assets, objective):
+    m, V, obj = M.build_model(series, assets, tech, objective=objective)
+    m.add_constraints(V["cap_fc"] >= 1.0, name="force_fc")
+    M.solve(m)
+    return V, obj
+
+
+@pytest.mark.parametrize("assets, binding", [(DUTY_FC, "duty"), (IDLE_FC, "calendar")])
+@pytest.mark.parametrize("objective", ["gwp", "cost"])
+def test_fuel_cell_replacement_counts_take_the_binding_limit(series, tech, assets,
+                                                             binding, objective):
+    V, _ = _solve_fc(series, tech, assets, objective)
     cap = float(V["cap_fc"].solution)
-    if cap < 1e-6:
-        pytest.skip("no fuel cell built")
     mwh = V["p_fc"].solution.values.sum() * DT * series.annual_scale
     for units, calendar, duty in (
             (V["fc_bop_units"], tech.fc_bop_calendar_years, tech.fc_bop_duty_hours),
-            (V["fc_stack_units"], tech.horizon_years, tech.fc_stack_duty_hours)):
+            (V["fc_stack_units"], tech.fc_stack_calendar_years, tech.fc_stack_duty_hours)):
         u = float(units.solution)
         assert u >= cap / calendar - 1e-6
         assert u >= mwh / duty - 1e-6
         assert u == pytest.approx(max(cap / calendar, mwh / duty), rel=1e-6)
+        assert (mwh / duty > cap / calendar) == (binding == "duty")
+
+
+def test_bop_duty_replacements_reach_the_cost_objective(series, tech):
+    """Reviewer point 1: above 2,400 h/yr BoP wear was charged in carbon only."""
+    V, obj = _solve_fc(series, tech, DUTY_FC, "cost")
+    cap = float(V["cap_fc"].solution)
+    bop = float(V["fc_bop_units"].solution)
+    assert bop > cap / tech.fc_bop_calendar_years * 1.5, "BoP duty should bind here"
+    line = M.contributions(V, obj, series, tech, DUTY_FC)["cost_capital"]["fuel cell"]
+    calendar_only = cap * (tech.cost_fc + tech.cost_fc_bop_per_mw / tech.fc_bop_calendar_years
+                           + tech.cost_fc_stack_per_mw / tech.fc_stack_calendar_years)
+    assert line == pytest.approx(
+        tech.cost_fc * cap + tech.cost_fc_bop_per_mw * bop
+        + tech.cost_fc_stack_per_mw * float(V["fc_stack_units"].solution), rel=1e-9)
+    assert line > calendar_only * 1.2
+
+
+def test_calendar_bound_fuel_cell_cost_equals_the_annuity(series, tech):
+    """An idle fuel cell costs exactly what the old calendar annuity said."""
+    V, obj = _solve_fc(series, tech, IDLE_FC, "gwp")
+    cap = float(V["cap_fc"].solution)
+    line = M.contributions(V, obj, series, tech, IDLE_FC)["cost_capital"]["fuel cell"]
+    assert line == pytest.approx(
+        cap * (tech.cost_fc + tech.cost_fc_bop_per_mw / tech.fc_bop_calendar_years
+               + tech.cost_fc_stack_per_mw / tech.fc_stack_calendar_years), rel=1e-6)
+
+
+def test_both_objectives_charge_every_replacement_variable(series, tech):
+    """Pooled, charging the stack alone passed the audit; each must appear in both."""
+    from optimisation import audit
+    m, V, obj = M.build_model(series, ALL, tech, objective="cost")
+    cost = audit._coeff_by_variable(m, obj["cost"])
+    gwp = audit._coeff_by_variable(m, obj["gwp"])
+    for v in ("fc_bop_units", "fc_stack_units"):
+        assert cost.get(v, 0.0) > 0, f"{v} missing from cost"
+        assert gwp.get(v, 0.0) > 0, f"{v} missing from gwp"
+
+
+def test_stack_calendar_life_is_not_the_horizon(series, tech):
+    """The horizon used to set the stack's calendar rate and nothing else."""
+    from dataclasses import replace
+    _, a = _solve_fc(series, replace(tech, horizon_years=10.0), IDLE_FC, "gwp")
+    _, b = _solve_fc(series, replace(tech, horizon_years=50.0), IDLE_FC, "gwp")
+    assert M.totals(a)["gwp_kgco2e_per_year"] == pytest.approx(
+        M.totals(b)["gwp_kgco2e_per_year"], rel=1e-9)
+
+
+def test_offshore_wind_is_out_of_scope():
+    """All sites are on land; there is no offshore profile to run it on."""
+    from optimisation import dc_architectures as A
+    assert not A.architecture("res_h2_grid", offshore=True).offshore_wind
+    assert not A.custom({"offshore_wind": True, "grid": True}, offshore=True).offshore_wind
+
+
+def test_export_is_refused_until_it_is_modelled(series, tech):
+    a = M.Assets(grid=True, allow_export=True)
+    with pytest.raises(NotImplementedError, match="Export"):
+        M.build_model(series, a, tech)
 
 
 def test_surplus_only_is_measured_against_available_not_dispatched_generation(series, tech):
@@ -409,7 +496,7 @@ def test_wind_and_solar_are_both_on_real_transformer_bills():
     scaled off ecoinvent's 280 g electronics dataset — that basis survives only
     to reproduce pre-2026 runs, and must never be what the LP charges.
     """
-    import dc_config as cfg
+    from optimiser_lca import stepup_transformers as inv, registry as R
     from optimisation import transformers as tx
     if not tx.CACHE_PATH.exists():
         pytest.skip("transformer_decomposition_cache.json not built — "
@@ -422,7 +509,7 @@ def test_wind_and_solar_are_both_on_real_transformer_bills():
     # Both read the foreground; neither is a scaled dataset.
     assert d["wind"]["code"] == tx.WIND_CODE
     assert s["code"] == tx.SOLAR_CODE
-    assert s["database"] == cfg.TRANSFORMER_FOREGROUND_DB
+    assert s["database"] == R.TRANSFORMER_DB
     assert solar == pytest.approx(s["kgco2e_per_MWp"] / d["asset_life_years"])
 
     # ...and specifically NOT the invented unit, which is what used to be here.
@@ -444,8 +531,8 @@ def test_wind_and_solar_are_both_on_real_transformer_bills():
     # The transcribed bill must still rebuild IEA PVPS's own stated unit mass.
     # This is the guard on the hardboard unit correction: the workbook cell
     # reads 36.96 m3, which is ~47 t and 1000x too large.
-    bill = sum(s["materials_kg_per_unit"].values()) + cfg.UPV_TX_FIBREBOARD_KG
-    assert bill == pytest.approx(cfg.UPV_TX_STATED_TOTAL_KG, abs=1.0)
+    bill = sum(s["materials_kg_per_unit"].values()) + inv.UPV_TX_FIBREBOARD_KG
+    assert bill == pytest.approx(inv.UPV_TX_STATED_TOTAL_KG, abs=1.0)
 
     # Two independent sources for step-ups of comparable rating should land in
     # the same place. Solar carries factory energy that wind does not, so it is

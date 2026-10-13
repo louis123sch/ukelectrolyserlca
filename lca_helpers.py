@@ -1,40 +1,35 @@
 """
-=============================================================================
-Shared LCA / Brightway helpers — the Brightway project, the GB grid-mix
-scoring used by ``optimisation/grid_build.py``, the LCA calls the coefficient
-modules make, and the Renewables.ninja client ``profiles.py`` uses.
+Shared Brightway helpers — the project session, exact-identity lookup, and
+the LCA calls the inventory and coefficient modules make.
 =============================================================================
 
-Settings come from ``dc_config``. Typical use:
+Settings come from ``dc_config``; inventories live in ``optimiser_lca``.
+Typical use::
 
     import lca_helpers as H
     ei, bio, fg_db, method = H.setup_brightway()
 
 After setup, helpers can be called with or without explicit Brightway handles
 (they fall back to the module-level handles populated by setup_brightway()).
+
+What is here: ``setup_brightway`` and the handles; ``resolve_exact`` /
+``resolve_flow`` (the one way anything on the build path finds an ecoinvent
+activity — by name, location and reference product, refusing zero or several
+hits); ``show_candidates`` / ``pick_candidate`` for *exploration*; and the
+scoring calls ``run_lca_score`` / ``run_non_electricity_lca``.
+
+What is not: the grid tables (``optimiser_lca.grid``), the foreground codes
+(``optimiser_lca.registry``), and the Renewables.ninja client
+(``optimisation.profiles``).
 """
 
 from __future__ import annotations
 
-import contextlib
-import io
-import json
-import os
 import uuid
-from io import StringIO
-from pathlib import Path
-
-import numpy as np
-import pandas as pd
 
 import bw2calc as bc
 import bw2data as bd
 import bw2io as bi
-
-try:
-    import requests
-except ImportError:  # pragma: no cover
-    requests = None
 
 import dc_config as cfg
 
@@ -44,69 +39,8 @@ import dc_config as cfg
 # =============================================================================
 ei = None       # ecoinvent database
 bio = None      # biosphere database
-fg_db = None    # foreground database
-method = None   # IPCC GWP100 method tuple
-
-
-# =============================================================================
-# Composite GB electricity definitions (grid_build.py)
-# =============================================================================
-WIND_GROUP_WEIGHTS = {
-    "WIND_GT3_ONSHORE": 0.006725107846 / 0.157504068947,
-    "WIND_13_OFFSHORE": 0.05505783324  / 0.157504068947,
-    "WIND_13_ONSHORE":  0.095721127861 / 0.157504068947,
-}
-
-IMPORT_GROUP_WEIGHTS = {
-    "IMPORTS_FR": 0.050547023864 / 0.080275563773,
-    "IMPORTS_IE": 0.005823079527 / 0.080275563773,
-    "IMPORTS_NL": 0.023905460382 / 0.080275563773,
-}
-
-TECH_SPECS = {
-    "GAS":              {"row_key": "GAS",      "query": "electricity production, natural gas, combined cycle GB"},
-    "COAL":             {"row_key": "COAL",     "query": "electricity production, hard coal GB"},
-    "NUCLEAR":          {"row_key": "NUCLEAR",  "query": "electricity production, nuclear GB"},
-    "WIND_GT3_ONSHORE": {"row_key": "WIND",     "query": "electricity production, wind, >3MW turbine, onshore GB"},
-    "WIND_13_OFFSHORE": {"row_key": "WIND",     "query": "electricity production, wind, 1-3MW turbine, offshore GB"},
-    "WIND_13_ONSHORE":  {"row_key": "WIND",     "query": "electricity production, wind, 1-3MW turbine, onshore GB"},
-    "WIND_EMB":         {"row_key": "WIND_EMB", "query": "electricity production, wind, <1MW turbine, onshore GB"},
-    "HYDRO":            {"row_key": "HYDRO",    "query": "electricity production, hydro, run-of-river GB"},
-    "IMPORTS_FR":       {"row_key": "IMPORTS",  "query": "import from FR"},
-    "IMPORTS_IE":       {"row_key": "IMPORTS",  "query": "import from IE"},
-    "IMPORTS_NL":       {"row_key": "IMPORTS",  "query": "import from NL"},
-    "BIOMASS":          {"row_key": "BIOMASS",  "query": "electricity high voltage GB heat and power co-generation, wood chips, 6667 kW, state-of-the-art 2014"},
-    "OTHER":            {"row_key": "OTHER",    "query": "electricity production, oil GB"},
-    "SOLAR":            {"row_key": "SOLAR",    "query": "Electricity, low voltage GB electricity production, photovoltaic, 570kWp open ground installation, multi-Si"},
-    "STORAGE":          {"row_key": "STORAGE",  "query": "electricity production, hydro, pumped storage GB"},
-}
-
-SIMPLE_TECH_KEYS = [
-    "GAS", "COAL", "NUCLEAR", "WIND_EMB", "HYDRO",
-    "BIOMASS", "OTHER", "SOLAR", "STORAGE",
-]
-WIND_COMPONENT_KEYS   = ["WIND_GT3_ONSHORE", "WIND_13_OFFSHORE", "WIND_13_ONSHORE"]
-IMPORT_COMPONENT_KEYS = ["IMPORTS_FR", "IMPORTS_IE", "IMPORTS_NL"]
-
-FUEL_COLS = [
-    "GAS", "COAL", "NUCLEAR", "WIND", "WIND_EMB",
-    "HYDRO", "IMPORTS", "BIOMASS", "OTHER", "SOLAR", "STORAGE",
-]
-
-# Foreground codes for each hydrogen process.
-H2_CODES = {
-    "SMR":            "smr_hermesmann_1kg_h2",
-    "SMR-CCS":        "smr_ccs_hermesmann_1kg_h2",
-    "AE operation":   "ae_op_hermesmann_1kg_h2",
-    "PEM operation":  "pem_op_hermesmann_1kg_h2",
-    "SOEC operation": "soec_op_hermesmann_1kg_h2",
-    "MP-E":           "mp_e_1kg_h2",
-}
-ELECTROLYSER_CODES = {
-    "AE operation":   "ae_op_hermesmann_1kg_h2",
-    "PEM operation":  "pem_op_hermesmann_1kg_h2",
-    "SOEC operation": "soec_op_hermesmann_1kg_h2",
-}
+fg_db = None    # hydrogen foreground database (None until built)
+method = None   # the GWP100 method tuple _select_gwp_method picks
 
 
 # =============================================================================
@@ -128,7 +62,15 @@ def find_database_name(must_contain, prefer=None):
 
 
 def _select_gwp_method():
-    """Pick IPCC 2021 GWP100 if available, else any IPCC GWP/climate-change method."""
+    """Pick IPCC 2021 GWP100 if available, else any IPCC GWP/climate-change method.
+
+    Note: with ecoinvent 3.9.1's bundled methods the first GWP100 match in
+    ``bd.methods`` order is the "no LT" (no long-term emissions) variant, and
+    that is what this returns. ``optimiser_lca.grid`` scores the grid with it,
+    so every grid series on disk is on that basis; the coefficient modules in
+    ``optimisation/`` pick the with-LT variant themselves. Registered as a known
+    inconsistency - changing this here would make every grid series stale.
+    """
     gwp_methods = [
         m for m in bd.methods
         if "IPCC" in str(m) and ("GWP" in str(m) or "climate change" in str(m).lower())
@@ -146,9 +88,10 @@ def setup_brightway():
     """Set the active project, find ecoinvent + biosphere + foreground + GWP method.
 
     Populates module-level globals ``ei``, ``bio``, ``fg_db``, ``method`` and
-    returns them in that order. Safe to call from any notebook.
+    returns them in that order. Safe to call from any notebook or module.
     """
     global ei, bio, fg_db, method
+    from optimiser_lca import registry
 
     bd.projects.set_current(cfg.PROJECT_NAME)
     print("Current Brightway project:", bd.projects.current)
@@ -164,26 +107,22 @@ def setup_brightway():
             password=password,
         )
 
-    ei_name  = find_database_name(["ecoinvent", cfg.SYSTEM_MODEL])
+    ei_name = cfg.ECOINVENT_DB if cfg.ECOINVENT_DB in bd.databases else \
+        find_database_name(["ecoinvent", cfg.SYSTEM_MODEL])
     bio_name = find_database_name(["biosphere"])
 
-    ei  = bd.Database(ei_name)
+    ei = bd.Database(ei_name)
     bio = bd.Database(bio_name)
     print("Using ecoinvent database:", ei_name)
     print("Using biosphere database:", bio_name)
 
-    if cfg.FOREGROUND_DB in bd.databases:
-        fg_db = bd.Database(cfg.FOREGROUND_DB)
-        print("Using foreground database:", cfg.FOREGROUND_DB)
-    elif cfg.RUN_BUILD_FOREGROUND_DATABASE:
-        print("Foreground database will be created by the foreground notebook:", cfg.FOREGROUND_DB)
-        fg_db = None
+    if registry.HYDROGEN_DB in bd.databases:
+        fg_db = bd.Database(registry.HYDROGEN_DB)
+        print("Using foreground database:", registry.HYDROGEN_DB)
     else:
-        raise ValueError(
-            f"Foreground database {cfg.FOREGROUND_DB!r} was not found. "
-            "Set RUN_BUILD_FOREGROUND_DATABASE=True in dc_config, or run the "
-            "tech_lca_foreground notebook first."
-        )
+        fg_db = None
+        print(f"Foreground database {registry.HYDROGEN_DB!r} not built yet: "
+              "run `python -m optimiser_lca.build`.")
 
     method = _select_gwp_method()
     print("Using LCIA method:", method)
@@ -192,14 +131,68 @@ def setup_brightway():
 
 
 def refresh_foreground():
-    """Reload the foreground database handle after writing/recreating it."""
+    """Reload the hydrogen foreground handle after writing/recreating it."""
     global fg_db
-    fg_db = bd.Database(cfg.FOREGROUND_DB)
+    from optimiser_lca import registry
+    fg_db = bd.Database(registry.HYDROGEN_DB)
     return fg_db
 
 
+def ecoinvent_name() -> str:
+    """The ecoinvent database name, without needing setup_brightway() first."""
+    return ei.name if ei is not None else cfg.ECOINVENT_DB
+
+
 # =============================================================================
-# Candidate-lookup helpers
+# Exact-identity lookup — the only way the build path finds an activity
+# =============================================================================
+def resolve_exact(name, location, product=None, unit=None, database=None):
+    """The one ecoinvent activity with this name, location and (if given)
+    reference product. Refuses zero or several matches.
+
+    Name + location is not a unique key: ecoinvent has multi-output activities
+    (``sulfuric acid production`` [RoW] exists twice, producing sulfuric acid
+    and producing steam), so pass ``product`` wherever the source records it.
+    ``unit`` separates the few activities that exist per kg and per unit.
+    """
+    from bw2data.errors import MultipleResults, UnknownObject
+    kwargs = {"database": database or ecoinvent_name(), "name": name, "location": location}
+    if product is not None:
+        kwargs["product"] = product
+    if unit is not None:
+        kwargs["unit"] = unit
+    try:
+        return bd.get_node(**kwargs)
+    except UnknownObject:
+        raise ValueError(f"No activity matches {kwargs}. Check the spelling with "
+                         "show_candidates().") from None
+    except MultipleResults as e:
+        raise ValueError(f"{e}: {kwargs} is not unique — give the reference product "
+                         "(and unit if needed).") from None
+
+
+def resolve_flow(name, categories, database=None):
+    """The one biosphere flow with this name and categories tuple."""
+    from bw2data.errors import MultipleResults, UnknownObject
+    kwargs = {"database": database or (bio.name if bio is not None else
+                                        find_database_name(["biosphere"])),
+              "name": name, "categories": tuple(categories)}
+    try:
+        return bd.get_node(**kwargs)
+    except UnknownObject:
+        raise ValueError(f"No biosphere flow matches {kwargs}.") from None
+    except MultipleResults as e:
+        raise ValueError(f"{e}: {kwargs} is not unique.") from None
+
+
+def get_exact_activities(identities, database=None):
+    """``{key: (name, location, reference product)}`` -> ``{key: activity}``,
+    every identity resolved exactly."""
+    return {k: resolve_exact(*v, database=database) for k, v in identities.items()}
+
+
+# =============================================================================
+# Exploration helpers — search by rank, for looking, never for building
 # =============================================================================
 def show_candidates(query, database=None, max_results=100):
     """Print and return the first ``max_results`` ecoinvent search hits for ``query``."""
@@ -216,13 +209,20 @@ def show_candidates(query, database=None, max_results=100):
 
 
 def pick_candidate(query, index=0, database=None, max_results=100):
-    """Print candidates and return the one at ``index`` (raising if missing)."""
+    """Print candidates and return the one at ``index`` (raising if missing).
+
+    For exploration. Once chosen, record the activity's identity in the
+    inventory module (``Process(identity=...)``) - nothing on the build path
+    depends on search order.
+    """
     database = database or ei
     results = show_candidates(query, database=database, max_results=max_results)
     if not results:
         raise ValueError(f"No candidates found for query: {query!r}")
     picked = results[index]
     print(f"\n  → Selected [{index}]: {picked.get('name')} | {picked.get('location')}")
+    print(f"     identity=({picked.get('name')!r}, {picked.get('location')!r}, "
+          f"{picked.get('reference product')!r})")
     return picked
 
 
@@ -237,36 +237,8 @@ def show_biosphere_candidates(query, max_results=100):
     return results
 
 
-def get_candidate_pool(query, database=None, max_results=100):
-    """Same search ordering as ``show_candidates`` — used for batch candidate selection."""
-    database = database or ei
-    return list(database.search(query))[:max_results]
-
-
-def select_all_candidate_activities(candidate_index_dict, tech_specs=None,
-                                    database=None, max_results=100):
-    """Pick one ecoinvent process per TECH_SPECS entry, ignoring whether shares are zero."""
-    tech_specs = tech_specs or TECH_SPECS
-    if candidate_index_dict is None:
-        raise ValueError("candidate_index_dict is required (e.g. GRID_CANDIDATE_INDEX from the notebook).")
-    database = database or ei
-
-    selected = {}
-    for tech_key, spec in tech_specs.items():
-        pool = get_candidate_pool(spec["query"], database=database, max_results=max_results)
-        idx = int(candidate_index_dict.get(tech_key, 0))
-        if not pool:
-            print(f"  ⚠ {tech_key:<18} no candidates for {spec['query']!r}")
-            continue
-        if idx >= len(pool):
-            print(f"  ⚠ {tech_key:<18} candidate_index {idx} out of range ({len(pool)} candidates)")
-            continue
-        selected[tech_key] = pool[idx]
-    return selected
-
-
 # =============================================================================
-# LCA core helpers (single definition — no per-section duplicates)
+# LCA core helpers
 # =============================================================================
 def is_any_electricity_exchange(exc):
     """True for direct technosphere kWh exchanges whose input is electricity."""
@@ -335,12 +307,13 @@ def run_non_electricity_lca(activity, method_=None, fg_database=None):
     return score, removed_kwh, removed_count
 
 
-def calculate_source_lca_scores(selected_generation_processes, method_=None):
+def calculate_source_lca_scores(activities, method_=None):
+    """``{key: activity}`` -> ``{key: kg CO2e per unit}``, one LCA each, printed."""
     method_ = method_ or method
     scores = {}
     print("Electricity source scores, one-off Brightway LCAs")
     print("------------------------------------------------")
-    for tech_key, act in selected_generation_processes.items():
+    for tech_key, act in activities.items():
         try:
             score = run_lca_score(act, method_, amount=1.0)
             scores[tech_key] = score
@@ -349,126 +322,3 @@ def calculate_source_lca_scores(selected_generation_processes, method_=None):
         except Exception as e:
             print(f"  ⚠ {tech_key:<18} failed ({type(e).__name__}: {e})")
     return scores
-
-
-def custom_electricity_score_for_row(csv_row, source_scores):
-    """Closed-form custom GB electricity score (kg CO2eq/kWh) for one row."""
-    score = 0.0
-    amount_sum = 0.0
-    lf = cfg.MARKET_LOSS_FACTOR
-
-    for tech_key in SIMPLE_TECH_KEYS:
-        if tech_key not in source_scores:
-            continue
-        spec = TECH_SPECS[tech_key]
-        share = float(csv_row.get(spec["row_key"] + "_perc", 0) or 0) / 100.0
-        if share <= 0:
-            continue
-        amount = share * lf
-        score += amount * source_scores[tech_key]
-        amount_sum += amount
-
-    wind_total = float(csv_row.get("WIND_perc", 0) or 0) / 100.0
-    if wind_total > 0:
-        for tech_key in WIND_COMPONENT_KEYS:
-            if tech_key not in source_scores:
-                continue
-            amount = wind_total * WIND_GROUP_WEIGHTS[tech_key] * lf
-            score += amount * source_scores[tech_key]
-            amount_sum += amount
-
-    imports_total = float(csv_row.get("IMPORTS_perc", 0) or 0) / 100.0
-    if imports_total > 0:
-        for tech_key in IMPORT_COMPONENT_KEYS:
-            if tech_key not in source_scores:
-                continue
-            amount = imports_total * IMPORT_GROUP_WEIGHTS[tech_key] * lf
-            score += amount * source_scores[tech_key]
-            amount_sum += amount
-
-    return score, amount_sum
-
-
-# =============================================================================
-# Renewables.ninja client (profiles.py)
-# =============================================================================
-
-
-def fetch_ninja_wind(session, lat, lon, date_from, date_to, capacity_kw, height_m,
-                     turbine, dataset="merra2",
-                     api_base="https://www.renewables.ninja/api/"):
-    """Fetch hourly wind power from the Renewables.ninja API (official-style)."""
-    url = api_base + "data/wind"
-    args = {
-        "lat": lat, "lon": lon, "date_from": date_from, "date_to": date_to,
-        "dataset": dataset, "capacity": capacity_kw, "height": height_m,
-        "turbine": turbine, "format": "json",
-    }
-    r = session.get(url, params=args, timeout=180)
-    print("Status:", r.status_code)
-    print("URL:", r.url)
-    if not r.ok:
-        body_preview = (r.text or "")[:2000]
-        print(body_preview)
-        if r.status_code in (401, 403):
-            raise RuntimeError(
-                "Renewables.ninja authentication failed "
-                f"(status {r.status_code}). "
-                "Check your API token (or quota) and retry. "
-                f"Response: {body_preview}"
-            )
-        raise RuntimeError(
-            f"Renewables.ninja request failed with status {r.status_code}. "
-            f"Response: {body_preview}"
-        )
-
-    parsed = json.loads(r.text)
-    data = pd.read_json(StringIO(json.dumps(parsed["data"])), orient="index")
-    metadata = parsed.get("metadata", {})
-
-    data.index = pd.to_datetime(data.index)
-    data.index.name = "time"
-    if "electricity" in data.columns:
-        data = data.rename(columns={"electricity": "wind_power_kw"})
-    if "wind_power_kw" not in data.columns:
-        raise ValueError(f"Expected 'electricity'/'wind_power_kw'; got {list(data.columns)}")
-    data["wind_power_mw"]        = data["wind_power_kw"] / 1000.0
-    data["wind_capacity_factor"] = data["wind_power_kw"] / float(capacity_kw)
-    return data, metadata, args
-
-
-def create_ninja_session(token=None):
-    """Create an authenticated Renewables.ninja session.
-
-    Token: the explicit argument, else ``RENEWABLES_NINJA_TOKEN`` from the
-    environment or this repo's gitignored ``.env``.
-    """
-    if requests is None:
-        raise ImportError("The 'requests' package is required for Renewables.ninja.")
-
-    if token is None:
-        try:
-            from dotenv import load_dotenv
-            load_dotenv(Path(__file__).with_name(".env"))
-        except Exception:
-            pass
-        token = os.getenv("RENEWABLES_NINJA_TOKEN")
-    if not token:
-        raise RuntimeError(
-            "No Renewables.ninja token. Put RENEWABLES_NINJA_TOKEN=... in .env "
-            "at the repo root, or set it in the environment.")
-
-    token = str(token).strip()
-    if token.lower().startswith("token "):
-        token = token[6:].strip()
-    if token.lower().startswith("bearer "):
-        token = token[7:].strip()
-
-    if not token:
-        raise ValueError("Renewables.ninja token is empty.")
-
-    session = requests.session()
-    session.headers.update({"Authorization": "Token " + token})
-    return session
-
-

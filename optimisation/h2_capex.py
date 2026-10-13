@@ -120,8 +120,9 @@ def fc_stack_cost_fraction() -> float:
 def fuel_cell_costs():
     """£/kW installed, and the annualised £/kW/year that follows."""
     from optimisation import fuel_cell as fc
-    d = fc.decompose()
-    life = d["bop_calendar_lifetime_years"]
+    # From the constant, not the decomposition cache: an assumption edited in
+    # fuel_cell.py must reach the cost side without a Brightway rerun.
+    life = fc.BOP_CALENDAR_LIFETIME_YEARS
     crf = capital_recovery_factor(FC_DISCOUNT_RATE, life)
     rows = []
     for case in CASES:
@@ -146,9 +147,18 @@ def fuel_cell_costs():
             "fixed_opex_frac": FC_FIXED_OPEX_FRAC[case],
             "lifetime_years": life,
             "stack_cost_fraction": stack_frac,
-            # BoP only: the calendar-driven part, annualised as before.
+            # BoP, split the same way as the stack so that duty reaches the
+            # cost objective as it reaches carbon. The LP charges
+            #   A_bop * (CRF + o - 1/L) * cap_fc  +  A_bop * fc_bop_units
+            # and fc_bop_units >= max(cap_fc/L, MWh/duty_hours). When calendar
+            # binds that is A_bop * (CRF + o) * cap_fc, exactly the old
+            # annuity; when duty binds it stays within about 2 % of the exact
+            # CRF on the shortened life. Charging the annuity alone made BoP
+            # replacements free in cost above 2,400 h/yr — up to 39 % low on
+            # the fuel cell line at 8,760 h. REVIEW_RESPONSE_PLAN.md §1.
             "annual_GBP_per_MW_year": (capex * 1000.0 * (1.0 - stack_frac)
-                                       * (crf + FC_FIXED_OPEX_FRAC[case])),
+                                       * (crf + FC_FIXED_OPEX_FRAC[case] - 1.0 / life)),
+            "bop_GBP_per_MW": capex * 1000.0 * (1.0 - stack_frac),
             # Stack capital, charged per replacement. Undiscounted, matching the
             # carbon side, because the LP abstracts away *when* a replacement
             # falls and a discount factor would need that schedule. This

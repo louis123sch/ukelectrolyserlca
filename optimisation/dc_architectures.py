@@ -53,6 +53,14 @@ BOUGHT_COLOURS = ("grey", "blue", "turquoise", "green")
 ONSITE_TECHS = ("PEM operation", "AE operation", "SOEC operation")
 STRATEGIES = ("baseload", "flexible", "free")
 
+# Offshore wind is out of scope: every site is on land (decided 3 Sep), and the
+# LP has no offshore profile — cap_offshore runs on the onshore series, so in
+# the high cost case it was building offshore on onshore yield. Held off here,
+# at the one place every caller's asset bounds pass through, rather than at
+# each caller. Turning it back on needs an offshore capacity-factor series
+# first. See ASSUMPTIONS.md.
+OFFSHORE_IN_SCOPE = False
+
 # The nine things that can be built, in the order they are shown to the user.
 # A named architecture is one particular subset of these; a custom one is any
 # subset at all, which is what the Streamlit page hands over.
@@ -74,7 +82,7 @@ def custom(flags: dict, *, grid_limit_mw=None, offshore=False,
     limit and no export, not merely a grid the LP is free to use.
     """
     f = {k: bool(flags.get(k)) for k in ASSET_FLAGS}
-    f["offshore_wind"] = f["offshore_wind"] and offshore
+    f["offshore_wind"] = f["offshore_wind"] and offshore and OFFSHORE_IN_SCOPE
     assets = M.Assets(**f, grid_limit_mw=grid_limit_mw, allow_export=allow_export)
     if not f["grid"]:
         assets = replace(assets, grid_limit_mw=0.0, allow_export=False)
@@ -85,6 +93,7 @@ def architecture(name: str, *, grid_limit_mw=None, offshore=False,
                  allow_export=False, flags: dict | None = None) -> M.Assets:
     """Asset bounds for one named power option, or for ``custom`` flags."""
     base = dict(grid_limit_mw=grid_limit_mw, allow_export=allow_export)
+    offshore = offshore and OFFSHORE_IN_SCOPE
     if name == "custom":
         return custom(flags or {}, grid_limit_mw=grid_limit_mw,
                       offshore=offshore, allow_export=allow_export)
@@ -212,7 +221,7 @@ def run():
               f"{tick(r.fuel_cell):>4}{tick(r.bought_h2):>5}  {r.strategy}")
     h2 = df[(df.electrolyser) | (df.bought_h2)]
     print(f"\n  {len(df)} configurations, {len(h2)} involving hydrogen.")
-    print(f"  Every pathway in lca_helpers.H2_CODES appears: AE / PEM / SOEC as built")
+    print(f"  Every pathway in optimiser_lca.registry.H2_CODES appears: AE / PEM / SOEC as built")
     print("  assets whose emissions follow the electricity feeding them, and")
     print("  SMR / SMR-CCS / MP-E as bought commodities at a price with a fixed burden.")
     print(f"\n  With a 13-point Pareto sweep each, that is {len(df) * 13} LP solves.")

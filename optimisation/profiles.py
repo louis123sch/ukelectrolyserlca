@@ -41,6 +41,89 @@ NINJA_BASE = "https://www.renewables.ninja/api/"
 SLICE_MINUTES = 30
 
 
+# -----------------------------------------------------------------------------
+# Renewables.ninja client
+# -----------------------------------------------------------------------------
+def create_ninja_session(token=None):
+    """Create an authenticated Renewables.ninja session.
+
+    Token: the explicit argument, else ``RENEWABLES_NINJA_TOKEN`` from the
+    environment or this repo's gitignored ``.env``.
+    """
+    try:
+        import requests
+    except ImportError:  # pragma: no cover
+        raise ImportError("The 'requests' package is required for Renewables.ninja.")
+
+    if token is None:
+        try:
+            from dotenv import load_dotenv
+            load_dotenv(ROOT / ".env")
+        except Exception:
+            pass
+        import os
+        token = os.getenv("RENEWABLES_NINJA_TOKEN")
+    if not token:
+        raise RuntimeError(
+            "No Renewables.ninja token. Put RENEWABLES_NINJA_TOKEN=... in .env "
+            "at the repo root, or set it in the environment.")
+
+    token = str(token).strip()
+    if token.lower().startswith("token "):
+        token = token[6:].strip()
+    if token.lower().startswith("bearer "):
+        token = token[7:].strip()
+    if not token:
+        raise ValueError("Renewables.ninja token is empty.")
+
+    session = requests.session()
+    session.headers.update({"Authorization": "Token " + token})
+    return session
+
+
+def fetch_ninja_wind(session, lat, lon, date_from, date_to, capacity_kw, height_m,
+                     turbine, dataset="merra2", api_base=NINJA_BASE):
+    """Fetch hourly wind power from the Renewables.ninja API (official-style)."""
+    from io import StringIO
+    url = api_base + "data/wind"
+    args = {
+        "lat": lat, "lon": lon, "date_from": date_from, "date_to": date_to,
+        "dataset": dataset, "capacity": capacity_kw, "height": height_m,
+        "turbine": turbine, "format": "json",
+    }
+    r = session.get(url, params=args, timeout=180)
+    print("Status:", r.status_code)
+    print("URL:", r.url)
+    if not r.ok:
+        body_preview = (r.text or "")[:2000]
+        print(body_preview)
+        if r.status_code in (401, 403):
+            raise RuntimeError(
+                "Renewables.ninja authentication failed "
+                f"(status {r.status_code}). "
+                "Check your API token (or quota) and retry. "
+                f"Response: {body_preview}"
+            )
+        raise RuntimeError(
+            f"Renewables.ninja request failed with status {r.status_code}. "
+            f"Response: {body_preview}"
+        )
+
+    parsed = json.loads(r.text)
+    data = pd.read_json(StringIO(json.dumps(parsed["data"])), orient="index")
+    metadata = parsed.get("metadata", {})
+
+    data.index = pd.to_datetime(data.index)
+    data.index.name = "time"
+    if "electricity" in data.columns:
+        data = data.rename(columns={"electricity": "wind_power_kw"})
+    if "wind_power_kw" not in data.columns:
+        raise ValueError(f"Expected 'electricity'/'wind_power_kw'; got {list(data.columns)}")
+    data["wind_power_mw"]        = data["wind_power_kw"] / 1000.0
+    data["wind_capacity_factor"] = data["wind_power_kw"] / float(capacity_kw)
+    return data, metadata, args
+
+
 def _cache_path(kind: str, args: dict) -> Path:
     key = hashlib.sha1(json.dumps(args, sort_keys=True).encode()).hexdigest()[:16]
     return CACHE_DIR / f"{kind}_{key}.csv"
@@ -65,9 +148,8 @@ def fetch_wind_cf(lat, lon, start, end, turbine="Vestas V90 2000",
             "height": float(hub_height_m), "dataset": dataset}
 
     def _fetch():
-        import lca_helpers as H
-        session = H.create_ninja_session(token)
-        data, _meta, _a = H.fetch_ninja_wind(
+        session = create_ninja_session(token)
+        data, _meta, _a = fetch_ninja_wind(
             session=session, lat=lat, lon=lon, date_from=str(start),
             date_to=str(end), capacity_kw=1000.0, height_m=hub_height_m,
             turbine=turbine, dataset=dataset)
@@ -82,8 +164,7 @@ def fetch_solar_cf(lat, lon, start, end, tilt=None, azim=None,
                    system_loss=None, tracking=None, dataset="merra2", token=None):
     """Hourly PV capacity factor at a site, per kWp. Cached.
 
-    Renewables.ninja's PV endpoint, the counterpart to the wind one
-    ``lca_helpers`` already wraps.
+    Renewables.ninja's PV endpoint, the counterpart to ``fetch_ninja_wind``.
 
     The array geometry comes from ``dc_config`` rather than from this
     signature. It used to be four hard-coded defaults here — tilt 35, azimuth
@@ -109,8 +190,7 @@ def fetch_solar_cf(lat, lon, start, end, tilt=None, azim=None,
             "tracking": int(tracking), "dataset": dataset}
 
     def _fetch():
-        import lca_helpers as H
-        session = H.create_ninja_session(token)
+        session = create_ninja_session(token)
         r = session.get(NINJA_BASE + "data/pv", timeout=180, params={
             "lat": lat, "lon": lon, "date_from": str(start), "date_to": str(end),
             "dataset": dataset, "capacity": 1.0, "system_loss": system_loss,
@@ -151,6 +231,24 @@ def grid_file_is_utc(path: Path) -> bool:
     return "clock" in head.columns and str(head["clock"].iloc[0]) == "UTC"
 
 
+def grid_file_is_current(path: Path) -> bool:
+    """UTC, and scored on the sources ``dc_config.GRID_SOURCES`` names today.
+
+    A series scored on a different source table (or before files recorded one)
+    is skipped, exactly as a wrong-clock one is, so changing a source can never
+    leave some runs on the old basis. ``grid_build --rescore`` refreshes them.
+    """
+    if not grid_file_is_utc(path):
+        return False
+    from optimisation.grid_build import grid_sources_id
+    try:
+        head = pd.read_csv(path, nrows=1)
+    except Exception:
+        return False
+    return ("grid_sources" in head.columns
+            and str(head["grid_sources"].iloc[0]) == grid_sources_id())
+
+
 def _series_index(folder: Path, pattern: str, time_col: str, start, end):
     """Every written CSV that matches, with how much of the window it holds.
 
@@ -170,7 +268,7 @@ def _series_index(folder: Path, pattern: str, time_col: str, start, end):
     # — but which file a run used was not reproducible, and a future pair that
     # disagreed would be picked between silently.
     for path in sorted(folder.glob(pattern)):
-        if folder == GRID_DIR and not grid_file_is_utc(path):
+        if folder == GRID_DIR and not grid_file_is_current(path):
             continue
         try:
             times = pd.read_csv(path, usecols=[time_col],

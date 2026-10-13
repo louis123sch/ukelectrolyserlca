@@ -19,13 +19,24 @@ Grid carbon, per half-hour
    (% gas, wind, nuclear, imports, ...) for each half-hour. Its own
    ``intensity`` figure is kept as ``carbon_intensity`` for reference only:
    it counts direct combustion, not life cycle.
-2. Each fuel maps to one ecoinvent GB electricity-production activity
-   (``lca_helpers.TECH_SPECS``, picked by ``dc_config.GRID_CANDIDATE_INDEX``),
-   scored once per build for GWP100. Those per-kWh scores are life cycle:
-   plant construction, fuel supply chain and combustion. Wind and imports are
-   split across sub-technologies by ``lca_helpers`` fixed weights.
+2. Each fuel maps to one ecoinvent activity, named by its exact identity in
+   ``optimiser_lca.grid.SOURCES`` and resolved by exact match — never by search
+   ranking — then scored once per process for GWP100. Those per-kWh scores are
+   life cycle: plant construction, fuel supply chain and combustion. Wind and
+   imports are split across sub-technologies by ``optimiser_lca.grid`` fixed
+   weights. Everything LCA about the series is in that one module.
 3. ``custom_electricity_score`` = Σ share × (1 + market loss share) × score.
    That column is what the LP reads (``profiles.load_grid_and_price``).
+
+Every file records which sources scored it
+------------------------------------------
+``grid_sources_id()`` is a short hash of ``optimiser_lca.grid.GRID_SOURCES``. Each grid
+CSV carries it in a ``grid_sources`` column, with the datasets and their scores
+in a ``.sources.json`` beside it, and ``profiles`` ignores a series scored on
+any other table. Changing a source therefore makes every series stale rather
+than silently mixing bases; ``rescore()`` (``--rescore`` on the command line)
+re-scores the files already on disk from the fuel mix each one recorded, with
+no API calls.
 
 Output file names and columns match what notebook 3.1 wrote, minus its
 per-hydrogen-technology columns, so every series already on disk still reads.
@@ -41,10 +52,10 @@ so a series in the old basis is rebuilt rather than silently used. Anything
 defined on the UK clock (DUoS time bands) converts from UTC itself.
 
 Run:  python -m optimisation.grid_build 13 2025-06-02 2025-06-09
+      python -m optimisation.grid_build --rescore
 """
 from __future__ import annotations
 
-import functools
 import hashlib
 import json
 import sys
@@ -235,29 +246,37 @@ def fetch_mix(region: int, start, end_inclusive) -> pd.DataFrame:
 # -----------------------------------------------------------------------------
 # Generation mix -> kg CO2e per kWh
 # -----------------------------------------------------------------------------
-@functools.lru_cache(maxsize=1)
-def source_scores() -> dict:
-    """GWP100 of 1 kWh from each GB generation source, from ecoinvent.
+def grid_sources_id() -> str:
+    """Short, stable id of ``optimiser_lca.grid.GRID_SOURCES``. No Brightway needed."""
+    from optimiser_lca import grid
+    return grid.sources_id()
 
-    One small LCA per source, once per process. Requires the Brightway project
-    named in ``dc_config.PROJECT_NAME``.
+
+def source_table() -> dict:
+    """``{key: {name, location, product, kgco2e_per_kwh}}`` for every source.
+
+    Resolved by exact identity from ``optimiser_lca.grid.SOURCES`` and scored
+    once per process. Requires the Brightway project named in
+    ``dc_config.PROJECT_NAME``.
     """
-    import dc_config as cfg
-    import lca_helpers as H
-    _ei, _bio, _fg, method = H.setup_brightway()
-    picked = H.select_all_candidate_activities(cfg.GRID_CANDIDATE_INDEX)
-    return H.calculate_source_lca_scores(picked, method)
+    from optimiser_lca import grid
+    return grid.source_table()
+
+
+def source_scores() -> dict:
+    """GWP100 of 1 kWh from each GB generation source, from ecoinvent."""
+    return {k: v["kgco2e_per_kwh"] for k, v in source_table().items()}
 
 
 def score_mix(mix: pd.DataFrame, scores: dict | None = None) -> pd.DataFrame:
     """Add the ``*_perc`` share columns and the per-kWh score to a mix frame."""
-    import lca_helpers as H
+    from optimiser_lca import grid
     scores = source_scores() if scores is None else scores
     df = mix.copy()
     for fuel, key in FUEL_TO_ROW_KEY.items():
         df[f"{key}_perc"] = df[f"api_{fuel}"].astype(float)
     df["WIND_EMB_perc"] = 0.0           # the API reports wind as one figure
-    out = [H.custom_electricity_score_for_row(row, scores) for _, row in df.iterrows()]
+    out = [grid.score_row(row, scores) for _, row in df.iterrows()]
     df["custom_electricity_score"] = [s for s, _ in out]
     df["custom_electricity_input_kwh_per_kwh"] = [a for _, a in out]
     return df
@@ -277,7 +296,7 @@ def build_grid(region: int, start, end, out_dir: Path | None = None) -> Path:
     ``start``/``end`` are UTC (``"YYYY-MM-DD HH:MM:SS"``), ``end`` inclusive
     at half-hour resolution. Returns the CSV path.
     """
-    import lca_helpers as H
+    from optimiser_lca import grid
     out_dir = Path(out_dir) if out_dir else GRID_DIR
     t0 = time.time()
     mix = fetch_mix(region, start, end)
@@ -285,16 +304,70 @@ def build_grid(region: int, start, end, out_dir: Path | None = None) -> Path:
           f"({mix['api_region_name'].iloc[0]}).")
     df = score_mix(mix)
     df = df.rename(columns={"DATETIME": "datetime"})
-    cols = _GRID_COLUMNS + [f"{c}_perc" for c in H.FUEL_COLS]
+    cols = _GRID_COLUMNS + [f"{c}_perc" for c in grid.FUEL_COLS]
     df = df[cols].copy()
     df["grid_data_source"] = "carbon_api"
     df["clock"] = CLOCK
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / grid_csv_name(region, start, end)
-    df.to_csv(path, index=False)
+    _write_scored(df, path)
     print(f"  wrote {path.name} — mean {df['custom_electricity_score'].mean()*1000:.0f} "
           f"g CO2e/kWh, {time.time() - t0:.0f} s")
     return path
+
+
+def sources_sidecar(path: Path) -> Path:
+    return Path(path).with_suffix(".sources.json")
+
+
+def _write_scored(df: pd.DataFrame, path: Path) -> None:
+    """Write a scored series with the id of the sources that scored it, and the
+    sources themselves beside it, so a file can always say what it is."""
+    from optimiser_lca import grid
+    df = df.copy()
+    df["grid_sources"] = grid_sources_id()
+    df.to_csv(path, index=False)
+    sources_sidecar(path).write_text(json.dumps(
+        {"grid_sources_id": grid_sources_id(),
+         "market_loss_factor": grid.MARKET_LOSS_FACTOR,
+         "sources": source_table()}, indent=2), encoding="utf-8")
+
+
+def rescore(path: Path) -> float:
+    """Re-score one grid CSV in place from the fuel mix it recorded.
+
+    The API shares are already in the file, so only the ecoinvent side is
+    redone: no API calls. Returns the new mean in g CO2e/kWh.
+    """
+    path = Path(path)
+    df = pd.read_csv(path)
+    if df.get("clock", pd.Series(["?"])).iloc[0] != CLOCK:
+        raise ValueError(f"{path.name} is not on the {CLOCK} clock; rebuild it instead.")
+    mix = df.rename(columns={"datetime": "DATETIME"})
+    out = score_mix(mix).rename(columns={"DATETIME": "datetime"})
+    df["custom_electricity_score"] = out["custom_electricity_score"].to_numpy()
+    df["custom_electricity_input_kwh_per_kwh"] = (
+        out["custom_electricity_input_kwh_per_kwh"].to_numpy())
+    _write_scored(df, path)
+    return float(df["custom_electricity_score"].mean() * 1000.0)
+
+
+def rescore_all(out_dir: Path | None = None) -> list[tuple[str, float]]:
+    """Re-score every UTC grid series in ``out_dir`` on the current sources."""
+    out_dir = Path(out_dir) if out_dir else GRID_DIR
+    done = []
+    for path in sorted(out_dir.glob("custom_grid_lca_*.csv")):
+        try:
+            head = pd.read_csv(path, nrows=1)
+        except Exception:
+            continue
+        if "clock" not in head.columns or str(head["clock"].iloc[0]) != CLOCK:
+            print(f"  skip {path.name}: not on the {CLOCK} clock")
+            continue
+        mean = rescore(path)
+        print(f"  {path.name}: mean {mean:.1f} g CO2e/kWh")
+        done.append((path.name, mean))
+    return done
 
 
 # -----------------------------------------------------------------------------
@@ -387,6 +460,9 @@ def build_prices(start, end, out_dir: Path | None = None) -> Path:
 
 
 if __name__ == "__main__":
-    region, lo, hi = int(sys.argv[1]), sys.argv[2], sys.argv[3]
-    from optimisation import sites
-    sites.ensure_grid_series(region, lo, hi)
+    if sys.argv[1:] == ["--rescore"]:
+        rescore_all()
+    else:
+        region, lo, hi = int(sys.argv[1]), sys.argv[2], sys.argv[3]
+        from optimisation import sites
+        sites.ensure_grid_series(region, lo, hi)

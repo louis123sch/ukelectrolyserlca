@@ -375,13 +375,14 @@ def get(spec, **kw) -> Site:
 # Grid data availability
 # -----------------------------------------------------------------------------
 def available_grid_regions() -> dict[int, list[str]]:
-    """Which Carbon Intensity regions have a cached half-hourly series (UTC clock)."""
+    """Which Carbon Intensity regions have a usable cached half-hourly series:
+    UTC clock, and scored on today's dc_config.GRID_SOURCES."""
     import re
-    from optimisation.profiles import grid_file_is_utc
+    from optimisation.profiles import grid_file_is_current
     out: dict[int, list[str]] = {}
     folder = ROOT / "custom_grid_lca_outputs"
     for p in sorted(folder.glob("custom_grid_lca_carbon_api_*.csv")):
-        if not grid_file_is_utc(p):
+        if not grid_file_is_current(p):
             continue
         m = re.search(r"_r(\d+)_", p.name)
         if m:
@@ -432,7 +433,7 @@ def _as_datetime(value, *, end_of_day=False) -> str:
 
 BUILD_LOCK = ROOT / "optimisation_outputs" / ".grid_build.lock"
 
-# Notebook 2 builds the foreground inventories from ecoinvent and the published
+# optimiser_lca.build writes the foreground inventories from ecoinvent and the published
 # parameters — there is no API behind it, so unlike the grid series it cannot be
 # fetched, only made. Every optimiser run needs it (the data centre facility,
 # fuel cell, tank, electrolysers, transformers), so the first grid build on a
@@ -446,7 +447,7 @@ def _dc_foreground_missing() -> bool:
     The project has to be opened first. ``bd.databases`` on a process that has
     not opened one returns an empty list rather than raising, so "cannot tell"
     is indistinguishable from "missing" — and guessing "missing" bolts the whole
-    of notebook 2 onto a build that did not need it. ``setup_brightway`` is
+    of the foreground build onto a grid build that did not need it. ``setup_brightway`` is
     idempotent and every real caller has already run it.
 
     False whenever the question still cannot be answered: the build then fails
@@ -454,10 +455,10 @@ def _dc_foreground_missing() -> bool:
     """
     try:
         import bw2data as bd
-        import dc_config as cfg
         import lca_helpers as H
+        from optimiser_lca.registry import DATA_CENTRE_DB
         H.setup_brightway()
-        return cfg.DC_FOREGROUND_DB not in bd.databases
+        return DATA_CENTRE_DB not in bd.databases
     except Exception:
         return False
 
@@ -541,9 +542,8 @@ def build_grid_series(carbon_api_region: int, start="2025-01-01 00:00:00",
     else, and a window outside what ``price_outputs/`` holds fails on price
     after paying for the grid build.
 
-    Notebook 2 is run first, but only when its database is genuinely absent —
-    see ``_dc_foreground_missing``. It is the one step still done by notebook,
-    because it builds inventories rather than fetching anything.
+    The foreground build (``python -m optimiser_lca.build``) runs first, but
+    only when its database is genuinely absent — see ``_dc_foreground_missing``.
     """
     from optimisation import grid_build
     if carbon_api_region not in CARBON_API_REGIONS:
@@ -561,20 +561,20 @@ def build_grid_series(carbon_api_region: int, start="2025-01-01 00:00:00",
 
 
 def _build_foreground():
-    """Run notebook 2 once. Same principle as the windows: if it is not there,
-    build it — a one-off, and every later build skips it."""
-    from backend.runner import FOREGROUND_NOTEBOOK, run_notebook
+    """Run the foreground build once. Same principle as the windows: if it is
+    not there, build it — a one-off, and every later build skips it."""
+    from backend.runner import run_foreground_build
     print("The data centre foreground database does not exist yet, so "
-          f"{FOREGROUND_NOTEBOOK} runs first. That is a one-off and slow.")
-    result = run_notebook(FOREGROUND_NOTEBOOK, timeout_s=_FOREGROUND_TIMEOUT_S)
-    # One retry, and only for a run that died without saying why. A cell that
+          "`python -m optimiser_lca.build` runs first. That is a one-off and slow.")
+    result = run_foreground_build(timeout_s=_FOREGROUND_TIMEOUT_S)
+    # One retry, and only for a run that died without saying why. A build that
     # raised will raise again; a killed process usually will not.
     if not result.success and result.crashed:
-        print(f"The notebook process died without reporting an error "
+        print(f"The build process died without reporting an error "
               f"(exit {result.returncode}). Retrying once.")
-        result = run_notebook(FOREGROUND_NOTEBOOK, timeout_s=_FOREGROUND_TIMEOUT_S)
+        result = run_foreground_build(timeout_s=_FOREGROUND_TIMEOUT_S)
     if not result.success:
-        raise RuntimeError(f"{FOREGROUND_NOTEBOOK} failed.\n"
+        raise RuntimeError("optimiser_lca.build failed.\n"
                            + (result.error_text or "")[-4000:])
 
 

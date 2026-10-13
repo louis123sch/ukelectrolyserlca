@@ -134,10 +134,12 @@ def build(cost_case: str = "central") -> pd.DataFrame:
                      grade="assumed",
                      note="calendar life ASSUMED — no public figure; see DATA_GAPS.md"))
     rows.append(_row("fuel_cell_stack", "MW", d["stack_kgco2e_per_MW"],
+                     calendar=d["stack_calendar_lifetime_years"],
                      duty=d["stack_lifetime_hours"],
                      source="Babatunde et al. 2024 Table S1; stack life their §3.4",
-                     grade="derived",
-                     note="calendar life taken as the study horizon, i.e. at least one stack"))
+                     grade="assumed",
+                     note="calendar life ASSUMED (placeholder) — sweep 10/15/25 y; "
+                          "see DATA_GAPS.md"))
     rows.append(_row("fuel_cell_maintenance", "MW", 0.0,
                      throughput=d["maintenance_kgco2e_per_MWh"],
                      source="ecoinvent 3.9.1 PEMFC maintenance, net of bundled stack",

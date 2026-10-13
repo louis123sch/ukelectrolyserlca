@@ -114,6 +114,28 @@ def test_backup_duty_costs_far_more_than_the_per_kwh_convention():
     assert b["stack_binding"] == "calendar" and b["bop_binding"] == "calendar"
 
 
+def test_fuel_cell_bop_cost_increment_tracks_the_exact_annuity():
+    """The LP's calendar-anchored BoP increment against the exact CRF.
+
+    A·(CRF(L) + o − 1/L) + A·h/H must equal A·(CRF(L) + o) when calendar binds
+    and stay within 2 % of A·(CRF(H/h) + o) when duty does. REVIEW_RESPONSE_PLAN §1.
+    """
+    from optimisation import h2_capex as hc
+    _cached(fuel_cell)
+    d = fuel_cell.decompose()
+    r, L, H = hc.FC_DISCOUNT_RATE, fuel_cell.BOP_CALENDAR_LIFETIME_YEARS, d["bop_duty_lifetime_hours"]
+    costs = hc.fuel_cell_costs()
+    for _, row in costs.iterrows():
+        A, o = row.bop_GBP_per_MW, row.fixed_opex_frac
+        for h in (100, 1000, H / L, 3000, 4000, 6000, 8760):
+            lp = row.annual_GBP_per_MW_year + A * max(1.0 / L, h / H)
+            exact = A * (hc.capital_recovery_factor(r, min(L, H / h)) + o)
+            if h <= H / L:
+                assert lp == pytest.approx(exact, rel=1e-9)
+            else:
+                assert lp == pytest.approx(exact, rel=0.02), f"{row.case} at {h} h"
+
+
 def test_fuel_cell_burden_is_monotonic_in_duty():
     _cached(fuel_cell)
     prev = 0.0
@@ -399,16 +421,17 @@ def test_transformer_mass_is_the_leng_bill_of_materials():
     """The transcribed numbers, guarded against drift.
 
     Wind is the fifty S11-2200/35 box transformers on Leng's 100 MW Gaoyou
-    farm — 282,343 kg for 100 MW — read from the foreground activity notebook
-    2 builds, not assembled here.
+    farm — 282,343 kg for 100 MW — read from the foreground activity
+    optimiser_lca/stepup_transformers.py builds, not assembled here.
     """
     import dc_config as cfg
+    from optimiser_lca import stepup_transformers as inv, registry as R
     from optimisation import transformers as tx
     _cached(tx)
     d = tx.decompose()
-    assert sum(cfg.TX_LENG_BOX_KG.values()) == pytest.approx(282_343.0, abs=1.0)
+    assert sum(inv.TX_LENG_BOX_KG.values()) == pytest.approx(282_343.0, abs=1.0)
     assert d["wind"]["kg_per_MW"] == pytest.approx(2823.43, abs=0.01)
-    assert d["wind"]["database"] == cfg.TRANSFORMER_FOREGROUND_DB
+    assert d["wind"]["database"] == R.TRANSFORMER_DB
     assert d["wind"]["kgco2e_per_MW_year"] == pytest.approx(
         d["wind"]["kgco2e_per_MW"] / cfg.TX_ASSET_LIFE_YEARS)
 
@@ -485,8 +508,8 @@ def test_solar_capital_is_build_plus_prorated_om():
     """
     from optimisation import renewables as R
     if not R.UPV_CACHE_PATH.exists():
-        pytest.skip("upv_decomposition_cache.json not built — run the "
-                    "utility-scale PV cells in 2.tech_lca_foreground.ipynb")
+        pytest.skip("upv_decomposition_cache.json not built — run "
+                    "`python -m optimiser_lca.build upv` then renewables.py")
     d = R.upv_decompose()
     life = 38.0
     expected = (d["capital_kgco2e_per_MWp"]
@@ -546,16 +569,16 @@ def test_solar_module_reproduces_smiths_published_epeat_result():
     (apos, where he published cut-off) reproduces that. If this fails, the
     transcription or the chain wiring has drifted.
     """
-    import dc_config as cfg
+    from optimiser_lca import registry, upv
     bd = pytest.importorskip("bw2data")
     try:
-        act = bd.get_activity((cfg.SOLAR_FOREGROUND_DB, "upv_perc_module"))
+        act = bd.get_activity((registry.SOLAR_DB, registry.UPV_MODULE))
     except Exception:
         pytest.skip("solar foreground not built in this Brightway project")
     import lca_helpers as H
     from optimisation import renewables as R
     per_m2 = H.run_lca_score(act, R._gwp_method(bd))
-    per_kwdc = per_m2 / (cfg.UPV_PV_W_PER_M2 / 1000.0)
+    per_kwdc = per_m2 / (upv.UPV_PV_W_PER_M2 / 1000.0)
     assert per_kwdc > 630.0, (
         f"module is {per_kwdc:,.0f} kg CO2e/kWdc; Smith reports his "
         "average-import module above the 630 EPEAT threshold")

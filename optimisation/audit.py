@@ -241,6 +241,18 @@ def check_objective_coverage(series, assets, tech):
         if cap not in V or float(np.asarray(m.variables[cap].upper).ravel()[0]) == 0.0:
             continue
         via = DUTY_VIA.get(flow, ())
+        # Each linked variable on its own as well as pooled. Pooled alone, a
+        # cost side that charged stack replacements and not BoP ones passed —
+        # and BoP duty stayed free in cost above 2,400 h/yr.
+        for v in via:
+            cv, gv = cost.get(v, 0.0), gwp.get(v, 0.0)
+            if (cv > 0) != (gv > 0):
+                dearer, cheaper = ("carbon", "cost") if gv > 0 else ("cost", "carbon")
+                report("coverage", "warn",
+                       f"{v} moves {dearer} but not {cheaper} ({cap})",
+                       f"One replacement count is charged in {dearer} only, so "
+                       f"running {flow} harder wears that part out for free in "
+                       f"{cheaper}. Every replacement variable needs both.")
         c = cost.get(flow, 0.0) + sum(cost.get(v, 0.0) for v in via)
         g = gwp.get(flow, 0.0) + sum(gwp.get(v, 0.0) for v in via)
         if (c > 0) == (g > 0):

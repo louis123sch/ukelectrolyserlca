@@ -3,7 +3,7 @@ Hydrogen storage — embodied carbon per kg of capacity.
 =============================================================================
 
 The one asset in the hydrogen chain that was already the right shape. ecoinvent
-3.9.1 has no hydrogen vessel, so ``2.tech_lca_foreground.ipynb`` builds one the
+3.9.1 has no hydrogen vessel, so ``optimiser_lca/h2_tank.py`` builds one the
 way Gandiglio et al. (2022) do — as a mass of steel and nothing else — with a
 reference product of **one kilogram of storage capacity**. That is already a
 capacity basis, so unlike the electrolyser and the fuel cell there is nothing to
@@ -12,7 +12,7 @@ config defines but does not build.
 
 What it adds over reading the activity directly:
 
-1. **Both tank designs**, not just the one ``dc_config.TANK_DESIGN``
+1. **Both tank designs**, not just the one ``h2_tank.TANK_DESIGN``
    currently selects, so the optimiser can run 28 bar against 200 bar as a
    sensitivity without a foreground rebuild. The as-built design is
    cross-checked against Brightway; the other is scored from its own steel
@@ -56,7 +56,7 @@ inventory         Gandiglio, M., Marocco, P., Bianco, I., Lovera, D.,
                   for a remote off-grid community", Int. J. Hydrogen Energy 47.
                   Table 3 — the as-built 21.6 m3 vessel at Ginostra.
 type I cylinder   ~1 wt% gravimetric capacity, a typical industrial stationary
-                  bottle. DERIVED, not transcribed — see dc_config.
+                  bottle. DERIVED, not transcribed — see optimiser_lca/h2_tank.py.
 embodied carbon   ecoinvent 3.9.1 apos, IPCC 2021 GWP100.
 vessel lifetime   25 years, the paper's own plant life. The tank is never
                   replaced within it.
@@ -88,24 +88,15 @@ LEAKAGE_IS_ASSUMED = True
 
 RECONSTRUCTION_TOLERANCE = 1e-4      # bw2calc solver noise; see electrolysers.py
 
-# Ideal-gas-with-compressibility, used to turn a design's volume and pressure
-# into the kg of hydrogen it holds. Only needed for designs specified by volume.
-R_H2_J_PER_KG_K = 4124.2
+# The design table, the real-gas capacity conversion and the steel intensity
+# all live with the inventory; this module reads them.
+from optimiser_lca.h2_tank import TANK_DESIGNS, TANK_DESIGN, capacity_kg, steel_kg_per_kg_h2  # noqa: E402,F401
 
 
 def _gwp_method(bd):
     return next(m for m in bd.methods
                 if m[1] == "IPCC 2021" and m[2] == "climate change"
                 and "GWP100" in str(m) and "no LT" not in str(m))
-
-
-def capacity_kg(design, cfg):
-    """kg of H2 a design holds, from its own volume and pressure."""
-    if "steel_kg_per_kg_h2" in design:
-        return None      # specified per kg directly; no volume to convert
-    p_pa = design["pressure_bar"] * 1e5
-    return (p_pa * design["volume_m3"]) / (
-        cfg.TANK_H2_COMPRESSIBILITY * R_H2_J_PER_KG_K * cfg.TANK_H2_TEMPERATURE_K)
 
 
 # Feed pressure assumed when nobody says otherwise. 30 bar is the pressurised
@@ -145,12 +136,6 @@ def compression_kwh_per_kg(from_bar: float, to_bar: float) -> float:
     return j_per_kg * COMPRESSION_REAL_OVER_ISOTHERMAL / 3.6e6
 
 
-def steel_kg_per_kg_h2(design, cfg):
-    if "steel_kg_per_kg_h2" in design:
-        return float(design["steel_kg_per_kg_h2"])
-    return design["steel_kg"] / capacity_kg(design, cfg)
-
-
 def decompose(use_cache: bool = True, refresh: bool = False):
     """Every tank design's embodied carbon per kg of storage capacity."""
     global _MEMO
@@ -169,18 +154,18 @@ def decompose(use_cache: bool = True, refresh: bool = False):
     import bw2data as bd
     import lca_helpers as H
     import dc_config as cfg
+    from optimiser_lca import h2_tank, registry as R
 
     ei, _bio, _fg, _m = H.setup_brightway()
     method = _gwp_method(bd)
 
     rows = []
-    for name, design in cfg.TANK_DESIGNS.items():
-        proc_name, proc_loc = design["steel_process"]
-        steel = [a for a in ei if a["name"] == proc_name and a["location"] == proc_loc]
-        if not steel:
-            raise ValueError(f"{name}: steel process {proc_name!r} [{proc_loc}] not in ecoinvent")
-        per_kg_steel = H.run_lca_score(steel[0], method)
-        intensity = steel_kg_per_kg_h2(design, cfg)
+    for name, design in TANK_DESIGNS.items():
+        proc = h2_tank.processes[design["steel_process"]]
+        proc_name = proc.identity[0]
+        steel = H.resolve_exact(*proc.identity)
+        per_kg_steel = H.run_lca_score(steel, method)
+        intensity = steel_kg_per_kg_h2(design)
         per_kg_cap = per_kg_steel * intensity
 
         # Filled in by the caller, which is the only place that knows which
@@ -193,7 +178,7 @@ def decompose(use_cache: bool = True, refresh: bool = False):
             "pressure_bar": design["pressure_bar"],
             "steel_process": proc_name,
             "steel_kg_per_kg_h2": intensity,
-            "capacity_kg_h2": capacity_kg(design, cfg),
+            "capacity_kg_h2": capacity_kg(design),
             "kgco2e_per_kg_steel": per_kg_steel,
             "kgco2e_per_kg_capacity": per_kg_cap,
             "lifetime_years": float(cfg.TANK_LIFETIME_YEARS),
@@ -201,12 +186,12 @@ def decompose(use_cache: bool = True, refresh: bool = False):
             "compression_kwh_per_kg": compression,
             "leakage_frac_per_hour": LEAKAGE_FRAC_PER_HOUR,
             "leakage_is_assumed": LEAKAGE_IS_ASSUMED,
-            "is_as_built": name == cfg.TANK_DESIGN,
+            "is_as_built": name == TANK_DESIGN,
             "note": design.get("note", ""),
         })
 
     # Cross-check the as-built design against the activity the notebook wrote.
-    act = bd.get_activity((cfg.H2_STORAGE_FOREGROUND_DB, "h2_tank_steel_1kg_capacity"))
+    act = bd.get_activity((R.H2_STORAGE_DB, R.H2_TANK))
     built = H.run_lca_score(act, method)
     for r in rows:
         if r["is_as_built"]:
@@ -235,7 +220,7 @@ def check_against_brightway(rows):
     if len(built) != 1:
         raise AssertionError(
             f"expected exactly 1 as-built design, found {len(built)}. "
-            "dc_config.TANK_DESIGN does not match TANK_DESIGNS.")
+            "h2_tank.TANK_DESIGN does not match TANK_DESIGNS.")
     r = built[0]
     ref = r.get("brightway_kgco2e_per_kg_capacity")
     if ref is None:
@@ -271,7 +256,7 @@ def run():
 
     print("\nAgainst a battery, on the only basis that compares — kWh delivered back")
     print("-" * 100)
-    import dc_config as cfg
+    from optimiser_lca import fuel_cell as cfg
     from optimisation import battery as batt
     kwh_out_per_kg = cfg.FC_H2_LHV_KWH_PER_KG * cfg.FC_ETA_NET_MEAN
     b_energy = batt.embodied_components()["energy_kgco2e_per_kWh"]

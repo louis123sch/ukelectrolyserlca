@@ -1,0 +1,96 @@
+{
+  "grid_sources_id": "158704fcb705",
+  "market_loss_factor": 1.0316426921769999,
+  "sources": {
+    "GAS": {
+      "name": "electricity production, natural gas, combined cycle power plant",
+      "location": "GB",
+      "product": "electricity, high voltage",
+      "kgco2e_per_kwh": 0.3872941059915504
+    },
+    "COAL": {
+      "name": "electricity production, hard coal",
+      "location": "GB",
+      "product": "electricity, high voltage",
+      "kgco2e_per_kwh": 1.0605377349389264
+    },
+    "NUCLEAR": {
+      "name": "electricity production, nuclear, boiling water reactor",
+      "location": "GB",
+      "product": "electricity, high voltage",
+      "kgco2e_per_kwh": 0.007409243358848685
+    },
+    "WIND_GT3_ONSHORE": {
+      "name": "electricity production, wind, >3MW turbine, onshore",
+      "location": "GB",
+      "product": "electricity, high voltage",
+      "kgco2e_per_kwh": 0.023769988120238634
+    },
+    "WIND_13_OFFSHORE": {
+      "name": "electricity production, wind, 1-3MW turbine, offshore",
+      "location": "GB",
+      "product": "electricity, high voltage",
+      "kgco2e_per_kwh": 0.017133679456164164
+    },
+    "WIND_13_ONSHORE": {
+      "name": "electricity production, wind, 1-3MW turbine, onshore",
+      "location": "GB",
+      "product": "electricity, high voltage",
+      "kgco2e_per_kwh": 0.014465839199978785
+    },
+    "WIND_EMB": {
+      "name": "electricity production, wind, <1MW turbine, onshore",
+      "location": "GB",
+      "product": "electricity, high voltage",
+      "kgco2e_per_kwh": 0.013866475021516911
+    },
+    "HYDRO": {
+      "name": "electricity production, hydro, run-of-river",
+      "location": "GB",
+      "product": "electricity, high voltage",
+      "kgco2e_per_kwh": 0.004381631730398895
+    },
+    "IMPORTS_FR": {
+      "name": "electricity, high voltage, import from FR",
+      "location": "GB",
+      "product": "electricity, high voltage",
+      "kgco2e_per_kwh": 0.07409543382375612
+    },
+    "IMPORTS_IE": {
+      "name": "electricity, high voltage, import from IE",
+      "location": "GB",
+      "product": "electricity, high voltage",
+      "kgco2e_per_kwh": 0.35176446237534276
+    },
+    "IMPORTS_NL": {
+      "name": "electricity, high voltage, import from NL",
+      "location": "GB",
+      "product": "electricity, high voltage",
+      "kgco2e_per_kwh": 0.4788748039496513
+    },
+    "BIOMASS": {
+      "name": "heat and power co-generation, wood chips, 6667 kW, state-of-the-art 2014",
+      "location": "GB",
+      "product": "electricity, high voltage",
+      "kgco2e_per_kwh": 0.05509787428914854
+    },
+    "OTHER": {
+      "name": "electricity production, oil",
+      "location": "GB",
+      "product": "electricity, high voltage",
+      "kgco2e_per_kwh": 1.3990715167165342
+    },
+    "SOLAR": {
+      "name": "electricity production, photovoltaic, 570kWp open ground installation, multi-Si",
+      "location": "GB",
+      "product": "electricity, low voltage",
+      "kgco2e_per_kwh": 0.07983430891030435
+    },
+    "STORAGE": {
+      "name": "electricity production, hydro, pumped storage",
+      "location": "GB",
+      "product": "electricity, high voltage",
+      "kgco2e_per_kwh": 0.46618921530858737
+    }
+  }
+}

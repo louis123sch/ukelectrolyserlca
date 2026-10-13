@@ -52,7 +52,7 @@ Sources
 -------
 inventories       Hermesmann, M. et al., alkaline / PEM / SOEC electrolysis.
                   Built into ``hydrogen foreground`` by
-                  ``2.tech_lca_foreground.ipynb``.
+                  ``optimiser_lca/hydrogen.py`` (python -m optimiser_lca.build).
 embodied carbon   ecoinvent 3.9.1 apos, IPCC 2021 GWP100.
 plant lifetime    25 years — NESO Green Hydrogen Data Portal, the same figure
                   ``price_outputs/electrolyser_costs_clean.csv`` carries.
@@ -153,9 +153,9 @@ def decompose(label, H, bd, method):
     electrolyser itself. Everything else that is not electricity (water, heat,
     electrolyte) is a genuine consumable and stays per kg.
     """
-    import lca_helpers as H_
+    from optimiser_lca import registry as R
     rated_mw = TECHNOLOGIES[label]
-    act = bd.get_activity(("hydrogen foreground", H_.ELECTROLYSER_CODES[label]))
+    act = bd.get_activity((R.HYDROGEN_DB, R.ELECTROLYSER_CODES[label]))
 
     capital = [e for e in act.technosphere() if e.input.get("unit") == "unit"]
     if len(capital) != 1:

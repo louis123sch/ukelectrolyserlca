@@ -23,9 +23,10 @@ Emissions are IPCC 2021 GWP100 on ecoinvent 3.9.1 apos throughout.
 
 | Input | Value | Grade | Source |
 |---|---|---|---|
-| Data centre inventory | 1.60e9 kWh over 25 y; 21,036 t CO₂e fixed | transcribed | Zhang, M., Carbajales-Dale, M., Ma, X., Guo, L., Fan, C. (2025), hyperscale Virginia data centre. Built into `data centre foreground` by `2.tech_lca_foreground.ipynb` |
+| Data centre inventory | 1.60e9 kWh over 25 y; 21,036 t CO₂e fixed | transcribed | Zhang, M., Carbajales-Dale, M., Ma, X., Guo, L., Fan, C. (2025), hyperscale Virginia data centre. Built into `data centre foreground` by `optimiser_lca/data_centre.py` |
 | Continuous load | 7,306 kW | derived | 1.60e9 kWh ÷ 25 y ÷ 8760 h — the inventory's own figure, not an added assumption |
-| Grid carbon intensity | half-hourly, mean 0.2369 kg CO₂e/kWh | transcribed | NESO Carbon Intensity API, regional (region 13, London), via `optimisation/grid_build.py` (originally notebook 3.1) |
+| Grid carbon intensity | half-hourly, mean 0.1882 kg CO₂e/kWh (was 0.2369 on the wrong gas dataset, to 13 Oct 2026) | transcribed | NESO Carbon Intensity API, regional (region 13, London), via `optimisation/grid_build.py` (originally notebook 3.1) |
+| Per-fuel life-cycle scores | gas CCGT 387, coal 1,061, nuclear 7.4, imports FR/IE/NL 74/352/479 g CO₂e/kWh | transcribed | ecoinvent 3.9.1 apos GB activities named by exact identity in `dc_config.GRID_SOURCES`; resolved by `lca_helpers.get_exact_activities`, which refuses zero or several matches. Gas was the conventional plant (558 g/kWh) until 13 Oct 2026 because a search-rank index picked it; every series was re-scored. Nuclear is BWR, as ecoinvent's own GB market proxies the AGR fleet. Imports split FR 63 % / IE 7 % / NL 30 % (`lca_helpers.IMPORT_GROUP_WEIGHTS`) |
 | Wholesale electricity price | half-hourly, mean £79.83/MWh | transcribed | Elexon BMRS Market Index Data, provider APXMIDP, via `optimisation/grid_build.py` (originally notebook 5) |
 | Linear decomposition | `fixed + Σ kWh×EF` | derived | Validated against a full Brightway LCA to 1e-6 by the script itself |
 
@@ -497,7 +498,7 @@ datasets stay the basis for both onshore and offshore.
 ---
 
 ## Generation step-up transformers — embodied carbon per MW connected
-`transformers.py`, inventory built in `2.tech_lca_foreground.ipynb`
+`transformers.py`, inventory built by `optimiser_lca/stepup_transformers.py`
 
 A wind turbine generates at **690 V**, which is *low* voltage — below the 1 kV
 boundary ecoinvent itself draws. The data centre draws at *medium* voltage,
@@ -743,6 +744,7 @@ number.
 | Rated capacity | **1 MW** each | derived | Only PEM states it. AE and SOEC are inferred from lifetime H₂ × specific energy, which lands on 160 GWh/MW for all three to within 0.2 % despite specific energies of 42.3–54.0 kWh/kg. `check_rating()` enforces it |
 | Implied utilisation in the foreground | 160,000 full-load hours, **73 % CF** over 25 y | derived | The trap this module exists to escape: an electrolyser built to run at 20 % CF is under-charged **3.7×** by the per-kg figure |
 | Variable burden | 0.042 / 0.107 / 1.628 kg CO₂e per kg H₂ | derived | Water, heat, electrolyte — genuinely per-kg, so left per-kg |
+| SOEC external heat | 18.9 MJ/kg H₂ on `market group for heat, district or industrial, other than natural gas` [RER] | transcribed | 87 % of SOEC's 1.628 kg/kg. Taken as the underlying LCA paper (Hermesmann et al.) specifies it, not chosen by this study, and open to change. The choice alone decides SOEC against PEM on renewable power: 2.27 against 0.89 kg CO₂e/kg as scored, and SOEC would be 0.22 on zero-burden heat. A zero-burden case is not the obvious alternative — at SOEC temperatures a data centre's own waste heat cannot supply it, so the heat has to come from somewhere. Not costed: see `DATA_GAPS.md`, *Electrolyser consumables cost*. Audit §3.3 |
 | Plant lifetime | 25 y | transcribed | NESO Green Hydrogen Data Portal, same figure as `electrolyser_costs_clean.csv` |
 
 *No stack/BoP split is possible* — Hermesmann's capital good is one monolithic
@@ -756,6 +758,7 @@ activity, so the whole of it is charged on calendar life. Registered in
 | Stack | 97.4 t CO₂e per MW, 32,000 h duty life | derived | Babatunde et al. 2024 Table S1; stack life their §3.4 |
 | Balance of plant | 469.0 t CO₂e per MW, 60,000 h duty life | derived | ecoinvent 3.9.1 "fuel cell production, PEM 2 kW" net of its own stack and of the domestic-CHP hot-water kit |
 | BoP **calendar** life | **25 y** | **assumed** | 60,000 h is a *duty* figure; at 200 h/yr it implies a 300-year asset. No public calendar life found. Charged over the same 25 y as the electrolyser and the data centre |
+| Stack **calendar** life | **25 y** | **assumed** | `fuel_cell.STACK_CALENDAR_LIFETIME_YEARS`, a placeholder. Until 12 Oct the stack took the study horizon as its calendar life. Read from the constant on every call, not from the decomposition cache |
 | Maintenance | 3.11 kg CO₂e per MWh delivered | derived | ecoinvent PEMFC maintenance net of the stack it bundles |
 | Hydrogen consumption | 63.16 kg H₂ per MWh | derived | 1/(η 0.475 × LHV 33.33 kWh/kg) |
 

@@ -138,8 +138,8 @@ SOLAR_EMBODIED_BASES = {
                   "inventory, fixed tilt, rescored on ecoinvent 3.9.1 apos"),
         "grade": "derived",
         "foreground": {
-            "capital_code": "upv_fixed_tilt_plant_per_mwp",
-            "om_code": "upv_fixed_tilt_om30_per_mwp",
+            "capital_code": "upv_fixed_tilt_plant_per_mwp",   # optimiser_lca.registry.UPV_CAPITAL
+            "om_code": "upv_fixed_tilt_om30_per_mwp",         # optimiser_lca.registry.UPV_OM30
             "om_reference_years": 30.0,
         },
     },
@@ -176,7 +176,7 @@ def upv_decompose(refresh: bool = False) -> dict:
     """Score the utility-scale PV foreground once, and cache it.
 
     Mirrors ``transformers.decompose``: the inventory lives in
-    ``2.tech_lca_foreground.ipynb``, this only scores and caches, so the
+    ``optimiser_lca/upv.py``, this only scores and caches, so the
     coefficient tests and a Streamlit session can read it without a Brightway
     connection.
 
@@ -201,23 +201,22 @@ def upv_decompose(refresh: bool = False) -> dict:
 
     import bw2data as bd
     import lca_helpers as H
-    import dc_config as cfg
+    from optimiser_lca.registry import SOLAR_DB
 
     H.setup_brightway()
     method = _gwp_method(bd)
     spec = SOLAR_EMBODIED_BASES["smith_2024_upv_fixed_tilt"]["foreground"]
     out = {"basis": "smith_2024_upv_fixed_tilt",
-           "database": cfg.SOLAR_FOREGROUND_DB,
+           "database": SOLAR_DB,
            "om_reference_years": spec["om_reference_years"]}
     for key, code in (("capital", spec["capital_code"]), ("om30", spec["om_code"])):
         try:
-            act = bd.get_activity((cfg.SOLAR_FOREGROUND_DB, code))
+            act = bd.get_activity((SOLAR_DB, code))
         except Exception:
             raise RuntimeError(
-                f"{cfg.SOLAR_FOREGROUND_DB!r}/{code!r} is not in this Brightway "
-                "project. Run the utility-scale PV cells in "
-                "2.tech_lca_foreground.ipynb first — the inventory lives there, "
-                "not in this module.") from None
+                f"{SOLAR_DB!r}/{code!r} is not in this Brightway project. Run "
+                "`python -m optimiser_lca.build upv` first — the inventory lives in "
+                "optimiser_lca/upv.py, not in this module.") from None
         out[f"{key}_kgco2e_per_MWp"] = H.run_lca_score(act, method)
     OUT_DIR.mkdir(exist_ok=True)
     UPV_CACHE_PATH.write_text(json.dumps(out, indent=2), encoding="utf-8")

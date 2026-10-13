@@ -28,6 +28,9 @@ Work where a number the study reports is not currently defensible.
       same time. Until then the cost axis of *every* hydrogen architecture is a
       ~4× range with a known-direction bias, and cost-optimal builds over-run
       the fuel cell for free. `h2_capex.py`, `fuel_cell.py`, `DATA_GAPS.md`.
+      BoP duty reached cost on 12 Oct (plan §1 step 1); step 2 — discount the
+      stack the same way and put fixed opex on full system capex — is part of
+      this job, since it moves every backup fuel cell (+12 % central).
 - [ ] **SOEC capex/opex.** Currently PEM × 1.2/1.5/2.0 with no source at all.
       Try NESO Green Hydrogen Portal, then IEA. Carbon-only SOEC runs are a
       defensible partial result meanwhile — cost-optimal SOEC is not.
@@ -36,28 +39,11 @@ Work where a number the study reports is not currently defensible.
       objective prefers SOEC partly for a reason that does not exist. Also
       check the heat is *available*: at ~800 °C a data centre's own waste heat
       cannot supply it, and nothing tests that today.
-- [ ] **Fuel cell BoP replacement is free in cost** (reviewer, 30 Sep).
-      Carbon charges `fc_bop_units` = max(calendar, duty); cost charges a
-      calendar annuity only, so above 2,400 h/yr the FC line is up to 39 %
-      low. Fix is the calendar-anchored increment in
-      `docs/REVIEW_RESPONSE_PLAN.md` §1 — independent of the capex sourcing
-      above, so do it first. `audit.DUTY_VIA` pools the two replacement
-      variables, which is why the audit passed it.
-- [ ] **Stack calendar life is `horizon_years`** (reviewer, 30 Sep).
-      `dc_model.py:336`. Add `STACK_CALENDAR_LIFETIME_YEARS` (ASSUMED 25,
-      sweep 10/15/25); horizon then drives nothing in the LP, so fix or drop
-      the UI box. Plan §2.
 - [ ] **Tank cost and tank carbon describe different vessels.** Default
       `gandiglio_28bar` is 313 kg stainless/kg H₂ in carbon, but costed at the
       €500–1,040/kg high-pressure range — ~3–10× low on its own shell mass.
       Price it from `steel_kg_per_kg_h2` (Capital Equipment Cost Database).
       Needs a decision on the default design. Plan §3 item 1, §6.3.
-- [ ] **Grid carbon is probably 12–21 % high: gas is scored on the wrong
-      dataset.** `dc_config.GRID_CANDIDATE_INDEX["GAS"] = 3` picks the GB
-      *conventional* gas plant (558 g/kWh) though the query asks for combined
-      cycle (candidate #1, 387 g/kWh) — the dataset `SOURCES.md` says we
-      refuse. Imports are FR/IE/NL 63/7/30, not ⅓ each. Rebuild the series and
-      the 16,132 t baseline. `docs/OBJECTIVE_AUDIT.md` §3.5.
 - [ ] **Grid imports carry no network embodied carbon.** The grid series is
       generation only (× `MARKET_LOSS_FACTOR` 1.0316); bought green H₂ is
       charged 8.2125 g/kWh network + a 1.0635 loss gross-up
@@ -68,28 +54,19 @@ Work where a number the study reports is not currently defensible.
       plus CCL — about +50 % on the grid-only bill, and it flatters import
       against every on-site asset. `ELECTRICITY_DELIVERED_UPLIFT` cannot reach
       the LP (`profiles.py` never reads `price_timeslices`). Audit §3.5.
-- [ ] **Islanded builds pay the grid fixed charge.** `dc_model.py:353` adds
-      `cost_grid_fixed_per_year` whatever `assets.grid` is — £271k/yr at
-      London, up to £4.67 m. Audit §3.7.
 - [ ] **Fuel-cell carbon is a natural-gas micro-CHP.** BoP carries
       fuel-processor kit and 400 km of installer travel; `gwp_fc_maint` is
       reformer-catalyst replacement (~0 for H₂-fed). ecoinvent states 15 y /
       80,000 h (system) and 6 y / 32,000 h (stack); DOE's MW class is 80,000 h,
       not 60,000. Do alongside the FC capex item. Audit §3.4.
-- [ ] **Bought grid-connected green is market-based, our own grid electrolyser
-      location-based** — 1.50 vs ~13.3 kg CO₂e/kg for the same physical setup,
-      which favours buying. State the basis or align them. Audit §3.6.
-- [ ] **Wind carbon and yield both flatter wind.** The ecoinvent turbine is a
-      20-year inventory amortised over 35–40 y with no replacements (up to
-      +73 % on `gwp_wind`); coastal ninja CFs (52–60 %) exceed DESNZ's *net*
-      41.3 % high case. Audit §3.1.
-- [ ] **Offshore wind runs on the onshore profile** (`dc_model.py:291`),
-      undocumented; in the high cost case the LP builds offshore on onshore
-      yield. Fetch an offshore series or switch offshore off. Audit §3.1.
-- [ ] **`validate.py`'s grid-only benchmark would now fail** (1.85 % vs 0.5 %).
-      `validate.py:316-319` and `myopic.py:232-234` pass 7.31 MW as *IT* at
-      PUE 1.0 (1.40× Zhang's IT load), and `baseline_grid.run()` still counts
-      the genset. Fix before the re-run item below. Audit §3.7.
+- [ ] **Wind carbon and yield both flatter wind.** The 35–40 y life is
+      deliberate (DESNZ lifespans, chosen 3 and 7 Sep) — keep it. What is
+      missing is the carbon of the replacement parts an ecoinvent turbine,
+      designed for 20 y with none, needs to last that long: the restated
+      figure (~5.6 g/kWh) sits below the lowest published wind LCA (~7 g,
+      IPCC AR5), as the 3 Sep bought-green work already noted. Separately,
+      coastal ninja CFs (52–60 %) exceed DESNZ's *net* 41.3 % high case.
+      Audit §3.1.
 
 ## Cheap wins
 
@@ -108,10 +85,17 @@ Either the source is named and public, or no new sourcing is needed at all.
       `dc_inputs.py:403` — and `build_tech()` already carries the optional-kwarg
       pattern. `DATA_GAPS.md` states the order (0.1–0.5 %/day) so no source is
       needed to bound it.
-- [ ] **CO₂ transport & storage from FES.** £450/tCO₂ in 2025 → £200 long term,
-      opex 5 % of capex, stated outright. `h2_prices.py:81` already parses
-      sheets CP1/CP2 of the same workbook and holds its GDP rebasing table, so
-      this is a third series through a working reader. Needed for SMR-CCS.
+- [ ] **CO₂ transport & storage: replace, don't add.** Blue's price already
+      carries T&S — NESO's ATR+CCS LCOH has a £0.62/kg T&S line, EHO implies
+      ~£0.74/kg — so adding FES's £450/tCO₂ on top would double count
+      (+£3.60/kg). If FES is wanted, swap it for the embedded rate (and check
+      whether the £450 is capital, ~£55/t levelised). `h2_prices.py:81`
+      already reads CP1/CP2 of that workbook. Also: grey's central price
+      carries 2024 ETS (~£32/t), not FES CP2 (£78.96/t). Audit §3.6.
+- [ ] **Sweep the fuel cell stack calendar life 10 / 15 / 25 y.** It is now
+      `fuel_cell.STACK_CALENDAR_LIFETIME_YEARS` (ASSUMED 25, a placeholder) and
+      no longer the horizon. Then look for a source: DOE backup-power targets,
+      Clean Hydrogen Partnership SRIA, manufacturer design lives. Plan §2.
 - [ ] **Battery fixed opex from BEIS 2022** *Benefits of Long Duration
       Electricity Storage*. Public PDF, and what FES itself routes to. Replaces
       the 2 %-of-capex proxy — the one battery input with no source.
@@ -125,24 +109,13 @@ Either the source is named and public, or no new sourcing is needed at all.
 
 - [ ] **Rebuild the *grid connection* transformer from a bill of materials.**
       Done for wind: `transformers.py` now reads a foreground activity built in
-      notebook 2 from Leng et al. (2026) Table S1, and no longer touches
+      `optimiser_lca/stepup_transformers.py` from Leng et al. (2026) Table S1, and no longer touches
       `market for transformer, high voltage use` — which ecoinvent's own comment
       describes as a **280 g** part used "in the information and communication
       technology". `grid_connection.py` is now the last user of it, and the
       argument for keeping it (one shared asset definition) died with the
       rewrite. Leng's own 100 MVA grid-end unit, `XZ11-100000/110` at
       715 kg/MVA, is the obvious basis and is already transcribed in the paper.
-      `DATA_GAPS.md`.
-
-- [ ] **Solar's step-up is still the old invented unit.** Wind moved to real
-      per-turbine transformers; `solar_pv` did not, because Leng is wind-only.
-      It keeps one plant-rated unit on the electronics dataset, ~2× high, with
-      no per-inverter-station units — and it is now on a *different basis* from
-      wind, which `test_wind_and_solar_are_on_different_transformer_bases`
-      pins so it cannot close by accident. IEA PVPS Task 12's 2020 LCI report
-      Table 40 is a ground-mount "Inverters + Transformers" bill (20,049 kg per
-      MW DC) that explicitly includes step-up transformers; the inverter share
-      needs subtracting, since the IEA PVPS solar basis already carries it.
       `DATA_GAPS.md`.
 
 - [ ] **Read NESO's variable opex.** `electrolyser_costs_clean.csv` carries
@@ -160,83 +133,60 @@ Either the source is named and public, or no new sourcing is needed at all.
 - [ ] **Generation cost scope.** DESNZ opex includes the *generator's*
       TNUoS/DUoS (+11.6 % on onshore) for plant behind our meter, and
       excludes land and business rates (~21 % of `cost_wind`). Audit §3.1.
-- [ ] **The CO₂ T&S item above would double count.** NESO's ATR+CCS LCOH
-      already has a £0.62/kg T&S line and EHO implies ~£0.74/kg — reframe as
-      replacing the embedded rate. Grey's central price also carries 2024 ETS
-      (~£32/t), not FES CP2 (£78.96/t). Audit §3.6.
 - [ ] **Network charge shape.** DUoS uses the "No Residual" class (a data
       centre is Band 1–4) and an unverified Nov–Feb red band (historic LPN is
       all-year 11–14 and 16–19: £6.96 vs £2.05/MWh); TDR is banded on the
       connection ceiling while DUoS bills `cap_grid`; TNUoS HH is a Triad
       charge, not a capacity one. Audit §3.5.
-- [ ] **Record SOEC's heat dataset.** 87 % of SOEC's consumables carbon is
-      "heat, other than natural gas" [RER]; that choice alone decides SOEC vs
-      PEM on renewable power. Audit §3.3.
+- [ ] **Decide SOEC's heat dataset.** 87 % of SOEC's consumables carbon is
+      "heat, other than natural gas" [RER], kept because Hermesmann's inventory
+      uses it — not a study choice, and it can change. It alone decides SOEC vs
+      PEM on renewable power (2.27 vs 0.89 kg/kg; 0.22 on zero-burden heat).
+      Pick a basis for the ~800 °C heat a site would actually buy. `SOURCES.md`.
 - [ ] **Tank heel.** `cap_tank` drains to zero; a 1–5 bar minimum for the FC
       feed makes both objectives 4–22 % low per usable kg. Audit §3.3.
-- [ ] **Re-fetch the solar series at 20°.** All ten cached series are still
-      35°. Audit §3.1.
 
 ## Verification and hygiene
 
 - [ ] **EHV band boundaries against DCUSA Schedule 32.**
       `network_charges.EHV_BAND_KVA` came from secondary summaries and has
       never been checked against the primary.
-- [ ] **Tidy the duplicate rows in `DATA_GAPS.md`.** Demand-side network
-      charges appears as both CLOSED and open; battery opex and electrolyser
-      consumables cost each appear twice. The open list should be countable.
 - [ ] **Add a wind-operational row to `DATA_GAPS.md`** when that work lands —
       it is not in the register at all yet.
-- [ ] **`myopic.evaluate` has drifted from the LP.** No stack cost, no grid
-      connection carbon, and no bought-H₂ or export path at all — so the
-      no-foresight bracket is wrong for any architecture that buys hydrogen.
-      Import the objective from `dc_model`; add a parity test. Plan §3 item 4.
-- [ ] **Test fixture double-counts the stack.** `tests/test_dc_model.py:59`
-      `cost_fc=194_244` is the pre-split full annuity, used alongside
-      `cost_fc_stack_per_mw`.
-- [ ] **`dc_runner._coefficient_identity` fingerprints the stale
-      `h2_capex.csv`**, not `h2_capex.py`/`fuel_cell.py`, so a coefficient
-      change can reuse an old run. Same class: `fuel_cell.decompose()` serves
-      lives from its JSON cache, so editing the constants is silently ignored.
+- [ ] **`myopic.evaluate` has drifted from the LP.** Stack and BoP costs
+      were added on 12 Oct, but there is still no grid connection carbon and no
+      bought-H₂ path at all — so the no-foresight bracket is wrong for any
+      architecture that buys hydrogen. Import the objective from `dc_model`;
+      add a parity test. Plan §3 item 4.
 - [ ] **Docs: reconcile 118 vs ~250 gCO₂/kWh** (reviewer, 30 Sep). 250 is the
       grid-only *total per MWh of load*, not a grid intensity: 118 (FES,
       national, direct, 2024) → 139 (API London 2025, direct) → 237
       (life-cycle) → 252 (+ facility embodied). Line drafted in plan §4.
+      Since the gas fix (13 Oct) the life-cycle figure is 188, not 237, and
+      the grid-only total 203 g/kWh, not 252: update the drafted line.
 - [ ] **Commercial brief: verify every regulatory/market number at source**
       before any investor sees it. Register at `docs/brief_claim_register.md`
       (47 rows, 14 high-risk). Also fix the in-house issues in plan §5:
       "full life-cycle" vs cradle-to-gate, stale worked example, 18.7 MW of
       wind at Westminster, CRU and RICS overreaches.
-- [ ] **Re-run `validate.py` and regenerate every doc figure** after the FC
-      fixes — `VALIDATION.md` is from 2026-08-24 and the baseline has moved
-      (16,014 → 16,132 t).
-- [ ] **Two hydrogen tests skip on every run.** `test_dc_model.py:244` (the
-      only test of the FC replacement rule) and `:193` (baseload) — the
-      fixture never builds a fuel cell or electrolyser. Force the build.
-      Audit §5.
-- [ ] **The run cache hashes almost nothing.** Beyond the `h2_capex` item
-      above: no coefficient module except the four `dc_*.py`, no decomposition
-      cache, no `h2_prices_recommended.csv`, no series, and no
-      `connection_headroom`. Audit §5.
+- [ ] **Regenerate every doc figure** — `validate.py` was re-run on 12 Oct
+      after the FC fixes, but the Overview and brief still quote 2026-08-24
+      numbers. Best done after the gas-dataset fix, which moves the baseline.
 - [ ] **Unserved load is carbon-free.** A min-GWP solve with any allowance
       sheds the dirtiest hours, and every g/kWh and £/MWh divides by gross
       demand. Audit §3.7.
-- [ ] **Stale-docs sweep** — list in audit §6. Includes the "Solar's step-up
-      is still the old invented unit" item above, which `DATA_GAPS.md` already
-      records as closed.
+- [ ] **Stale-docs sweep** — list in audit §6. Also the solar capacity
+      factors quoted in `DATA_GAPS.md` (13.96–15.15 %), which are from the old
+      35° series; new runs already fetch 20° (tilt is in the cache key).
 - [ ] **"Flexible" with a grid is identical to "free"** (`dc_model.py:448-449`),
       so three matrix scenarios are duplicates. Drop it or define it.
       Audit §3.3.
 - [ ] **`audit.py` blind spots.** Lifetime agreement can only fail for the
       electrolyser; `NOT_ASSETS` hides unserved and bought H₂; `DUTY_VIA` also
       hides FC maintenance; `cap_batt_e` is never slack-checked. Audit §5.
-- [ ] **Compressor capital is partly counted already.** Compressor draw sits
-      inside `cap_ely` (4.7 % of SOEC's) and Hermesmann's BoMs list
-      compressors, so plan §6.3 option 2 would double count as written.
-      Audit §3.3.
-- [ ] **Export is broken if anyone switches it on** — credited at demand
-      rates, no carbon credit, unbounded with no grid limit, missing from
-      `contributions()`. Audit §3.5.
+- [ ] **Export is refused until it is modelled** (`dc_model.build_model`
+      raises since 12 Oct). To build it: credit at an export price, not demand
+      rates; give it a carbon credit; add it to `contributions()`. Audit §3.5.
 - [ ] **Unverified — check against the papers:** blue's carbon balance
       (~0.9 kg CO₂/kg H₂ unaccounted from SMR-CCS's extra gas; CCS-step diesel
       with no combustion) against Hermesmann, and R134a leakage (~27.5 t/yr if
@@ -249,37 +199,26 @@ All one-directional — every one of these makes an architecture look cleaner
 than it is. Checked exchange by exchange against the inventories, so this list
 is what is *actually* absent rather than what sounds absent.
 
-- [ ] **Battery enclosure.** `battery.py` is an LFP traction pack plus a
-      500 kW inverter and nothing else — no container, racking, HVAC or fire
-      suppression, because ecoinvent 3.9.1 has no stationary BESS enclosure.
-      Already stated in `SOURCES.md`; needs a source outside ecoinvent, and a
-      BESS-container LCA paper is the likely route.
-- [ ] **Battery and fuel cell step-up.** `transformers.py` charges the step-up
-      on `cap_wind`, `cap_offshore` and `cap_solar` only, but `dis` and `p_fc`
-      inject onto the same bus. The battery's PCS is an inverter, not a
-      transformer, and ecoinvent's 2 kW PEMFC does carry `inverter, 2.5kW` —
-      so both have power conditioning and neither has a step-up. Two more
-      coefficients on the same 230.2 kg CO₂e/MW/year basis, no new sourcing.
-- [ ] **Hydrogen compressor capital.** `tank_compression_kwh_per_kg` charges
-      the electricity to fill the tank in both objectives, and **nothing
-      charges the compressor itself** — not its embodied carbon, not its
-      capex. Distinct from the parked "hydrogen loading compressor capex"
-      below, which is the *seller's* machine for bought hydrogen; this one is
-      the study's own, on a tank the LP sizes. `h2_storage.py`.
-- [ ] **Hydrogen tank fittings.** Gandiglio's inventory is 15,652 kg of
-      chromium steel and nothing else — no valves, piping, instrumentation or
-      foundations. Steel dominates a pressure vessel, so this is a bounded
-      floor rather than an open question, but it is not zero.
-- [ ] **Connection and step-up switchgear.** `grid_connection.py` and
-      `transformers.py` both count transformer capital only; switchgear,
-      protection, civils and the bay are counted in neither. Same omission
-      twice, so one foreground would close both.
-- [ ] **Check the data centre's own electrical distribution.** Zhang's
-      inventory has twelve non-electricity exchanges and none is discrete
-      switchgear, a PDU or a transformer — the facility's power chain is
-      whatever the bulk copper, steel and aluminium masses represent. Worth
-      confirming against the paper before calling it a gap, since it may be
-      deliberate at material-production scope. `baseline_grid.DC_DRIVERS`.
+- [ ] **Hydrogen compressor capital — cost side only.** Its carbon was judged
+      negligible on 4 Sep (~12.8 t CO₂e per 300 kW unit, 0.01 % of the tank);
+      its £ is still open. Check before adding anything: compressor *power*
+      already sits inside `cap_ely` (4.7 % of SOEC's, priced at electrolyser
+      rates) and Hermesmann's bills list compressors, so plan §6.3 option 2
+      would double count as written. Distinct from the parked seller-side
+      loading compressor below. `h2_storage.py`, audit §3.3.
+- [ ] **Hydrogen tank frame and foundations.** Gandiglio's inventory is
+      15,652 kg of chromium steel and nothing else. Valves and piping are
+      small, but on 4 Sep the skid, frame and foundations were judged worth
+      chasing — a 10–20 % uplift was 380–770 t CO₂e/yr in the surplus-only
+      run. No paper itemises it; the two routes are a manufacturer's total
+      module mass, or a concrete pad sized from first principles.
+
+**Closed 4 Sep as negligible** — not to be reopened without new evidence:
+battery enclosure, battery and fuel-cell step-up transformers, connection and
+step-up switchgear, and the data centre's own electrical distribution.
+Sized against the North Norfolk 100 MW run, all of them together are at most
+~1.6 % of total carbon at the knee point and under 0.2 % at minimum cost, so
+none can move a ranking. Recorded in `DATA_GAPS.md` on 12 Oct.
 
 ## Parked
 
@@ -307,3 +246,4 @@ No public source found. Revisit if the item becomes load-bearing in a result.
 - [ ] **DUoS regional coverage.** Only LPN HV Site Specific is transcribed, so
       any distribution-connected site outside London is priced on London
       tariffs. Thirteen DNO charging statements, hand-transcribed, no API.
+

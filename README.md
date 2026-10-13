@@ -50,10 +50,11 @@ conda activate brightway
 streamlit run Home.py
 ```
 
-On a new machine, run `2.tech_lca_foreground.ipynb` once to build the
+On a new machine, run `python -m optimiser_lca.build` once to write the
 foreground databases (data centre facility, fuel cell, electrolysers, H2
-storage, SMR/SMR-CCS/pyrolysis for bought hydrogen, UPV, transformers). The
-first grid build will do it for you if it is missing.
+storage, SMR/SMR-CCS/pyrolysis for bought hydrogen, UPV, transformers), then
+`python optimisation/coefficients.py`. The first grid build will do the
+foreground build for you if it is missing.
 
 ## The data centre powering study
 
@@ -89,9 +90,11 @@ Carbon Intensity API's regional data begins, to yesterday.
 
 1. fetches the region's half-hourly generation mix from the Carbon Intensity
    API (raw responses cached in `carbon_intensity_api_cache/`, gitignored);
-2. scores each fuel with one ecoinvent GB electricity-production activity
-   (`lca_helpers.TECH_SPECS`, choice in `dc_config.GRID_CANDIDATE_INDEX`) and
-   writes kg CO₂e per kWh delivered to `custom_grid_lca_outputs/`;
+2. scores each fuel with one ecoinvent activity, named by exact identity in
+   `dc_config.GRID_SOURCES` (no search ranking), and writes kg CO₂e per kWh
+   delivered to `custom_grid_lca_outputs/`, stamped with an id of that table;
+   a series scored on a different table is ignored until re-scored with
+   `python -m optimisation.grid_build --rescore` (no API calls);
 3. when asked, fetches Elexon Market Index prices for the same window into
    `price_outputs/`.
 
@@ -102,9 +105,9 @@ python -m optimisation.grid_build 2 2025-03-03 2025-03-05
 All series are naive UTC — grid, price and weather alike — and a requested
 window is read as UTC (`optimisation/ASSUMPTIONS.md` §3b).
 
-The only notebook a build can still start is `2.tech_lca_foreground.ipynb`,
-and only on a machine where the foreground databases do not exist yet
-(`backend/runner.py` runs it headless).
+No notebook is on the build path any more. On a machine where the
+foreground databases do not exist yet, the first grid build runs
+`python -m optimiser_lca.build` headless (`backend/runner.py`).
 
 > **A correction this exposed.** The old `dashboard_config.WIND_LAT / WIND_LON` was a
 > field near St Albans — Carbon Intensity region 10, TNUoS zone 9 — while every
@@ -166,17 +169,49 @@ response plan.
 
 ## Configuration
 
-`dc_config.py` holds the fixed modelling assumptions: the Brightway project,
-the grid-mix scoring choices and loss factor, and the fuel cell, hydrogen tank,
-transformer and PV inventory parameters notebook 2 builds from. Everything you
-choose per run (load, PUE, site, dates, assets, objective) is an input on the
-page or an argument to the scripts. Nothing edits `dc_config.py` at run time.
+`dc_config.py` holds the study settings: the Brightway project, and the
+operating lives and amortisation periods the `optimisation/` modules apply
+after an activity has been scored. Everything you choose per run (load, PUE,
+site, dates, assets, objective) is an input on the page or an argument to the
+scripts. Nothing edits `dc_config.py` at run time.
+
+## The LCA side: `optimiser_lca/`
+
+Every inventory the optimiser scores is one module in `optimiser_lca/`, each
+readable top to bottom in the same four sections — source and scope, the
+parameters that enter an exchange amount, the ecoinvent processes it draws on
+(each with the search that found it, its exact identity, and the reason for
+the pick), and the foreground activities it writes:
+
+| module | what | database |
+| --- | --- | --- |
+| `grid.py` | GB grid carbon: the ecoinvent source per Carbon Intensity API fuel, losses, wind/imports splits, the closed-form score, network delivery terms | (scores a series, no database) |
+| `hydrogen.py` | Hermesmann SMR, SMR-CCS + CCS, MP-E, AE/PEM/SOEC build + operation | `hydrogen foreground` |
+| `data_centre.py` | Zhang et al. 2025 hyperscale facility | `data centre foreground` |
+| `fuel_cell.py` | Babatunde et al. 2024 stack, and 1 kWh of electricity from it | `fuel cell foreground` |
+| `h2_tank.py` | Gandiglio et al. 2022 steel vessel, both designs | `hydrogen storage foreground` |
+| `stepup_transformers.py` | Leng et al. 2026 wind and IEA PVPS 2026 solar step-ups | `transformer foreground` |
+| `upv.py` | Smith et al. 2024 utility PV, fixed tilt, rescored on apos | `solar foreground` |
+
+`registry.py` holds every database name and activity code; `common.py` the
+verbs (`show`, `pin`, `resolve`, `to_bw_dict`, `write`); `build.py` writes the
+databases in dependency order; `validate.py` reproduces the papers. The build
+resolves every process by exact identity — name, location, reference product —
+and refuses to proceed if a pinned identity is no longer among the search hits
+for its query, so a ranking shift can never swap a process silently.
+
+```bash
+python -m optimiser_lca.build --check     # static checks, no Brightway
+python -m optimiser_lca.build             # (re)write every foreground database
+python -m optimiser_lca.validate          # fuel cell and data centre against their papers
+python scripts/snapshot_foreground.py     # freeze what is in Brightway, to diff after a change
+```
 
 ## Notebooks
 
 | Notebook | Role |
 | --- | --- |
-| `2.tech_lca_foreground.ipynb` | builds the foreground databases — run once per machine, or after changing an inventory parameter in `dc_config.py` |
+| `2.tech_lca_foreground.ipynb` | **reads** every inventory in `optimiser_lca/` — each process's search neighbourhood with the chosen row marked, one table per activity, and the paper validations. Builds nothing; `python -m optimiser_lca.build` does |
 | `6.datacentre_optimiser.ipynb` | **results of the study** — Pareto fronts, installed mixes, carbon by source, a dispatch week, and the foresight bracket |
 
 The numbering is kept from the original sequence so references in the docs

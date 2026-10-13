@@ -157,14 +157,16 @@ KNOBS: dict[str, Knob] = {k.name: k for k in (
     Knob("ely_capex", "Electrolyser annualised cost", "x today",
          ("cost_ely",), "multiplier", "down", 0.01, 1.0, ("electrolyser",)),
     Knob("fc_capex", "Fuel cell annualised cost", "x today",
-         ("cost_fc", "cost_fc_stack_per_mw"), "multiplier", "down", 0.01, 1.0,
-         ("fuel_cell",),
-         note="Moves the stack replacement cost with the unit, because a fuel "
-              "cell that got cheaper to buy did not stay expensive to re-stack."),
+         ("cost_fc", "cost_fc_stack_per_mw", "cost_fc_bop_per_mw"), "multiplier",
+         "down", 0.01, 1.0, ("fuel_cell",),
+         note="Moves the stack and BoP replacement costs with the unit, because "
+              "a fuel cell that got cheaper to buy did not stay expensive to "
+              "re-stack or re-plant."),
     Knob("tank_capex", "Hydrogen store annualised cost", "x today",
          ("cost_tank",), "multiplier", "down", 0.01, 1.0, ("tank",)),
     Knob("h2_chain", "Whole H2 chain annualised cost", "x today",
-         ("cost_ely", "cost_tank", "cost_fc", "cost_fc_stack_per_mw"),
+         ("cost_ely", "cost_tank", "cost_fc", "cost_fc_stack_per_mw",
+          "cost_fc_bop_per_mw"),
          "multiplier", "down", 0.01, 1.0, ("electrolyser", "fuel_cell"),
          note="The headline knob: how much cheaper the make-store-burn chain has "
               "to get as a whole. Reporting the links separately understates the "

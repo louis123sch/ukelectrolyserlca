@@ -26,3 +26,7 @@ optimisation_outputs/.grid_build.lock
 # Carbon Intensity API response cache — refetched on demand by notebook 3.1
 # during a grid build. Kept on disk, not in git (it was 118 MB).
 carbon_intensity_api_cache/
+
+# What is in the foreground databases right now — scripts/snapshot_foreground.py
+# regenerates it, and it is only for diffing before/after an inventory change.
+optimisation_outputs/foreground_snapshot*.json

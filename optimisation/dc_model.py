@@ -131,12 +131,16 @@ class Tech:
     gwp_fc_maint_per_mwh: float
     gwp_grid_per_mw: float
     fc_bop_calendar_years: float; fc_bop_duty_hours: float
-    fc_stack_duty_hours: float
+    fc_stack_calendar_years: float; fc_stack_duty_hours: float
     # cost, GBP per MW (or MWh / kg) per year
     cost_wind: float; cost_offshore: float; cost_solar: float
     cost_batt_p: float; cost_batt_e: float
     cost_ely: float; cost_tank: float; cost_fc: float
-    cost_fc_stack_per_mw: float
+    # Per replacement, on fc_stack_units / fc_bop_units. cost_fc is the BoP
+    # annuity *net* of its calendar replacement, which cost_fc_bop_per_mw
+    # then charges — see h2_capex.fuel_cell_costs. Not defaulted, so a Tech
+    # that forgets one fails loudly instead of running the fuel cell for free.
+    cost_fc_stack_per_mw: float; cost_fc_bop_per_mw: float
     cost_grid_per_mw_year: float; cost_grid_fixed_per_year: float
     # flows
     ely_kwh_per_kg: float; ely_variable_gwp_per_kg: float
@@ -225,6 +229,15 @@ def build_model(series: Series, assets: Assets, tech: Tech, *,
                 f"free, zero-carbon hydrogen and every result would be "
                 f"nonsense. Set {colour_key} on the scenario, or lock {flag} "
                 f"off.")
+    if assets.grid and assets.allow_export:
+        # Nothing in the study switches export on, and it is not fit to be:
+        # exported MWh are credited at the *demand* price (wholesale plus
+        # volumetric network charges), carry no carbon credit, and are missing
+        # from contributions(). Refused rather than silently wrong. OBJECTIVE_
+        # AUDIT.md §3.5.
+        raise NotImplementedError(
+            "Export is not modelled correctly yet — it would be credited at "
+            "demand rates with no carbon credit. Leave allow_export off.")
 
     n, dt = series.n, series.dt_hours
     t = pd.RangeIndex(n, name="t")
@@ -333,7 +346,7 @@ def build_model(series: Series, assets: Assets, tech: Tech, *,
     m.add_constraints(
         V["fc_bop_units"] - fc_mwh / tech.fc_bop_duty_hours >= 0, name="fc_bop_duty")
     m.add_constraints(
-        V["fc_stack_units"] - V["cap_fc"] / tech.horizon_years >= 0,
+        V["fc_stack_units"] - V["cap_fc"] / tech.fc_stack_calendar_years >= 0,
         name="fc_stack_calendar")
     m.add_constraints(
         V["fc_stack_units"] - fc_mwh / tech.fc_stack_duty_hours >= 0, name="fc_stack_duty")
@@ -350,7 +363,10 @@ def build_model(series: Series, assets: Assets, tech: Tech, *,
     # objective, and they cannot change an argmin anyway. They are added back
     # for reporting, and — importantly — netted off any epsilon limit, which is
     # stated against the *total* the user sees, not the variable part.
-    cost_const = tech.cost_grid_fixed_per_year
+    # The fixed connection charge belongs to the connection. An islanded build
+    # has none, so charging it here put £271k/yr (London) to £4.67m/yr on
+    # every architecture that never touches the grid.
+    cost_const = tech.cost_grid_fixed_per_year if assets.grid else 0.0
     gwp_const = (tech.dc_fixed_gwp_per_year
                  + tech.dc_other_gwp_per_mwh
                  * float(series.demand_mw.sum() * dt) * scale)
@@ -361,10 +377,11 @@ def build_model(series: Series, assets: Assets, tech: Tech, *,
         + tech.cost_batt_p * V["cap_batt_p"] + tech.cost_batt_e * V["cap_batt_e"]
         + tech.cost_ely * V["cap_ely"] + tech.cost_tank * V["cap_tank"]
         + tech.cost_fc * V["cap_fc"]
-        # Stack replacements, on the same convex max(calendar, duty) count the
-        # carbon side uses. Without this, running the fuel cell hard buys extra
-        # stacks in carbon and nothing in cost.
+        # Stack and BoP replacements, on the same convex max(calendar, duty)
+        # counts the carbon side uses. Without them, running the fuel cell hard
+        # buys extra kit in carbon and nothing in cost.
         + tech.cost_fc_stack_per_mw * V["fc_stack_units"]
+        + tech.cost_fc_bop_per_mw * V["fc_bop_units"]
         + tech.cost_grid_per_mw_year * V["cap_grid"]
         + scale * (price * V["imp"] * dt).sum()
         + scale * (tech.bought_h2_gbp_per_kg * V["h2_buy"]).sum()
@@ -569,7 +586,8 @@ def contributions(V, obj, series, tech, assets) -> dict:
         "electrolyser": tech.cost_ely * cap["cap_ely"],
         "H2 tank": tech.cost_tank * cap["cap_tank"],
         "fuel cell": (tech.cost_fc * cap["cap_fc"]
-                      + tech.cost_fc_stack_per_mw * float(V["fc_stack_units"].solution)),
+                      + tech.cost_fc_stack_per_mw * float(V["fc_stack_units"].solution)
+                      + tech.cost_fc_bop_per_mw * float(V["fc_bop_units"].solution)),
         "grid connection": tech.cost_grid_per_mw_year * float(V["cap_grid"].solution),
     }
     cost_op = {
@@ -577,7 +595,7 @@ def contributions(V, obj, series, tech, assets) -> dict:
         buy_1: scale * tech.bought_h2_gbp_per_kg * float(ser["h2_buy"].sum()),
         buy_2: scale * tech.bought_h2_2_gbp_per_kg * float(ser["h2_buy_2"].sum()),
         "unserved (VoLL)": scale * VOLL_GBP_PER_MWH * float((ser["unserved"] * dt).sum()),
-        "connection fixed": tech.cost_grid_fixed_per_year,
+        "connection fixed": obj["cost_const"],
     }
     mwh = float(series.demand_mw.sum() * dt) * scale
     return {

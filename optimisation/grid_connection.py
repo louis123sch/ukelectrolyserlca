@@ -72,21 +72,14 @@ def decompose(refresh: bool = False) -> dict:
     if _CACHE is not None and not refresh:
         return _CACHE
 
-    import bw2data as bd
     import lca_helpers as H
-    import dc_config as cfg
     from optimisation import baseline_grid as bg
 
     H.setup_brightway()
     method = bg.gwp_method()
-    ei = bd.Database(cfg.ECOINVENT_DB if hasattr(cfg, "ECOINVENT_DB")
-                     else "ecoinvent-3.9.1-apos")
 
     def score(name, unit):
-        hits = [a for a in ei if a["name"] == name and a["unit"] == unit]
-        if not hits:
-            raise ValueError(f"{name!r} ({unit}) not in {ei.name}")
-        return H.run_lca_score(hits[0], method)
+        return H.run_lca_score(H.resolve_exact(name, "GLO", unit=unit), method)
 
     per_kg = score(TRANSFORMER_ACTIVITY, "kilogram")
     per_km = score(LINE_ACTIVITY, "kilometer")

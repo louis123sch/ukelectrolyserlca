@@ -220,8 +220,11 @@ with c2:
                                "whose 7.31 MW is already facility-level.")
 with c3:
     horizon = st.number_input("Horizon (years)", 1.0, 50.0, 25.0, step=1.0,
-                              help="Amortisation only — a different thing from the "
-                                   "dispatch window. Both are reported.")
+                              help="Does not change the optimisation: every asset "
+                                   "is annualised on its own life, and the fuel "
+                                   "cell stack now has its own calendar life. "
+                                   "Used only to count battery builds in the "
+                                   "notes below.")
 with c4:
     unserved = st.number_input("Unserved allowance", 0.0, 0.10, 0.0, step=0.001,
                                format="%.3f",

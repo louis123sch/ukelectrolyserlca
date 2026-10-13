@@ -85,6 +85,26 @@ Storage compression is still counted where it applies, via
 `dc_config.TANK_COMPRESSION_KWH_PER_KG` — zero for the 28 bar design,
 since the electrolyser already delivers at ~30 bar.
 
+**Bought green hydrogen is green by definition, and that rests on certificates.**
+Decided 2–3 Sep. The grid-connected share of bought green
+(`h2_prices.GREEN_H2_GRID_SHARE`, 0.5) is scored on a *renewable* electricity
+basis plus a network delivery burden — 1.469 kg CO₂e/kg against 0.976 behind the
+meter — not on the grid mix the electrolyser physically draws from. That is a
+market-based reading, and it holds only if the seller's grid electricity is
+backed by matched renewable certificates (REGOs, or an RFNBO-style hourly match).
+Two things follow that the numbers do not show on their own:
+
+- The price carries **no certificate premium**. NESO's and EHO's grid-connected
+  LCOH are priced on wholesale power, so the bought-green price is the cost of
+  the electricity, not of the claim to it.
+- The LP's **own** grid electrolyser (`grid_h2`) is scored on the real
+  location-based grid mix instead. Same physical setup, two bases: about
+  **13.3 kg CO₂e/kg** made on site against **1.50** bought. The asymmetry favours
+  buying, and it is deliberate — the study assumes a buyer can contract for
+  certified green hydrogen but does not assume the data centre certifies its own
+  imports. Anyone comparing `grid_h2` with bought green should read the gap as
+  partly an accounting convention, not only physics. Audit §3.6.
+
 ## 3a. The site is a coordinate, and everything follows from it
 
 `sites.resolve(lat, lon)` derives the Carbon Intensity region and the TNUoS
@@ -119,6 +139,16 @@ Rules published on the UK clock convert from UTC where they are applied: the
 DUoS red/amber/green bands (`network_charges.duos_band`) and Elexon settlement
 periods (`grid_build.normalise_elexon`). The DUoS red band is November-February
 only, so it never moved; amber did, by an hour, all summer.
+
+## 3c. Generation is onshore wind and ground-mount solar only
+
+Every site is on land (decided 3 Sep), so offshore wind is out of scope and
+`dc_architectures.OFFSHORE_IN_SCOPE` holds it off for every architecture and
+every caller. It used to be unlocked wherever `sites.Site.offshore_wind` flagged
+a coastal region, and the LP has no offshore profile — `cap_offshore` ran on the
+*onshore* capacity-factor series, so in the high cost case it built offshore on
+onshore yield. The offshore coefficients are still built and reported; turning
+the switch back on needs an offshore series first.
 
 ## 4. Cost basis
 

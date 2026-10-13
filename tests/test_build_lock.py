@@ -7,9 +7,10 @@ running on Windows, both of them silent about the real cause:
   * ``_build_lock`` imported ``fcntl``, which does not exist there, so the run
     died with ModuleNotFoundError the moment it decided to build; and
   * reading an executed notebook back through the locale codec raises on
-    box-drawing output — after nbconvert has already succeeded. Only notebook 2
-    (the one-off foreground build) still goes through nbconvert, but it prints
-    the same separators.
+    box-drawing output — after nbconvert has already succeeded. Nothing on the
+    build path goes through nbconvert any more (the foreground is written by
+    ``python -m optimiser_lca.build``), but ``run_notebook`` is kept for
+    running the reader notebook headless and prints the same separators.
 
 No notebook is executed here. This is the plumbing around it.
 """
@@ -85,7 +86,8 @@ def test_the_lock_comes_back_when_its_holder_dies():
 # -----------------------------------------------------------------------------
 def test_the_foreground_notebook_exists():
     assert (REPO / runner.FOREGROUND_NOTEBOOK).exists(), (
-        f"{runner.FOREGROUND_NOTEBOOK} is the notebook a first build runs")
+        f"{runner.FOREGROUND_NOTEBOOK} is the reader notebook run_notebook defaults to")
+    assert (REPO / "optimiser_lca" / "build.py").exists(), "the foreground build a first grid build runs"
 
 
 def test_the_executed_notebook_is_read_as_utf8_not_the_locale_codec(tmp_path):

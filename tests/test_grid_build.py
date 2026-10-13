@@ -115,14 +115,13 @@ def test_chunks_cover_the_window_without_gaps():
 # Scoring
 # -----------------------------------------------------------------------------
 def test_score_is_share_times_loss_times_source_score():
-    import dc_config as cfg
-    import lca_helpers as H
+    from optimiser_lca import grid
     mix = pd.DataFrame([{f"api_{f}": 0.0 for f in G.CI_FUELS}])
     mix.loc[0, "api_gas"], mix.loc[0, "api_nuclear"] = 50.0, 50.0
-    scores = {k: 0.0 for k in H.TECH_SPECS}
+    scores = {k: 0.0 for k in grid.TECH_SPECS}
     scores.update(GAS=0.4, NUCLEAR=0.01)
     out = G.score_mix(mix, scores)
-    expect = cfg.MARKET_LOSS_FACTOR * (0.5 * 0.4 + 0.5 * 0.01)
+    expect = grid.MARKET_LOSS_FACTOR * (0.5 * 0.4 + 0.5 * 0.01)
     assert out["custom_electricity_score"].iloc[0] == pytest.approx(expect)
 
 
@@ -155,3 +154,54 @@ def test_rescoring_an_existing_file_reproduces_it():
     rel = ((new["custom_electricity_score"] - old["custom_electricity_score"]).abs()
            / old["custom_electricity_score"].abs())
     assert rel.max() < 1e-5, f"max relative difference {rel.max():.3e}"
+
+
+# -----------------------------------------------------------------------------
+# Which sources score the grid
+# -----------------------------------------------------------------------------
+def test_every_scored_fuel_has_exactly_one_named_source():
+    from optimiser_lca import grid
+    assert set(grid.GRID_SOURCES) == set(grid.TECH_SPECS)
+    assert all(len(v) == 3 and all(isinstance(x, str) and x for x in v)
+               for v in grid.GRID_SOURCES.values())
+
+
+def test_sources_id_moves_when_a_source_changes(monkeypatch):
+    from optimiser_lca import grid
+    before = G.grid_sources_id()
+    assert before == G.grid_sources_id()                      # stable
+    assert before == "158704fcb705"      # the id every series on disk carries
+    changed = dict(grid.GRID_SOURCES)
+    changed["GAS"] = ("electricity production, natural gas, conventional power plant",
+                      "GB", "electricity, high voltage")
+    monkeypatch.setattr(grid, "GRID_SOURCES", changed)
+    assert G.grid_sources_id() != before
+
+
+def test_series_scored_on_other_sources_are_ignored(tmp_path):
+    from optimisation import profiles
+    row = {"datetime": ["2025-06-02 00:00:00"], "custom_electricity_score": [0.1],
+           "clock": ["UTC"]}
+    unmarked = tmp_path / "unmarked.csv"
+    pd.DataFrame(row).to_csv(unmarked, index=False)
+    stale = tmp_path / "stale.csv"
+    pd.DataFrame({**row, "grid_sources": ["000000000000"]}).to_csv(stale, index=False)
+    current = tmp_path / "current.csv"
+    pd.DataFrame({**row, "grid_sources": [G.grid_sources_id()]}).to_csv(current, index=False)
+    assert not profiles.grid_file_is_current(unmarked)
+    assert not profiles.grid_file_is_current(stale)
+    assert profiles.grid_file_is_current(current)
+
+
+def test_grid_sources_resolve_exactly_and_gas_is_combined_cycle():
+    """Pins TODO gap #1 shut: gas is scored on CCGT, by identity, not by rank."""
+    bd = pytest.importorskip("bw2data")
+    import dc_config as cfg
+    if cfg.PROJECT_NAME not in bd.projects:
+        pytest.skip("Brightway project not present on this machine")
+    from optimiser_lca import grid
+    table = G.source_table()
+    assert table["GAS"]["name"] == "electricity production, natural gas, combined cycle power plant"
+    assert 0.35 < table["GAS"]["kgco2e_per_kwh"] < 0.42
+    for key, (name, loc, product) in grid.GRID_SOURCES.items():
+        assert (table[key]["name"], table[key]["location"], table[key]["product"]) == (name, loc, product)

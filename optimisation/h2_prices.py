@@ -99,17 +99,18 @@ GAS_KWH_HHV_PER_M3 = 39.5 / 3.6
 # --- inventory coefficients, read from this project's own foreground -------
 # (kept as constants so this module runs without Brightway; verified against
 #  the activities by ``check_against_inventory()``)
+from optimiser_lca import registry as _R  # noqa: E402
 INVENTORY = {
-    "grey":      {"code": "smr_hermesmann_1kg_h2",
+    "grey":      {"code": _R.SMR,
                   "gas_m3_per_kg": 4.85, "elec_kwh_per_kg": -1.1,
                   "direct_co2_kg_per_kg": 9.0},
-    "blue":      {"code": "smr_ccs_hermesmann_1kg_h2",
+    "blue":      {"code": _R.SMR_CCS,
                   "gas_m3_per_kg": 5.33, "elec_kwh_per_kg": -0.05,
                   "direct_co2_kg_per_kg": 0.99},
-    "turquoise": {"code": "mp_e_1kg_h2",
+    "turquoise": {"code": _R.MP_E,
                   "gas_m3_per_kg": 5.72, "elec_kwh_per_kg": 10.29,
                   "direct_co2_kg_per_kg": 0.0},
-    "green":     {"code": "pem_op_hermesmann_1kg_h2",
+    "green":     {"code": _R.PEM_OP,
                   "gas_m3_per_kg": 0.0, "elec_kwh_per_kg": 54.0,
                   "direct_co2_kg_per_kg": 0.0},
 }
@@ -179,7 +180,7 @@ if GREEN_H2_ELECTRICITY_BASIS not in GREEN_H2_ELECTRICITY_BASES:
 # as one — offered as a peer of the wind options it would let a caller pair
 # behind-the-meter renewable pricing with grid carbon, which is the exact
 # incoherence this whole section exists to remove.
-ECOINVENT_GB_LV_GCO2E_PER_KWH = 311.21970194853005
+from optimiser_lca.grid import GB_LV_MARKET_GCO2E_PER_KWH as ECOINVENT_GB_LV_GCO2E_PER_KWH  # noqa: E402
 LEGACY_GREEN_H2_GWP_KGCO2E_PER_KG = 17.00093068911594
 
 # --- delivering it: what separates the two green rows ----------------------
@@ -200,8 +201,11 @@ LEGACY_GREEN_H2_GWP_KGCO2E_PER_KG = 17.00093068911594
 # renewable in both. Both are derived from ecoinvent 3.9.1 apos's GB
 # `market for electricity, low voltage` by contribution analysis, and
 # ``check_grid_delivery()`` re-derives them from the live database.
-GRID_DELIVERY_LOSS_GROSS_UP = 1.063495
-GRID_DELIVERY_NETWORK_GCO2E_PER_KWH = 8.2125
+# Stated once, with the rest of the grid LCA, in optimiser_lca/grid.py.
+from optimiser_lca.grid import (  # noqa: E402
+    DELIVERY_LOSS_GROSS_UP as GRID_DELIVERY_LOSS_GROSS_UP,
+    DELIVERY_NETWORK_GCO2E_PER_KWH as GRID_DELIVERY_NETWORK_GCO2E_PER_KWH,
+)
 # The variant in h2_prices_recommended.csv that takes delivery over the grid.
 GREEN_GRID_DELIVERED_VARIANT = "grid-connected electrolyser"
 
@@ -250,59 +254,11 @@ def _reject_grid_basis(basis: str) -> None:
 
 
 def check_grid_delivery(tol_frac: float = 0.02) -> dict:
-    """Re-derive the delivery constants from the live database.
-
-    Same contract as ``check_against_inventory()``: the constants above are kept
-    hard-coded so this module runs without Brightway, and this fails the run if
-    they have drifted from the activities they were taken from.
-    """
-    import bw2calc as bc
-    import bw2data as bd
-
-    import lca_helpers as H
-    from optimisation import electrolysers as ely
-
-    H.setup_brightway()
-    method = ely._gwp_method(bd)
-    ei = bd.Database("ecoinvent-3.9.1-apos")
-    lv = next(a for a in ei if a["name"] == "market for electricity, low voltage"
-              and a.get("location") == "GB")
-    lca = bc.LCA({lv: 1}, method)
-    lca.lci()
-    lca.lcia()
-    rev = {v: k for k, v in lca.activity_dict.items()}
-
-    gen_kwh = network = 0.0
-    for idx, amount in enumerate(lca.supply_array):
-        if abs(amount) < 1e-14:
-            continue
-        act = bd.get_activity(rev[idx])
-        name = act["name"]
-        # Generation is every leaf that produces a kWh; the loss gross-up is
-        # simply how much of it the chain draws to deliver one.
-        if act.get("unit") == "kilowatt hour" and name.startswith("electricity production"):
-            gen_kwh += amount
-        # Take the market rows only: each sits at the top of its own sub-tree,
-        # so construction and maintenance are counted once between them.
-        elif name.startswith("market for") and (
-                "network, electricity" in name
-                or name.startswith("market for sulfur hexafluoride")):
-            network += H.run_lca_score(act, method) * amount
-
-    out = {"loss_gross_up": gen_kwh,
-           "network_gco2e_per_kwh": network * 1000.0,
-           "lv_market_gco2e_per_kwh": lca.score * 1000.0}
-    problems = []
-    for key, const in (("loss_gross_up", GRID_DELIVERY_LOSS_GROSS_UP),
-                       ("network_gco2e_per_kwh", GRID_DELIVERY_NETWORK_GCO2E_PER_KWH),
-                       ("lv_market_gco2e_per_kwh", ECOINVENT_GB_LV_GCO2E_PER_KWH)):
-        if abs(out[key] - const) > tol_frac * abs(const):
-            problems.append(f"{key}: constant {const:.6g}, live {out[key]:.6g}")
-    if problems:
-        raise AssertionError("Grid delivery constants have gone stale:\n  "
-                             + "\n  ".join(problems))
-    out["ok"] = True
-    return out
+    """Re-derive the three delivery constants from the live database and fail
+    if they have drifted. The derivation lives with the grid LCA in
+    ``optimiser_lca.grid.check_delivery``; this keeps the name callers use."""
+    from optimiser_lca import grid
+    return grid.check_delivery(tol_frac=tol_frac)
 
 
 def green_h2_electricity_gco2e_per_kwh(basis: str | None = None, *,
@@ -774,7 +730,7 @@ def price_table():
                 "case": case,
                 "price_GBP_per_kg": round(total, 2),
                 "activity_code": inv["code"],
-                "activity_database": "hydrogen foreground",
+                "activity_database": _R.HYDROGEN_DB,
                 "gas_m3_per_kg": inv["gas_m3_per_kg"],
                 "elec_kwh_per_kg": inv["elec_kwh_per_kg"],
                 "direct_co2_kg_per_kg": inv["direct_co2_kg_per_kg"],
@@ -908,7 +864,7 @@ def check_against_inventory():
         return f"skipped — Brightway unavailable ({type(e).__name__})"
     problems = []
     for colour, inv in INVENTORY.items():
-        act = bd.get_activity(("hydrogen foreground", inv["code"]))
+        act = bd.get_activity((_R.HYDROGEN_DB, inv["code"]))
         # unit check matters: PEM has "heat ... other than natural gas" in MJ,
         # which a bare name match would wrongly count as gas.
         gas = sum(float(e["amount"]) for e in act.technosphere()

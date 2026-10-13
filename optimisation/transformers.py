@@ -16,14 +16,14 @@ this module charges, per MW of ``cap_wind``.
 
 The inventory is not here
 -------------------------
-It is a foreground activity, built in ``2.tech_lca_foreground.ipynb`` alongside
-the hydrogen tank and for the same reason — ecoinvent cannot supply the asset,
-so it is assembled from a published bill of materials. This module only scores
-that activity and amortises it. To change what a transformer is made of, edit
-the notebook; to change how long it lasts, edit ``TX_ASSET_LIFE_YEARS`` in
-``dc_config.py``. Both are stated once and read here.
+It is a foreground activity, built by ``optimiser_lca/stepup_transformers.py``
+alongside the hydrogen tank and for the same reason — ecoinvent cannot supply
+the asset, so it is assembled from a published bill of materials. This module
+only scores that activity and amortises it. To change what a transformer is
+made of, edit that module and rebuild; to change how long it lasts, edit
+``TX_ASSET_LIFE_YEARS`` in ``dc_config.py``. Both are stated once and read here.
 
-    database  cfg.TRANSFORMER_FOREGROUND_DB
+    database  TRANSFORMER_DB
     code      wind_turbine_stepup_per_mw
     unit      1 MW of wind connected
     source    Leng et al. (2026), Processes 14(7) 1045, Supplementary Table S1
@@ -92,7 +92,7 @@ pays for through ``grid_connection.py``. Charging it would bill the site for a
 voltage change it does not make.
 
 **No step between the collection network and the data centre.** Both sit in the
-medium-voltage band, so the chain closes. ``cfg.TX_SITE_COLLECTION_KV`` states
+medium-voltage band, so the chain closes. ``stepup_transformers.TX_SITE_COLLECTION_KV`` states
 that as a number rather than leaving it as the phrase "the same bus", and
 ``check()`` refuses a value outside the band. Leng's units are wound for 35 kV,
 above the band; a 20 kV unit of the same rating carries less insulation and is
@@ -113,7 +113,7 @@ activity, ``solar_inverter_stepup_per_mwp``, built from IEA PVPS Task 12's
 T12-33:2026 LCI report: the oil-immersed 2.5 MVA units in a utility PV plant's
 inverter stations, four of them on the report's own 10 MWp reference plant. Two
 things make this better than the wind side rather than merely equal to it. The
-unit is wound **20 / 0.4 kV**, which is ``cfg.TX_SITE_COLLECTION_KV`` and the
+unit is wound **20 / 0.4 kV**, which is ``stepup_transformers.TX_SITE_COLLECTION_KV`` and the
 inverter's LV terminals exactly — so no voltage adjustment is applied, where
 Leng's 35 kV units have to be taken as erring high. And the count is **read off**
 Table 50 rather than derived, which retires the two ASSUMED constants the old
@@ -143,7 +143,7 @@ wind inventory    Leng, H. et al. (2026), "Life Cycle Assessment of an Onshore
                   Wind Farm: Carbon Emission Evaluation and Mitigation Pathway
                   Design", *Processes* 14(7), 1045, Supplementary Table S1.
                   Transcribed into dc_config.TX_LENG_BOX_KG and built
-                  into the foreground by notebook 2.
+                  into the foreground by optimiser_lca/stepup_transformers.py.
 cross-check       Teffera, B. et al. (2021), "Life cycle assessment of wind
                   farms in Ethiopia", *Int J LCA* 26:76-96, Table 5.
 turbine voltage   690 V, stated for all four turbine models in Teffera Table 2
@@ -168,10 +168,10 @@ sys.path.insert(0, str(ROOT))
 OUT_DIR = ROOT / "optimisation_outputs"
 CACHE_PATH = OUT_DIR / "transformer_decomposition_cache.json"
 
-# The foreground activities notebook 2 builds. Everything about what a
-# transformer is made of lives there; this module only scores and amortises it.
-WIND_CODE = "wind_turbine_stepup_per_mw"
-SOLAR_CODE = "solar_inverter_stepup_per_mwp"
+# The foreground activities optimiser_lca/stepup_transformers.py builds.
+# Everything about what a transformer is made of lives there; this module only
+# scores and amortises it.
+from optimiser_lca.registry import TX_WIND as WIND_CODE, TX_SOLAR as SOLAR_CODE, TRANSFORMER_DB  # noqa: E402
 
 # --- solar: the legacy plant-rated unit, kept only to reproduce old runs ------
 # What this was, before IEA PVPS T12-33:2026 supplied a real solar bill: one
@@ -194,8 +194,9 @@ SOLAR_MVA_PER_MWP = 1.0 / (SOLAR_DC_AC_RATIO * POWER_FACTOR)
 SOLAR_BASES = ("iea_pvps_2026", "legacy")
 SOLAR_BASIS = "iea_pvps_2026"
 
-ASSUMED = ("cfg.TX_SITE_COLLECTION_KV", "cfg.TX_MATERIAL_PROCESSES['iron']",
-           "cfg.TX_MATERIAL_PROCESSES['silica']")
+ASSUMED = ("stepup_transformers.TX_SITE_COLLECTION_KV",
+           "stepup_transformers.TX_MATERIAL_PROCESSES['iron']",
+           "stepup_transformers.TX_MATERIAL_PROCESSES['silica']")
 
 TECHNOLOGIES = ("onshore_wind", "offshore_wind", "solar_pv")
 
@@ -208,10 +209,16 @@ def _cfg():
     return cfg
 
 
+def _inv():
+    """The inventory module: the bills, the voltage chain, the checks."""
+    from optimiser_lca import stepup_transformers as tx
+    return tx
+
+
 def wind_kg_per_mw() -> float:
     """Turbine step-up mass per MW of wind, from Leng's own farm."""
-    cfg = _cfg()
-    return sum(cfg.TX_LENG_BOX_KG.values()) / cfg.TX_LENG_FARM_MW
+    tx = _inv()
+    return sum(tx.TX_LENG_BOX_KG.values()) / tx.TX_LENG_FARM_MW
 
 
 def legacy_kg_per_mva() -> float:
@@ -253,75 +260,70 @@ def decompose(refresh: bool = False) -> dict:
     H.setup_brightway()
     method = bg.gwp_method()
     life = float(cfg.TX_ASSET_LIFE_YEARS)
+    tx = _inv()
 
-    # wind — the foreground activity notebook 2 built, per MW connected
+    # wind — the foreground activity, per MW connected
     try:
-        act = bd.get_activity((cfg.TRANSFORMER_FOREGROUND_DB, WIND_CODE))
+        act = bd.get_activity((TRANSFORMER_DB, WIND_CODE))
     except Exception:
         raise RuntimeError(
-            f"{cfg.TRANSFORMER_FOREGROUND_DB!r}/{WIND_CODE!r} is not in this "
-            "Brightway project. Run the wind turbine step-up cells in "
-            "2.tech_lca_foreground.ipynb first — the inventory lives there, "
-            "not in this module.") from None
+            f"{TRANSFORMER_DB!r}/{WIND_CODE!r} is not in this Brightway project. "
+            "Run `python -m optimiser_lca.build stepup_transformers` first — the "
+            "inventory lives in optimiser_lca/stepup_transformers.py, not here.") from None
     wind_per_mw = H.run_lca_score(act, method)
 
     # solar — the IEA PVPS foreground, built the same way wind is
-    cfg.upv_tx_check()
+    tx.check()
     try:
-        act_s = bd.get_activity((cfg.TRANSFORMER_FOREGROUND_DB, SOLAR_CODE))
+        act_s = bd.get_activity((TRANSFORMER_DB, SOLAR_CODE))
     except Exception:
         raise RuntimeError(
-            f"{cfg.TRANSFORMER_FOREGROUND_DB!r}/{SOLAR_CODE!r} is not in this "
-            "Brightway project. Run the solar inverter-station step-up cells in "
-            "2.tech_lca_foreground.ipynb first — the inventory lives there, "
-            "not in this module.") from None
+            f"{TRANSFORMER_DB!r}/{SOLAR_CODE!r} is not in this Brightway project. "
+            "Run `python -m optimiser_lca.build stepup_transformers` first — the "
+            "inventory lives in optimiser_lca/stepup_transformers.py, not here.") from None
     solar_per_mwp = H.run_lca_score(act_s, method)
 
     # solar — the legacy plant-rated unit, kept for reproducibility only
-    ei = bd.Database(getattr(cfg, "ECOINVENT_DB", "ecoinvent-3.9.1-apos"))
-    hits = [a for a in ei if a["name"] == LEGACY_ACTIVITY
-            and a["unit"] == "kilogram"]
-    if not hits:
-        raise ValueError(f"{LEGACY_ACTIVITY!r} (kilogram) not in {ei.name}")
-    legacy_per_kg = H.run_lca_score(hits[0], method)
+    legacy_per_kg = H.run_lca_score(
+        H.resolve_exact(LEGACY_ACTIVITY, "GLO", unit="kilogram"), method)
     legacy_per_mva = legacy_per_kg * legacy_kg_per_mva()
 
-    solar_mass_per_unit = (sum(cfg.UPV_TX_MATERIALS_KG.values())
-                           + cfg.UPV_TX_FIBREBOARD_KG)
+    solar_mass_per_unit = (sum(tx.UPV_TX_MATERIALS_KG.values())
+                           + tx.UPV_TX_FIBREBOARD_KG)
 
     out = {
         "basis": "leng_wind_iea_pvps_2026_solar",
         "solar_basis": SOLAR_BASIS,
         "asset_life_years": life,
-        "site_collection_kV": float(cfg.TX_SITE_COLLECTION_KV),
-        "turbine_terminal_V": float(cfg.TX_TURBINE_TERMINAL_V),
-        "medium_voltage_band_kV": list(cfg.TX_MEDIUM_VOLTAGE_BAND_KV),
+        "site_collection_kV": float(tx.TX_SITE_COLLECTION_KV),
+        "turbine_terminal_V": float(tx.TX_TURBINE_TERMINAL_V),
+        "medium_voltage_band_kV": list(tx.TX_MEDIUM_VOLTAGE_BAND_KV),
         "wind": {
-            "database": cfg.TRANSFORMER_FOREGROUND_DB,
+            "database": TRANSFORMER_DB,
             "code": WIND_CODE,
             "source": "Leng et al. 2026, Processes 14(7) 1045, Table S1",
-            "farm_MW": float(cfg.TX_LENG_FARM_MW),
-            "n_turbines": int(cfg.TX_LENG_N_TURBINES),
-            "unit_rating_MVA": float(cfg.TX_LENG_UNIT_MVA),
-            "materials_kg_per_MW": {m: kg / cfg.TX_LENG_FARM_MW
-                                    for m, kg in cfg.TX_LENG_BOX_KG.items()},
+            "farm_MW": float(tx.TX_LENG_FARM_MW),
+            "n_turbines": int(tx.TX_LENG_N_TURBINES),
+            "unit_rating_MVA": float(tx.TX_LENG_UNIT_MVA),
+            "materials_kg_per_MW": {m: kg / tx.TX_LENG_FARM_MW
+                                    for m, kg in tx.TX_LENG_BOX_KG.items()},
             "kg_per_MW": wind_kg_per_mw(),
             "kgco2e_per_MW": wind_per_mw,
             "kgco2e_per_MW_year": wind_per_mw / life,
         },
         "solar": {
-            "database": cfg.TRANSFORMER_FOREGROUND_DB,
+            "database": TRANSFORMER_DB,
             "code": SOLAR_CODE,
-            "source": cfg.UPV_TX_SOURCE,
-            "unit_rating_MVA": float(cfg.UPV_TX_UNIT_MVA),
-            "primary_kV": float(cfg.UPV_TX_PRIMARY_KV),
-            "secondary_kV": float(cfg.UPV_TX_SECONDARY_KV),
-            "reference_plant_MWp": float(cfg.UPV_TX_REFERENCE_MWP),
-            "units_per_plant": int(cfg.UPV_TX_UNITS_PER_PLANT),
-            "units_per_MWp": float(cfg.UPV_TX_UNITS_PER_MWP),
-            "materials_kg_per_unit": dict(cfg.UPV_TX_MATERIALS_KG),
+            "source": tx.UPV_TX_SOURCE,
+            "unit_rating_MVA": float(tx.UPV_TX_UNIT_MVA),
+            "primary_kV": float(tx.UPV_TX_PRIMARY_KV),
+            "secondary_kV": float(tx.UPV_TX_SECONDARY_KV),
+            "reference_plant_MWp": float(tx.UPV_TX_REFERENCE_MWP),
+            "units_per_plant": int(tx.UPV_TX_UNITS_PER_PLANT),
+            "units_per_MWp": float(tx.UPV_TX_UNITS_PER_MWP),
+            "materials_kg_per_unit": dict(tx.UPV_TX_MATERIALS_KG),
             "kg_per_unit": solar_mass_per_unit,
-            "kg_per_MWp": solar_mass_per_unit * cfg.UPV_TX_UNITS_PER_MWP,
+            "kg_per_MWp": solar_mass_per_unit * tx.UPV_TX_UNITS_PER_MWP,
             "kgco2e_per_MWp": solar_per_mwp,
             "kgco2e_per_MWp_year": solar_per_mwp / life,
         },
@@ -368,6 +370,7 @@ def check(d: dict | None = None) -> str:
     """The arithmetic must round-trip, and the shape must stay capacity-shaped."""
     d = d or decompose()
     cfg = _cfg()
+    tx = _inv()
     problems = []
     w = d["wind"]
 
@@ -378,9 +381,9 @@ def check(d: dict | None = None) -> str:
     if abs(mass - w["kg_per_MW"]) > 1e-6:
         problems.append(f"kg/MW has drifted from the Table S1 bill it is "
                         f"transcribed from ({mass:,.2f} vs {w['kg_per_MW']:,.2f})")
-    if abs(sum(cfg.TX_LENG_BOX_KG.values()) / cfg.TX_LENG_FARM_MW
+    if abs(sum(tx.TX_LENG_BOX_KG.values()) / tx.TX_LENG_FARM_MW
            - w["kg_per_MW"]) > 1e-6:
-        problems.append("the cache no longer matches dc_config's bill")
+        problems.append("the cache no longer matches the inventory's bill")
 
     # The site must collect inside the band the data centre draws at, or the
     # chain has an uncharged transformation in it.
@@ -394,22 +397,22 @@ def check(d: dict | None = None) -> str:
                         "this module exists to charge would not be needed")
 
     # Both technologies must now be on the foreground, not on a scaled dataset.
-    if w["database"] != cfg.TRANSFORMER_FOREGROUND_DB:
+    if w["database"] != TRANSFORMER_DB:
         problems.append("wind is no longer reading the foreground inventory")
     s = d.get("solar")
-    if not s or s["database"] != cfg.TRANSFORMER_FOREGROUND_DB:
+    if not s or s["database"] != TRANSFORMER_DB:
         problems.append("solar is no longer reading the foreground inventory")
     else:
         # The transcribed bill must still rebuild the report's stated unit mass,
         # which is what guards the hardboard unit correction.
-        bill = sum(s["materials_kg_per_unit"].values()) + cfg.UPV_TX_FIBREBOARD_KG
+        bill = sum(s["materials_kg_per_unit"].values()) + tx.UPV_TX_FIBREBOARD_KG
         if abs(bill - s["kg_per_unit"]) > 1e-6:
             problems.append(f"solar kg/unit has drifted from its bill "
                             f"({bill:,.2f} vs {s['kg_per_unit']:,.2f})")
-        if abs(bill - cfg.UPV_TX_STATED_TOTAL_KG) > 1.0:
+        if abs(bill - tx.UPV_TX_STATED_TOTAL_KG) > 1.0:
             problems.append(
                 f"solar bill sums to {bill:,.1f} kg against IEA PVPS's stated "
-                f"{cfg.UPV_TX_STATED_TOTAL_KG:,.0f} kg per unit")
+                f"{tx.UPV_TX_STATED_TOTAL_KG:,.0f} kg per unit")
         # The unit has to be wound for the voltage the site collects at, or it
         # is the wrong transformer for this chain.
         if abs(s["primary_kV"] - d["site_collection_kV"]) > 1e-9:

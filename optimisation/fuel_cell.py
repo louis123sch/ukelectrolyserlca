@@ -19,7 +19,7 @@ So this module splits the inventory three ways:
 | term | scales with | why |
 |---|---|---|
 | **balance of plant** | whichever runs out first: 25 calendar years, or 60,000 operating hours | a physical system that both ages and wears |
-| **stack** | whichever runs out first: the horizon, or 32,000 operating hours | you must buy one to have a fuel cell; you buy another every 32,000 hours of running |
+| **stack** | whichever runs out first: 25 calendar years, or 32,000 operating hours | you must buy one to have a fuel cell; you buy another every 32,000 hours of running |
 | **maintenance** | MWh delivered | service events are driven by runtime, as the inventory itself models them |
 
 Neither replaceable component is simply "capital" or "throughput". Each is
@@ -51,7 +51,7 @@ Sources
 stack             Babatunde, S. et al. (2024), "Environmental Impact Assessment
                   of a 1 kW Proton-Exchange Membrane Fuel Cell", Table S1.
                   Built into ``fuel cell foreground`` by
-                  ``2.tech_lca_foreground.ipynb``.
+                  ``optimiser_lca/fuel_cell.py`` (python -m optimiser_lca.build).
 balance of plant  ecoinvent 3.9.1 "fuel cell production, polymer electrolyte
                   membrane, 2 kW" net of its own stack, and net of the
                   domestic-micro-CHP hot-water kit ecoinvent bundles with it.
@@ -64,6 +64,16 @@ one — at 200 h/yr it implies a 300-year asset. No public calendar life was
 found for a stationary PEMFC balance of plant, so this study charges it over
 the same 25 years it gives the electrolyser and the data centre. Registered in
 ``DATA_GAPS.md``; every result that depends on it should say so.
+
+**Stack calendar life is ASSUMED too**, and is a placeholder rather than a
+claim. It used to be the study horizon, which made the *Horizon* input move the
+stack and nothing else. PEM membranes age at open circuit, so a backup stack
+that sits idle will not reach 25 years; sweep 10 / 15 / 25 until a source is
+found (DOE stationary targets, Clean Hydrogen Partnership SRIA, backup-PEMFC
+manufacturer design lives).
+
+Both calendar lives are read from the constants below on every call, never from
+the decomposition cache, so editing one takes effect without a Brightway rerun.
 
 Run:  python optimisation/fuel_cell.py
 """
@@ -85,6 +95,8 @@ _MEMO: dict | None = None
 # ASSUMED — see the module docstring. Not a published figure.
 BOP_CALENDAR_LIFETIME_YEARS = 25.0
 BOP_LIFETIME_IS_ASSUMED = True
+STACK_CALENDAR_LIFETIME_YEARS = 25.0
+STACK_CALENDAR_LIFE_IS_ASSUMED = True
 
 RECONSTRUCTION_TOLERANCE = 1e-4      # bw2calc solver noise; see electrolysers.py
 
@@ -136,6 +148,20 @@ def _classify(name, amount, seen_stack_netting):
         "any coefficient from this module.")
 
 
+def _with_calendar_lives(d: dict) -> dict:
+    """Overlay the calendar lives from the module constants.
+
+    They are assumptions, not inventory, so the cache must not freeze them: an
+    edited constant used to be silently ignored until the cache was deleted.
+    """
+    d["bop_calendar_lifetime_years"] = BOP_CALENDAR_LIFETIME_YEARS
+    d["bop_lifetime_is_assumed"] = BOP_LIFETIME_IS_ASSUMED
+    d["bop_kgco2e_per_MW_year"] = d["bop_kgco2e_per_MW"] / BOP_CALENDAR_LIFETIME_YEARS
+    d["stack_calendar_lifetime_years"] = STACK_CALENDAR_LIFETIME_YEARS
+    d["stack_calendar_life_is_assumed"] = STACK_CALENDAR_LIFE_IS_ASSUMED
+    return d
+
+
 def decompose(use_cache: bool = True, refresh: bool = False) -> dict:
     """Per-kWh inventory -> per-MW capital, per-MWh wear, per-MWh maintenance."""
     global _MEMO
@@ -143,21 +169,22 @@ def decompose(use_cache: bool = True, refresh: bool = False) -> dict:
         _MEMO = None
         CACHE_PATH.unlink(missing_ok=True)
     if _MEMO is not None:
-        return _MEMO
+        return _with_calendar_lives(_MEMO)
     if use_cache and CACHE_PATH.exists():
         try:
             _MEMO = json.loads(CACHE_PATH.read_text(encoding="utf-8"))
-            return _MEMO
+            return _with_calendar_lives(_MEMO)
         except Exception:
             pass
 
     import bw2data as bd
     import lca_helpers as H
-    import dc_config as cfg
+    from optimiser_lca import fuel_cell as cfg      # the inventory's own parameters
+    from optimiser_lca import registry as R
 
     H.setup_brightway()
     method = _gwp_method(bd)
-    act = bd.get_activity((cfg.FC_FOREGROUND_DB, "pemfc_op_1kwh_h2"))
+    act = bd.get_activity((R.FUEL_CELL_DB, R.FC_OP))
 
     groups = {"fuel": 0.0, "stack": 0.0, "bop": 0.0, "maint": 0.0}
     h2_kg_per_kwh = 0.0
@@ -178,7 +205,7 @@ def decompose(use_cache: bool = True, refresh: bool = False) -> dict:
         parts.append({"name": name, "amount": amount, "kind": kind, "kgco2e_per_kwh": score})
 
     # The inventory's own amortisation bases, read back out of the amounts so
-    # they cannot drift from dc_config.
+    # they cannot drift from the inventory module.
     stack_hours = 1.0 / (stack_units_per_kwh * cfg.FC_RATED_POWER_KW)
     bop_hours = float(cfg.FC_SYSTEM_LIFETIME_H)
 
@@ -208,6 +235,7 @@ def decompose(use_cache: bool = True, refresh: bool = False) -> dict:
         "_foreground_total_per_kWh": sum(groups.values()),
         "_parts": parts,
     }
+    _with_calendar_lives(out)
     OUT_DIR.mkdir(exist_ok=True)
     CACHE_PATH.write_text(json.dumps(out, indent=2), encoding="utf-8")
     _MEMO = out
@@ -229,7 +257,7 @@ def check_reconstruction(d):
             f"{ref * 1000:.2f} g CO2e/kWh non-fuel burden, error {err:.1e}")
 
 
-def burden_kgco2e_per_year(cap_mw, mwh_per_year, horizon_years=None):
+def burden_kgco2e_per_year(cap_mw, mwh_per_year, stack_calendar_years=None):
     """Annual embodied burden of a fuel cell of ``cap_mw`` delivering ``mwh_per_year``.
 
     Applies the max(calendar, duty) replacement rule to both the stack and the
@@ -237,10 +265,10 @@ def burden_kgco2e_per_year(cap_mw, mwh_per_year, horizon_years=None):
     baseload one both cost what they actually cost.
     """
     d = decompose()
-    horizon_years = horizon_years or d["bop_calendar_lifetime_years"]
+    stack_calendar_years = stack_calendar_years or d["stack_calendar_lifetime_years"]
     h = (mwh_per_year / cap_mw) if cap_mw else 0.0        # full-load-equiv h/yr
 
-    stack_rate = max(1.0 / horizon_years, h / d["stack_lifetime_hours"])
+    stack_rate = max(1.0 / stack_calendar_years, h / d["stack_lifetime_hours"])
     bop_rate = max(1.0 / d["bop_calendar_lifetime_years"], h / d["bop_duty_lifetime_hours"])
     return {
         "bop": d["bop_kgco2e_per_MW"] * cap_mw * bop_rate,
@@ -249,7 +277,7 @@ def burden_kgco2e_per_year(cap_mw, mwh_per_year, horizon_years=None):
         "stack_units_per_MW_year": stack_rate,
         "bop_units_per_MW_year": bop_rate,
         "full_load_hours_per_year": h,
-        "stack_binding": "duty" if h / d["stack_lifetime_hours"] > 1.0 / horizon_years else "calendar",
+        "stack_binding": "duty" if h / d["stack_lifetime_hours"] > 1.0 / stack_calendar_years else "calendar",
         "bop_binding": "duty" if h / d["bop_duty_lifetime_hours"] > 1.0 / d["bop_calendar_lifetime_years"] else "calendar",
     }
 
@@ -297,7 +325,9 @@ def run():
           f"{' ASSUMED' if d['bop_lifetime_is_assumed'] else ''}, "
           f"{d['bop_duty_lifetime_hours']:,.0f} h)")
     print(f"  stack              {d['stack_kgco2e_per_MW'] / 1000:>10,.1f} t CO2e/MW, replaced on "
-          f"max(horizon, {d['stack_lifetime_hours']:,.0f} h)")
+          f"max({d['stack_calendar_lifetime_years']:.0f} y"
+          f"{' ASSUMED' if d['stack_calendar_life_is_assumed'] else ''}, "
+          f"{d['stack_lifetime_hours']:,.0f} h)")
     print(f"  maintenance        {d['maintenance_kgco2e_per_MWh']:>10,.2f} kg CO2e/MWh delivered")
     print(f"  hydrogen           {d['h2_kg_per_MWh']:>10,.2f} kg H2/MWh "
           f"(eta {d['eta_net_mean']:.3f} net AC)")

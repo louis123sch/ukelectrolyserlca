@@ -70,17 +70,30 @@ def _coefficient_identity() -> dict:
     covered only what the user typed. A cached result that predates a
     formulation change is worse than no cache, since it looks authoritative.
     """
+    def digest(f: Path):
+        return hashlib.sha256(f.read_bytes()).hexdigest()[:12] if f.exists() else None
+
     out = {}
-    for name in ("tech_lca_coefficients.csv", "h2_capex.csv"):
-        f = ROOT / "optimisation_outputs" / name
-        out[name] = hashlib.sha256(f.read_bytes()).hexdigest()[:12] if f.exists() else None
+    # What build_tech actually reads: the recommended H2 prices and every
+    # decomposition cache. h2_capex.csv is deliberately absent — nothing reads
+    # it; h2_capex.py is computed live and is fingerprinted below instead.
+    outputs = ROOT / "optimisation_outputs"
+    for f in [outputs / "tech_lca_coefficients.csv", outputs / "h2_prices_recommended.csv",
+              outputs / "bought_h2_gwp_cache.json",
+              *sorted(outputs.glob("*_decomposition*_cache.json"))]:
+        out[f.name] = digest(f)
+    # The model, and every module that turns a source into a coefficient. The
+    # constants live in code (calendar lives, capex, discount rates), so a
+    # cache keyed on the tables alone reused runs across a coefficient change.
     # grid_build/profiles/network_charges decide what the series *mean* (the
-    # UTC clock fix changed every grid file under an unchanged file name), so
-    # they are fingerprinted with the model.
+    # UTC clock fix changed every grid file under an unchanged file name).
     for name in ("dc_model.py", "dc_pareto.py", "dc_inputs.py", "dc_architectures.py",
-                 "grid_build.py", "profiles.py", "network_charges.py"):
-        f = ROOT / "optimisation" / name
-        out[name] = hashlib.sha256(f.read_bytes()).hexdigest()[:12] if f.exists() else None
+                 "grid_build.py", "profiles.py", "network_charges.py",
+                 "battery.py", "tech_costs.py", "renewables.py", "transformers.py",
+                 "h2_prices.py", "h2_capex.py", "h2_storage.py", "fuel_cell.py",
+                 "electrolysers.py", "grid_connection.py", "sites.py"):
+        out[name] = digest(ROOT / "optimisation" / name)
+    out["dc_config.py"] = digest(ROOT / "dc_config.py")
     return out
 
 
@@ -118,6 +131,9 @@ def run_one(scenario: A.Scenario, *, site, start: str, end: str,
         "size_mw_it": size_mw_it, "pue": pue, "resample_hours": resample_hours,
         "points": points, "cost_case": cost_case, "horizon_years": horizon_years,
         "unserved_fraction": unserved_fraction,
+        # Hashed as asked; the value actually used is recorded on the site
+        # below, after the series is built.
+        "connection_headroom": connection_headroom,
         "gwp_target_kg_per_year": gwp_target_kg_per_year,
         # In the hash, not just in build_tech's arguments: the share moves both
         # the price and the burden of bought green hydrogen, so a cached run at

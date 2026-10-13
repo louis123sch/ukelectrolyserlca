@@ -141,7 +141,7 @@ def evaluate(df: pd.DataFrame, series: M.Series, tech: M.Tech, caps: dict) -> di
     h = (fc_mwh / cap_fc) if cap_fc else 0.0
     bop_units = cap_fc * max(1.0 / tech.fc_bop_calendar_years, h / tech.fc_bop_duty_hours) \
         if cap_fc else 0.0
-    stack_units = cap_fc * max(1.0 / tech.horizon_years, h / tech.fc_stack_duty_hours) \
+    stack_units = cap_fc * max(1.0 / tech.fc_stack_calendar_years, h / tech.fc_stack_duty_hours) \
         if cap_fc else 0.0
 
     gwp = (tech.gwp_wind * caps.get("cap_wind", 0.0)
@@ -174,8 +174,10 @@ def evaluate(df: pd.DataFrame, series: M.Series, tech: M.Tech, caps: dict) -> di
             + tech.cost_ely * caps.get("cap_ely", 0.0)
             + tech.cost_tank * caps.get("cap_tank", 0.0)
             + tech.cost_fc * cap_fc
+            + tech.cost_fc_stack_per_mw * stack_units
+            + tech.cost_fc_bop_per_mw * bop_units
             + tech.cost_grid_per_mw_year * caps.get("cap_grid", 0.0)
-            + tech.cost_grid_fixed_per_year
+            + (tech.cost_grid_fixed_per_year if caps.get("cap_grid", 0.0) > 0 else 0.0)
             + scale * float((series.grid_price_per_mwh * df.imp * dt).sum())
             + scale * M.VOLL_GBP_PER_MWH * float((df.unserved * dt).sum()))
     mwh = float(series.demand_mw.sum() * dt) * scale
@@ -229,9 +231,12 @@ if __name__ == "__main__":
     from optimisation import dc_architectures as A
     from optimisation import dc_inputs as I
 
-    base, meta = I.build_series("london", "2025-01-01", "2025-12-29", 7.31, pue=1.0)
+    import dc_config as cfg
+    # Zhang's 7.31 MW is facility draw; at Zhang's PUE that is 5.22 MW of IT.
+    pue = float(cfg.DC_REFERENCE_PUE)
+    base, meta = I.build_series("london", "2025-01-01", "2025-12-29", 7.31 / pue, pue=pue)
     series = I.resample(base, 1.0)
-    tech = I.build_tech("london", meta, size_mw_it=7.31, pue=1.0)
+    tech = I.build_tech("london", meta, size_mw_it=7.31 / pue, pue=pue)
     assets = A.architecture("grid_res_battery")
     m, V, obj = M.build_model(series, assets, tech, objective="cost")
     M.solve(m)

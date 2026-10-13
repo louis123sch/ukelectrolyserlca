@@ -278,7 +278,8 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
     # charges the one the LP builds. Different assets, independent LP variables.
     ely.assert_no_double_count(uses_capital_per_mw=True, uses_foreground_fixed=False)
 
-    tank_design = tank_design or cfg.TANK_DESIGN
+    from optimiser_lca import h2_tank
+    tank_design = tank_design or h2_tank.TANK_DESIGN
     solar_basis = solar_basis or ren.SOLAR_EMBODIED_BASIS
     green_h2_basis = green_h2_basis or h2_prices.GREEN_H2_ELECTRICITY_BASIS
     emb = ren.apply_case(ren.decompose_all(), cost_case,
@@ -396,13 +397,14 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
         # The step-up between generator terminals and the site collection
         # network — 690 V (LOW) up to medium voltage, which is where the data
         # centre draws. Wind is the real per-turbine units from Leng's bill of
-        # materials, built as a foreground activity in notebook 2; solar is
+        # materials, built as a foreground activity by optimiser_lca; solar is
         # still the old invented plant-rated unit on ecoinvent's electronics
         # transformer. The two are NOT on one basis: see transformers.py.
         gwp_tx_wind_per_mw=tx.kgco2e_per_mw_year("onshore_wind"),
         gwp_tx_solar_per_mwp=tx.kgco2e_per_mw_year("solar_pv"),
         fc_bop_calendar_years=d["bop_calendar_lifetime_years"],
         fc_bop_duty_hours=d["bop_duty_lifetime_hours"],
+        fc_stack_calendar_years=d["stack_calendar_lifetime_years"],
         fc_stack_duty_hours=d["stack_lifetime_hours"],
         cost_wind=gen_cost("onshore_wind"), cost_offshore=gen_cost("offshore_wind"),
         cost_solar=gen_cost("solar_pv"),
@@ -412,6 +414,7 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
         cost_tank=float(tkc.annual_GBP_per_kg_year),
         cost_fc=float(fcr.annual_GBP_per_MW_year),
         cost_fc_stack_per_mw=float(fcr.stack_GBP_per_MW),
+        cost_fc_bop_per_mw=float(fcr.bop_GBP_per_MW),
         cost_grid_per_mw_year=meta["capacity_GBP_per_MW_year"],
         cost_grid_fixed_per_year=meta["fixed_GBP_per_year"],
         ely_kwh_per_kg=ely_row["kwh_per_kg"],
@@ -489,8 +492,9 @@ def _bought_h2_gwp(activity_code: str, green_basis: str | None = None, *,
     import bw2data as bd
     import lca_helpers as H
     from optimisation import baseline_grid as bg
+    from optimiser_lca.registry import HYDROGEN_DB
     H.setup_brightway()
-    act = bd.get_activity(("hydrogen foreground", activity_code))
+    act = bd.get_activity((HYDROGEN_DB, activity_code))
     score = H.run_lca_score(act, bg.gwp_method())
     cache[activity_code] = score
     OUT_DIR.mkdir(exist_ok=True)

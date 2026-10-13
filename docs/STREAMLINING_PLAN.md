@@ -33,7 +33,7 @@ test was **reachability**:
 | `tests/` (all 8 files) | all test DC modules |
 | `backend/runner.py` | executes the grid-build notebook — `sites.build_grid_series` depends on it |
 | `lca_helpers.py`, `dashboard_config.py` | used by DC modules *and* by the notebooks a grid build runs |
-| `2.tech_lca_foreground.ipynb` | builds every foreground DB the DC reads: DC facility, PEM fuel cell, AE/PEM/SOEC, H2 tank, SMR/SMR-CCS/MP-E (bought-H2 colours), UPV, transformers |
+| `2.tech_lca_foreground.ipynb` | builds every foreground DB the DC reads: DC facility, PEM fuel cell, AE/PEM/SOEC, H2 tank, SMR/SMR-CCS/MP-E (bought-H2 colours), UPV, transformers. *Superseded 13 Oct 2026: the inventories moved to `optimiser_lca/` and the notebook became a reader — see `docs/LCA_STRUCTURE_PLAN.md`* |
 | `3.1.custom_grid_carbon_intensity_api.ipynb` | produces the half-hourly regional `custom_electricity_score` the LP's grid carbon comes from |
 | `5.prices.ipynb` | Elexon prices + `electrolyser_costs_clean.csv` (read by `h2_capex.py`) |
 | `6.datacentre_optimiser.ipynb` | the study's results |

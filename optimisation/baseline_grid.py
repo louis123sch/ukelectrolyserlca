@@ -36,9 +36,10 @@ sys.path.insert(0, str(ROOT))
 import bw2data as bd
 
 import lca_helpers as H
-from dc_config import DC_FOREGROUND_DB, DC_OPERATION_YEARS
+from dc_config import DC_OPERATION_YEARS
+from optimiser_lca.registry import DATA_CENTRE_DB as DC_FOREGROUND_DB, DATA_CENTRE
 
-DC_CODE = "dc_zhang_virginia_baseline_25y"
+DC_CODE = DATA_CENTRE
 
 # What each non-electricity exchange scales with. Building shell, IT hardware and
 # the UPS track installed IT capacity and do not move when cooling improves;
@@ -143,12 +144,16 @@ def decompose_data_centre_by_driver(method, tolerance=1e-4):
 
 def load_grid_and_prices():
     """Half-hourly GB grid emission factor joined to the Elexon price."""
-    from optimisation.profiles import grid_file_is_utc
+    from optimisation.profiles import grid_file_is_current, grid_file_is_utc
     if not grid_file_is_utc(GRID_CSV):
         raise ValueError(
             f"{GRID_CSV.name} is on the old London-local clock while prices are "
             "UTC. Rebuild it: python -m optimisation.grid_build 13 "
             "'2025-01-01 00:00:00' '2025-12-29 00:00:00'")
+    if not grid_file_is_current(GRID_CSV):
+        raise ValueError(
+            f"{GRID_CSV.name} was scored on different grid sources from "
+            "optimiser_lca.grid.SOURCES. Re-score it: python -m optimisation.grid_build --rescore")
     grid = pd.read_csv(GRID_CSV, parse_dates=["datetime"])
     grid = grid.rename(columns={
         "datetime": "DATETIME",

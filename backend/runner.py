@@ -1,12 +1,16 @@
-"""Execute a project notebook headless, in this interpreter's environment.
+"""Run the foreground build, or a project notebook, headless in this
+interpreter's environment.
 
-Only one notebook still needs this: ``2.tech_lca_foreground.ipynb``, which
-builds the foreground databases from ecoinvent and has no API behind it, so it
-runs once per machine (``optimisation.sites.build_grid_series`` starts it when
-the data centre foreground is missing). Grid and price series are built in
-Python by ``optimisation/grid_build.py`` and do not come through here.
+``run_foreground_build`` runs ``python -m optimiser_lca.build``, which writes
+the foreground databases from ecoinvent and has no API behind it, so it runs
+once per machine (``optimisation.sites.build_grid_series`` starts it when the
+data centre foreground is missing). Grid and price series are built in Python
+by ``optimisation/grid_build.py`` and do not come through here.
 
-Nothing is patched: the notebook reads ``dc_config.py`` as it stands.
+``run_notebook`` executes a notebook with nbconvert. Nothing on the build path
+needs it any more — ``2.tech_lca_foreground.ipynb`` is now a reader of the
+inventories, not their builder — but it is kept for running that reader
+headless.
 """
 
 from __future__ import annotations
@@ -78,6 +82,40 @@ def _extract_notebook_log(nb_path: Path, max_chars: int = 20000) -> str:
     if len(text) > max_chars:
         text = text[-max_chars:]
     return text
+
+
+def run_foreground_build(timeout_s: int = 5400, modules: list[str] | None = None) -> RunResult:
+    """``python -m optimiser_lca.build [modules]`` in this interpreter, with the
+    same care over consoles and codecs as ``run_notebook``."""
+    cmd = [sys.executable, "-X", "utf8", "-m", "optimiser_lca.build", "--quiet"] + list(modules or [])
+    env = dict(os.environ)
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["MPLBACKEND"] = "Agg"
+    try:
+        proc = subprocess.run(
+            cmd, cwd=REPO_DIR, capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=timeout_s + 60, env=env,
+            **_NO_WINDOW,
+        )
+    except subprocess.TimeoutExpired as exc:
+        return RunResult(
+            success=False,
+            error_text=f"Build timed out after {timeout_s}s.\n{exc.stdout or ''}\n{exc.stderr or ''}",
+        )
+    if proc.returncode != 0:
+        # A Python traceback means the build raised; its absence means the
+        # process died, which is the case a retry can help with.
+        crashed = "Traceback" not in (proc.stderr or "")
+        parts = [f"optimiser_lca.build exited {proc.returncode}"
+                 + ("." if not crashed else
+                    " without a traceback, which means the process died rather "
+                    "than the build failing.")]
+        for name, text in (("stderr", proc.stderr), ("stdout", proc.stdout)):
+            if (text or "").strip():
+                parts.append(f"--- {name} ---\n{text[-6000:]}")
+        return RunResult(success=False, error_text="\n".join(parts),
+                         returncode=proc.returncode, crashed=crashed)
+    return RunResult(success=True, log_text=(proc.stdout or "")[-20000:], returncode=0)
 
 
 def run_notebook(notebook: str = FOREGROUND_NOTEBOOK, timeout_s: int = 5400) -> RunResult:
