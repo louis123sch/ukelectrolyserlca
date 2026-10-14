@@ -521,6 +521,18 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
                     h2_prices._resolve_grid_share(green_h2_grid_share)
                     if "green" in (h2_colour, h2_colour_2) else None)},
     )
+    # Transformer conversion losses, on the units the capital terms above
+    # already charge. Offshore shares wind's: it is the same turbine step-up.
+    from dataclasses import replace as _replace
+    from optimisation import conversion_losses as cl
+    lw, ls, lg = cl.stepup("onshore_wind"), cl.stepup("solar_pv"), cl.grid_intake()
+    tech = _replace(tech,
+                    loss_wind_noload=lw["noload_mw_per_mw"],
+                    loss_wind_load_at_full=lw["load_loss_per_mw_at_full_loading"],
+                    loss_solar_noload=ls["noload_mw_per_mw"],
+                    loss_solar_load_at_full=ls["load_loss_per_mw_at_full_loading"],
+                    loss_grid_noload=lg["noload_mw_per_mw"],
+                    loss_grid_load=lg["load_loss_fraction"])
     return with_storage_losses(
         tech, batt_standing_loss_per_hour=batt_standing_loss_per_hour,
         tank_leakage_per_hour=tank_leakage_per_hour)

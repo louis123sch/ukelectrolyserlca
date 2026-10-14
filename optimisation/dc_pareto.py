@@ -109,14 +109,16 @@ def _extract(V, obj, series, tag):
     row.update({k: float(V[flow].solution.sum()) * series.annual_scale
                 for k, flow in MASS_VARS.items()})
     mwh = float(series.demand_mw.sum() * series.dt_hours) * series.annual_scale
+    unserved = _energy(V, series, "unserved")
     row.update({
         "cost_GBP_per_year": tot["cost_GBP_per_year"],
         "gwp_kgco2e_per_year": tot["gwp_kgco2e_per_year"],
-        "gwp_g_per_kWh": tot["gwp_kgco2e_per_year"] / mwh,
-        "cost_GBP_per_MWh": tot["cost_GBP_per_year"] / mwh,
+        # On served demand, VoLL penalties off: see dc_model.intensities.
+        **M.intensities(tot["cost_GBP_per_year"], tot["gwp_kgco2e_per_year"],
+                        unserved, mwh),
         "import_MWh_per_year": _energy(V, series, "imp"),
         "export_MWh_per_year": _energy(V, series, "exp"),
-        "unserved_MWh_per_year": _energy(V, series, "unserved"),
+        "unserved_MWh_per_year": unserved,
     })
     return row
 
@@ -175,7 +177,7 @@ def front(series, assets, tech, *, points: int = DEFAULT_POINTS,
         if keep_dispatch:
             # Later solves of the same tag are refinements of it (the anchor
             # tie-breaks), so the last one written is the one that is reported.
-            frames[tag] = M.dispatch_frame(V, series)
+            frames[tag] = M.dispatch_frame(V, series, tech)
 
     def solve_one(objective, gwp_limit=None, cost_limit=None):
         m, V, obj = M.build_model(series, assets, tech, objective=objective,

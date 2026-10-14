@@ -1009,13 +1009,14 @@ else:
             "**At least one of these builds leaves demand unserved.** That is "
             "within the allowance you set, but it means that combination "
             "cannot actually keep the data centre up on its own kit. Unserved "
-            "energy is priced at a deliberately punitive value so infeasible "
-            "reliability targets surface as expensive answers rather than "
-            "solver failures."
+            "energy carries a deliberately punitive penalty in both objectives "
+            "(£100,000/MWh, and the same at the FES carbon price in CO₂e), so "
+            "it is used only as a last resort. Per-MWh and g/kWh figures leave "
+            "the penalty out and divide by the demand actually served."
         )
     if base_gwp_t is not None:
         st.caption(
-            f"**Demand served:** {summary['demand_MWh_per_year']:,.0f} MWh/yr · "
+            f"**Demand:** {summary['demand_MWh_per_year']:,.0f} MWh/yr · "
             f"**solve time:** {summary['solve_seconds']:.0f} s. Grid-only "
             f"reference for this data centre: **{base_gwp_t:,.0f} t CO₂e/yr** at "
             f"{base_gco2:,.0f} g/kWh — every carbon figure above can be read "

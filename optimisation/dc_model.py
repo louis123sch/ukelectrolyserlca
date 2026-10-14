@@ -81,11 +81,35 @@ sys.path.insert(0, str(ROOT))
 HOURS_PER_YEAR = 8760.0
 H2_LHV_KWH_PER_KG = 33.33
 
-# Value of lost load. Not a market number — a penalty large enough that an
-# infeasible reliability target surfaces as an expensive answer rather than a
-# solver failure, which is far easier to diagnose. ASSUMED.
+# Value of lost load. Not a market number — a penalty large enough that a
+# shortfall within the unserved allowance is used only as a last resort. It
+# turns an infeasible target into an expensive one only when that allowance
+# is non-zero; at the default of zero the reliability constraint is hard.
+# ASSUMED.
 VOLL_GBP_PER_MWH = 100_000.0
 VOLL_IS_ASSUMED = True
+
+# The same penalty in the carbon objective, charged the same way: per MWh of
+# demand left unmet. Without it unserved load was carbon-free, so a min-GWP
+# solve with any allowance shed the dirtiest hours as an emissions "cut" —
+# 455.7 against a 236.9 kg/MWh mean on the old grid (OBJECTIVE_AUDIT.md §3.7).
+# Expressed at the study's carbon price (FES 2025 CP2, 2025, the figure
+# dc_pareto reports the front against) so a shed MWh weighs the same in both
+# objectives: £100,000/MWh at £78.96/t is 1,266 t CO2e/MWh. A penalty, not an
+# emission — like VoLL, it is there so the reliability target binds in both
+# objectives, and per-MWh intensities are reported without it.
+VOLL_CARBON_PRICE_GBP_PER_T = 78.96
+VOLL_KGCO2E_PER_MWH = VOLL_GBP_PER_MWH / VOLL_CARBON_PRICE_GBP_PER_T * 1000.0
+
+# Hydrogen is an indirect greenhouse gas: it lengthens methane's lifetime and
+# raises tropospheric ozone and stratospheric water vapour. IPCC 2021 GWP100 as
+# implemented in ecoinvent 3.9.1 carries NO factor for it (checked 14 Oct), so
+# under the study's own method a leaked kilogram scores zero. Charged here as
+# a stated extension of that method, at Sand et al. (2023), Commun. Earth
+# Environ. 4:203, GWP100 = 11.6 ± 2.8; Warwick et al. (2022) for BEIS give
+# 11 ± 5. Only bites when tank leakage is non-zero, which by default it is not.
+H2_GWP100 = 11.6
+H2_GWP100_SOURCE = "Sand et al. 2023, Commun. Earth Environ. 4:203"
 
 
 @dataclass
@@ -170,6 +194,20 @@ class Tech:
     # written before they existed still constructs.
     gwp_tx_wind_per_mw: float = 0.0
     gwp_tx_solar_per_mwp: float = 0.0
+    # kg CO2e per kg of hydrogen leaked from the tank. See H2_GWP100.
+    gwp_h2_leaked_per_kg: float = H2_GWP100
+    # Transformer conversion losses (conversion_losses.py). No-load: MW drawn
+    # at the node per MW installed, every step. Load: share of delivered power
+    # at full loading, scaled by the profile's energy-weighted loading — see
+    # loss_factors. The grid's load loss is already a share of imports.
+    # Defaulted to zero, which is exactly the lossless model, so a Tech written
+    # before they existed reproduces its old answer.
+    loss_wind_noload: float = 0.0
+    loss_wind_load_at_full: float = 0.0
+    loss_solar_noload: float = 0.0
+    loss_solar_load_at_full: float = 0.0
+    loss_grid_noload: float = 0.0
+    loss_grid_load: float = 0.0
     labels: dict = field(default_factory=dict)
 
 
@@ -196,6 +234,25 @@ class Series:
     def annual_scale(self) -> float:
         """Scale a window total to an annual one, as sizing.evaluate() does."""
         return HOURS_PER_YEAR / self.hours
+
+
+def loss_factors(series: Series, tech: Tech) -> dict:
+    """Load-loss shares of delivered power for this window: wind, solar, grid.
+
+    A step-up's load loss is quadratic in its loading x. Linearised as
+    ``loss_at_full · x_eff · p`` with ``x_eff = Σcf² / Σcf``, the energy-weighted
+    loading of the availability profile, it is exact in energy terms when the
+    unit carries that profile (curtailment lowers the true loading, so this
+    errs slightly high). From the window's own capacity factors, so it follows
+    the site and the resampling.
+    """
+    def x_eff(cf):
+        cf = np.asarray(cf, dtype=float)
+        tot = cf.sum()
+        return float((cf * cf).sum() / tot) if tot > 0 else 0.0
+    return {"wind": tech.loss_wind_load_at_full * x_eff(series.cf_wind),
+            "solar": tech.loss_solar_load_at_full * x_eff(series.cf_solar),
+            "grid": tech.loss_grid_load}
 
 
 def build_model(series: Series, assets: Assets, tech: Tech, *,
@@ -292,17 +349,28 @@ def build_model(series: Series, assets: Assets, tech: Tech, *,
     V["fc_stack_units"] = m.add_variables(lower=0.0, name="fc_stack_units")
 
     cf_w, cf_s = series_da(series.cf_wind), series_da(series.cf_solar)
+    lf = loss_factors(series, tech)
 
     # --- (1) energy balance, one node -----------------------------------
+    # Imports arrive through the site's intake transformer, which keeps a
+    # share of them; every installed transformer draws its no-load loss at the
+    # node, whether or not anything flows. conversion_losses.py.
     m.add_constraints(
         V["p_wind"] + V["p_offshore"] + V["p_solar"] + V["dis"] + V["p_fc"]
-        + V["imp"] + V["unserved"]
-        - V["ch"] - V["p_ely"] - V["exp"] == demand, name="balance")
+        + (1.0 - lf["grid"]) * V["imp"] + V["unserved"]
+        - V["ch"] - V["p_ely"] - V["exp"]
+        - tech.loss_wind_noload * (V["cap_wind"] + V["cap_offshore"])
+        - tech.loss_solar_noload * V["cap_solar"]
+        - tech.loss_grid_noload * V["cap_grid"] == demand, name="balance")
 
     # --- (2) VRE availability; curtailment is implicit ------------------
-    m.add_constraints(V["p_wind"] - cf_w * V["cap_wind"] <= 0, name="wind_cf")
-    m.add_constraints(V["p_offshore"] - cf_w * V["cap_offshore"] <= 0, name="offshore_cf")
-    m.add_constraints(V["p_solar"] - cf_s * V["cap_solar"] <= 0, name="solar_cf")
+    # p_* is power delivered to the node, after the generator's step-up.
+    m.add_constraints(V["p_wind"] - (1.0 - lf["wind"]) * cf_w * V["cap_wind"] <= 0,
+                      name="wind_cf")
+    m.add_constraints(V["p_offshore"] - (1.0 - lf["wind"]) * cf_w * V["cap_offshore"] <= 0,
+                      name="offshore_cf")
+    m.add_constraints(V["p_solar"] - (1.0 - lf["solar"]) * cf_s * V["cap_solar"] <= 0,
+                      name="solar_cf")
 
     # --- (3)-(5) battery ------------------------------------------------
     eta = float(np.sqrt(tech.batt_rte))
@@ -352,7 +420,8 @@ def build_model(series: Series, assets: Assets, tech: Tech, *,
         V["fc_stack_units"] - fc_mwh / tech.fc_stack_duty_hours >= 0, name="fc_stack_duty")
 
     # --- strategies ------------------------------------------------------
-    apply_strategy(m, V, series, assets, ely_strategy, islanded_baseload_uses_cf_floor)
+    apply_strategy(m, V, series, assets, ely_strategy, islanded_baseload_uses_cf_floor,
+                   tech=tech)
 
     # --- objectives ------------------------------------------------------
     # One definition, shared with contributions() and myopic.evaluate, so a
@@ -454,6 +523,12 @@ def objective_terms(q, series: Series, tech: Tech, *, price, ci) -> dict:
         "electrolyser consumables": scale * (tech.ely_variable_gwp_per_kg
                                              * kg_per_mwh_in * q["p_ely"] * dt).sum(),
         "fuel cell maintenance": scale * (tech.gwp_fc_maint_per_mwh * q["p_fc"] * dt).sum(),
+        "unserved (VoLL)": scale * (VOLL_KGCO2E_PER_MWH * q["unserved"] * dt).sum(),
+        # The tank loses leakage x dt of the previous step's stock each step.
+        # Storage is cyclic, so summed over the window the previous steps'
+        # stocks are exactly this window's stocks and no roll is needed.
+        "H2 leaked from tank": scale * (tech.tank_leakage_per_hour * dt
+                                        * tech.gwp_h2_leaked_per_kg * q["tank"]).sum(),
     }
     cost_capital = {
         "wind": tech.cost_wind * q["cap_wind"],
@@ -508,7 +583,7 @@ def _total(*groups):
     return reduce(operator.add, [v for g in groups for v in g.values()])
 
 
-def apply_strategy(m, V, series, assets, strategy, islanded_uses_cf_floor):
+def apply_strategy(m, V, series, assets, strategy, islanded_uses_cf_floor, tech=None):
     """Force a mode of operation so its cost and carbon penalty can be measured.
 
     An unconstrained LP always picks the optimal dispatch itself, so a "running
@@ -554,8 +629,12 @@ def apply_strategy(m, V, series, assets, strategy, islanded_uses_cf_floor):
             # corrected.
             cf_w = xr.DataArray(np.asarray(series.cf_wind, dtype=float), coords=[t])
             cf_s = xr.DataArray(np.asarray(series.cf_solar, dtype=float), coords=[t])
-            available = ((cf_w * V["cap_wind"] + cf_w * V["cap_offshore"]
-                          + cf_s * V["cap_solar"]) * dt).sum()
+            # Delivered to the node, after the step-ups, as the availability
+            # constraints state it.
+            lf = loss_factors(series, tech) if tech is not None else \
+                {"wind": 0.0, "solar": 0.0}
+            available = (((1.0 - lf["wind"]) * cf_w * (V["cap_wind"] + V["cap_offshore"])
+                          + (1.0 - lf["solar"]) * cf_s * V["cap_solar"]) * dt).sum()
             served = float((series.demand_mw * dt).sum()) - (V["unserved"] * dt).sum()
             m.add_constraints((V["p_ely"] * dt).sum() - available + served <= 0,
                               name="surplus_only")
@@ -579,6 +658,25 @@ def totals(obj: dict) -> dict:
     }
 
 
+def intensities(cost: float, gwp: float, unserved_mwh: float,
+                demand_mwh: float) -> dict:
+    """£/MWh and g/kWh of a build, on the demand it actually *served*.
+
+    Both VoLL penalties come off first: they are there to make a reliability
+    target bind, not to be read as money spent or carbon emitted. Dividing by
+    gross demand, as every intensity did until 14 Oct, credited a build for
+    load it never carried.
+    """
+    served = demand_mwh - unserved_mwh
+    cost_x = cost - VOLL_GBP_PER_MWH * unserved_mwh
+    gwp_x = gwp - VOLL_KGCO2E_PER_MWH * unserved_mwh
+    return {"served_MWh_per_year": served,
+            "cost_excl_VoLL_GBP_per_year": cost_x,
+            "gwp_excl_VoLL_kgco2e_per_year": gwp_x,
+            "cost_GBP_per_MWh": cost_x / served if served > 0 else float("nan"),
+            "gwp_g_per_kWh": gwp_x / served if served > 0 else float("nan")}
+
+
 def solve(m, solver="highs", **kw):
     import logging
     logging.getLogger("linopy").setLevel(logging.ERROR)
@@ -587,8 +685,10 @@ def solve(m, solver="highs", **kw):
         raise RuntimeError(
             f"LP did not solve to optimality: {m.status} / {m.termination_condition}. "
             "An islanded architecture with a zero-unserved target and no store big "
-            "enough to ride the year is the usual cause — the VoLL penalty should "
-            "make that expensive rather than infeasible, so this is worth reading.")
+            "enough to ride the year is the usual cause. The VoLL penalties turn "
+            "a shortfall into an expensive answer only when an unserved "
+            "allowance is given (unserved_fraction > 0); at the default of zero "
+            "the reliability constraint is hard and this is the result.")
     return m
 
 def contributions(V, obj, series, tech, assets) -> dict:
@@ -694,8 +794,12 @@ def serve_stack(df: pd.DataFrame) -> pd.DataFrame:
     return long
 
 
-def dispatch_frame(V, series) -> pd.DataFrame:
-    """The solved dispatch as a tidy half-hourly (or hourly) frame."""
+def dispatch_frame(V, series, tech=None) -> pd.DataFrame:
+    """The solved dispatch as a tidy half-hourly (or hourly) frame.
+
+    Pass ``tech`` to have ``curtailed`` net of the step-up losses; without it
+    the transformer losses count as curtailment.
+    """
     cols = ("p_wind", "p_offshore", "p_solar", "ch", "dis", "soc", "p_ely",
             "h2_buy", "h2_buy_2", "tank", "h2_fc", "p_fc", "imp", "exp",
             "unserved")
@@ -703,8 +807,9 @@ def dispatch_frame(V, series) -> pd.DataFrame:
     df.insert(0, "demand", series.demand_mw)
     df["grid_gwp_per_mwh"] = series.grid_gwp_per_mwh
     df["price_per_mwh"] = series.grid_price_per_mwh
-    df["curtailed"] = (series.cf_wind * float(V["cap_wind"].solution)
-                       + series.cf_wind * float(V["cap_offshore"].solution)
-                       + series.cf_solar * float(V["cap_solar"].solution)
+    lf = loss_factors(series, tech) if tech is not None else {"wind": 0.0, "solar": 0.0}
+    df["curtailed"] = ((1.0 - lf["wind"]) * series.cf_wind
+                       * (float(V["cap_wind"].solution) + float(V["cap_offshore"].solution))
+                       + (1.0 - lf["solar"]) * series.cf_solar * float(V["cap_solar"].solution)
                        - df.p_wind - df.p_offshore - df.p_solar)
     return df

@@ -1063,6 +1063,49 @@ case is visible.
 
 ---
 
+## Transformer conversion losses — `conversion_losses.py`
+
+Added 14 Oct 2026. The capital of each transformer is charged above; this is
+the energy it loses, which enters the LP's node balance rather than a carbon
+coefficient — the lost kWh is generated or imported by plant already charged.
+
+| Unit | Rated | Pk (load) | Po (no-load) | Source | Grade |
+|---|---|---|---|---|---|
+| Wind turbine step-up (Leng) | 2.2 MVA | 16,400 W | 1,413 W | Table I.1 Tier 2, interpolated 2,000–2,500 kVA | transcribed + derived |
+| Solar inverter station (IEA PVPS) | 2.5 MVA | 18,500 W | 1,575 W | Table I.1 Tier 2 | transcribed |
+| Grid intake (Leng main unit) | 100 MVA | 0.288 % of S | 0.046 % of S | Table I.7 Tier 2, PEI ≥ 100 MVA 99.770 %, split at k_PEI 0.4 | transcribed + **assumed** split |
+
+Retained Commission Regulation (EU) No 548/2014, Annex I, Tier 2 (1 July
+2021), read on legislation.gov.uk on 14 Oct 2026 —
+<https://www.legislation.gov.uk/eur/2014/548/annex/I/division/1/adopted> and
+`/division/2/adopted`. These are legal maxima, so a real unit is at or below
+them. Leng's turbine unit is wound for 35 kV, above Table I.1's 24 kV class;
+the table is read anyway as the nearest limit.
+
+Per MW: wind 1.1 MVA/MW (50 × 2.2 MVA per 100 MW), solar 1.0 MVA/MWp (4 ×
+2.5 MVA per 10 MWp), intake 2 MVA/MW (N-1 ÷ power factor 1.0, each unit
+carrying half). No-load loss is drawn at the node on installed capacity every
+step; load loss is linearised at the energy-weighted loading Σx²/Σx of the
+window's own capacity factors (`dc_model.loss_factors`) and, for the intake,
+at an ASSUMED 0.5.
+
+## Hydrogen as a greenhouse gas — `dc_model.H2_GWP100`
+
+Added 14 Oct 2026. Leaked hydrogen is charged at **GWP100 = 11.6 kg CO₂e/kg**
+— Sand, M. et al. (2023), "A multi-model assessment of the Global Warming
+Potential of hydrogen", *Communications Earth & Environment* 4:203,
+<https://doi.org/10.1038/s43247-023-00857-8> (11.6 ± 2.8). Warwick, N. et al.
+(2022) for BEIS give 11 ± 5. IPCC 2021 GWP100 as implemented in ecoinvent 3.9.1
+carries **no** characterisation factor for hydrogen (checked 14 Oct), so this is
+a stated extension of the study's method, applied only to the tank's leakage.
+
+## Unserved load in the carbon objective — `dc_model.VOLL_KGCO2E_PER_MWH`
+
+A penalty, not an emission: VoLL (£100,000/MWh, ASSUMED) at the study's
+carbon price, FES 2025 CP2 for 2025 (£78.96/t), = 1,266 t CO₂e/MWh. Charged
+the same way cost charges VoLL, so a shed MWh weighs the same in both
+objectives. Reported totals carry it; intensities do not.
+
 ## Scope decisions
 
 These are choices, not data. They are recorded in `ASSUMPTIONS.md` with their

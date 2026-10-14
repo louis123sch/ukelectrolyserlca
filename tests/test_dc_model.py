@@ -659,3 +659,96 @@ def test_myopic_buys_hydrogen_when_the_build_may(series, tech):
     assert df.unserved.sum() < 1e-9 * series.n or df.h2_buy.sum() > 0
     assert df.h2_buy.sum() == pytest.approx(
         (df.p_fc * tech.fc_kg_h2_per_mwh * DT).sum() - 0.0, rel=1e-9)
+
+
+# =============================================================================
+# Unserved load and leaked hydrogen in the carbon objective (CARBON_PLAN 2.1-2.2)
+# =============================================================================
+def test_carbon_voll_is_voll_at_the_study_carbon_price():
+    from optimisation import h2_prices
+    assert M.VOLL_CARBON_PRICE_GBP_PER_T == pytest.approx(
+        h2_prices.carbon_gbp_per_t(2025), rel=1e-4)
+    assert M.VOLL_KGCO2E_PER_MWH == pytest.approx(
+        M.VOLL_GBP_PER_MWH / M.VOLL_CARBON_PRICE_GBP_PER_T * 1000.0)
+
+
+@pytest.mark.parametrize("assets", [ALL, M.Assets(grid=True)], ids=["all", "grid_only"])
+def test_min_gwp_does_not_shed_load_to_cut_carbon(series, tech, assets):
+    # Before 14 Oct unserved load was carbon-free, so a min-GWP solve with an
+    # allowance used every MWh of it, in the dirtiest hours.
+    V, _ = _solve(series, tech, assets, objective="gwp", unserved_fraction=0.01)
+    assert V["unserved"].solution.values.sum() * DT < 1e-6
+
+
+def test_intensities_divide_by_served_demand_without_the_penalties():
+    r = M.intensities(cost=2e6 + M.VOLL_GBP_PER_MWH * 10, gwp=5e5 + M.VOLL_KGCO2E_PER_MWH * 10,
+                      unserved_mwh=10.0, demand_mwh=1010.0)
+    assert r["served_MWh_per_year"] == 1000.0
+    assert r["cost_GBP_per_MWh"] == pytest.approx(2000.0)
+    assert r["gwp_g_per_kWh"] == pytest.approx(500.0)
+
+
+def test_leaked_hydrogen_is_charged_at_its_gwp(series, tech):
+    # Scored on a hand-made dispatch: the synthetic LP has no reason to hold
+    # hydrogen, and the parity tests already prove the LP sums these terms.
+    from dataclasses import replace
+    from optimisation import myopic
+    leak = 4e-6
+    t = replace(tech, tank_leakage_per_hour=leak)
+    q = {k: 0.0 for k in myopic.CAPACITIES}
+    q.update({k: np.zeros(series.n) for k in myopic.FLOWS})
+    q["fc_bop_units"] = q["fc_stack_units"] = 0.0
+    q["tank"] = np.full(series.n, 1_000.0)          # 1 t held all window
+    got = M.score(q, series, t)["gwp_operational"]["H2 leaked from tank"]
+    kg_leaked = series.annual_scale * leak * DT * 1_000.0 * series.n
+    assert got == pytest.approx(kg_leaked * M.H2_GWP100, rel=1e-12)
+    assert M.score(q, series, tech)["gwp_operational"]["H2 leaked from tank"] == 0.0
+
+
+# =============================================================================
+# Transformer conversion losses (CARBON_PLAN 2.3)
+# =============================================================================
+def _lossy(tech):
+    from dataclasses import replace
+    from optimisation import conversion_losses as cl
+    w, s, g = cl.stepup("onshore_wind"), cl.stepup("solar_pv"), cl.grid_intake()
+    return replace(tech, loss_wind_noload=w["noload_mw_per_mw"],
+                   loss_wind_load_at_full=w["load_loss_per_mw_at_full_loading"],
+                   loss_solar_noload=s["noload_mw_per_mw"],
+                   loss_solar_load_at_full=s["load_loss_per_mw_at_full_loading"],
+                   loss_grid_noload=g["noload_mw_per_mw"],
+                   loss_grid_load=g["load_loss_fraction"])
+
+
+def test_losses_close_the_balance_and_bind_availability(series, tech):
+    t = _lossy(tech)
+    V, _ = _solve(series, t, ALL, objective="gwp")
+    g = lambda k: V[k].solution.values
+    c = lambda k: float(V[k].solution)
+    lf = M.loss_factors(series, t)
+    assert 0 < lf["wind"] < 0.01 and 0 < lf["solar"] < 0.01 and 0 < lf["grid"] < 0.01
+    noload = (t.loss_wind_noload * (c("cap_wind") + c("cap_offshore"))
+              + t.loss_solar_noload * c("cap_solar") + t.loss_grid_noload * c("cap_grid"))
+    residual = (g("p_wind") + g("p_solar") + g("dis") + g("p_fc")
+                + (1 - lf["grid"]) * g("imp") + g("unserved") - g("ch") - g("p_ely")
+                - noload - series.demand_mw)
+    assert np.abs(residual).max() < 1e-6
+    assert (g("p_wind") <= (1 - lf["wind"]) * series.cf_wind * c("cap_wind") + 1e-6).all()
+
+
+@pytest.mark.parametrize("objective", ["cost", "gwp"])
+def test_losses_make_every_build_dearer_and_dirtier(series, tech, objective):
+    _, lossless = _solve(series, tech, ALL, objective=objective)
+    _, lossy = _solve(series, _lossy(tech), ALL, objective=objective)
+    key = {"cost": "cost_GBP_per_year", "gwp": "gwp_kgco2e_per_year"}[objective]
+    a, b = M.totals(lossless)[key], M.totals(lossy)[key]
+    assert a < b < a * 1.02          # real, and under a couple of per cent
+
+
+def test_myopic_dispatch_balances_with_losses(series, tech):
+    from optimisation import myopic
+    t = _lossy(tech)
+    caps = {"cap_wind": 10.0, "cap_solar": 5.0, "cap_batt_p": 2.0, "cap_batt_e": 8.0,
+            "cap_grid": 8.0}
+    df = myopic.dispatch(series, t, caps)    # raises if the balance breaks
+    assert df.unserved.sum() < 1e-9

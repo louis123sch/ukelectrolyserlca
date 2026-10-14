@@ -91,7 +91,8 @@ def _coefficient_identity() -> dict:
                  "grid_build.py", "profiles.py", "network_charges.py",
                  "battery.py", "tech_costs.py", "renewables.py", "transformers.py",
                  "h2_prices.py", "h2_capex.py", "h2_storage.py", "fuel_cell.py",
-                 "electrolysers.py", "grid_connection.py", "sites.py"):
+                 "electrolysers.py", "grid_connection.py", "sites.py",
+                 "conversion_losses.py"):
         out[name] = digest(ROOT / "optimisation" / name)
     out["dc_config.py"] = digest(ROOT / "dc_config.py")
     return out

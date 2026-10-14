@@ -124,11 +124,6 @@ Either the source is named and public, or no new sourcing is needed at all.
 - [ ] **EHV band boundaries against DCUSA Schedule 32.**
       `network_charges.EHV_BAND_KVA` came from secondary summaries and has
       never been checked against the primary.
-- [ ] **`myopic.evaluate` has drifted from the LP.** Stack and BoP costs
-      were added on 12 Oct, but there is still no grid connection carbon and no
-      bought-H₂ path at all — so the no-foresight bracket is wrong for any
-      architecture that buys hydrogen. Import the objective from `dc_model`;
-      add a parity test. Plan §3 item 4.
 - [ ] **Docs: reconcile 118 vs ~250 gCO₂/kWh** (reviewer, 30 Sep). 250 is the
       grid-only *total per MWh of load*, not a grid intensity: 118 (FES,
       national, direct, 2024) → 139 (API London 2025, direct) → 159
@@ -147,18 +142,12 @@ Either the source is named and public, or no new sourcing is needed at all.
       now 11,114 t/yr at 174 g/kWh after the 13 Oct grid fixes (gas, imports,
       delivery, solar). `validate.py` and `myopic.py` already size Zhang's
       7.31 MW as facility draw at `DC_REFERENCE_PUE` (audit §7 A4 is done).
-- [ ] **Unserved load is carbon-free.** A min-GWP solve with any allowance
-      sheds the dirtiest hours, and every g/kWh and £/MWh divides by gross
-      demand. Audit §3.7.
 - [ ] **Stale-docs sweep** — list in audit §6. Also the solar capacity
       factors quoted in `DATA_GAPS.md` (13.96–15.15 %), which are from the old
       35° series; new runs already fetch 20° (tilt is in the cache key).
 - [ ] **"Flexible" with a grid is identical to "free"** (`dc_model.py:448-449`),
       so three matrix scenarios are duplicates. Drop it or define it.
       Audit §3.3.
-- [ ] **`audit.py` blind spots.** Lifetime agreement can only fail for the
-      electrolyser; `NOT_ASSETS` hides unserved and bought H₂; `DUTY_VIA` also
-      hides FC maintenance; `cap_batt_e` is never slack-checked. Audit §5.
 - [ ] **Export is refused until it is modelled** (`dc_model.build_model`
       raises since 12 Oct). To build it: credit at an export price, not demand
       rates; give it a carbon credit; add it to `contributions()`. Audit §3.5.

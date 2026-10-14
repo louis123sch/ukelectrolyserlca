@@ -327,7 +327,7 @@ def check_degeneracy_and_slack(series, assets, tech, objective="gwp"):
     m, V, obj = M.build_model(series, assets, tech, objective=objective)
     M.solve(m)
     active = _coeff_by_variable(m, obj[objective])
-    d = M.dispatch_frame(V, series)
+    d = M.dispatch_frame(V, series, tech)
 
     from optimisation.dc_pareto import ENERGY_VARS
     clean = True

@@ -79,8 +79,16 @@ def dispatch(series: M.Series, tech: M.Tech, caps: dict,
     cap_ely, cap_tank = caps.get("cap_ely", 0.0), caps.get("cap_tank", 0.0)
     cap_fc, cap_grid = caps.get("cap_fc", 0.0), caps.get("cap_grid", 0.0)
 
-    avail = series.cf_wind * cap_w + series.cf_solar * cap_s
-    demand = series.demand_mw
+    # The same transformer losses the LP applies: generation delivered net of
+    # its step-up, imports net of the intake, and every unit's no-load loss
+    # added to what the site must serve.
+    lf = M.loss_factors(series, tech)
+    avail = ((1.0 - lf["wind"]) * series.cf_wind * cap_w
+             + (1.0 - lf["solar"]) * series.cf_solar * cap_s)
+    noload = (tech.loss_wind_noload * cap_w + tech.loss_solar_noload * cap_s
+              + tech.loss_grid_noload * cap_grid)
+    demand = series.demand_mw + noload
+    eta_imp = 1.0 - lf["grid"]
 
     soc = initial_soc_frac * cap_be
     tank = initial_tank_frac * cap_tank
@@ -129,8 +137,8 @@ def dispatch(series: M.Series, tech: M.Tech, caps: dict,
                 p_fc = min(short, cap_fc, tank / tech.fc_kg_h2_per_mwh / dt)
                 tank -= p_fc * tech.fc_kg_h2_per_mwh * dt
             short -= p_fc
-        imp = min(short, cap_grid) if short > 0 else 0.0
-        short -= imp
+        imp = min(short / eta_imp, cap_grid) if short > 0 else 0.0
+        short -= imp * eta_imp
 
         out["direct"][i] = direct; out["ch"][i] = ch; out["dis"][i] = dis
         out["p_ely"][i] = p_ely; out["p_fc"][i] = p_fc; out["imp"][i] = imp
@@ -139,8 +147,8 @@ def dispatch(series: M.Series, tech: M.Tech, caps: dict,
         out["soc"][i] = soc; out["tank"][i] = tank
 
     df = pd.DataFrame(out, index=series.index)
-    df["demand"] = demand
-    served = df.direct + df.dis + df.p_fc + df.imp + df.unserved
+    df["demand"] = series.demand_mw
+    served = df.direct + df.dis + df.p_fc + eta_imp * df.imp + df.unserved
     if not np.allclose(served, demand, atol=1e-6):
         raise AssertionError("myopic dispatch broke the demand balance")
     return df
@@ -187,11 +195,12 @@ def evaluate(df: pd.DataFrame, series: M.Series, tech: M.Tech, caps: dict,
     cost = sum(terms["cost_capital"].values()) + sum(terms["cost_operational"].values()) \
         + cost_const
     mwh = float(series.demand_mw.sum() * dt) * scale
+    unserved = float((df.unserved * dt).sum()) * scale
     return {
         "cost_GBP_per_year": cost, "gwp_kgco2e_per_year": gwp,
-        "gwp_g_per_kWh": gwp / mwh, "cost_GBP_per_MWh": cost / mwh,
+        **M.intensities(cost, gwp, unserved, mwh),
         "import_MWh_per_year": float((df.imp * dt).sum()) * scale,
-        "unserved_MWh_per_year": float((df.unserved * dt).sum()) * scale,
+        "unserved_MWh_per_year": unserved,
         "curtailed_MWh_per_year": (float((df.curtailed * dt).sum()) * scale
                                    if "curtailed" in df else float("nan")),
         "soc_end_frac": (df.soc.iloc[-1] / caps["cap_batt_e"]) if caps.get("cap_batt_e") else float("nan"),
@@ -203,9 +212,10 @@ def bracket(series, tech, caps, lp_totals, lp_vars=None, assets=None) -> pd.Data
     """LP against merit order for the same build — the value of foresight.
 
     Report unserved energy alongside cost, because cost alone is misleading
-    here: a myopic dispatch that fails to serve load is charged VoLL, which is a
-    diagnostic penalty rather than a price anyone pays. £33 m of "cost"
-    difference is really 332 MWh of lost load wearing a price tag.
+    here: a myopic dispatch that fails to serve load is charged VoLL — in both
+    objectives since 14 Oct — which is a diagnostic penalty rather than a price
+    anyone pays or a tonne anyone emits. £33 m of "cost" difference is really
+    332 MWh of lost load wearing a price tag. ``*_excl_VoLL`` take it off.
 
     ``assets``: the architecture, so the merit order may buy hydrogen when the
     LP could, and the connection charge follows the same flag.
@@ -235,6 +245,8 @@ def bracket(series, tech, caps, lp_totals, lp_vars=None, assets=None) -> pd.Data
     df = pd.DataFrame(rows)
     voll_m = M.VOLL_GBP_PER_MWH * df.unserved_MWh_per_year / 1e6
     df["cost_excl_VoLL_m"] = df.cost_m_GBP_per_year - voll_m
+    voll_t = M.VOLL_KGCO2E_PER_MWH * df.unserved_MWh_per_year / 1e3
+    df["gwp_excl_VoLL_t"] = df.gwp_t_per_year - voll_t
     return df
 
 
