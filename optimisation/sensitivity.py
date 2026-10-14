@@ -54,6 +54,7 @@ class Case:
     h2_colour: str | None = None
     unserved_fraction: float = 0.0
     tech_kwargs: dict = field(default_factory=dict)
+    series_kwargs: dict = field(default_factory=dict)
 
 
 CASES = {
@@ -72,12 +73,18 @@ CASES = {
 }
 
 
-def prepare(case: Case):
+# Knobs that change the series rather than the coefficients. A variant moving
+# one of these rebuilds the series for itself.
+SERIES_KNOBS = ("wind_net_factor",)
+
+
+def prepare(case: Case, **series_kwargs):
     """(site, series, meta, assets) for a case — built once, shared by variants."""
     from optimisation import dc_inputs as I
     from optimisation import sites
     site = sites.get(case.site)
-    series, meta = I.build_series(site, case.start, case.end, case.size_mw_it, pue=case.pue)
+    series, meta = I.build_series(site, case.start, case.end, case.size_mw_it, pue=case.pue,
+                                  **{**case.series_kwargs, **series_kwargs})
     if case.resample_hours:
         series = I.resample(series, case.resample_hours)
     assets = A.architecture(case.architecture, offshore=site.offshore_wind,
@@ -164,10 +171,13 @@ def run(case: Case | str, variants: list[dict], *, name: str,
     case = CASES[case] if isinstance(case, str) else case
     if {} not in variants:
         variants = [{}] + list(variants)
-    site, series, meta, assets = prepare(case)
+    site, series0, meta0, assets = prepare(case)
     rows = []
     for i, variant in enumerate(variants, 1):
-        kwargs = {**case.tech_kwargs, **variant}
+        s_kw = {k: v for k, v in variant.items() if k in SERIES_KNOBS}
+        series, meta = (prepare(case, **s_kw)[1:3] if s_kw else (series0, meta0))
+        kwargs = {**case.tech_kwargs,
+                  **{k: v for k, v in variant.items() if k not in SERIES_KNOBS}}
         tech = I.build_tech(site, meta, ely_tech=case.ely_tech, h2_colour=case.h2_colour,
                             size_mw_it=case.size_mw_it, pue=case.pue, **kwargs)
         for objective in objectives:
@@ -203,6 +213,10 @@ CARBON_KNOBS = {
     "batt_usable_fraction": [0.85, 0.95],
     "green_h2_grid_share": [0.0, 1.0],
     "tank_leakage_per_hour": [0.01 / 100 / 24, 0.1 / 100 / 24],
+    "wind_life_extension": ["none", "servicing"],
+    "fc_stack_basis": ["gramc_2025"],
+    "batt_cell_basis": ["voss_de", "jasper_fig4_311"],
+    "wind_net_factor": [1.0],
 }
 
 

@@ -7,8 +7,8 @@
   "it_kgco2e_over_life": 20501842.65795671,
   "it_kgco2e_per_year": 820073.7063182683,
   "it_kgco2e_per_mw_it_year": 157146.62397323817,
-  "energy_kgco2e_over_life": 2893863.421236304,
-  "energy_kgco2e_per_mwh": 1.80866463827269,
+  "energy_kgco2e_over_life": 3582363.421236304,
+  "energy_kgco2e_per_mwh": 2.23897713827269,
   "backup_kgco2e_per_year_excluded": 32467.97972467819,
-  "charged_kgco2e_per_year_at_reference": 935828.2431677204
+  "charged_kgco2e_per_year_at_reference": 963368.2431677204
 }

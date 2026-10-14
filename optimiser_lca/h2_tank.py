@@ -40,11 +40,23 @@ run at higher pressure. Switching to ``type1_200bar`` makes the tank ~3×
 lighter and switches on 2.5 kWh/kg of compression electricity (charged in
 the dispatch, not here).
 
+**Frame and foundations, added 14 Oct 2026.** The paper's line is the shell
+and nothing it stands on. No paper itemises a pressure vessel's skid or pad,
+so both are sized from first principles on the paper's own vessel and graded
+ASSUMED: a horizontal cylinder of 21.6 m3 at L/D 3.5 (D 1.98 m, L 6.94 m), a
+reinforced-concrete slab 0.5 m thick with 0.5 m clearance all round, rebar at
+100 kg/m3 of concrete, and saddles and frame at 10 % of the shell's mass in
+low-alloyed steel. About +13 % on the vessel's carbon — inside the 10-20 %
+judged worth chasing on 4 Sep. The 200 bar design takes the same pad per m3 of
+vessel, so per kg of H2 it falls with the gas density.
+
 **Still missing**, following the paper: forming, valves and pipework,
-foundations, compressor hardware, end-of-life, hydrogen leakage. All push the
-same way, so the tank is a floor with a published inventory behind it.
+compressor hardware, end-of-life, hydrogen leakage. All push the same way, so
+the tank is a floor with a published inventory behind it.
 """
 from __future__ import annotations
+
+import math
 
 from optimiser_lca import registry as R
 from optimiser_lca.common import Activity, Inventory, Process
@@ -100,6 +112,43 @@ def steel_kg_per_kg_h2(design: dict) -> float:
 DESIGN = TANK_DESIGNS[TANK_DESIGN]
 TANK_STEEL_KG_PER_KG_H2 = steel_kg_per_kg_h2(DESIGN)
 
+# --- frame and foundations, ASSUMED (see the module docstring) -----------------
+VESSEL_L_OVER_D = 3.5
+PAD_CLEARANCE_M = 0.5
+PAD_THICKNESS_M = 0.5
+REBAR_KG_PER_M3_CONCRETE = 100.0
+FRAME_STEEL_FRACTION_OF_SHELL = 0.10
+FOUNDATIONS_ARE_ASSUMED = True
+_REF = TANK_DESIGNS["gandiglio_28bar"]
+
+
+def pad_m3_per_m3_vessel() -> float:
+    """Concrete per m3 of vessel volume, from the reference vessel's geometry."""
+    v = _REF["volume_m3"]
+    d = (4.0 * v / (math.pi * VESSEL_L_OVER_D)) ** (1.0 / 3.0)
+    length = VESSEL_L_OVER_D * d
+    area = (length + 2 * PAD_CLEARANCE_M) * (d + 2 * PAD_CLEARANCE_M)
+    return area * PAD_THICKNESS_M / v
+
+
+def h2_kg_per_m3(design: dict) -> float:
+    """Stored H2 density: from volume and pressure where the design has them,
+    else a Type I bottle's ~1 wt% at 200 bar read through the gas law."""
+    rho = (design["pressure_bar"] * 1e5 * M_H2_KG_PER_MOL) / (
+        TANK_H2_COMPRESSIBILITY * R_GAS_J_PER_MOL_K * TANK_H2_TEMPERATURE_K)
+    return rho
+
+
+def foundations_per_kg_h2(design: dict) -> dict:
+    """Concrete (m3), rebar (kg) and frame steel (kg) per kg of H2 capacity."""
+    concrete = pad_m3_per_m3_vessel() / h2_kg_per_m3(design)
+    return {"concrete_m3": concrete,
+            "rebar_kg": concrete * REBAR_KG_PER_M3_CONCRETE,
+            "frame_kg": FRAME_STEEL_FRACTION_OF_SHELL * steel_kg_per_kg_h2(design)}
+
+
+TANK_FOUNDATIONS = foundations_per_kg_h2(DESIGN)
+
 # =============================================================================
 # Processes
 # =============================================================================
@@ -111,7 +160,15 @@ processes = {
     "steel_low_alloyed_hr": Process(
         identity=("market for steel, low-alloyed, hot rolled", "GLO"),
         query="market for steel low-alloyed hot rolled GLO",
-        why="a Type I cylinder is carbon/low-alloy steel, not stainless"),
+        why="a Type I cylinder is carbon/low-alloy steel, not stainless; also the frame"),
+    "concrete_normal": Process(
+        identity=("concrete, all types to generic market for concrete, normal strength",
+                  "RoW", "concrete, normal strength"),
+        query="market for concrete normal RoW",
+        why="the pad; the same concrete the SMR plant inventory uses"),
+    "reinforcing_steel": Process(
+        identity=("market for reinforcing steel", "GLO", "reinforcing steel"),
+        query="market for reinforcing steel GLO"),
 }
 flows = {}
 
@@ -132,11 +189,18 @@ activities = [
                 f"{TANK_STEEL_KG_PER_KG_H2:.1f} kg steel per kg H2 at "
                 f"{DESIGN['pressure_bar']:g} bar. Functional unit is 1 kg of "
                 "storage CAPACITY - amortise over TANK_LIFETIME_YEARS (dc_config). "
-                "Excludes forming, valves, foundations, compressor hardware, end-of-life and "
+                "Frame and a concrete pad are added, sized from the vessel's geometry "
+                "(ASSUMED). Excludes forming, valves, compressor hardware, end-of-life and "
                 "hydrogen leakage, as the source does.",
         technosphere=[
             (DESIGN["steel_process"], TANK_STEEL_KG_PER_KG_H2, "kilogram",
              f"Vessel steel — {TANK_DESIGN}, {DESIGN['pressure_bar']:g} bar"),
+            ("steel_low_alloyed_hr", TANK_FOUNDATIONS["frame_kg"], "kilogram",
+             "Saddles and frame, 10 % of shell mass - ASSUMED"),
+            ("concrete_normal", TANK_FOUNDATIONS["concrete_m3"], "cubic meter",
+             "Pad, 0.5 m slab with 0.5 m clearance - ASSUMED"),
+            ("reinforcing_steel", TANK_FOUNDATIONS["rebar_kg"], "kilogram",
+             "Pad reinforcement, 100 kg/m3 - ASSUMED"),
         ],
     ),
 ]

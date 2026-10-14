@@ -8,16 +8,17 @@
   "bop_duty_lifetime_hours": 80000.0,
   "bop_calendar_lifetime_years": 20.0,
   "bop_lifetime_is_assumed": true,
-  "stack_kgco2e_per_MW": 97431.28734467816,
-  "stack_kgco2e_per_MWh": 3.2477095781559386,
+  "stack_kgco2e_per_MW": 97431.28734467817,
+  "stack_kgco2e_per_MWh": 3.247709578155939,
   "bop_kgco2e_per_MW": 44324.55668313031,
   "bop_kgco2e_per_MW_year": 2216.227834156515,
+  "stack_kgco2e_per_MW_gramc_2025": 47597.40974153044,
   "bop_container_kgco2e_per_MW": 3657.698520802372,
   "bop_kw_per_container": 1000.0,
   "maintenance_kgco2e_per_MWh": 0.0032037756522448986,
   "_per_kwh": {
     "fuel": 1.0738510144402174,
-    "stack": 0.0032477095781559386,
+    "stack": 0.003247709578155939,
     "bop": 0.0005540569585391289,
     "maint": 3.2037756522448987e-06
   },
@@ -33,7 +34,7 @@
       "name": "Fuel cell stack production, PEM, 1 kW (Babatunde et al. 2024)",
       "amount": 3.3333333333333335e-05,
       "kind": "stack",
-      "kgco2e_per_kwh": 0.0032477095781559386
+      "kgco2e_per_kwh": 0.003247709578155939
     },
     {
       "name": "Fuel cell balance of plant, stationary, hydrogen-fed, per kW",

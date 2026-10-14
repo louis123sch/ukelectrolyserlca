@@ -137,19 +137,19 @@ def build(cost_case: str = "central") -> pd.DataFrame:
     rows.append(_row("fuel_cell_bop", "MW", d["bop_kgco2e_per_MW"],
                      calendar=d["bop_calendar_lifetime_years"],
                      duty=d["bop_duty_lifetime_hours"],
-                     source="ecoinvent 3.9.1 2 kW PEMFC net of stack; DOE 2020 duty life",
+                     source="Usai 2021 loops + 500 kW inverter + container; DOE MW-class duty life",
                      grade="assumed",
-                     note="calendar life ASSUMED — no public figure; see DATA_GAPS.md"))
+                     note="calendar life 20 y ASSUMED (Nedstack-indicative) — sweep 15/20/25 y; see DATA_GAPS.md"))
     rows.append(_row("fuel_cell_stack", "MW", d["stack_kgco2e_per_MW"],
                      calendar=d["stack_calendar_lifetime_years"],
                      duty=d["stack_lifetime_hours"],
                      source="Babatunde et al. 2024 Table S1; stack life their §3.4",
                      grade="assumed",
-                     note="calendar life ASSUMED (placeholder) — sweep 10/15/25 y; "
-                          "see DATA_GAPS.md"))
+                     note="calendar life 10 y ASSUMED — sweep 5/10/15 y; Gramc 2025 "
+                          "stack is the sensitivity basis; see DATA_GAPS.md"))
     rows.append(_row("fuel_cell_maintenance", "MW", 0.0,
                      throughput=d["maintenance_kgco2e_per_MWh"],
-                     source="ecoinvent 3.9.1 PEMFC maintenance, net of bundled stack",
+                     source="Usai 2021 air filter + coolant per 8,000 h",
                      grade="derived", note="pure throughput term"))
 
     # --- hydrogen storage -----------------------------------------------

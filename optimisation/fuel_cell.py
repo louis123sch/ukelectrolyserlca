@@ -160,6 +160,31 @@ def _with_calendar_lives(d: dict) -> dict:
     return d
 
 
+# Which stack inventory the LP charges. Babatunde's 2 kW graphite-plate stack
+# (ecoinvent's "future" dataset) is the default and the conservative one, at
+# ~97 kg CO2e/kW; Gramc et al. 2025's 48 kW automotive stack, rebuilt on this
+# study's ecoinvent 3.9.1 apos, is the sensitivity. Kept as the default after
+# the 14 Oct comparison: Gramc's stack is a vehicle stack whose component
+# manufacture is largely raw material only, so it errs low for a MW-class
+# stationary unit, and Babatunde errs high. The band is reported, not chosen
+# between (sensitivity.CARBON_KNOBS).
+STACK_BASES = {
+    "babatunde_2024": "Babatunde et al. 2024 / ecoinvent 'future' 2 kW graphite-plate stack",
+    "gramc_2025": "Gramc et al. 2025, IJHE 104:623, 48 kW automotive stainless-plate stack",
+}
+STACK_BASIS = "babatunde_2024"
+
+
+def stack_kgco2e_per_mw(d: dict, basis: str | None = None) -> float:
+    """Embodied carbon of one MW of stack, on the named basis."""
+    basis = basis or STACK_BASIS
+    if basis == "babatunde_2024":
+        return float(d["stack_kgco2e_per_MW"])
+    if basis == "gramc_2025":
+        return float(d["stack_kgco2e_per_MW_gramc_2025"])
+    raise ValueError(f"stack basis must be one of {list(STACK_BASES)}, got {basis!r}")
+
+
 def decompose(use_cache: bool = True, refresh: bool = False) -> dict:
     """Per-kWh inventory -> per-MW capital, per-MWh wear, per-MWh maintenance."""
     global _MEMO
@@ -233,6 +258,9 @@ def decompose(use_cache: bool = True, refresh: bool = False) -> dict:
         "stack_kgco2e_per_MWh": stack_per_mw / stack_hours,
         "bop_kgco2e_per_MW": bop_per_mw,
         "bop_kgco2e_per_MW_year": bop_per_mw / BOP_CALENDAR_LIFETIME_YEARS,
+        # The sensitivity stack, per MW (its activity is per kW).
+        "stack_kgco2e_per_MW_gramc_2025": H.run_lca_score(
+            bd.get_activity((R.FUEL_CELL_DB, R.FC_STACK_GRAMC)), method) * 1000.0,
         # Of which the container, at the inventory's own kW per container.
         "bop_container_kgco2e_per_MW": container_per_kwh * bop_hours * 1000.0,
         "bop_kw_per_container": cfg.FC_KW_PER_CONTAINER,

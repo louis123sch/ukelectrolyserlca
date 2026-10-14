@@ -40,7 +40,7 @@ DC_CACHE = OUT_DIR / "dc_facility_decomposition_v2_cache.json"
 
 from optimisation import dc_model, sites
 
-DISCOUNT_RATE = 0.06        # as sizing.Electrolyser; see ASSUMPTIONS.md
+DISCOUNT_RATE = 0.06        # ASSUMED, unsourced; one discount-rate policy is a TODO (audit §4)
 
 
 def data_centre_coefficients(refresh: bool = False) -> dict:
@@ -97,9 +97,10 @@ def data_centre_coefficients(refresh: bool = False) -> dict:
 
 
 def build_series(site, start: str, end: str, size_mw_it: float,
-                 pue: float = 1.15, token: str | None = None,
+                 pue: float | None = None, token: str | None = None,
                  connection_headroom: float | None = None,
-                 auto_build: bool = True, on_progress=None) -> dc_model.Series:
+                 auto_build: bool = True, on_progress=None,
+                 wind_net_factor: float | None = None) -> dc_model.Series:
     """Aligned half-hourly inputs for one site and window.
 
     ``site`` is anything ``sites.get`` accepts — a ``Site``, a ``(lat, lon)``
@@ -111,10 +112,19 @@ def build_series(site, start: str, end: str, size_mw_it: float,
     window at any GB coordinate just works; the wait only happens when
     something is genuinely missing. ``on_progress`` takes a one-line notice
     before that wait.
+
+    ``wind_net_factor`` turns ninja's single-turbine capacity factor into a
+    farm's net one; defaults to ``profiles.WIND_NET_FACTOR`` (0.851). Pass 1.0
+    to reproduce runs before 14 Oct 2026.
     """
     from optimisation import network_charges as nc
     from optimisation import profiles
+    import dc_config as cfg
 
+    # One default PUE for every entry point that does not choose its own:
+    # Zhang's, the facility the inventory describes. It used to be 1.15 here,
+    # 1.0 in the CLI and the matrix, 1.2 in audit and 1.5 on the page.
+    pue = float(cfg.DC_REFERENCE_PUE) if pue is None else float(pue)
     site = sites.get(site)
     # tilt/azimuth are left unset so profiles.fetch_solar_cf takes them from
     # dc_config. Before this, they were hard-coded defaults in that
@@ -154,11 +164,14 @@ def build_series(site, start: str, end: str, size_mw_it: float,
     voltage = nc.delivery_voltage(transmission, tdr_band)
     grid_gwp = grid_lca.delivered(df["grid_generation_kgco2e_per_kwh"].to_numpy(), voltage)
 
+    net = profiles.WIND_NET_FACTOR if wind_net_factor is None else float(wind_net_factor)
+    if not 0.5 <= net <= 1.0:
+        raise ValueError(f"wind_net_factor must be in [0.5, 1.0], got {net!r}")
     series = dc_model.Series(
         index=index,
         dt_hours=float(meta["slice_hours"]),
         demand_mw=np.full(len(index), size_mw_it * pue),
-        cf_wind=df["wind_cf"].to_numpy(),
+        cf_wind=df["wind_cf"].to_numpy() * net,
         cf_solar=df["solar_cf"].to_numpy(),
         grid_gwp_per_mwh=grid_gwp * 1000.0,
         grid_price_per_mwh=price,
@@ -176,6 +189,8 @@ def build_series(site, start: str, end: str, size_mw_it: float,
     meta["transmission_connected"] = transmission
     meta["connection_tier_note"] = tier_note
     meta["grid_delivery_voltage"] = voltage
+    meta["wind_net_factor"] = net
+    meta["mean_wind_cf_net"] = float(np.mean(series.cf_wind))
     meta["mean_grid_delivered_kgco2e_per_kwh"] = float(grid_gwp.mean())
     meta["site"] = site.key
     meta["site_name"] = site.name
@@ -233,7 +248,7 @@ def resample(series: dc_model.Series, freq_hours: float) -> dc_model.Series:
 def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
                tank_design: str | None = None, h2_colour: str | None = None,
                cost_case: str = "central", horizon_years: float = 25.0,
-               size_mw_it: float = 100.0, pue: float = 1.15,
+               size_mw_it: float = 100.0, pue: float | None = None,
                solar_basis: str | None = None, h2_variant: str | None = None,
                green_h2_basis: str | None = None,
                green_h2_grid_share: float | None = None,
@@ -245,8 +260,16 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
                fc_stack_calendar_years: float | None = None,
                fc_bop_calendar_years: float | None = None,
                fc_kw_per_container: float | None = None,
-               batt_usable_fraction: float | None = None) -> dc_model.Tech:
+               batt_usable_fraction: float | None = None,
+               wind_life_extension: str | None = None,
+               fc_stack_basis: str | None = None,
+               batt_cell_basis: str | None = None) -> dc_model.Tech:
     """Resolve every coefficient the LP needs. Touches Brightway only via caches.
+
+    ``pue`` is accepted for symmetry with ``build_series`` and ignored: PUE
+    reaches the facility's carbon only through demand, which the series
+    carries (the energy-driven part is charged per MWh of it), and the
+    IT-driven part scales with ``size_mw_it`` alone.
 
     ``solar_basis`` selects the inventory behind solar's embodied carbon and
     defaults to ``renewables.SOLAR_EMBODIED_BASIS`` — IEA PVPS rather than
@@ -297,6 +320,10 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
     ``BOP_CALENDAR_LIFETIME_YEARS``), the kW of fuel cell one container houses
     (``optimiser_lca.fuel_cell.FC_KW_PER_CONTAINER``) and the battery's usable
     share of nameplate (``battery.USABLE_FRACTION``). None keeps the default.
+    ``fc_stack_basis`` is one of ``fuel_cell.STACK_BASES``; ``batt_cell_basis``
+    one of ``battery.CELL_KGCO2E_PER_KWH``.
+    ``wind_life_extension`` is one of ``renewables.WIND_LIFE_EXTENSION_BASES``:
+    the parts a 20-y ecoinvent turbine needs to reach this study's life.
     The BoP life moves the cost annuity as well as the carbon replacement
     count; the container count rescales only the container's share of the BoP
     carbon, which ``fuel_cell.decompose`` scores separately, so no inventory is
@@ -337,8 +364,8 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
     tank_design = tank_design or h2_tank.TANK_DESIGN
     solar_basis = solar_basis or ren.SOLAR_EMBODIED_BASIS
     green_h2_basis = green_h2_basis or h2_prices.GREEN_H2_ELECTRICITY_BASIS
-    emb = ren.apply_case(ren.decompose_all(), cost_case,
-                         solar_basis=solar_basis).set_index("technology")
+    emb = ren.apply_case(ren.decompose_all(), cost_case, solar_basis=solar_basis,
+                         wind_life_extension=wind_life_extension).set_index("technology")
     ann = tc.annualised_table()
 
     def gen_cost(asset):
@@ -355,7 +382,8 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
     bc = batt.cost_components()[cost_case]
     crf_b = batt.capital_recovery_factor(batt.WACC_REAL, batt.ASSET_LIFE_YEARS)
     annuity_b = crf_b + batt.FIXED_OPEX_PCT_CAPEX[cost_case]
-    be = batt.embodied_components(usable_fraction=batt_usable_fraction)
+    be = batt.embodied_components(usable_fraction=batt_usable_fraction,
+                                  cell_basis=batt_cell_basis)
 
     # electrolyser
     ely_row = ely.with_heat_source(
@@ -372,7 +400,8 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
 
     # fuel cell
     d = fc.decompose()
-    if "bop_container_kgco2e_per_MW" not in d:      # a cache from before the split
+    if ("bop_container_kgco2e_per_MW" not in d
+            or "stack_kgco2e_per_MW_gramc_2025" not in d):  # a cache from before the split
         d = fc.decompose(refresh=True)
     fc_bop_years = float(fc_bop_calendar_years or d["bop_calendar_lifetime_years"])
     fc_stack_years = float(fc_stack_calendar_years or d["stack_calendar_lifetime_years"])
@@ -466,15 +495,15 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
         gwp_ely=ely_row["capital_kgco2e_per_MW"] / ely.PLANT_LIFETIME_YEARS * stack_share,
         gwp_tank=tank_row["kgco2e_per_kg_capacity_year"],
         gwp_fc_bop_per_mw=gwp_fc_bop,
-        gwp_fc_stack_per_mw=d["stack_kgco2e_per_MW"],
+        gwp_fc_stack_per_mw=fc.stack_kgco2e_per_mw(d, fc_stack_basis),
         gwp_fc_maint_per_mwh=d["maintenance_kgco2e_per_MWh"],
         gwp_grid_per_mw=gc.kgco2e_per_mw_year(),
         # The step-up between generator terminals and the site collection
         # network — 690 V (LOW) up to medium voltage, which is where the data
         # centre draws. Wind is the real per-turbine units from Leng's bill of
-        # materials, built as a foreground activity by optimiser_lca; solar is
-        # still the old invented plant-rated unit on ecoinvent's electronics
-        # transformer. The two are NOT on one basis: see transformers.py.
+        # materials, solar IEA PVPS T12-33:2026's inverter-station units, both
+        # built as foreground activities by optimiser_lca, and each amortised
+        # over its generator's life. See transformers.py.
         gwp_tx_wind_per_mw=tx.kgco2e_per_mw_year(
             "onshore_wind", life_years=float(emb.loc["onshore_wind"].study_lifetime_years)),
         gwp_tx_solar_per_mwp=tx.kgco2e_per_mw_year(
@@ -517,6 +546,9 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
                 "fc_kw_per_container": fc_kw_box,
                 "batt_usable_fraction": (batt.USABLE_FRACTION if batt_usable_fraction is None
                                          else float(batt_usable_fraction)),
+                "wind_life_extension": wind_life_extension or ren.WIND_LIFE_EXTENSION,
+                "fc_stack_basis": fc_stack_basis or fc.STACK_BASIS,
+                "batt_cell_basis": batt_cell_basis or batt.CELL_BASIS,
                 "green_h2_grid_share": (
                     h2_prices._resolve_grid_share(green_h2_grid_share)
                     if "green" in (h2_colour, h2_colour_2) else None)},
@@ -622,12 +654,21 @@ def _bought_h2_gwp(activity_code: str, green_basis: str | None = None, *,
         return (h2_prices.green_h2_gwp_per_kg(green_basis, grid_share=grid_share)
                 + compression)
 
+    # Keyed on the inventories that move a fossil score. Until 14 Oct the
+    # cache had no fingerprint and outlived two rewrites of the hydrogen
+    # foreground, still holding the dead 17.0 green value (audit §3.6).
+    import hashlib
+    fp = hashlib.sha256(b"".join(
+        (ROOT / "optimiser_lca" / f).read_bytes()
+        for f in ("hydrogen.py", "gb_grid.py", "grid.py"))).hexdigest()[:12]
     cache = {}
     if _H2_GWP_CACHE.exists():
         try:
             cache = json.loads(_H2_GWP_CACHE.read_text(encoding="utf-8"))
         except Exception:
             pass
+    if cache.get("_fingerprint") != fp:
+        cache = {"_fingerprint": fp}
     if activity_code in cache:
         return cache[activity_code] + compression
     import bw2data as bd

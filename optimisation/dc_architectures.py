@@ -9,7 +9,7 @@ worth building, which is itself a result.
 The five options, plus two references
 -------------------------------------
 ``grid_only`` and ``grid_battery`` are references rather than proposals.
-``grid_only`` reproduces the 16,006 t CO2e/yr baseline every other number is
+``grid_only`` reproduces the grid-only baseline every other number is
 quoted against. ``grid_battery`` — grid plus a battery and no new generation —
 is the structural counterpart to ``grid_h2`` on bought hydrogen: both do exactly
 one job, shifting grid electricity in time from clean half-hours to dirty ones.
@@ -170,7 +170,7 @@ def core_matrix() -> list[Scenario]:
         n += 1
         S.append(Scenario(n=n, **kw))
 
-    add(architecture="grid_only", label="Grid only", note="reference — the 16,006 t/yr baseline")
+    add(architecture="grid_only", label="Grid only", note="reference — the grid-only baseline")
     add(architecture="grid_battery", label="Grid + battery",
         note="time-shift only, no new generation — the battery's clean statement")
     add(architecture="grid_res_battery", label="Grid + renewables + battery")

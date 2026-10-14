@@ -188,7 +188,8 @@ class Tech:
     # LOW voltage; the data centre draws at MEDIUM, so the step is compulsory —
     # 100 MW at 690 V is 83,674 A. Wind is one transformer per TURBINE (fifty on
     # a 100 MW farm), which is why it scales exactly with cap_wind. Solar is
-    # still one invented plant-rated unit and is the smaller of the two.
+    # IEA PVPS T12-33:2026's 2.5 MVA inverter-station units, four per 10 MWp,
+    # and is the larger of the two per MW.
     # Carbon only: DESNZ/Arup capex already reaches the point of connection, so
     # a cost term would double count. See transformers.py. Defaulted so a Tech
     # written before they existed still constructs.
@@ -444,10 +445,11 @@ def build_model(series: Series, assets: Assets, tech: Tech, *,
         m.add_objective(gwp)
     elif objective == "connection":
         # Smallest grid connection, for use only as a final tie-break with both
-        # cost and gwp already pinned by epsilon constraints. cap_grid is priced
-        # in cost and absent from gwp, so at a site where the connection charge
-        # is zero — a transmission connection in a floored TNUoS zone — neither
-        # objective has any preference between connections, and the reported
+        # cost and gwp already pinned by epsilon constraints. cap_grid carries
+        # only a small embodied term in gwp (grid_connection.py, 138 kg/MW/yr)
+        # and, at a site where the connection charge is zero — a transmission
+        # connection in a floored TNUoS zone — nothing in cost, so neither
+        # objective has much preference between connections, and the reported
         # size is whichever vertex the solver stopped at. Minimising it directly
         # is the only thing that makes the number mean "the connection this
         # build actually needs".

@@ -53,6 +53,36 @@ PEM_UNITS_PER_KG_H2  = 3.37e-7     # 1 / 2,964,315 kg
 SOEC_UNITS_PER_KG_H2 = 2.645e-7    # 1 / 3,779,894 kg
 CO2_CAPTURED_PER_KG_H2 = 8.01      # kg, SMR-CCS -> CCS waste treatment
 
+# --- carbon balance of the gas routes (added 14 Oct 2026) -----------------------
+# Every carbon atom in the natural gas an SMR plant takes leaves as CO2, either
+# to air or to the capture train. ecoinvent's GB high-pressure gas, which these
+# routes link to, carries 0.741 kg fossil C per kg at 0.735 kg/m3 (its own
+# product properties: Bussa et al. 2021 composition, Meili et al. 2022
+# density), i.e. 1.997 kg CO2 per m3 burned. Hermesmann's SimaPro exports do
+# not close on it:
+#   SMR       4.85 m3 -> 9.686 kg CO2, inventory emits 9.0           (0.686 short)
+#   SMR-CCS   5.33 m3 -> 10.645 kg CO2, inventory captures 8.01 and
+#             emits 0.99 = 9.0, the same as SMR on 10 % more gas      (1.645 short)
+# The SMR-CCS route's extra gas raises steam for solvent regeneration and is
+# burned in a flue the inventory's capture does not reach, so the shortfall is
+# emitted, not captured. The closure is charged as fossil CO2 to air, on the
+# gas's own carbon content, so the inventory and the gas it links to agree.
+# Methane pyrolysis needs none: its carbon leaves as solid carbon.
+GAS_KG_PER_M3 = 0.7350015434999999          # ecoinvent 'dry mass', GB HP gas
+GAS_FOSSIL_C_PER_KG = 0.7410015561000001    # ecoinvent 'carbon content, fossil'
+CO2_PER_KG_C = 44.0095 / 12.011
+GAS_CO2_KG_PER_M3 = GAS_KG_PER_M3 * GAS_FOSSIL_C_PER_KG * CO2_PER_KG_C
+SMR_GAS_M3, SMR_CO2_EMITTED = 4.85, 9.0
+SMR_CCS_GAS_M3, SMR_CCS_CO2_EMITTED = 5.33, 0.99
+SMR_CO2_CLOSURE = SMR_GAS_M3 * GAS_CO2_KG_PER_M3 - SMR_CO2_EMITTED
+SMR_CCS_CO2_CLOSURE = (SMR_CCS_GAS_M3 * GAS_CO2_KG_PER_M3
+                       - SMR_CCS_CO2_EMITTED - CO2_CAPTURED_PER_KG_H2)
+# The CCS step's diesel was linked as the *product* (market group for diesel),
+# so the fuel was bought and never burned. Taken as burned in a building
+# machine — well drilling and site plant — at ecoinvent's 42.8 MJ/kg.
+CCS_DIESEL_KG_PER_KG_CO2 = 0.0154
+DIESEL_MJ_PER_KG = 42.8
+
 # =============================================================================
 # Processes — exact identities, with the search that found each one
 # =============================================================================
@@ -61,7 +91,10 @@ processes = {
     "electricity_hv_gb": Process(
         query="market for electricity high voltage GB", pick=10,
         identity=("market for electricity, high voltage", "GB", "electricity, high voltage"),
-        why="GB HV market; the SMR plant takes grid power at transmission voltage"),
+        why="GB HV market; kept for the electrolysers only, whose electricity "
+            "every coefficient strips out. The fossil routes take GRID_DB's "
+            "study grid instead (gb_grid.py) - this market is 2018 and runs gas "
+            "on the conventional plant"),
     "gas_hp_gb": Process(
         query="market for natural gas high pressure GB", pick=1,
         identity=("market for natural gas, high pressure", "GB", "natural gas, high pressure")),
@@ -99,9 +132,11 @@ processes = {
         query="onshore well oil gas GLO", pick=1,
         identity=("market for onshore well, oil/gas", "GLO", "onshore well, oil/gas"),
         why="injection well, as the source models it"),
-    "ccs_diesel": Process(
-        query="market group for diesel RER", pick=0,
-        identity=("market group for diesel", "RER", "diesel")),
+    "ccs_diesel_burned": Process(
+        query="market for diesel burned in building machine GLO", pick=0,
+        identity=("market for diesel, burned in building machine", "GLO",
+                  "diesel, burned in building machine"),
+        why="the source linked diesel as a product and never burned it"),
     # --- methane pyrolysis -----------------------------------------------------
     "steel_chromium_188": Process(
         query="Market for steel, chromium steel 18/8 GLO", pick=1,
@@ -354,7 +389,8 @@ activities = [
         reference_product="hydrogen", unit=_kg, location="GB",
         comment="Recreated from SimaPro export SMR.XLSX.",
         technosphere=[
-            ("electricity_hv_gb", -1.1,    _kwh,  "Avoided product: Electricity, high voltage GB"),
+            (FG(R.GB_GRID_HV_2025, database=R.GRID_DB), -1.1, _kwh,
+             "Avoided product: electricity, high voltage, GB study grid"),
             ("gas_hp_gb",         4.85,    _m3,   "Natural gas, high pressure GB"),
             ("tap_water",         6.64,    _kg,   "Tap water"),
             ("concrete_normal",   6.60e-6, _m3,   "Concrete, normal RoW"),
@@ -366,6 +402,8 @@ activities = [
         ],
         biosphere=[
             ("co2",            9.0,  _kg, "Carbon dioxide; modelled as fossil CO2"),
+            ("co2",            SMR_CO2_CLOSURE, _kg,
+             "carbon-balance closure on the linked gas's own carbon content (DERIVED)"),
             ("oxygen_air",     0.31, _kg, "Oxygen to air"),
             ("water_air",      2.93, _kg, "Water to air"),
             ("water_resource", 0.38, _m3, "Water, cooling, GB"),
@@ -378,7 +416,7 @@ activities = [
         technosphere=[
             (FG(R.CCS),           CO2_CAPTURED_PER_KG_H2, _kg,
              "8.01 kg CO2 per kg H2 to foreground CCS waste-treatment"),
-            ("electricity_hv_gb", -0.05,   _kwh,  "Avoided electricity"),
+            (FG(R.GB_GRID_HV_2025, database=R.GRID_DB), -0.05, _kwh, "Avoided electricity, GB study grid"),
             ("gas_hp_gb",         5.33,    _m3,   "Natural gas, high pressure GB"),
             ("tap_water",         4.68,    _kg,   "Tap water"),
             ("concrete_normal",   6.60e-6, _m3,   "Concrete RoW"),
@@ -390,6 +428,8 @@ activities = [
         ],
         biosphere=[
             ("co2",            0.99, _kg, "CO2 residual, not captured"),
+            ("co2",            SMR_CCS_CO2_CLOSURE, _kg,
+             "carbon-balance closure: the extra gas's CO2, uncaptured (DERIVED)"),
             ("oxygen_air",     0.41, _kg, "Oxygen to air"),
             ("water_air",      1.33, _kg, "Water to air"),
             ("water_resource", 1.18, _m3, "Water, cooling, GB"),
@@ -402,9 +442,10 @@ activities = [
         technosphere=[
             ("ccs_pipeline",      2.34666e-9, "kilometer", "Pipeline, natural gas, long distance"),
             ("ccs_well",          9.863e-8,   _m,          "Onshore well, oil/gas"),
-            ("ccs_diesel",        0.0154,     _kg,         "Diesel"),
-            ("electricity_hv_gb", 0.0171,     _kwh,        "Electricity HV GB — pipeline pumping"),
-            ("electricity_hv_gb", 0.0070,     _kwh,        "Electricity HV GB — compressor"),
+            ("ccs_diesel_burned", CCS_DIESEL_KG_PER_KG_CO2 * DIESEL_MJ_PER_KG, _MJ,
+             "Diesel 0.0154 kg, burned (was linked unburned)"),
+            (FG(R.GB_GRID_HV_2025, database=R.GRID_DB), 0.0171, _kwh, "Electricity, GB study grid — pipeline pumping"),
+            (FG(R.GB_GRID_HV_2025, database=R.GRID_DB), 0.0070, _kwh, "Electricity, GB study grid — compressor"),
         ],
         biosphere=[
             ("co2", 1.36106e-7, _kg, "CO2 fugitive emissions from CCS pipeline/well"),
@@ -416,7 +457,7 @@ activities = [
         comment="Methane pyrolysis MP-E from Table 3. Electric heating; no direct CO2.",
         technosphere=[
             ("gas_hp_gb",          5.72,    _m3,  "Natural gas, high pressure GB"),
-            ("electricity_hv_gb",  10.29,   _kwh, "Electricity HV GB"),
+            (FG(R.GB_GRID_HV_2025, database=R.GRID_DB), 10.29, _kwh, "Electricity, GB study grid"),
             ("palladium",          8.45e-6, _kg,  "Palladium GLO"),
             ("copper_cathode",     5.63e-6, _kg,  "Copper GLO"),
             ("steel_low_alloyed",  1.99e-3, _kg,  "Steel low-alloyed"),

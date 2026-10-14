@@ -309,8 +309,23 @@ def data_centre_vs_paper():
     return s
 
 
+def gb_grid_vs_series(tol=1e-4):
+    """The GB grid activity must score to its pinned figure and its series' mean."""
+    import bw2data as bd
+    import lca_helpers as H
+    from optimiser_lca import gb_grid
+    H.setup_brightway()
+    print(gb_grid.check_against_series())
+    s = H.run_lca_score(bd.get_activity((R.GRID_DB, R.GB_GRID_HV_2025)), _gwp_with_lt(bd)) * 1000
+    pinned = gb_grid.GB_GRID_2025_HV_GCO2E_PER_KWH
+    print(f"GB study grid, 2025, delivered at HV: {s:.3f} g CO2e/kWh (pinned {pinned:.3f})")
+    if abs(s - pinned) > tol * pinned:
+        raise AssertionError("gb_grid has moved: update GB_GRID_2025_HV_GCO2E_PER_KWH")
+    return s
+
+
 CHECKS = {"fc_stack": fc_stack_vs_paper, "fc_operation": fc_operation_sanity,
-          "data_centre": data_centre_vs_paper}
+          "data_centre": data_centre_vs_paper, "gb_grid": gb_grid_vs_series}
 
 
 def main(argv=None):

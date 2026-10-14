@@ -39,8 +39,9 @@ def main(argv=None):
     ap.add_argument("--tdr-band", default=sites.DEFAULT_TDR_BAND,
                     help="TNUoS demand residual band, by agreed capacity")
     ap.add_argument("--dc-size", type=float, default=100.0, help="IT load, MW")
-    ap.add_argument("--pue", type=float, default=1.0,
-                    help="1.0 reproduces the Zhang foreground, whose figure is already facility-level")
+    ap.add_argument("--pue", type=float, default=None,
+                    help="default: Zhang's own PUE (dc_config.DC_REFERENCE_PUE, 1.4), "
+                         "the facility the inventory describes")
     ap.add_argument("--start", default="2025-01-01")
     ap.add_argument("--end", default="2025-12-29")
     ap.add_argument("--horizon-years", type=float, default=25.0,

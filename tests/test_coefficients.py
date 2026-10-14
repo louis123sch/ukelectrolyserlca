@@ -380,10 +380,12 @@ def test_green_compressor_never_runs_on_grid_carbon():
         assert I < 0.1 * hp.ECOINVENT_GB_LV_GCO2E_PER_KWH, (
             f"green compressor at grid_share={share} draws {I:.1f} g/kWh — "
             f"that is grid carbon on a renewable commodity")
-    # fossil colours do take the grid their own activities link to
+    # fossil colours take the grid their own activities link to: the study's
+    # own GB grid since 14 Oct, not ecoinvent's 2018 market
     for colour in ("grey", "blue", "turquoise"):
         assert (hp.bought_h2_compression_gco2e_per_kwh(colour)
-                == hp.ECOINVENT_GB_LV_GCO2E_PER_KWH)
+                == hp.FOSSIL_SELLER_GRID_GCO2E_PER_KWH)
+        assert hp.FOSSIL_SELLER_GRID_GCO2E_PER_KWH < 0.6 * hp.ECOINVENT_GB_LV_GCO2E_PER_KWH
 
 
 def test_compression_uses_the_same_thermodynamics_as_self_production():
@@ -410,13 +412,15 @@ def test_compression_moves_blue_far_more_than_green():
     """The finding that inverted DATA_GAPS' expectation.
 
     Green buys renewable power for its compressor, so the term is ~2 % of its
-    production burden. Blue buys grid power, so it is ~15 %.
+    production burden. Blue buys grid power — the study's 2025 GB grid at
+    142 g/kWh since 14 Oct, so ~0.21 kg/kg (it was 0.45 on ecoinvent's 311 g
+    low-voltage market) — still ten times green's.
     """
     from optimisation import h2_prices as hp
     green = hp.bought_h2_compression_kgco2e_per_kg("green", grid_share=0.5)
     blue = hp.bought_h2_compression_kgco2e_per_kg("blue")
-    assert green < 0.05 and blue > 0.4
-    assert blue > 15 * green
+    assert green < 0.05 and 0.15 < blue < 0.30
+    assert blue > 8 * green
 
 
 # =============================================================================
@@ -674,3 +678,99 @@ def test_sensitivity_variant_lists():
     assert v == [{}, {"a": 1}, {"a": 2}, {"b": 3}]
     assert S.grid({"a": [1, 2], "b": [3, 4]}) == [
         {"a": 1, "b": 3}, {"a": 1, "b": 4}, {"a": 2, "b": 3}, {"a": 2, "b": 4}]
+
+
+
+# =============================================================================
+# Gas-route carbon balance and the study grid (CARBON_PLAN 3.4-3.6)
+# =============================================================================
+def test_gas_routes_close_their_carbon_balance():
+    from optimiser_lca import hydrogen as h
+    # ecoinvent's own GB high-pressure gas: ~2.0 kg CO2 per m3 burned
+    assert h.GAS_CO2_KG_PER_M3 == pytest.approx(1.9956, rel=1e-4)
+    smr_out = 9.0 + h.SMR_CO2_CLOSURE
+    ccs_out = 0.99 + h.SMR_CCS_CO2_CLOSURE + h.CO2_CAPTURED_PER_KG_H2
+    assert smr_out == pytest.approx(4.85 * h.GAS_CO2_KG_PER_M3, rel=1e-12)
+    assert ccs_out == pytest.approx(5.33 * h.GAS_CO2_KG_PER_M3, rel=1e-12)
+    assert 0 < h.SMR_CO2_CLOSURE < h.SMR_CCS_CO2_CLOSURE
+
+
+def test_gb_grid_shares_match_the_series():
+    from optimiser_lca import gb_grid
+    assert "OK" in gb_grid.check_against_series()
+
+
+def test_fossil_routes_take_the_study_grid():
+    from optimiser_lca import hydrogen as h, registry as R
+    for act in h.activities:
+        if act.code in (R.SMR, R.SMR_CCS, R.CCS, R.MP_E):
+            assert not any(row[0] == "electricity_hv_gb" for row in act.technosphere), act.code
+
+
+# =============================================================================
+# Wind life extension and net yield; the second stack basis (CARBON_PLAN 3.1-3.2)
+# =============================================================================
+def test_wind_parts_fraction():
+    from optimisation import renewables as r
+    assert r.wind_parts_fraction(35, "none") == 0.0
+    assert r.wind_parts_fraction(35, "servicing") == pytest.approx(0.07)
+    assert r.wind_parts_fraction(35, "servicing_overhaul") == pytest.approx(0.07 + 0.205)
+    # within the design life there is no overhaul
+    assert r.wind_parts_fraction(25, "servicing_overhaul") == pytest.approx(0.05)
+    with pytest.raises(ValueError):
+        r.wind_parts_fraction(35, "bogus")
+
+
+def test_central_wind_restates_above_the_lowest_published_lca():
+    from optimisation import renewables as r
+    w = r.apply_case(r.decompose_all(), "central").set_index("technology").loc["onshore_wind"]
+    # IPCC AR5's lowest published onshore figure is ~7 g CO2e/kWh; a 35-y
+    # turbine charged no parts sat at 5.8.
+    assert w.restated_kgco2e_per_kWh * 1000 > 7.0
+    none = r.apply_case(r.decompose_all(), "central", wind_life_extension="none") \
+        .set_index("technology").loc["onshore_wind"]
+    assert none.restated_kgco2e_per_kWh * 1000 == pytest.approx(5.77, abs=0.05)
+
+
+def test_wind_net_factor_is_its_components():
+    from optimisation import profiles as p
+    prod = 1.0
+    for v in p.WIND_NET_COMPONENTS.values():
+        prod *= v
+    assert p.WIND_NET_FACTOR == pytest.approx(prod)
+    assert 0.80 < p.WIND_NET_FACTOR < 0.90           # EWEA's 10-20 % total loss
+
+
+def test_gramc_stack_is_the_lighter_basis():
+    _cached(fuel_cell)
+    d = fuel_cell.decompose()
+    b = fuel_cell.stack_kgco2e_per_mw(d, "babatunde_2024")
+    g = fuel_cell.stack_kgco2e_per_mw(d, "gramc_2025")
+    assert fuel_cell.stack_kgco2e_per_mw(d) == b              # the default
+    assert 0.3 < g / b < 0.7
+    from optimisation import dc_inputs as I
+    t = I.build_tech("london", _NO_NETWORK, fc_stack_basis="gramc_2025")
+    assert t.gwp_fc_stack_per_mw == pytest.approx(g)
+
+
+def test_battery_cell_basis_swaps_only_the_cell():
+    from optimisation import battery as b
+    base = b.embodied_components()["energy_kgco2e_per_kWh"]
+    j = b.embodied_components(cell_basis="jasper_fig4_311")["energy_kgco2e_per_kWh"]
+    delta = (b.CELL_KGCO2E_PER_KWH["jasper_fig4_311"] - b.CELL_KGCO2E_PER_KWH["voss_cn"])
+    assert j - base == pytest.approx(delta / b.USABLE_FRACTION)
+
+
+def test_facility_charges_the_refrigerant_it_tops_up():
+    from optimiser_lca import data_centre as dc
+    act = dc.activities[0]
+    bought = next(a for k, a, *_ in act.technosphere if k == "refrigerant_r134a")
+    leaked = next(a for k, a, *_ in act.biosphere if k == "hfc134a_air")
+    assert leaked == bought == 450
+
+
+def test_tank_carries_its_frame_and_pad():
+    from optimisation import h2_storage
+    for r in h2_storage.decompose():
+        share = r["foundations_kgco2e_per_kg_capacity"] / r["kgco2e_per_kg_capacity"]
+        assert 0.05 < share < 0.20, (r["design"], share)

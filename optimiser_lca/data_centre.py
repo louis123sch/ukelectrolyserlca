@@ -49,14 +49,20 @@ equivalent of what the paper's ecoinvent 3.7 cutoff model used:
   server is ``market for computer, laptop`` — the same proxy the paper used
   (its own quantity is a server count with a refresh-cycle adjustment).
 
-No direct biosphere flows: the source study has none in the foreground — all
-impact runs through the technosphere links, matching the paper's finding that
->99 % of impact is electricity-driven.
+One direct biosphere flow, added 14 Oct 2026: the refrigerant leaked. Zhang's
+supplementary Table S1 derives the 450 kg of R134a as "2 000 kg × 0.009 y⁻¹ ×
+25 y = 450 kg top-up" — refrigerant bought to replace what leaked at 0.9 %/yr
+— and the paper charges only its production (~6.6 kg CO2e/kg). A top-up that
+replaces leakage is the leakage, so the same 450 kg is emitted as HFC-134a to
+air (GWP100 1,530 in IPCC 2021): 688 t CO2e over the life, ~27.5 t/yr. Their
+0.9 %/yr sits below the 1-3 %/yr they cite for best-practice sites, so this
+errs low. The 2,000 kg initial charge is not in the inventory and its
+end-of-life fate is outside the boundary.
 """
 from __future__ import annotations
 
 from optimiser_lca import registry as R
-from optimiser_lca.common import Activity, Inventory, Process
+from optimiser_lca.common import Activity, Flow, Inventory, Process
 
 # =============================================================================
 # Parameters — all in dc_config (DC_OPERATION_YEARS, DC_REFERENCE_PUE); the
@@ -121,7 +127,12 @@ processes = {
         why="the paper's 'tetrafluoroethane' is R134a; 3.9.1 has no bare tetrafluoroethane market"),
 }
 
-flows = {}
+flows = {
+    "hfc134a_air": Flow(
+        query="Ethane, 1,1,1,2-tetrafluoro-, HFC-134a",
+        identity=("Ethane, 1,1,1,2-tetrafluoro-, HFC-134a", ("air",)),
+        why="the refrigerant top-up replaces refrigerant that leaked"),
+}
 
 # =============================================================================
 # Activities
@@ -154,6 +165,10 @@ activities = [
             ("battery",              2.0e4, "kilogram",      "Battery, Li-ion, rechargeable, prismatic — UPS"),
             ("sodium_hypochlorite", 1.30e5, "kilogram",      "Sodium hypochlorite — cooling water treatment"),
             ("refrigerant_r134a",       450, "kilogram",     "Tetrafluoroethane / R134a — cooling-system refrigerant top-up"),
+        ],
+        biosphere=[
+            ("hfc134a_air", 450, "kilogram",
+             "R134a leaked: the 450 kg top-up replaces leakage at 0.9 %/yr (Zhang Table S1)"),
         ],
     ),
 ]

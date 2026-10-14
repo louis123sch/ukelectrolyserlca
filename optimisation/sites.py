@@ -409,7 +409,8 @@ def require_grid_region(site: Site, grid_filename: str):
         f"{grid_filename!r}"
         + (f" — region {got} ({CARBON_API_REGIONS.get(got, '?')})." if got else ".")
         + "\n\nCached regions: "
-        + (", ".join(f"{r} ({CARBON_API_REGIONS[r]})" for r in sorted(have)) or "none")
+        + (", ".join(f"{r} ({CARBON_API_REGIONS.get(r, 'GB-wide' if r == 18 else '?')})"
+                     for r in sorted(have)) or "none")
         + f"\n\nGenerate this one with:\n"
           f"    python -c \"from optimisation import sites; "
           f"sites.build_grid_series({site.carbon_api_region})\"")

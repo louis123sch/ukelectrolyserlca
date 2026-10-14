@@ -23,7 +23,7 @@ Emissions are IPCC 2021 GWP100 on ecoinvent 3.9.1 apos throughout.
 
 | Input | Value | Grade | Source |
 |---|---|---|---|
-| Data centre inventory | 1.60e9 kWh over 25 y; 21,036 t CO₂e fixed | transcribed | Zhang, M., Carbajales-Dale, M., Ma, X., Guo, L., Fan, C. (2025), hyperscale Virginia data centre. Built into `data centre foreground` by `optimiser_lca/data_centre.py` |
+| Data centre inventory | 1.60e9 kWh over 25 y; 24,896 t CO₂e non-electricity over the life, genset included (14 Oct 2026, with refrigerant leakage: was 24,207) | transcribed | Zhang, M., Carbajales-Dale, M., Ma, X., Guo, L., Fan, C. (2025), hyperscale Virginia data centre. Built into `data centre foreground` by `optimiser_lca/data_centre.py` |
 | Continuous load | 7,306 kW | derived | 1.60e9 kWh ÷ 25 y ÷ 8760 h — the inventory's own figure, not an added assumption |
 | Grid carbon intensity | half-hourly, mean 0.1585 kg CO₂e/kWh delivered at high voltage. History: 0.2369 on the conventional gas plant; 0.1882 after the gas fix; 0.1585 after the import split, delivery terms and grid solar (all 13 Oct 2026) | derived | NESO Carbon Intensity API, regional (region 13, London), with Elexon FUELHH interconnector flows, via `optimisation/grid_build.py` |
 | Per-fuel life-cycle scores | gas CCGT 387, coal 1,061, nuclear 7.4, solar 30.9; imports FR/BE/NL/NO/DK/IE 74/178/479/22/207/352 g CO₂e/kWh | transcribed | Activities named by exact identity in `optimiser_lca.grid.SOURCES`, resolved by `lca_helpers.resolve_exact`, which refuses zero or several matches; IPCC 2021 GWP100 with long-term emissions, as every asset is. Gas was the conventional plant (558) until 13 Oct 2026. Nuclear is BWR, as ecoinvent's own GB market proxies the AGR fleet. Solar is the Smith 2024 plant (`optimiser_lca/upv.py`) at ecoinvent's GB yield, replacing the 2008 El Tesoro plant (79.8). NO and DK are those countries' own HV markets — ecoinvent has no GB import activity for them, and its FR/BE/NL/IE ones are the exporter's HV market under another name |
@@ -1106,6 +1106,55 @@ carbon price, FES 2025 CP2 for 2025 (£78.96/t), = 1,266 t CO₂e/MWh. Charged
 the same way cost charges VoLL, so a shed MWh weighs the same in both
 objectives. Reported totals carry it; intensities do not.
 
+## Carbon-side fixes of 14 Oct 2026 — sources
+
+**Wind life extension** (`renewables.WIND_LIFE_EXTENSION`). Vestas,
+*LCA of Electricity Production from an onshore V136-4.2 MW Wind Plant* (2022
+update), Table 9 and Fig 7; *… EnVentus V162-6.2 MW* (2023), Fig 7 and §7.2.3;
+V90-2.0 MW (2011), V117-4.2 MW (2019), V150-4.2 MW (2022) stage tables — all at
+<https://vestas.com/en/sustainability/environment/lifecycle-assessments>.
+Siemens Gamesa, EPD SG 6.2-170 / 6.6-170 onshore, S-P-06090 (2022), §3.2.2.3
+and Fig 5. Servicing 4 % of production GWP per 20 y (SECONDARY); overhaul
+20.5 % (gear & main shaft + blades, V136 and V162 Fig 7 midpoint, ASSUMED as a
+once-only event beyond a 25-y design life).
+
+**Net wind yield** (`profiles.WIND_NET_FACTOR` = 0.851). Arup for DESNZ,
+*Renewable Energy Generation Cost and Technical Assumptions 2024 — Onshore Wind
+and Solar PV* (July 2025), §5.8.2 availability 96.9 %, §5.8.4 wake 9 %, Table
+22 net load factors 33.0 / 38.1 / 41.3 %. Vestas LCAs §3.4.2 electrical 2.5 %.
+Staffell & Pfenninger (2016), *Energy* 114:1224, for what ninja models.
+
+**GB study grid** (`optimiser_lca/gb_grid.py`). NESO Carbon Intensity API,
+region 18 (GB), 2025, built by `grid_build.build_grid(18, …)`; scored on
+`optimiser_lca.grid` throughout; network terms from ecoinvent 3.9.1's GB HV
+market. 141.87 g CO₂e/kWh delivered at high voltage.
+
+**Gas-route carbon balance** (`optimiser_lca/hydrogen.py`). ecoinvent 3.9.1
+product properties of `market for natural gas, high pressure` [GB]: carbon
+content, fossil 0.741 (Bussa et al. 2021 composition), dry mass 0.735 kg/m³
+(Meili et al. 2022). Diesel at 42.8 MJ/kg on `market for diesel, burned in
+building machine` [GLO].
+
+**Refrigerant leakage** (`optimiser_lca/data_centre.py`). Zhang et al. (2025)
+supplementary `mmc1.xlsx`, sheet "S1 LCA Inventory List", Operation row 7 —
+<https://ars.els-cdn.com/content/image/1-s2.0-S2772783125000548-mmc1.xlsx>;
+contribution tree in `mmc2.xlsx`. HFC-134a GWP100 1,530 from IPCC 2021 as
+implemented in ecoinvent 3.9.1.
+
+**Fuel cell stack, sensitivity basis** (`fuel_cell.STACK_BASES`). Gramc, J.,
+Stropnik, R., Hojkar, D., Sekavčnik, M., Iribarren, D., Dufour, J., Mori, M.
+(2025), "Ecodesign as a key concept for improving the life cycle environmental
+performance of proton-exchange membrane fuel cells", *Int J Hydrogen Energy*
+104:623–634, doi:10.1016/j.ijhydene.2024.08.020, CC BY 4.0. Table 3 reference
+case per 48 kWe stack, ÷ 48. Proxies: PFSA on tetrafluoroethylene (as the
+Babatunde stack), carbon-cloth GDL on CFRP, PEN/PET subgasket on PET + film
+extrusion. 47.6 kg CO₂e/kW here; 25.2 in the paper (EF 3.1, ecoinvent 3.9 +
+Sphera) — platinum, 38.2 of the 47.6, carries ~70.6 t CO₂e/kg in apos.
+
+**Tank frame and foundations** (`optimiser_lca/h2_tank.py`). First
+principles on Gandiglio et al. (2022)'s 21.6 m³ vessel; every parameter ASSUMED
+and named in the module.
+
 ## Scope decisions
 
 These are choices, not data. They are recorded in `ASSUMPTIONS.md` with their
@@ -1116,10 +1165,12 @@ transport is modelled for any colour.
 
 ## Still open
 
-Tracked in `DATA_GAPS.md`. At the time of writing, on the carbon side: the
-fuel cell's BoP calendar life, hydrogen tank standing loss, battery standing
-loss (both bounded by sweep but unsourced), and the absence of a stack/BoP split in the electrolyser inventory. On
-the cost side: fuel cell capex, hydrogen tank capex, SOEC costs, battery fixed
-OPEX, and demand-side network charges (DUoS/TNUoS) for the data centre's own
-import — the DESNZ connection figures are *generator*-side and are not a
-substitute.
+Tracked in `DATA_GAPS.md`; sequenced in `docs/CARBON_PLAN.md`. At 14 Oct 2026,
+on the carbon side: the fuel cell's two calendar lives and kW per container
+(swept, unsourced), the storage standing losses (bounded by sweep, unsourced),
+the wind net-yield caveat (possible double count with ninja's bias
+correction), the electrolyser's missing stack/BoP split, a supergrid
+transformer for 275/400 kV sites, wind transformers' factory energy, and
+bought hydrogen's haulage and turquoise outlet pressure. On the cost side:
+fuel cell capex, hydrogen tank capex, SOEC costs, battery fixed OPEX, levies on
+imports, and one price base and discount-rate policy.

@@ -100,13 +100,16 @@ GAS_KWH_HHV_PER_M3 = 39.5 / 3.6
 # (kept as constants so this module runs without Brightway; verified against
 #  the activities by ``check_against_inventory()``)
 from optimiser_lca import registry as _R  # noqa: E402
+from optimiser_lca import hydrogen as _H  # noqa: E402
 INVENTORY = {
+    # Direct CO2 includes the carbon-balance closure on the linked gas
+    # (optimiser_lca.hydrogen, 14 Oct 2026): 9.0 + 0.679 and 0.99 + 1.637.
     "grey":      {"code": _R.SMR,
                   "gas_m3_per_kg": 4.85, "elec_kwh_per_kg": -1.1,
-                  "direct_co2_kg_per_kg": 9.0},
+                  "direct_co2_kg_per_kg": 9.0 + _H.SMR_CO2_CLOSURE},
     "blue":      {"code": _R.SMR_CCS,
                   "gas_m3_per_kg": 5.33, "elec_kwh_per_kg": -0.05,
-                  "direct_co2_kg_per_kg": 0.99},
+                  "direct_co2_kg_per_kg": 0.99 + _H.SMR_CCS_CO2_CLOSURE},
     "turquoise": {"code": _R.MP_E,
                   "gas_m3_per_kg": 5.72, "elec_kwh_per_kg": 10.29,
                   "direct_co2_kg_per_kg": 0.0},
@@ -181,6 +184,10 @@ if GREEN_H2_ELECTRICITY_BASIS not in GREEN_H2_ELECTRICITY_BASES:
 # behind-the-meter renewable pricing with grid carbon, which is the exact
 # incoherence this whole section exists to remove.
 from optimiser_lca.grid import GB_LV_MARKET_GCO2E_PER_KWH as ECOINVENT_GB_LV_GCO2E_PER_KWH  # noqa: E402
+# The grid a fossil seller takes since 14 Oct 2026: the study's own GB grid,
+# 2025 mean, delivered at high voltage — the activity the fossil routes' own
+# electricity now links to (optimiser_lca/gb_grid.py).
+from optimiser_lca.gb_grid import GB_GRID_2025_HV_GCO2E_PER_KWH as FOSSIL_SELLER_GRID_GCO2E_PER_KWH  # noqa: E402
 LEGACY_GREEN_H2_GWP_KGCO2E_PER_KG = 17.00093068911594
 
 # --- delivering it: what separates the two green rows ----------------------
@@ -392,14 +399,17 @@ def bought_h2_compression_gco2e_per_kwh(colour: str, basis: str | None = None,
     by being behind a renewable meter cannot compress on grid power.
 
     Every other colour is a fossil plant already scored whole against the GB
-    grid its own activity links to, so its compressor takes the same grid.
+    grid its own activity links to, so its compressor takes the same grid —
+    the study's own, since 14 Oct 2026 (``optimiser_lca.gb_grid``). It was
+    ecoinvent's 2018 GB low-voltage market at 311 g/kWh, the last grid figure
+    in the study not on ``optimiser_lca.grid``.
     """
     if colour == "green":
         return green_h2_electricity_gco2e_per_kwh(basis, grid_share=grid_share)
     if colour not in INVENTORY:
         raise ValueError(f"Unknown H2 colour {colour!r}. Available: "
                          f"{sorted(INVENTORY)}")
-    return ECOINVENT_GB_LV_GCO2E_PER_KWH
+    return FOSSIL_SELLER_GRID_GCO2E_PER_KWH
 
 
 def bought_h2_compression_kgco2e_per_kg(colour: str, basis: str | None = None,

@@ -161,6 +161,10 @@ def decompose(use_cache: bool = True, refresh: bool = False):
     ei, _bio, _fg, _m = H.setup_brightway()
     method = _gwp_method(bd)
 
+    # Frame and pad, scored once per unit and applied per design (14 Oct 2026).
+    unit = {k: H.run_lca_score(H.resolve_exact(*h2_tank.processes[k].identity), method)
+            for k in ("steel_low_alloyed_hr", "concrete_normal", "reinforcing_steel")}
+
     rows = []
     for name, design in TANK_DESIGNS.items():
         proc = h2_tank.processes[design["steel_process"]]
@@ -168,7 +172,11 @@ def decompose(use_cache: bool = True, refresh: bool = False):
         steel = H.resolve_exact(*proc.identity)
         per_kg_steel = H.run_lca_score(steel, method)
         intensity = steel_kg_per_kg_h2(design)
-        per_kg_cap = per_kg_steel * intensity
+        f = h2_tank.foundations_per_kg_h2(design)
+        foundations = (f["frame_kg"] * unit["steel_low_alloyed_hr"]
+                       + f["concrete_m3"] * unit["concrete_normal"]
+                       + f["rebar_kg"] * unit["reinforcing_steel"])
+        per_kg_cap = per_kg_steel * intensity + foundations
 
         # Filled in by the caller, which is the only place that knows which
         # electrolyser is feeding this tank. Left at the tank's own pressure
@@ -182,6 +190,7 @@ def decompose(use_cache: bool = True, refresh: bool = False):
             "steel_kg_per_kg_h2": intensity,
             "capacity_kg_h2": capacity_kg(design),
             "kgco2e_per_kg_steel": per_kg_steel,
+            "foundations_kgco2e_per_kg_capacity": foundations,
             "kgco2e_per_kg_capacity": per_kg_cap,
             "lifetime_years": float(cfg.TANK_LIFETIME_YEARS),
             "kgco2e_per_kg_capacity_year": per_kg_cap / float(cfg.TANK_LIFETIME_YEARS),

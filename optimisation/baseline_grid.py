@@ -59,6 +59,10 @@ DC_DRIVERS = (
     ("energy", "market for refrigerant"),
     ("backup", "market for diesel, burned in diesel-electric generating set"),
 )
+# The same for the facility's direct emissions.
+DC_BIOSPHERE_DRIVERS = (
+    ("energy", "Ethane, 1,1,1,2-tetrafluoro-, HFC-134a"),
+)
 
 # Cached full-year outputs of the existing pipeline. Both are half-hourly and
 # cover 2025-01-01 to 2025-12-29.
@@ -134,6 +138,21 @@ def decompose_data_centre_by_driver(method, tolerance=1e-4):
                 f"Unclassified data centre exchange {name!r}. Update DC_DRIVERS "
                 "before trusting any facility coefficient.")
         groups[kind] += H.run_lca_score(exc.input, method) * float(exc["amount"])
+
+    # Direct emissions: the refrigerant the top-up replaces (14 Oct 2026). It
+    # leaks from the cooling plant, so it follows delivered energy, like the
+    # refrigerant purchase it mirrors.
+    cfs = {}
+    for flow_key, cf in bd.Method(method).load():
+        cfs[flow_key if not isinstance(flow_key, int) else bd.get_node(id=flow_key).key] = cf
+    for exc in dc.biosphere():
+        kind = next((k for k, prefix in DC_BIOSPHERE_DRIVERS
+                     if exc.input["name"].startswith(prefix)), None)
+        if kind is None:
+            raise ValueError(
+                f"Unclassified data centre emission {exc.input['name']!r}. Update "
+                "DC_BIOSPHERE_DRIVERS before trusting any facility coefficient.")
+        groups[kind] += cfs.get(exc.input.key, 0.0) * float(exc["amount"])
 
     # Scoring exchange by exchange must rebuild the single-LCA figure; the
     # residual is bw2calc solver noise, as in electrolysers.py.

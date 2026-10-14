@@ -82,6 +82,31 @@ def create_ninja_session(token=None):
     return session
 
 
+# --- gross to net wind yield (added 14 Oct 2026) --------------------------------
+# Renewables.ninja simulates one turbine on a smoothed power curve. Staffell &
+# Pfenninger (2016, Energy 114:1224) model no availability, wake or electrical
+# loss explicitly, and the cached coastal series run at 52-60 % — above
+# DESNZ/Arup 2024's *net* high case of 41.3 % (Table 22). The losses that turn
+# one turbine into a farm, from the same Arup report and Vestas's LCAs:
+#   availability   0.969  Arup 2024 §5.8.2, mean of respondents (94.1-98.8 %)
+#   wake           0.91   Arup 2024 §5.8.4, mean 9 % (2-14 %)
+#   electrical     0.98   Vestas V136/V150/V162 LCAs §3.4.2 give 2.5 %; the
+#                         turbine step-up's share is charged separately
+#                         (conversion_losses.py), so 2 % here
+#   performance    0.985  power-curve and environmental, ASSUMED
+# = 0.851. Inside EWEA's "typically 10-20 %" total loss. Caveat, recorded in
+# DATA_GAPS.md: if ninja's point series carries the fleet bias correction its
+# paper describes (fitted to metered output, so it absorbs fleet losses),
+# part of this is counted twice. Even at 0.85 the coastal sites stay above
+# Arup's high case, so it is not over-correcting there.
+WIND_NET_COMPONENTS = {"availability": 0.969, "wake": 0.91, "electrical": 0.98,
+                       "performance": 0.985}
+WIND_NET_FACTOR = 1.0
+for _v in WIND_NET_COMPONENTS.values():
+    WIND_NET_FACTOR *= _v
+WIND_NET_FACTOR_IS_ASSUMED = True
+
+
 def fetch_ninja_wind(session, lat, lon, date_from, date_to, capacity_kw, height_m,
                      turbine, dataset="merra2", api_base=NINJA_BASE):
     """Fetch hourly wind power from the Renewables.ninja API (official-style)."""

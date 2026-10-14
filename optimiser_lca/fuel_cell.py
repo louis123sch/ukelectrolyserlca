@@ -319,6 +319,38 @@ processes = {
     "bop_cable": Process(
         query="market for cable three-conductor cable GLO",
         identity=("market for cable, three-conductor cable", "GLO", "cable, three-conductor cable")),
+    # --- Gramc et al. 2025 stack (sensitivity basis) -----------------------------
+    "carbon_black": Process(
+        query="market for carbon black GLO",
+        identity=("market for carbon black", "GLO", "carbon black")),
+    "pet_amorphous": Process(
+        query="market for polyethylene terephthalate granulate amorphous GLO",
+        identity=("market for polyethylene terephthalate, granulate, amorphous", "GLO",
+                  "polyethylene terephthalate, granulate, amorphous"),
+        why="the PEN/PET subgasket film; PEN has no dataset"),
+    "cfrp_proxy": Process(
+        query="market for carbon fibre reinforced plastic injection moulded GLO",
+        identity=("market for carbon fibre reinforced plastic, injection moulded", "GLO",
+                  "carbon fibre reinforced plastic, injection moulded"),
+        why="the carbon-cloth GDL; ecoinvent 3.9.1 has no carbon fibre on its own. PROXY"),
+    "silicone_rer": Process(
+        query="market for silicone product RER",
+        identity=("market for silicone product", "RER", "silicone product")),
+    "grtp": Process(
+        query="market for glass fibre reinforced plastic polyamide injection moulded GLO",
+        identity=("market for glass fibre reinforced plastic, polyamide, injection moulded",
+                  "GLO", "glass fibre reinforced plastic, polyamide, injection moulded"),
+        why="Gramc's glass-fibre-reinforced thermoplastic endplates"),
+    "copper_cathode": Process(
+        query="market for copper cathode GLO",
+        identity=("market for copper, cathode", "GLO", "copper, cathode")),
+    "steel_unalloyed": Process(
+        query="market for steel unalloyed GLO",
+        identity=("market for steel, unalloyed", "GLO", "steel, unalloyed")),
+    "electricity_mv_rer": Process(
+        query="market group for electricity medium voltage RER",
+        identity=("market group for electricity, medium voltage", "RER", "electricity, medium voltage"),
+        why="Gramc's 'European grid mix' for stack manufacture"),
     # --- stationary additions ---------------------------------------------------
     "inverter_500kw": Process(
         query="market for inverter 500kW GLO",
@@ -391,6 +423,52 @@ STACK = Activity(
         ("occupation_industrial",  0.0395, "square meter-year", "Occupation, industrial area"),
         ("transformation_from",    0.0008, _m2,                "Transformation, from unspecified"),
         ("transformation_to",      0.0008, _m2,                "Transformation, to industrial area"),
+    ],
+)
+
+GRAMC_STACK_KW = 48.0      # TRANSCRIBED - Gramc et al. 2025's functional unit
+
+# Gramc, J. et al. (2025), "Ecodesign as a key concept for improving the life
+# cycle environmental performance of proton-exchange membrane fuel cells",
+# Int J Hydrogen Energy 104:623-634, doi:10.1016/j.ijhydene.2024.08.020, open
+# access. Table 3, reference case, per 48 kWe automotive stack, divided by 48.
+# A *sensitivity* basis, not a like-for-like replacement for Babatunde: an
+# automotive stack with stainless-steel bipolar plates (Babatunde's is a
+# graphite-plate 2 kW unit), components mostly raw material only plus a total
+# 410 kWh electricity estimate, on ecoinvent 3.9 + Sphera in GaBi. Their own
+# result is 1.21 t CO2e per stack (25.2 kg/kW, EF 3.1), MEA ~78 %, Pt 63.5 %
+# (Mori 2023). End-of-life burdens are 1.8 % of their total and recycling
+# credits are reported separately; neither is taken here. Nafion is on the
+# tetrafluoroethylene precursor, as in the Babatunde stack, where Gramc use an
+# elementary-flow inventory.
+GRAMC_STACK = Activity(
+    code=R.FC_STACK_GRAMC,
+    name="Fuel cell stack production, PEM, 1 kW (Gramc et al. 2025, 48 kW automotive)",
+    reference_product="fuel cell stack, polymer electrolyte membrane, 1 kW electrical",
+    unit="unit", location="GLO",
+    comment="1 kW of the 48 kWe reference stack in Gramc et al. 2025 (IJHE 104:623, Table 3), "
+            "amounts as printed per stack x 1/48. Cradle-to-gate; no end-of-life, no "
+            "recycling credit. Sensitivity basis for the Babatunde stack.",
+    scale=1.0 / GRAMC_STACK_KW, scale_note="(per 48 kWe stack -> per kW)",
+    technosphere=[
+        ("platinum",            0.026,  "kilogram", "Pt, virgin - 26 g, 0.465 mg/cm2"),
+        ("carbon_black",        0.039,  "kilogram", "Carbon black - catalyst support"),
+        ("tetrafluoroethylene", 0.144,  "kilogram", "PFSA ionomer - Nafion precursor proxy"),
+        ("water_deionised",     0.490,  "kilogram", "Water - ink"),
+        ("isopropanol",         0.220,  "kilogram", "Alcohol - ink solvent"),
+        ("pet_amorphous",       1.820,  "kilogram", "PEN/PET subgasket film"),
+        ("bop_extrusion_film",  1.820,  "kilogram", "Subgasket film extrusion"),
+        ("cfrp_proxy",          1.249,  "kilogram", "Carbon cloth GDL - CFRP proxy"),
+        ("steel_chromium_188", 21.623,  "kilogram", "Bipolar plates, stainless steel"),
+        ("silicone_rer",        1.265,  "kilogram", "Gaskets, silicone"),
+        ("grtp",                3.800,  "kilogram", "Endplates, glass-fibre-reinforced thermoplastic"),
+        ("copper_cathode",      0.950,  "kilogram", "Current collectors, copper"),
+        ("steel_chromium_188",  0.852,  "kilogram", "Connecting components, chromium steel"),
+        ("steel_unalloyed",     2.820,  "kilogram", "Connecting components, steel"),
+        ("electricity_mv_rer", 410.0,   "kilowatt hour", "Stack production, European grid mix"),
+    ],
+    biosphere=[
+        ("propanol_air", 0.220, "kilogram", "ink alcohol, evaporated"),
     ],
 )
 
@@ -503,7 +581,7 @@ OPERATION = Activity(
     ],
 )
 
-activities = [STACK, BOP, SERVICE, OPERATION]
+activities = [STACK, GRAMC_STACK, BOP, SERVICE, OPERATION]
 
 
 def inventory() -> Inventory:

@@ -115,6 +115,55 @@ ECOINVENT_LIFETIME_YEARS = {
 
 HOURS_PER_YEAR = 8760.0
 
+# --- what it takes a turbine to reach this study's life ------------------------
+# ecoinvent's onshore turbine is a 20-year machine with no replacements ("all
+# parts will hold for the lifetime of 20 years"), and this study amortises it
+# over DESNZ/Arup's 35 y (25-40 by case) — deliberately, decided 3 and 7 Sep.
+# What was missing is the kit that gets it there. Added 14 Oct 2026, as a
+# multiplier on wind capital:
+#
+#   servicing  replacements and refurbishments in normal operation, pro rata
+#              to life. Vestas product LCAs put "replacements/servicing" at
+#              ~4 % of production + use GWP (V136-4.2 MW 2022 Fig 7; V162-6.2
+#              MW 2023 Fig 7, 4.0 %), operation at 1.8-5.3 % of manufacturing
+#              across V90-2.0 to V162; Siemens Gamesa SG 6.2-170 EPD (S-P-06090,
+#              2022) O&M ~5.1 %. 4 % per 20 operating years. SECONDARY.
+#   overhaul   once the life passes the design life: a gearbox-and-main-shaft
+#              set and a blade set, 9 % + 9 % of production GWP for the V136
+#              and 8 % + 15 % for the V162 (Fig 7 of each) — 20.5 %, the
+#              midpoint. No LCA itemises a 20-to-35-y extension; this is the
+#              study's own construction from those shares. ASSUMED.
+#
+# The restated onshore figure goes from 5.8 g/kWh, below the lowest
+# published wind LCA (~7 g, IPCC AR5), to 7.3 (central). The design life is Siemens
+# Gamesa's 25 y (Vestas state 20); a life within it pays servicing only.
+WIND_SERVICING_FRACTION_PER_20Y = 0.04
+WIND_OVERHAUL_FRACTION = 0.205
+WIND_DESIGN_LIFE_YEARS = 25.0
+WIND_LIFE_EXTENSION_BASES = {
+    "none": "ecoinvent's turbine as inventoried — no parts beyond year 20 "
+            "(reproduces runs before 14 Oct 2026)",
+    "servicing": "normal replacements, 4 % of capital per 20 years, pro rata",
+    "servicing_overhaul": "servicing, plus one gearbox/main-shaft and blade "
+                          "overhaul once the life passes 25 y",
+}
+WIND_LIFE_EXTENSION = "servicing_overhaul"
+WIND_LIFE_EXTENSION_IS_ASSUMED = True
+
+
+def wind_parts_fraction(life_years: float, basis: str | None = None) -> float:
+    """Extra wind capital, as a fraction of the turbine's own, to last ``life_years``."""
+    basis = basis or WIND_LIFE_EXTENSION
+    if basis not in WIND_LIFE_EXTENSION_BASES:
+        raise ValueError(f"wind life-extension basis must be one of "
+                         f"{list(WIND_LIFE_EXTENSION_BASES)}, got {basis!r}")
+    if basis == "none":
+        return 0.0
+    frac = WIND_SERVICING_FRACTION_PER_20Y * float(life_years) / 20.0
+    if basis == "servicing_overhaul" and life_years > WIND_DESIGN_LIFE_YEARS:
+        frac += WIND_OVERHAUL_FRACTION
+    return frac
+
 # IEA PVPS Task 12, 2023 data update (May 2024). The reference system its
 # per-kWh results are quoted against. TRANSCRIBED.
 IEA_PVPS_REFERENCE = {
@@ -390,7 +439,7 @@ def decompose_all(use_cache: bool = True, refresh: bool = False):
     return rows
 
 
-def apply_case(rows, case="central", solar_basis=None):
+def apply_case(rows, case="central", solar_basis=None, wind_life_extension=None):
     """The cheap half: restate per-kWh burden at a scenario's LF and lifetime.
 
     ``case`` is the **cost** case. Load factor and lifetime are taken from the
@@ -406,6 +455,10 @@ def apply_case(rows, case="central", solar_basis=None):
     so selecting a basis here reaches the LP, the sizing optimiser and the
     dashboard without any of them needing to know a choice was made. Each row
     carries ``embodied_basis`` so a result can say which one it used.
+
+    ``wind_life_extension`` picks how wind's capital is grossed up for the parts
+    a 20-y turbine needs to reach this study's life
+    (``WIND_LIFE_EXTENSION_BASES``); onshore and offshore alike.
     """
     import optimisation.tech_costs as tc
 
@@ -444,6 +497,11 @@ def apply_case(rows, case="central", solar_basis=None):
             row["embodied_basis_label"] = "ecoinvent 3.9.1 apos"
             row["embodied_basis_grade"] = "transcribed"
             capital_only = True
+            parts = wind_parts_fraction(life, wind_life_extension)
+            row["life_extension_basis"] = wind_life_extension or WIND_LIFE_EXTENSION
+            row["life_extension_fraction"] = parts
+            row["capital_kgco2e_per_MW"] = (row["ecoinvent_capital_kgco2e_per_MW"]
+                                            * (1.0 + parts))
         row["capital_only"] = capital_only
         row.update(restate(row,
                            tc._value(params, "net_load_factor", technical_case),

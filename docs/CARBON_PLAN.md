@@ -18,6 +18,37 @@ terms that were exercised but never asserted.
 
 Effort: XS < 1 h, S ≈ half a day, M ≈ 1–2 days, L > 2 days.
 
+## Status — 14 Oct 2026, end of day
+
+Decisions taken (user, 14 Oct): unserved load is charged in carbon **the same
+way as in cost** — a VoLL penalty, at the study's carbon price — rather than at
+a genset's intensity; conversion losses **go into the LP**.
+
+| Item | State | Where |
+|---|---|---|
+| 0 Commit, stale rows | done | `5b1b9b9`, `cb3a076` |
+| 1.1 Sensitivity runner | done | `optimisation/sensitivity.py` |
+| 1.2 Overrides | done: FC lives, kW/container, battery usable fraction; plus wind life extension, wind net factor, FC stack basis, battery cell basis | `dc_inputs.build_tech`, `build_series` |
+| 1.3 One objective, myopic parity | done | `dc_model.objective_terms` |
+| 1.4 `audit.py` | done — found unserved free in carbon, and solar's step-up on a 35-y life against a 38-y annuity (fixed) | `audit.py` |
+| 1.5 Skipped tests | already forced before this plan; fixture refreshed | `tests/test_dc_model.py` |
+| 2.1 Unserved carbon | done — 1,266 t CO₂e/MWh penalty; intensities on served demand | `dc_model.py` |
+| 2.2 Leaked H₂ | done — GWP100 11.6 | `dc_model.H2_GWP100` |
+| 2.3 Conversion losses | done — Reg. 548/2014 Tier 2 | `conversion_losses.py` |
+| 3.1 Wind | done — 5.77 → 7.32 g/kWh; net factor 0.851 | `renewables.py`, `profiles.py` |
+| 3.1c Offshore | already off (`OFFSHORE_IN_SCOPE = False`) | `dc_architectures.py` |
+| 3.2 FC stack | done — Gramc built, 47.6 vs 97.4 kg/kW; Babatunde stays default | `optimiser_lca/fuel_cell.py` |
+| 3.3 Tank frame and pad | done, ASSUMED geometry, +13 % | `optimiser_lca/h2_tank.py` |
+| 3.4 R134a | done — 450 kg is leakage top-up (Zhang S1) | `optimiser_lca/data_centre.py` |
+| 3.5 Blue balance | done — closed on ecoinvent's gas carbon; grey +0.68, blue +1.64 kg CO₂; CCS diesel burned | `optimiser_lca/hydrogen.py` |
+| 3.6 Fossil grid | done — `gb_grid` foreground, 141.9 g/kWh | `optimiser_lca/gb_grid.py` |
+| 3.7 Battery | done as sensitivities (cell basis, usable fraction) | `battery.py` |
+| 3.8 Haulage, turquoise pressure | not done — conditional, no colour is load-bearing yet | — |
+| 3.9 Small items | not done — supergrid transformer EPD, wind factory energy, electrolyser stack split | `DATA_GAPS.md` |
+| 3.10 SOEC heat availability | closed on the carbon side | `DATA_GAPS.md` |
+| 4 Sweeps | see `optimisation_outputs/sensitivity_carbon_*.csv` | — |
+| 5 Regenerate | see below | — |
+
 ---
 
 ## At a glance

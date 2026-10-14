@@ -160,6 +160,19 @@ BESS_KGCO2E_PER_KWH_NAMEPLATE = 97.754
 # depth of discharge in their use phase, which would add a further 12.5 %.
 USABLE_FRACTION = 0.90
 
+# The cell is the soft spot of the energy term (~81 % of it). Pinned per kWh
+# of cells, so a sensitivity swaps the cell and keeps everything around it:
+#   voss_cn          Voß 2025 cell, made in China — the default, inside
+#                    BESS_KGCO2E_PER_KWH_NAMEPLATE
+#   voss_de          the same cell from Voß's own German gigafactory
+#   jasper_fig4_311  Jasper 2026 Fig 4 "cells" for the liquid-cooled LFP
+#                    system, re-scored on ecoinvent 3.11 cut-off at EF 3.1
+#                    with transport: a cross-version comparison, not a
+#                    like-for-like inventory
+# Scored 14 Oct 2026 on ecoinvent 3.9.1 apos (optimiser_lca/bess.py).
+CELL_KGCO2E_PER_KWH = {"voss_cn": 79.485, "voss_de": 72.452, "jasper_fig4_311": 95.44}
+CELL_BASIS = "voss_cn"
+
 # --- the legacy EV-pack basis -------------------------------------------------
 # ecoinvent's LFP dataset documents a 203 kg pack holding 23.5 kWh gross, and
 # its own price comment independently cites 0.115 kWh/kg. The cell figure
@@ -221,7 +234,8 @@ def lifetime_throughput_mwh_per_mwh():
     return WARRANTED_CYCLES * mean_capacity
 
 
-def embodied_components(basis: str | None = None, usable_fraction: float | None = None):
+def embodied_components(basis: str | None = None, usable_fraction: float | None = None,
+                        cell_basis: str | None = None):
     """Embodied carbon split the same way as cost: per kW and per usable kWh.
 
     ``usable_fraction`` overrides ``USABLE_FRACTION`` (ASSUMED) for a sweep; it
@@ -231,8 +245,13 @@ def embodied_components(basis: str | None = None, usable_fraction: float | None 
     usable = USABLE_FRACTION if usable_fraction is None else float(usable_fraction)
     if not 0.5 <= usable <= 1.0:
         raise ValueError(f"usable_fraction must be in [0.5, 1.0], got {usable!r}")
+    cell = cell_basis or CELL_BASIS
+    if cell not in CELL_KGCO2E_PER_KWH:
+        raise ValueError(f"cell_basis must be one of {list(CELL_KGCO2E_PER_KWH)}, got {cell!r}")
     if basis == "jasper_voss_2026":
-        energy = BESS_KGCO2E_PER_KWH_NAMEPLATE / usable
+        nameplate = (BESS_KGCO2E_PER_KWH_NAMEPLATE - CELL_KGCO2E_PER_KWH[CELL_BASIS]
+                     + CELL_KGCO2E_PER_KWH[cell])
+        energy = nameplate / usable
     elif basis == "ecoinvent_ev_pack":
         kg_per_kwh = 1.0 / PACK_KWH_PER_KG
         energy = kg_per_kwh * PACK_KGCO2E_PER_KG * (1.0 + CONTAINER_UPLIFT_FRACTION)

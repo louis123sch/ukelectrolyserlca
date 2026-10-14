@@ -327,7 +327,7 @@ def _bracket_and_bisect(f, knob, base, *, target, rel_tol, max_expand, progress)
 # --------------------------------------------------------------------------
 def find(scenario, knob_name: str, *, site=sites.DEFAULT_PRESET,
          start: str = "2025-01-01", end: str = "2025-12-29",
-         size_mw_it: float = 100.0, pue: float = 1.0,
+         size_mw_it: float = 100.0, pue: float | None = None,
          resample_hours: float | None = 1.0, cost_case: str = "central",
          horizon_years: float = 25.0, unserved_fraction: float = 0.0,
          connection_headroom: float | None = None,
@@ -349,6 +349,9 @@ def find(scenario, knob_name: str, *, site=sites.DEFAULT_PRESET,
     stated carbon target, when does hydrogen enter" rather than "when is it
     cheapest outright". Left off, the probe is a pure min-cost solve.
     """
+    if pue is None:
+        import dc_config
+        pue = float(dc_config.DC_REFERENCE_PUE)
     knob = KNOBS[knob_name]
     site = sites.get(site)
     # Scoped by site, size and year exactly as dc_runner scopes dc_runs. Keying
@@ -601,7 +604,7 @@ def sweep(scenario, knobs=DEFAULT_KNOBS, *, progress=None, **kw) -> list[dict]:
     prep = prepare(
         scenario, site=site,
         start=kw.get("start", "2025-01-01"), end=kw.get("end", "2025-12-29"),
-        size_mw_it=kw.get("size_mw_it", 100.0), pue=kw.get("pue", 1.0),
+        size_mw_it=kw.get("size_mw_it", 100.0), pue=kw.get("pue"),
         resample_hours=kw.get("resample_hours", 1.0),
         cost_case=kw.get("cost_case", "central"),
         horizon_years=kw.get("horizon_years", 25.0),

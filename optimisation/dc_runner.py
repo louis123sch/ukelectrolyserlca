@@ -122,7 +122,10 @@ def run_one(scenario: A.Scenario, *, site, start: str, end: str,
     nothing.
     """
     from optimisation import dc_inputs as I
+    import dc_config
 
+    if pue is None:            # recorded as used, so the hash and summary say it
+        pue = float(dc_config.DC_REFERENCE_PUE)
     site = sites.get(site)
     cfg = {
         "scenario": asdict(scenario),
@@ -275,7 +278,7 @@ def _worker(args):
 
 
 def run_matrix(scenarios=None, *, site=sites.DEFAULT_PRESET, start="2025-01-01",
-               end="2025-12-29", size_mw_it=100.0, pue=1.0,
+               end="2025-12-29", size_mw_it=100.0, pue=None,
                resample_hours=1.0, points=12, cost_case="central",
                horizon_years=25.0, unserved_fraction=0.0,
                gwp_target_kg_per_year=None, connection_headroom=None,

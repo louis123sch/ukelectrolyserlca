@@ -32,7 +32,8 @@ Carbon Intensity API (`optimisation/grid_build.py`, originally notebook 3.1),
 by the exact `fixed + Σ kWh×EF` decomposition in `baseline_grid.py`.
 
 The inventory has **exactly one** electricity exchange — IT + cooling/aux,
-1.60e9 kWh over 25 years — and it is the only US-located input in the activity.
+1.60e9 kWh over 25 years — and it is the only US-*grid* input in the activity
+(the concrete is RNA, i.e. North American, as the audit noted).
 The swap is applied two ways, which agree to 1e-4 %: the full Brightway
 substitution above, and the `fixed + Σ kWh×EF` decomposition
 `baseline_grid.py` uses so the optimiser can treat the facility as linear
@@ -42,9 +43,12 @@ coefficients.
 `GLO` for reinforcing and structural steel, copper, aluminium, tap water, the
 diesel genset, the UPS battery and R134a; `RoW` for PUR foam and sodium
 hypochlorite. So they are not US-specific, but they are not GB-specific either,
-and no transport leg is modelled at all. Together they are 841 t CO2e/y
-amortised, 5.3 % of baseline 1. Sourcing them to GB/European supply chains is a
-known, unmodelled refinement.
+and no transport leg is modelled at all. Together with the materials they are
+about 963 t CO2e/y charged at the reference facility (14 Oct 2026, after the
+refrigerant leakage was added), plus the 32.5 t genset the LP excludes.
+Sourcing them to GB/European supply chains is a known, unmodelled refinement.
+The R134a top-up is also emitted as HFC-134a: Zhang derive it as leakage
+replacement (see SOURCES.md).
 
 *Scope*: the activity is **Material Production + Operation only**.
 Transportation, construction energy and water, disposal and recycling are
@@ -82,8 +86,9 @@ hydrogen" option is now "green hydrogen bought at a price, with its production
 burden and its compression, but no haulage".
 
 Storage compression is still counted where it applies, via
-`dc_config.TANK_COMPRESSION_KWH_PER_KG` — zero for the 28 bar design,
-since the electrolyser already delivers at ~30 bar.
+`h2_storage.compression_kwh_per_kg` from the electrolyser's delivery pressure
+to the tank's — zero for the 28 bar design, since the electrolyser already
+delivers at ~30 bar.
 
 **Bought green hydrogen is green by definition, and that rests on certificates.**
 Decided 2–3 Sep. The grid-connected share of bought green
@@ -198,9 +203,10 @@ would double count, while the carbon side has no such term anywhere — none of
 the generation inventories contains a transformer, and ecoinvent has no power
 transformer at any rating to supply one. See SOURCES.md.
 
-Electricity is priced at the Elexon APXMIDP half-hourly wholesale price. No
-demand-side network charges (DUoS/TNUoS), levies or supplier margin are
-included yet, so absolute £/MWh understates a real import bill. The
+Electricity is priced at the Elexon APXMIDP half-hourly wholesale price plus
+the demand-side network charges `network_charges.py` builds (TNUoS, BSUoS,
+DUoS). Levies (RO/FiT/CfD/CM/AAHEDC, CCL) and supplier margin are not
+included, so absolute £/MWh still understates a real import bill (TODO). The
 connection and UoS figures in the DESNZ tables are *generator*-side and are
 not a substitute.
 
@@ -226,7 +232,7 @@ Every foreground already meets this without modification:
 | Data centre | Material production + operation only; disposal and recycling excluded by scope choice |
 | H2 storage tank | Steel mass only; end-of-life listed among its stated omissions |
 | Grid connection | Transformer materials only (Leng 2026's 100 MVA, 110 kV main transformer, per MVA, × 2 for N-1), plus a line term reported but not charged per MW; no switchgear, protection, civils, manufacturing energy, losses or end-of-life |
-| Generation step-up transformers | Transformer capital only; no switchgear, protection or civils, no manufacturing energy, and no losses |
+| Generation step-up transformers | Transformer capital (wind materials-only; solar with IEA PVPS process energy); no switchgear, protection or civils. Losses are charged as energy in the LP (`conversion_losses.py`), not as a coefficient |
 | Grid battery | Jasper/Voß cradle-to-gate manufacture including the cell factory's energy; Jasper's EOL sheet not taken, every delivery-transport row left out (and subtracted where a source folded it into a factor), no foundation |
 | Electrolysers | Capital good plus consumables; no end-of-life exchange |
 | Fuel cell stack | Babatunde et al. cradle-to-gate manufacture, no use or end-of-life phase |
