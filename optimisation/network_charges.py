@@ -321,6 +321,25 @@ def is_transmission_connected(peak_mw: float,
         f"transmission_connected= to state it")
 
 
+def delivery_voltage(transmission_connected: bool, tdr_band: str | None = None) -> str:
+    """The ecoinvent voltage level a site takes grid electricity at, for its
+    carbon: ``optimiser_lca.grid.delivered`` charges losses and network down
+    to it.
+
+    The bands are ecoinvent's (high > 24 kV, medium 1-24 kV). A transmission
+    connection is high voltage, and so is every distribution connection this
+    study prices: the TDR bands it assigns are EHV1-4, i.e. 22-132 kV. (DUoS is
+    the LPN *HV* tariff, an 11 kV proxy for an EHV site — see above — but the
+    connection being modelled is EHV.) A band below EHV, should one ever be
+    assigned, takes medium voltage.
+    """
+    if transmission_connected:
+        return "high"
+    if tdr_band is None or str(tdr_band).startswith(("EHV", "T-Demand")):
+        return "high"
+    return "medium"
+
+
 def tdr_band_for(peak_mw: float, annual_mwh: float | None = None, *,
                  power_factor: float = 1.0,
                  transmission_connected: bool | None = None) -> tuple[str, str]:

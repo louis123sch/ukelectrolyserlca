@@ -278,6 +278,15 @@ processes = {
         query="market group for heat district or industrial other than natural gas RER", pick=0,
         identity=("market group for heat, district or industrial, other than natural gas", "RER",
                   "heat, district or industrial, other than natural gas")),
+    "heat_ng_boiler": Process(
+        query="heat production natural gas at boiler modulating >100kW Europe without Switzerland", pick=0,
+        identity=("heat production, natural gas, at boiler modulating >100kW",
+                  "Europe without Switzerland", "heat, district or industrial, natural gas"),
+        why="SOEC's 5.24 kWh/kg is Mehmeti et al. 2018 (Table 1), who supply it from "
+            "'Heat, natural gas, at boiler modulating'; this is that dataset's v3 "
+            "successor. >100kW because a 1 MW SOEC draws ~124 kW of heat. Gerloff 2021 "
+            "copied the amount but swapped in heat_rer (52 % coal and peat), and "
+            "Hermesmann copied Gerloff. No GB boiler exists in 3.9.1"),
     # --- SOEC ceramics ---------------------------------------------------------------
     "abs_row": Process(
         query="acrylonitrile-butadiene-styrene copolymer production RoW", pick=0,
@@ -549,14 +558,15 @@ activities = [
     Activity(
         code=R.SOEC_OP, name="Hydrogen production, SOEC electrolysis Hermesmann",
         reference_product="hydrogen", unit=_kg, location="GB",
-        comment="SOEC operation from uksoecoperation.XLSX. SOEC capital good linked.",
+        comment="SOEC operation from uksoecoperation.XLSX. SOEC capital good linked. "
+                "Heat on a natural-gas boiler as in Mehmeti et al. 2018, the source of the 5.24 kWh.",
         technosphere=[
             (FG(R.SOEC_UNIT),   SOEC_UNITS_PER_KG_H2, _unit,
              "Capital good: 1 unit / 3,779,894 kg H2 lifetime = 2.645e-7 unit/kg H2"),
             ("water_deionised",    8.99,  _kg,  "Water, deionised"),
             ("water_softened",   644.7,   _kg,  "Water, completely softened"),
             ("electricity_lv_gb", 42.3,   _kwh, "Electricity LV GB"),
-            ("heat_rer",          18.864, _MJ,  "Heat district/industrial RER (5.24 kWh × 3.6)"),
+            ("heat_ng_boiler",    18.864, _MJ,  "Heat, natural gas boiler (5.24 kWh × 3.6), Mehmeti 2018"),
         ],
     ),
 ]

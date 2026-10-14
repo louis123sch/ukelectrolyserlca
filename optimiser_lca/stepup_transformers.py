@@ -1,5 +1,6 @@
 """
-Generation step-up transformers — Leng et al. 2026 (wind), IEA PVPS 2026 (solar).
+Power transformers — Leng et al. 2026 (wind step-ups and the grid intake),
+IEA PVPS 2026 (solar step-ups).
 =============================================================================
 
 Why this inventory exists
@@ -26,9 +27,12 @@ two products with a market and a production each, and both are *electronics*:
 weight of 280 g … used in the information and communication technology" — and
 30 g for the low-voltage one. There is no substation, switchgear or power
 transformer dataset at any rating. Scaling a 280 g component up to stand for a
-57 t substation unit is a factor of 205,000 and runs about 2× high. So both
-transformers are assembled from a published bill of materials, the way the
-hydrogen tank is.
+57 t substation unit is a factor of 205,000 and runs about 2× high. So all
+three transformers here — the two generation step-ups and the grid intake —
+are assembled from a published bill of materials, the way the hydrogen tank
+is, and nothing in the optimiser's default path scores ecoinvent's transformer
+any more (only ``transformers.SOLAR_BASIS = "legacy"`` still does, to
+reproduce pre-2026 runs).
 
 Wind — Leng et al. 2026
 -----------------------
@@ -69,16 +73,42 @@ total is ~5,680 kg; the transcribed materials sum to 5,633.04, leaving
 46.9 kg = 0.03696 m³ at hardboard's ~1,270 kg/m³. So the cell is dm³
 mislabelled as m³; ``check()`` guards the reconciliation.
 
-What is deliberately NOT here (both): the grid-export transformer (this
-study's generation is behind the meter; the grid intake is charged by
-``grid_connection.py``); any step between the collection network and the data
-centre (both sit in the medium-voltage band); switchgear, protection and
-civils (absent from grid_connection.py too, so a level shift rather than a
-bias); losses; end-of-life. **Manufacturing energy** is in the solar bill
-(~6 % of it) and not in the wind one; materials-only the two land within 1 %.
+Grid intake — Leng et al. 2026, the farm's main transformer
+-----------------------------------------------------------
+The same Table S1 also bills the Gaoyou farm's grid-end **main transformer,
+XZ11-100000/110**: one 100 MVA unit stepping the 35 kV collection bus up to
+110 kV, 71,458.6 kg = 714.6 kg/MVA. That is the only published bill of
+materials in this study for a transformer of grid-intake class, so it is the
+basis of ``cap_grid``'s embodied carbon: functional unit **1 MVA of
+grid-intake transformer capacity** = the bill ÷ 100, mapped through the same
+``TX_MATERIAL_PROCESSES`` as the wind units (the "Iron" reading is the same
+judgement). ``optimisation/grid_connection.py`` scores it, applies N-1
+redundancy and the power factor, and amortises it.
 
-What the optimiser reads: ``optimisation/transformers.py`` scores both
-activities and amortises them over ``dc_config.TX_ASSET_LIFE_YEARS``.
+**The voltage judgement.** A 110 kV unit fits a GB **132 kV** EHV/DNO
+connection, which is the common case for a ~100 MW data centre. For a site
+connected at **275/400 kV** it errs LOW: supergrid transformers carry more
+insulation and are heavier per MVA. Leng's unit is used for every site as the
+default; it is stated in DATA_GAPS.md rather than varied by voltage.
+
+**Materials only**, like the wind step-ups. Leng's own published figure for
+this unit (342 t CO₂e) adds factory electricity on the Chinese grid; that is
+left out here for the same reason it is left out of the wind bill.
+
+What is deliberately NOT here (all three): the grid-*export* transformer
+charged to generation (this study's generation is behind the meter; Leng's
+grid-end unit is used for the grid *intake* instead, charged per MW of
+``cap_grid`` by ``grid_connection.py``); any step between the collection
+network and the data centre (both sit in the medium-voltage band); switchgear,
+protection and civils (absent from the grid intake too, so a level shift
+rather than a bias); losses; end-of-life. **Manufacturing energy** is in the
+solar bill (~6 % of it) and in neither Leng bill; materials-only wind and
+solar land within 1 %.
+
+What the optimiser reads: ``optimisation/transformers.py`` scores the two
+step-ups and amortises them over ``dc_config.TX_ASSET_LIFE_YEARS``;
+``optimisation/grid_connection.py`` scores the grid intake and amortises it
+over its own ``ASSET_LIFE_YEARS``.
 """
 from __future__ import annotations
 
@@ -108,8 +138,23 @@ TX_LENG_BOX_KG = {             # TRANSCRIBED, kg for all fifty units
     "silica":   1_143.0,
 }
 TX_KG_PER_MW = {m: kg / TX_LENG_FARM_MW for m, kg in TX_LENG_BOX_KG.items()}
+
+# --- grid intake: Leng Table S1, the farm's main transformer XZ11-100000/110 ----
+TX_LENG_MAIN_MVA = 100.0       # from the model number XZ11-100000/110 (kVA / kV)
+TX_LENG_MAIN_KV  = 110.0       # from the same model number - the HV winding
+TX_LENG_MAIN_KG = {            # TRANSCRIBED, kg for the one unit (t x 1000)
+    "steel":  30_200.0,
+    "iron":   20_800.0,
+    "copper": 16_800.0,
+    "oil":     3_430.0,
+    "silica":    228.6,        # printed in kg, not t
+}
+TX_LENG_MAIN_STATED_KG = 71_458.6   # DERIVED - the five Table S1 rows summed by hand
+                                    # from the PDF; check() holds the dict to it
+TX_GRID_KG_PER_MVA = {m: kg / TX_LENG_MAIN_MVA for m, kg in TX_LENG_MAIN_KG.items()}
+
 # Each Leng material -> the processes that make it. Steel and copper carry
-# their forming step, as grid_connection.py's own rebuild does.
+# their forming step. Used for both Leng bills, box and main.
 TX_MATERIAL_PROCESSES = {
     "steel":  ["steel_low_alloyed", "sheet_rolling_steel"],
     # ASSUMED: Leng lists Steel and Iron separately and does not say what the
@@ -185,8 +230,18 @@ def check() -> str:
         for p in procs:
             if p not in processes:
                 raise AssertionError(f"no ecoinvent process {p!r} for Leng material {m!r}")
+    main = sum(TX_LENG_MAIN_KG.values())
+    if abs(main - TX_LENG_MAIN_STATED_KG) > 1e-6:
+        raise AssertionError(
+            f"Leng main-transformer bill sums to {main:,.1f} kg against the "
+            f"{TX_LENG_MAIN_STATED_KG:,.1f} kg of Table S1's five rows")
+    for bill, label in ((TX_LENG_BOX_KG, "box"), (TX_LENG_MAIN_KG, "main")):
+        unmapped = set(bill) - set(TX_MATERIAL_PROCESSES)
+        if unmapped:
+            raise AssertionError(f"Leng {label} transformer rows {sorted(unmapped)} have no process")
     return (f"OK - wind {sum(TX_KG_PER_MW.values()):,.0f} kg/MW; solar {mass:,.0f} kg per "
             f"{UPV_TX_UNIT_MVA:g} MVA unit, {UPV_TX_UNITS_PER_MWP:g} units/MWp; "
+            f"grid intake {main / TX_LENG_MAIN_MVA:,.1f} kg/MVA; "
             f"site collects at {TX_SITE_COLLECTION_KV:g} kV")
 
 
@@ -272,6 +327,15 @@ for _material, _kg_per_mw in TX_KG_PER_MW.items():
                                 f"{_material} in the turbine step-up transformers — "
                                 f"Leng Table S1, {TX_LENG_BOX_KG[_material]:,.0f} kg per "
                                 f"{TX_LENG_FARM_MW:.0f} MW farm"))
+
+_grid_exchanges = []
+for _material, _kg_per_mva in TX_GRID_KG_PER_MVA.items():
+    for _p in TX_MATERIAL_PROCESSES[_material]:
+        _grid_exchanges.append((_p, _kg_per_mva, _kg,
+                                f"{_material} in the grid-intake transformer — Leng "
+                                f"Table S1 main transformer XZ11-100000/110, "
+                                f"{TX_LENG_MAIN_KG[_material]:,.1f} kg per "
+                                f"{TX_LENG_MAIN_MVA:.0f} MVA unit"))
 
 _per_mwp = UPV_TX_UNITS_PER_MWP
 
@@ -365,11 +429,42 @@ activities = [
         ),
         technosphere=_solar_exchanges,
     ),
+    Activity(
+        code=R.TX_GRID,
+        name="Grid-intake transformer, per MVA of grid-intake transformer capacity",
+        reference_product="grid-intake transformer capacity",
+        unit="megavolt ampere", location="GLO",
+        comment=(
+            "The power transformer that steps the network's high voltage down onto "
+            "the site, sized by cap_grid. Functional unit is 1 MVA of rating; "
+            "grid_connection.py turns it into a per-MW figure with N-1 redundancy "
+            "and the power factor, and amortises it over its own ASSET_LIFE_YEARS. "
+            "ecoinvent 3.9.1 has no power transformer at any rating - its four "
+            "transformer activities are two electronic components of 280 g and 30 g "
+            "average weight, 'used in the information and communication technology' "
+            "by its own comments - and no substation or switchgear dataset either. "
+            "So this is assembled from Leng et al. (2026), Processes 14(7) 1045, "
+            "Supplementary Table S1: the Gaoyou farm's grid-end main transformer, "
+            f"XZ11-100000/110, one {TX_LENG_MAIN_MVA:.0f} MVA unit wound for "
+            f"{TX_LENG_MAIN_KV:.0f} kV, {sum(TX_LENG_MAIN_KG.values()):,.1f} kg in "
+            f"total = {sum(TX_GRID_KG_PER_MVA.values()):,.1f} kg/MVA, divided by its "
+            "rating. Materials mapped exactly as the wind step-ups are, Iron read as "
+            "core steel. VOLTAGE: a 110 kV unit fits a GB 132 kV EHV/DNO connection, "
+            "the common case for a ~100 MW data centre; for a 275/400 kV "
+            "transmission-connected site it errs LOW, supergrid transformers being "
+            "heavier per MVA. Used for every site as the default. "
+            "EXCLUDES: switchgear, protection, the bay and civils; the line to the "
+            "site (grid_connection.py reports it separately); manufacturing energy, "
+            "which Leng include on the Chinese grid (their 342 t CO2e for this unit) "
+            "and this does not, as for the wind units; losses; end-of-life."
+        ),
+        technosphere=_grid_exchanges,
+    ),
 ]
 
 
 def inventory() -> Inventory:
-    return Inventory(name="step-up transformers (Leng 2026 wind, IEA PVPS 2026 solar)",
+    return Inventory(name="power transformers (Leng 2026 wind + grid intake, IEA PVPS 2026 solar)",
                      database=R.TRANSFORMER_DB, processes=processes, flows=flows,
                      activities=activities)
 
@@ -386,5 +481,8 @@ def describe() -> str:
         f"-> {UPV_TX_UNITS_PER_MWP:g}/MWp; {mass_unit:,.0f} kg/unit -> {mass_unit * UPV_TX_UNITS_PER_MWP:,.0f} kg/MWp",
         f"  inverters at {UPV_TX_SECONDARY_KV * 1000:.0f} V: {amps(UPV_TX_UNIT_MVA, UPV_TX_SECONDARY_KV * 1e3):,.0f} A "
         f"per unit; at {UPV_TX_PRIMARY_KV:g} kV: {amps(UPV_TX_UNIT_MVA, UPV_TX_PRIMARY_KV * 1e3):,.0f} A",
-        "Amortised over TX_ASSET_LIFE_YEARS in optimisation/transformers.py, not here.",
+        f"Grid intake: Leng main transformer XZ11-100000/110, {TX_LENG_MAIN_MVA:.0f} MVA at "
+        f"{TX_LENG_MAIN_KV:.0f} kV -> {sum(TX_GRID_KG_PER_MVA.values()):,.1f} kg/MVA",
+        "Step-ups amortised over TX_ASSET_LIFE_YEARS in optimisation/transformers.py; "
+        "the grid intake over ASSET_LIFE_YEARS in optimisation/grid_connection.py.",
     ])

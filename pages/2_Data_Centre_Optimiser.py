@@ -591,6 +591,18 @@ with c3:
              "burden, each with its own variable in the LP, and the sweep "
              "decides the mix rather than being told it. Buying only the "
              "cheaper one is then a result, not an assumption.")
+    soec_heat = None
+    if ely_choice == "SOEC":
+        soec_heat = st.radio(
+            "SOEC heat source", ["gas_boiler", "electric_boiler"], key="kit_soec_heat",
+            horizontal=True,
+            format_func={"gas_boiler": "Gas boiler",
+                         "electric_boiler": "Electric boiler"}.get,
+            help="How SOEC's 5.24 kWh/kg of external heat is raised. **Gas "
+                 "boiler** is the inventory (Mehmeti et al. 2018): a fixed "
+                 "~1.42 kg CO₂e/kg H₂, and free in cost. **Electric boiler** "
+                 "draws ~5.3 kWh/kg more from the site's own supply, so the "
+                 "heat costs and emits whatever that hour's electricity does.")
     any_hydrogen = bool(ely_choice) or bool(buy_choice)
     if any_hydrogen:
         st.session_state["kit_fuel_cell"] = True
@@ -714,7 +726,8 @@ st.caption(f"**{n_solves}–{n_solves + 4} LP solves** at {resample:g} h steps �
 
 kit_on = [k for k in A.ASSET_FLAGS if flags[k]]
 LABELS = {"grid": "grid", "wind": "wind", "solar": "solar", "battery": "battery",
-          "electrolyser": f"{ely_choice} electrolyser" if ely_choice else "electrolyser",
+          "electrolyser": (f"{ely_choice} electrolyser" if ely_choice else "electrolyser")
+                          + (" (electric boiler)" if soec_heat == "electric_boiler" else ""),
           "tank": "H₂ storage", "fuel_cell": "fuel cell",
           "buy_h2": f"bought {colour} H₂",
           "buy_h2_2": f"bought {colour_2} H₂"}
@@ -726,6 +739,7 @@ scenario = A.Scenario(
     h2_colour=colour if f_buy else None,
     h2_colour_2=colour_2,
     strategy=strategy if f_ely else "free",
+    soec_heat=soec_heat if f_ely else None,
 )
 
 out_root = RUNS / f"{site.key}_{size_mw:g}MW_{start[:4]}_custom"

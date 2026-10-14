@@ -7,7 +7,8 @@ and date range:
 
     wind_cf      capacity factor, Renewables.ninja, per kW installed
     solar_cf     capacity factor, Renewables.ninja PV, per kWp installed
-    grid_kgco2e_per_kwh   half-hourly GB grid intensity
+    grid_kgco2e_per_kwh   half-hourly GB grid intensity, delivered at high voltage
+    grid_generation_kgco2e_per_kwh   the same per kWh generated, before delivery
     price_GBP_per_MWh     half-hourly Elexon wholesale price
 
 Renewables.ninja rate-limits aggressively, so every fetch is cached to disk
@@ -232,11 +233,12 @@ def grid_file_is_utc(path: Path) -> bool:
 
 
 def grid_file_is_current(path: Path) -> bool:
-    """UTC, and scored on the sources ``dc_config.GRID_SOURCES`` names today.
+    """UTC, and scored on today's ``optimiser_lca.grid.basis()``.
 
-    A series scored on a different source table (or before files recorded one)
-    is skipped, exactly as a wrong-clock one is, so changing a source can never
-    leave some runs on the old basis. ``grid_build --rescore`` refreshes them.
+    A series scored on a different basis (or before files recorded one) is
+    skipped, exactly as a wrong-clock one is, so changing a source, a weight or
+    a delivery term can never leave some runs on the old basis.
+    ``grid_build --rescore`` refreshes them.
     """
     if not grid_file_is_utc(path):
         return False
@@ -437,8 +439,12 @@ def load_grid_and_price(start, end, *, carbon_api_region: int | None = None,
             + ("\nWhat is there:\n  " + describe_files(gindex) if gindex else ""))
     grid = pd.read_csv(gpath, parse_dates=["datetime"]).rename(
         columns={"datetime": "time",
-                 "custom_electricity_score": "grid_kgco2e_per_kwh"})
-    grid = grid[["time", "grid_kgco2e_per_kwh"]]
+                 "custom_electricity_score": "grid_kgco2e_per_kwh",
+                 "generation_kgco2e_per_kwh": "grid_generation_kgco2e_per_kwh"})
+    # grid_kgco2e_per_kwh is delivered at high voltage, the one-number figure
+    # everything quotes; the LP delivers the generation column at the site's
+    # own voltage instead (dc_inputs.build_series).
+    grid = grid[["time", "grid_kgco2e_per_kwh", "grid_generation_kgco2e_per_kwh"]]
 
     ppath, _pindex = _best_covering(
         PRICE_DIR, "elexon_market_index_clean_*.csv", "DATETIME", start, end)

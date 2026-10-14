@@ -131,9 +131,9 @@ INVENTORY = {
 # stale annual average. The bought row was a worse-modelled duplicate of it.
 #
 # 76 % of that 311 g/kWh comes from a single dataset, "electricity production,
-# natural gas, conventional power plant", which ``lca_helpers.py`` already
-# refuses to use for this study's own grid. The refusal was never propagated
-# here; this is that propagation, not a new judgement.
+# natural gas, conventional power plant", which ``optimiser_lca/grid.py`` does
+# not use for this study's own grid: it scores gas on the combined-cycle plant
+# (387 against 558 g/kWh). This is that judgement propagated, not a new one.
 #
 # The default is ecoinvent's own GB onshore wind activity, unmodified — same
 # database, version and method as every other coefficient in the study, and
@@ -186,26 +186,30 @@ LEGACY_GREEN_H2_GWP_KGCO2E_PER_KG = 17.00093068911594
 # --- delivering it: what separates the two green rows ----------------------
 # Green hydrogen is renewable however the electricity reaches the electrolyser,
 # but reaching it *over the grid* is not free, and the two terms that make it
-# costly are ones ecoinvent separates from generation itself:
-#
-#   losses   1.063495 kWh must be generated per kWh delivered at low voltage,
-#            a 6.35 % gross-up, accumulated over the HV -> MV -> LV chain.
-#   network  8.2125 g CO2e per kWh delivered, being the transmission and
-#            distribution infrastructure: LV distribution 5.932, MV
-#            transmission 1.583, HV transmission 0.655, network maintenance
-#            0.019, SF6 switchgear leakage 0.025.
+# costly are ones ecoinvent separates from generation itself: the losses down
+# to the voltage it is taken at, and the network's embodied carbon.
 #
 # Behind the meter the electrolyser sits on the generator's own terminals and
 # pays neither. That is the entire carbon difference between the two green
 # rows — a *delivery* difference, not a generation one, since the source is
-# renewable in both. Both are derived from ecoinvent 3.9.1 apos's GB
-# `market for electricity, low voltage` by contribution analysis, and
-# ``check_grid_delivery()`` re-derives them from the live database.
-# Stated once, with the rest of the grid LCA, in optimiser_lca/grid.py.
-from optimiser_lca.grid import (  # noqa: E402
-    DELIVERY_LOSS_GROSS_UP as GRID_DELIVERY_LOSS_GROSS_UP,
-    DELIVERY_NETWORK_GCO2E_PER_KWH as GRID_DELIVERY_NETWORK_GCO2E_PER_KWH,
-)
+# renewable in both.
+#
+# The terms are the grid's own (optimiser_lca.grid.DELIVERY), at the voltage
+# the seller connects at, so a seller's electrolyser and this study's data
+# centre take grid electricity on one basis. High voltage (> 24 kV): a
+# grid-connected electrolyser at the 5-100 MW scale of the GB pipeline
+# connects at 33 kV or above. ASSUMED — no register of GB electrolyser
+# connection voltages is published. At high voltage the gross-up is 1.0338 and
+# the network 1.93 g/kWh.
+#
+# Until 13 Oct 2026 the seller paid LOW-voltage delivery, 1.063495 and 8.2125
+# g/kWh — a household's connection, with the gross-up undercounted (CHP and
+# import kWh were left out of "generation") and the network missing its N2O
+# and direct SF6. Low voltage on the corrected basis would be 1.1132 and 11.30.
+GREEN_H2_SELLER_VOLTAGE = "high"
+from optimiser_lca import grid as _grid_lca  # noqa: E402
+GRID_DELIVERY_LOSS_GROSS_UP = _grid_lca.DELIVERY[GREEN_H2_SELLER_VOLTAGE]["gross_up"]
+GRID_DELIVERY_NETWORK_GCO2E_PER_KWH = _grid_lca.DELIVERY[GREEN_H2_SELLER_VOLTAGE]["network_gco2e_per_kwh"]
 # The variant in h2_prices_recommended.csv that takes delivery over the grid.
 GREEN_GRID_DELIVERED_VARIANT = "grid-connected electrolyser"
 
@@ -254,8 +258,8 @@ def _reject_grid_basis(basis: str) -> None:
 
 
 def check_grid_delivery(tol_frac: float = 0.02) -> dict:
-    """Re-derive the three delivery constants from the live database and fail
-    if they have drifted. The derivation lives with the grid LCA in
+    """Re-derive the delivery constants, every voltage, from the live database
+    and fail if they have drifted. The derivation lives with the grid LCA in
     ``optimiser_lca.grid.check_delivery``; this keeps the name callers use."""
     from optimiser_lca import grid
     return grid.check_delivery(tol_frac=tol_frac)

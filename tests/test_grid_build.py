@@ -16,6 +16,10 @@ REPO = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 from optimisation import grid_build as G
 
+# The basis id every grid series on disk carries. Changes whenever anything in
+# optimiser_lca.grid that moves a score does — then rescore and update this.
+GRID_BASIS_ID = "055e53f4b11b"
+
 
 # -----------------------------------------------------------------------------
 # File names: what profiles.py globs for, and what is already on disk
@@ -114,15 +118,77 @@ def test_chunks_cover_the_window_without_gaps():
 # -----------------------------------------------------------------------------
 # Scoring
 # -----------------------------------------------------------------------------
-def test_score_is_share_times_loss_times_source_score():
+def test_score_is_share_times_source_score_then_delivered():
     from optimiser_lca import grid
     mix = pd.DataFrame([{f"api_{f}": 0.0 for f in G.CI_FUELS}])
     mix.loc[0, "api_gas"], mix.loc[0, "api_nuclear"] = 50.0, 50.0
+    mix["DATETIME"] = pd.Timestamp("2025-06-02 00:00")
     scores = {k: 0.0 for k in grid.TECH_SPECS}
     scores.update(GAS=0.4, NUCLEAR=0.01)
     out = G.score_mix(mix, scores)
-    expect = grid.MARKET_LOSS_FACTOR * (0.5 * 0.4 + 0.5 * 0.01)
-    assert out["custom_electricity_score"].iloc[0] == pytest.approx(expect)
+    gen = 0.5 * 0.4 + 0.5 * 0.01
+    hv = grid.DELIVERY["high"]
+    assert out["generation_kgco2e_per_kwh"].iloc[0] == pytest.approx(gen)
+    assert out["custom_electricity_score"].iloc[0] == pytest.approx(
+        gen * hv["gross_up"] + hv["network_gco2e_per_kwh"] / 1000.0)
+
+
+def _flows(**mw):
+    from optimiser_lca import grid
+    t = pd.DatetimeIndex(["2025-06-02 00:00", "2025-06-02 00:30"])
+    return pd.DataFrame({k: [mw.get(k, 0.0)] * 2 for k in grid.LINKS}, index=t)
+
+
+def test_imports_split_by_the_half_hours_flows():
+    """A half-hour's imports follow what is flowing in on the region's links."""
+    from optimiser_lca import grid
+    mix = pd.DataFrame({"DATETIME": pd.DatetimeIndex(["2025-06-02 00:00", "2025-06-02 00:30"]),
+                        "api_region_id": [99, 99], "api_imports": [10.0, 10.0]})
+    # Region 99 has no fit, so every link counts equally: national flows.
+    # Exports (negative) count as zero.
+    out = G.attach_import_shares(mix, _flows(INTFR=1000.0, INTNSL=3000.0, INTNED=-800.0))
+    assert out["imp_FR"].iloc[0] == pytest.approx(0.25)
+    assert out["imp_NO"].iloc[0] == pytest.approx(0.75)
+    assert out["imp_NL"].iloc[0] == 0.0
+    assert set(out["import_basis"]) == {"flows"}
+    assert out[grid.IMPORT_SHARE_COLS].sum(axis=1).tolist() == pytest.approx([1.0, 1.0])
+
+
+def test_no_flow_falls_back_to_the_regions_annual_split():
+    from optimiser_lca import grid
+    mix = pd.DataFrame({"DATETIME": pd.DatetimeIndex(["2025-06-02 00:00"]),
+                        "api_region_id": [13], "api_imports": [30.0]})
+    out = G.attach_import_shares(mix, _flows(INTNED=-500.0))       # all exporting
+    assert out["import_basis"].iloc[0] == "annual"
+    for c, v in grid.annual_import_shares(13).items():
+        assert out[f"imp_{c}"].iloc[0] == pytest.approx(v)
+
+
+def test_a_fitted_region_weights_its_own_links():
+    """London's imports come through the Channel links, not North Sea Link."""
+    from optimiser_lca import grid
+    if 13 not in grid.IMPORT_ATTRIBUTION:
+        pytest.skip("London has no fitted attribution")
+    beta = grid.link_weights(13)
+    assert beta["INTFR"] > 10 * beta.get("INTNSL", 0.0)
+    shares, basis = grid.import_shares(13, {"INTFR": 1000.0, "INTNSL": 1000.0})
+    assert basis == "flows" and shares["FR"] > 0.9
+
+
+def test_import_attribution_fit_recovers_known_weights():
+    import numpy as np
+    from optimiser_lca import grid
+    rng = np.random.default_rng(0)
+    t = pd.date_range("2025-01-01", periods=400, freq="30min")
+    flows = pd.DataFrame(rng.uniform(-500, 1500, (400, len(grid.LINKS))), index=t, columns=grid.LINKS)
+    true = {k: 0.0 for k in grid.LINKS}
+    true.update(INTFR=0.02, INTNEM=0.01)
+    imports = sum(true[k] * flows[k].clip(lower=0) for k in grid.LINKS) / 1000.0 * 1000.0
+    mix = pd.DataFrame({"DATETIME": t, "api_imports": imports.to_numpy()})
+    fit = G.fit_import_attribution(mix, flows)
+    assert fit["r2"] == pytest.approx(1.0, abs=1e-9)
+    assert fit["beta"]["INTFR"] == pytest.approx(2 / 3, abs=1e-6)
+    assert fit["beta"]["INTNEM"] == pytest.approx(1 / 3, abs=1e-6)
 
 
 def test_elexon_settlement_periods_become_times():
@@ -162,19 +228,28 @@ def test_rescoring_an_existing_file_reproduces_it():
 def test_every_scored_fuel_has_exactly_one_named_source():
     from optimiser_lca import grid
     assert set(grid.GRID_SOURCES) == set(grid.TECH_SPECS)
-    assert all(len(v) == 3 and all(isinstance(x, str) and x for x in v)
+    # (name, location, product), plus the database for a foreground source.
+    assert all(len(v) in (3, 4) and all(isinstance(x, str) and x for x in v)
                for v in grid.GRID_SOURCES.values())
+    assert grid.GRID_SOURCES["SOLAR"][3] == "solar foreground"
+    assert set(grid.COUNTRY_SOURCE.values()) <= set(grid.SOURCES)
+    assert {v[1] for v in grid.INTERCONNECTORS.values()} == set(grid.COUNTRY_SOURCE)
 
 
-def test_sources_id_moves_when_a_source_changes(monkeypatch):
+def test_sources_id_moves_when_anything_that_scores_changes(monkeypatch):
     from optimiser_lca import grid
     before = G.grid_sources_id()
     assert before == G.grid_sources_id()                      # stable
-    assert before == "158704fcb705"      # the id every series on disk carries
+    assert before == GRID_BASIS_ID       # the id every series on disk carries
     changed = dict(grid.GRID_SOURCES)
     changed["GAS"] = ("electricity production, natural gas, conventional power plant",
                       "GB", "electricity, high voltage")
     monkeypatch.setattr(grid, "GRID_SOURCES", changed)
+    assert G.grid_sources_id() != before
+    monkeypatch.undo()
+    delivery = {v: dict(d) for v, d in grid.DELIVERY.items()}
+    delivery["high"]["network_gco2e_per_kwh"] += 0.1
+    monkeypatch.setattr(grid, "DELIVERY", delivery)
     assert G.grid_sources_id() != before
 
 
@@ -203,5 +278,16 @@ def test_grid_sources_resolve_exactly_and_gas_is_combined_cycle():
     table = G.source_table()
     assert table["GAS"]["name"] == "electricity production, natural gas, combined cycle power plant"
     assert 0.35 < table["GAS"]["kgco2e_per_kwh"] < 0.42
-    for key, (name, loc, product) in grid.GRID_SOURCES.items():
-        assert (table[key]["name"], table[key]["location"], table[key]["product"]) == (name, loc, product)
+    for key, ident in grid.GRID_SOURCES.items():
+        assert (table[key]["name"], table[key]["location"], table[key]["product"]) == tuple(ident[:3])
+    # The grid's solar is the Smith plant now, not the 2008 El Tesoro one.
+    assert 0.02 < table["SOLAR"]["kgco2e_per_kwh"] < 0.04
+
+
+def test_delivery_constants_match_ecoinvent():
+    bd = pytest.importorskip("bw2data")
+    import dc_config as cfg
+    if cfg.PROJECT_NAME not in bd.projects:
+        pytest.skip("Brightway project not present on this machine")
+    from optimiser_lca import grid
+    assert grid.check_delivery()["ok"]

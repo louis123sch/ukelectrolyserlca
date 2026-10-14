@@ -137,6 +137,17 @@ UPV_PV_OM_PANEL_M2_PER_M2  = 1.50e-2      # 0.05 %/yr panel replacement
 UPV_PV_OM_REPLACEMENT_FRACTION = 1.30e-5 / 4.30e-5
 UPV_PV_INSTALL_DIESEL_MJ_PER_M2 = 2.6     # Smith A14. TRANSCRIBED.
 
+# --- the GB grid's own solar fleet, per kWh -------------------------------------
+# The grid's solar share used to be scored on ecoinvent's 2008 El Tesoro plant
+# (79.8 g/kWh), the plant this study rejects for its own cap_solar. This scores
+# it on the same Smith plant instead, at the yield ecoinvent assigns its GB
+# 570 kWp plant: 961.4 kWh/kWp/yr over 30 years, i.e. LF 10.97 % and 28,842
+# kWh/kWp. Only the inventory changes, not the yield, and 30 years is Smith's
+# own O&M period, so the O&M activity enters whole. TRANSCRIBED from
+# renewables_embodied.csv (ecoinvent_lifetime_kWh_per_kW).
+UPV_GRID_FLEET_KWH_PER_KWP = 28_842.0
+UPV_GRID_FLEET_YEARS = 30.0
+
 # --- fixed-tilt mounting (IEA PVPS T12-33:2026, Z-PV-239), per 1 m2 of module ---
 UPV_MOUNT_SOURCE = ("IEA PVPS Task 12, Report T12-33:2026, Table 44 / workbook "
                     "sheet X-Montage-utility, dataset Z-PV-239")
@@ -385,6 +396,23 @@ activities = (
              f"inverter replacement, {UPV_PV_OM_REPLACEMENT_FRACTION:.1%} of the installed count "
              "over 30 y (Mason 10 %/decade) - Smith A15"),
         ]),
+        # One kWh from the GB grid's solar fleet: the plant and its 30 years of
+        # O&M spread over the lifetime yield. optimiser_lca.grid scores the
+        # grid's solar share on this.
+        Activity(
+            code=R.UPV_GRID_KWH, name="UPV, GB grid solar fleet, electricity per kWh",
+            reference_product="electricity, low voltage", unit="kilowatt hour",
+            location="GB", comment=_COMMENT + (
+                f" Per kWh at {UPV_GRID_FLEET_KWH_PER_KWP:,.0f} kWh/kWp over "
+                f"{UPV_GRID_FLEET_YEARS:g} y, ecoinvent's own yield for its GB "
+                "570 kWp plant; only the inventory is Smith's."),
+            technosphere=[
+                (FG(R.UPV_CAPITAL), 1.0 / (UPV_GRID_FLEET_KWH_PER_KWP * 1000.0), "megawatt",
+                 "plant, per MWp, over its lifetime yield"),
+                (FG(R.UPV_OM30), (UPV_GRID_FLEET_YEARS / UPV_PV_OM_REFERENCE_YEARS)
+                 / (UPV_GRID_FLEET_KWH_PER_KWP * 1000.0), "megawatt",
+                 "30 years of O&M, per MWp, over the same yield"),
+            ]),
     ]
 )
 

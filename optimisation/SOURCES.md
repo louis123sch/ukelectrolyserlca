@@ -25,8 +25,10 @@ Emissions are IPCC 2021 GWP100 on ecoinvent 3.9.1 apos throughout.
 |---|---|---|---|
 | Data centre inventory | 1.60e9 kWh over 25 y; 21,036 t CO₂e fixed | transcribed | Zhang, M., Carbajales-Dale, M., Ma, X., Guo, L., Fan, C. (2025), hyperscale Virginia data centre. Built into `data centre foreground` by `optimiser_lca/data_centre.py` |
 | Continuous load | 7,306 kW | derived | 1.60e9 kWh ÷ 25 y ÷ 8760 h — the inventory's own figure, not an added assumption |
-| Grid carbon intensity | half-hourly, mean 0.1882 kg CO₂e/kWh (was 0.2369 on the wrong gas dataset, to 13 Oct 2026) | transcribed | NESO Carbon Intensity API, regional (region 13, London), via `optimisation/grid_build.py` (originally notebook 3.1) |
-| Per-fuel life-cycle scores | gas CCGT 387, coal 1,061, nuclear 7.4, imports FR/IE/NL 74/352/479 g CO₂e/kWh | transcribed | ecoinvent 3.9.1 apos GB activities named by exact identity in `dc_config.GRID_SOURCES`; resolved by `lca_helpers.get_exact_activities`, which refuses zero or several matches. Gas was the conventional plant (558 g/kWh) until 13 Oct 2026 because a search-rank index picked it; every series was re-scored. Nuclear is BWR, as ecoinvent's own GB market proxies the AGR fleet. Imports split FR 63 % / IE 7 % / NL 30 % (`lca_helpers.IMPORT_GROUP_WEIGHTS`) |
+| Grid carbon intensity | half-hourly, mean 0.1585 kg CO₂e/kWh delivered at high voltage. History: 0.2369 on the conventional gas plant; 0.1882 after the gas fix; 0.1585 after the import split, delivery terms and grid solar (all 13 Oct 2026) | derived | NESO Carbon Intensity API, regional (region 13, London), with Elexon FUELHH interconnector flows, via `optimisation/grid_build.py` |
+| Per-fuel life-cycle scores | gas CCGT 387, coal 1,061, nuclear 7.4, solar 30.9; imports FR/BE/NL/NO/DK/IE 74/178/479/22/207/352 g CO₂e/kWh | transcribed | Activities named by exact identity in `optimiser_lca.grid.SOURCES`, resolved by `lca_helpers.resolve_exact`, which refuses zero or several matches; IPCC 2021 GWP100 with long-term emissions, as every asset is. Gas was the conventional plant (558) until 13 Oct 2026. Nuclear is BWR, as ecoinvent's own GB market proxies the AGR fleet. Solar is the Smith 2024 plant (`optimiser_lca/upv.py`) at ecoinvent's GB yield, replacing the 2008 El Tesoro plant (79.8). NO and DK are those countries' own HV markets — ecoinvent has no GB import activity for them, and its FR/BE/NL/IE ones are the exporter's HV market under another name |
+| Import split | per half-hour: Elexon FUELHH flow on each link × a per-region attribution. London FR 74 / BE 16 / NL 8 / NO 2 % over 2025 | derived | `optimiser_lca.grid.IMPORT_ATTRIBUTION`, fitted by `grid_build.fit_import_attribution` (non-negative least squares of the region's API import share on the ten links' flows, 2025; London R² 0.70). Replaced ecoinvent's GB-market split, FR 63 / NL 30 / IE 7 % on every region: −29 g/kWh on London 2025 |
+| Delivery to the facility | ×1.0338 on generation + 1.93 g CO₂e/kWh network (high voltage) | derived | ecoinvent 3.9.1 GB voltage chain, `optimiser_lca.grid.derive_delivery`: the HV market's 3.27 % self-loss, and the market without its electricity input — lines, cables, maintenance and the N₂O its lines emit. At 7.3 MW the facility is banded EHV2, which `network_charges.delivery_voltage` puts at high voltage. Replaced a flat 3.16 % with no network carbon: +2.3 g/kWh |
 | Wholesale electricity price | half-hourly, mean £79.83/MWh | transcribed | Elexon BMRS Market Index Data, provider APXMIDP, via `optimisation/grid_build.py` (originally notebook 5) |
 | Linear decomposition | `fixed + Σ kWh×EF` | derived | Validated against a full Brightway LCA to 1e-6 by the script itself |
 
@@ -108,8 +110,8 @@ select it: every bought-green run was dead code the solver discarded.
 Two things make this a propagation rather than a new judgement. **76 % of that
 311 g/kWh comes from one dataset** — `electricity production, natural gas,
 conventional power plant`, parameterised on 2012 IEA data and given a 39.5 % GB
-share while ecoinvent's own GB CCGT gets zero — and `lca_helpers.py` already
-refuses that dataset for this study's own grid. And grid-connected electrolysis
+share while ecoinvent's own GB CCGT gets zero — and `optimiser_lca/grid.py`
+scores this study's own grid on the combined-cycle plant instead. And grid-connected electrolysis
 is already modelled properly as the `grid_h2` architecture, where the LP charges
 electricity carbon from its own half-hourly dispatch; the bought row was a
 worse-modelled duplicate of it carrying a renewable price tag.
@@ -163,20 +165,31 @@ absorbs the whole difference, inverting the physical ordering.
 **The two green rows differ in delivery, not in source.** Both are renewable —
 that is what makes them green — but taking the power over the network rather than
 off the generator's terminals costs two things, and ecoinvent separates both from
-generation:
+generation. They are the grid's own delivery terms (`optimiser_lca.grid.DELIVERY`)
+at the seller's voltage, `h2_prices.GREEN_H2_SELLER_VOLTAGE` = **high** (> 24 kV),
+so a seller's electrolyser and this study's data centre take grid electricity on
+one basis. The voltage is **assumed**: a grid-connected electrolyser at the
+5–100 MW scale of the GB pipeline connects at 33 kV or above, but no register of
+connection voltages is published.
 
 | Term | Value | Source |
 |---|---|---|
-| Loss gross-up | **1.063495** kWh generated per kWh delivered (+6.35 %) | Cumulative generation drawn by GB `market for electricity, low voltage` over the HV → MV → LV chain |
-| Network embodied carbon | **8.2125** g CO₂e/kWh delivered | LV distribution 5.932, MV transmission 1.583, HV transmission 0.655, maintenance 0.019, SF₆ switchgear leakage 0.025 |
+| Loss gross-up | **1.033799** kWh generated per kWh delivered (+3.38 %) | GB `market for electricity, high voltage`, whose self-input loses 3.27 % per kWh out |
+| Network carbon | **1.932** g CO₂e/kWh delivered | The HV market without its electricity input, × its throughput: N₂O emitted by the lines (corona discharge) 1.41, HVDC lines, cables and their maintenance 0.52 |
 
 So on the default basis a grid-delivered seller's electricity is
-14.466 × 1.063495 + 8.2125 = **23.597 g CO₂e/kWh**, and its hydrogen
-**1.469 kg CO₂e/kg** against 0.976 behind the meter — a **+50.5 %** delivery
+14.466 × 1.033799 + 1.932 = **16.887 g CO₂e/kWh**, and its hydrogen
+**1.107 kg CO₂e/kg** against 0.976 behind the meter — a **+13.4 %** delivery
 premium. Behind the meter pays neither term, which is the physical meaning of
-"directly connected". `check_grid_delivery()` re-derives both constants from the
-live database and fails the run if they drift, on the same contract as
+"directly connected". `check_grid_delivery()` re-derives every voltage's terms
+from the live database and fails the run if they drift, on the same contract as
 `check_against_inventory()`.
+
+Until 13 Oct 2026 the seller paid **low-voltage** delivery — ×1.063495 and
+8.2125 g/kWh, giving 1.469 kg/kg (+50.5 %). That is a household's connection, and
+both terms were short even for one: the gross-up left CHP and import kWh out of
+"generation" (corrected low voltage: ×1.1132) and the network omitted the N₂O and
+the direct SF₆ (corrected: 11.30 g/kWh).
 
 **The default is a 50:50 mix of the two, not one or the other.** A buyer
 contracting on the open market gets a portfolio, not one plant.
@@ -189,8 +202,8 @@ unreachable.
 | grid share | electricity g/kWh | kg CO₂e/kg | £/kg | kg CO₂e/MWh |
 |---|---|---|---|---|
 | 0.00 — all behind the meter | 14.466 | 0.9762 | 4.93 | 61.66 |
-| **0.50 — default** | **19.031** | **1.2228** | **6.63** | **77.23** |
-| 1.00 — all grid-connected | 23.597 | 1.4693 | 8.33 | 92.81 |
+| **0.50 — default** | **15.676** | **1.0416** | **6.63** | **65.79** |
+| 1.00 — all grid-connected | 16.887 | 1.1069 | 8.33 | 69.91 |
 
 The share is **ASSUMED**, and is the weakest input in this section: no GB
 breakdown of green hydrogen production by connection type is published, and at
@@ -242,7 +255,7 @@ Resulting terms, at the default bases:
 
 | Colour | kWh/kg | I (g CO₂e/kWh) | kg CO₂e/kg | % of production | £/kg |
 |---|---|---|---|---|---|
-| green | 1.194 | 19.03 | **0.023** | +1.9 % | 0.096 |
+| green | 1.194 | 15.68 | **0.019** | +1.8 % | 0.096 |
 | blue | 1.450 | 311.22 | **0.451** | +14.5 % | 0.116 |
 | grey | 1.450 | 311.22 | 0.451 | +4.3 % | 0.116 |
 | turquoise | 1.450 | 311.22 | 0.451 | +8.3 % | 0.116 |
@@ -258,7 +271,7 @@ grid its own activity links to, so its compressor takes that grid.
 The consequence is the opposite of what was expected. `DATA_GAPS.md` carried
 **~0.761 kg CO₂e/kg** as this term's likely size for green — which would have
 been 78 % of production and might have re-dominated the row. That figure assumed
-a *grid*-powered compressor. Charged coherently, green's compression is **0.023**,
+a *grid*-powered compressor. Charged coherently, green's compression is **0.019**,
 and it is **blue** that the term actually moves, at 14.5 %.
 
 **Not included: the compressor's own capital**, in either objective, and no
@@ -285,9 +298,109 @@ remains — smaller, and now in one place rather than two.
 | Cycling limit | 1–2 per day, warranty-aligned | transcribed | Same |
 | Round-trip efficiency | 88 % | transcribed (weakly) | Modo's standard assumption, but **not** on the model-assumptions page itself — the least firmly sourced number in this module |
 | Fixed OPEX | 2 % of capex/year | **assumed** | Modo do not publish it. FES routes battery opex to BEIS 2022 *Benefits of Long Duration Electricity Storage* instead. Flagged `OPEX_IS_PROXY = True` |
-| Pack embodied carbon | 11.368 kg CO₂e/kg | transcribed | ecoinvent 3.9.1 apos, `market for battery, Li-ion, LFP, rechargeable, prismatic` [GLO], IPCC 2021 GWP100 |
-| PCS embodied carbon | 15,930.86 kg CO₂e/unit = 31.9 /kW | transcribed | ecoinvent 3.9.1 apos, `market for inverter, 500kW` [GLO] |
-| Pack energy density | 0.1158 kWh/kg | transcribed | ecoinvent's own dataset comment: a 203 kg pack holding 23.5 kWh gross. Its price comment independently cites 0.115 kWh/kg, and the cell figure (0.159 kWh/kg × 0.727 kg cell/kg pack) agrees to 0.2 % |
+| Energy-term embodied carbon | **97.75 kg CO₂e per kWh nameplate** → **108.6 per usable kWh** | derived | `battery foreground`, built by `optimiser_lca/bess.py` (below): Jasper et al. 2026's liquid-cooled LFP container around Voß et al. 2025's LFP cell, made in China, on ecoinvent 3.9.1 apos, IPCC 2021 GWP100. Pinned as `BESS_KGCO2E_PER_KWH_NAMEPLATE` |
+| Usable fraction | 0.90 of nameplate | **assumed** | `cap_batt_e` is the energy the LP can swing (`soc` runs 0..`cap_batt_e`) and Modo's costs are per usable kWh, while both sources report per kWh of cells. 0.90 is commercial operating practice; Jasper's 80 % depth of discharge would make it 122.2 |
+| PCS embodied carbon | 15,930.86 kg CO₂e/unit = 31.9 /kW | transcribed | ecoinvent 3.9.1 apos, `market for inverter, 500kW` [GLO]. Unchanged; Jasper's own 800 kg PCS is excluded from the energy term so it is not charged twice |
+| Legacy: EV pack | 11.368 kg CO₂e/kg at 0.1158 kWh/kg = 98.2 /kWh | transcribed | ecoinvent 3.9.1 apos, `market for battery, Li-ion, LFP, rechargeable, prismatic` [GLO]. The basis before 14 Oct 2026, kept as `EMBODIED_BASIS = "ecoinvent_ev_pack"` to reproduce old runs only |
+
+### The grid battery's energy term — Jasper et al. 2026, Voß et al. 2025
+
+> F.B. Jasper, Y. Zhou, H. Ersoy, M. Baumann et al. (2026), "Life Cycle
+> Assessment of Grid-Scale Battery Storage", *Energy Advances* **5**, 550–570,
+> doi:10.1039/D5YA00341E. SI workbook on Zenodo, doi:10.5281/zenodo.17651912,
+> **CC-BY-NC**.
+>
+> P. Voß, B. Gruber, M. Mitterfellner, J.-D. Plöpst, F. Degen, R. Schmuch,
+> S. Lux (2025), "Benchmarking state-of-the-art sodium-ion battery cells",
+> *Energy Environ. Sci.* **18**, 8104–8129, doi:10.1039/D5EE00415B. Table 3
+> and ESI Tables S5, S31, S32, S35, S36.
+
+**Why it replaced the EV pack.** ecoinvent's pack is an electric-vehicle
+traction pack (Dai et al. / GREET, 2016-era) with no container, racking, HVAC
+or fire suppression. The "25–35 % high" finding in the review plan (§6.1–6.2)
+compared it with *newer EV packs* (BatPaC, EverBatt), which is right pack for
+pack and wrong for a grid battery: every stationary system source — Jasper's
+inventory, and the Trina (140.7, DC block), Sungrow (152–160 with PCS) and
+Huawei (106–114, on 3.9.1) EPDs — lands **above** 98.2, because the enclosure
+is 18–23 % of a DC block's carbon and a whole container is no lighter per kWh
+than an EV pack.
+
+**What is built.** Jasper's liquid-cooled LFP design, 1,600 kW / 3,008 kWh, 8
+racks × 8 modules × 47 kWh, 306 Ah cells — liquid cooling being what current
+containers ship with. The cell is Voß's, which Jasper link and do not
+reproduce; Voß is on ecoinvent 3.9.1, so it rebuilds here without a version
+mismatch.
+
+| Part | kg CO₂e/kWh nameplate | Jasper Fig. 4, LC LFP (3.11, EF 3.1) |
+|---|---|---|
+| Cells (made in China) | **79.48** | 95.44 |
+| Modules without cells | 6.55 | 6.57 |
+| Racks | 6.85 | 6.59 |
+| Container | 1.22 | 3.50 |
+| Liquid cooling | 2.58 | 2.64 |
+| Fire suppression | 0.76 | 0.76 |
+| Others (BESS controller) | 0.32 | 0.25 |
+| **DC block** | **97.75** | 115.75 (140.11 less PCS, transformer, foundation) |
+
+Every non-cell part reproduces Jasper's to within 4 % except the container,
+where ecoinvent 3.9.1's 20 ft intermodal container (2.9 t CO₂e) is about a
+third of whatever 3.11 carries; this is built as the inventory says, on the
+study's database, and the gap is stated rather than patched. The cell gap is
+the graphite route (3.11's Acheson dataset against Voß's own Table S5) and the
+blend (65:35 against 75:25).
+
+**The cell, validated.** Voß Table 3's LFP/graphite cell — 383.4 Wh,
+2,170.8 g, 176.6 Wh/kg — with each material from its ESI table:
+
+| Check | Rebuilt | Voß |
+|---|---|---|
+| Synthetic graphite, Acheson powder route (Table S5) | 24.51 kg/kg, +0.51 of Voß's transport = 25.02 | 25.1 |
+| Natural graphite (Engels 2022) | 4.675 kg/kg, +0.515 transport = 5.19 | 5.19 |
+| Cell, German factory, 75:25 | 72.45 kg/kWh | 71.2 |
+
+The German cell lands 1.8 % high *despite* leaving out the transport and
+processing materials Voß include, so like for like it is ~6 % high. The
+likeliest cause is the factory energy, which Voß do not tabulate: 18 kWh
+electricity + 19 kWh gas per kWh is Degen et al. (2023) as restated by Jasper
+§2.4.1. It errs high, the conservative direction.
+
+**Choices this study makes, not the sources.**
+- *Cells made in China* — where most stationary LFP cells are made, and what
+  Jasper assume. +7.0 kg/kWh over Voß's German factory. The German cell is
+  built too (`bess_lfp_cell_1kwh_de`) so Voß's figure stays reproducible.
+- *Graphite 75:25 synthetic:natural* — Voß's benchmark, given as current market
+  share. All-synthetic would be +5.0 kg/kWh, all-natural −15.0 (Voß's own
+  figures move by +4.9 and −14.7).
+- *The 330 g housing is charged wholly on Voß Table S36* — Voß put fixing and
+  isolation materials (S37, all PET) inside it without a split; S36 already
+  carries PET, and the Al-heavy table errs high.
+- *Ellingsen's busbars*, which Jasper do not reproduce, are mapped to their
+  metals, the bimetallic set 50:50 copper:aluminium (~1.8 kg/kWh in all).
+- *The BESS controller* (30 kg), which has no inventory in the SI, is
+  ecoinvent's electronics for control units, as Jasper's HV control box is.
+
+**Pinned footprints, not inventories.** Five source figures are carbon
+footprints: natural graphite 5.19, PVDF 60.6 (Hu et al.), separator 5.06
+(ecoinvent 3.8, which Voß chose over 3.9.1's 39.6 as "unrealistically high";
+3.9.1 scores 34.4–39.5 here), and Carrère's crucible (7.346) and packaging
+(0.432) per kg of synthetic graphite. Each enters as fossil CO₂ of its own
+size: right for GWP100 and *only* for GWP100.
+
+**Boundary — the same as every other inventory here.** No end-of-life
+(Jasper's EOL sheet and `treatment of used CSS` are not taken). No delivery
+transport: every rail, lorry and sea row in both sources is left out, as
+`upv.py` leaves out Smith's, and where Voß folded their China-to-Berlin legs
+into one factor (natural graphite) they are subtracted back out with negative
+exchanges. Factory energy is *in*, as it is for solar. Jasper's PCS (charged on
+the power term), transformer (battery step-up closed as negligible, 4 Sep) and
+concrete foundation (civils are outside every capital inventory) are excluded.
+Voß's processing materials — NMP, argon, nitrogen, compressed air — are not
+tabulated by them and are left out; this errs low.
+
+**What is still not in it.** Current 20 ft products pack ~5 MWh against
+Jasper's 3 MWh; spreading the per-container items over 5 MWh would take ~3
+kg/kWh off. End-of-life, as everywhere. And the cell is the soft spot: Jasper's
+3.11 cell is 20 % above this one on the same bill.
 
 **Why Modo rather than NREL.** The FES 2025 Economics Methodology report
 states NESO's Li-ion CAPEX is *"a combination of Modo survey data with CAPEX
@@ -295,16 +408,12 @@ data from the National Renewable Energy Laboratory"*. Modo's assumptions are
 published openly and already in real 2025 GBP, so they need neither FX nor
 deflation — unlike NREL, which is USD and US-market.
 
-**Verification built in.** `check_against_ecoinvent()` re-scores both
-ecoinvent factors and fails if they have moved by more than 0.1 %.
+**Verification built in.** `check_against_ecoinvent()` re-scores the battery
+foreground and both ecoinvent factors, and fails if any has moved by more than
+0.1 %.
 
-**Caveats printed by the module.** ecoinvent's LFP dataset is an electric-
-vehicle traction pack (Dai et al. / GREET), reused for stationary storage —
-standard practice, but an approximation in both directions. It carries no
-container, racking, HVAC or fire suppression, because ecoinvent 3.9.1 has no
-stationary BESS enclosure. And the battery's 15-year life against the data
-centre's 25 means **1.67 builds** over the study horizon, which both cost and
-carbon must carry.
+**Life.** The battery's 15-year life against the data centre's 25 means **1.67
+builds** over the study horizon, which both cost and carbon must carry.
 
 ---
 
@@ -607,12 +716,14 @@ plant (0.595) is the outlier.
 
 ### What is deliberately not counted
 
-**No grid-export transformer.** Leng's farm also has that 100 MVA unit stepping
-up to 110 kV, and it is not taken. This study's generation is **behind the
-meter**: there is nothing to export into, and the one transformation between the
-site and the outside world is the grid intake, which `cap_grid` already pays for
-through `grid_connection.py`. Charging it would bill the site for a voltage
-change it does not make.
+**No grid-export transformer charged to generation.** Leng's farm also has that
+100 MVA unit stepping up to 110 kV, and it is not charged to `cap_wind`. This
+study's generation is **behind the meter**: there is nothing to export into, and
+the one transformation between the site and the outside world is the grid
+intake, which `cap_grid` pays for through `grid_connection.py`. Charging it to
+generation would bill the site for a voltage change it does not make. The same
+unit's bill **is** taken — as the basis of the grid *intake* (below), not of
+generation.
 
 **No step between the collection network and the data centre.** Both sit in the
 medium-voltage band, so the chain closes. `dc_config.TX_SITE_COLLECTION_KV`
@@ -622,8 +733,8 @@ for 35 kV, above it; a 20 kV unit of the same rating carries less insulation and
 is lighter, so taking their mass **errs high** — the safe direction, and it
 covers any residual step.
 
-**No switchgear, protection or civils.** Absent here and absent from
-`grid_connection.py`, so it is a level shift rather than a bias. Teffera puts MV
+**No switchgear, protection or civils.** Absent here and absent from the grid
+intake in `grid_connection.py`, so it is a level shift rather than a bias. Teffera puts MV
 plus HV switchgear at 0.61 t/MW against a plant transformer's 1.08 t/MW — real
 but small, and the insulating-gas term is already carried for imported power,
 since ecoinvent's medium-voltage market allocates high-voltage switchgear SF₆ to
@@ -714,6 +825,42 @@ partly cancelled: the electronics dataset runs high for a given mass, while a
 40 MVA specific mass under-counts a 2.5 MVA unit by ~1.6×. It survives only as
 `transformers.SOLAR_BASIS = "legacy"`, to reproduce pre-2026 runs.
 
+### The grid intake — Leng's main transformer
+
+`grid_connection.py`, inventory `transformer foreground/grid_intake_transformer_per_mva`
+built by `optimiser_lca/stepup_transformers.py`
+
+`cap_grid` used to be the last thing on the default path still scoring
+ecoinvent's 280 g electronics transformer: **333.5 kg CO₂e/MW/year**, from
+5.34 kg CO₂e/kg at an uncited 1.25 t/MVA (300 t / 240 MVA, DERIVED from a GB
+400 kV supergrid transformer) × 2 for N-1 over 40 years. It now reads the same
+Table S1's grid-end unit, transcribed into `stepup_transformers.TX_LENG_MAIN_KG`
+and mapped exactly as the box transformers are (same `TX_MATERIAL_PROCESSES`,
+same "Iron" reading):
+
+| material, `XZ11-100000/110` | kg | per MVA | grade |
+|---|---|---|---|
+| Steel | 30,200 | 302.0 | transcribed |
+| Iron *(core)* | 20,800 | 208.0 | transcribed; read as core steel, **assumed** |
+| Copper | 16,800 | 168.0 | transcribed |
+| Transformer oil | 3,430 | 34.3 | transcribed |
+| Silicon dioxide | 228.6 | 2.3 | transcribed (printed in kg); silica-sand proxy |
+| **total** | **71,458.6** | **714.6** | `check()` holds the sum |
+
+Scored materials-only on ecoinvent 3.9.1 apos: **2,753 kg CO₂e per MVA**
+(3.85 kg CO₂e/kg — above the box units' 3.46 because copper is 23.5 % of the
+mass rather than 16.6 %, and half the carbon). × 2 MVA/MW (N-1 ÷ power factor
+1.0) ÷ 40 years = **137.7 kg CO₂e/MW/year**, −59 % on the old basis. Leng's own
+342 t CO₂e for this unit includes factory electricity on the Chinese grid; the
+275 t here does not, for consistency with the wind units.
+
+*The voltage judgement.* The unit is wound for **110 kV**, which fits a GB
+**132 kV** EHV/DNO connection — the common case for a ~100 MW data centre. For a
+site connected at **275/400 kV** it errs **low**, supergrid transformers being
+heavier per MVA. It is used for every site as the default and registered in
+DATA_GAPS.md. Switchgear, protection, the bay, civils, losses and end-of-life
+are excluded, as for the step-ups.
+
 **Sources.** Leng et al. (2026), *Processes* 14(7) 1045 —
 <https://doi.org/10.3390/pr14071045>. Teffera et al. (2021), *Int J LCA* 26:76–96
 — <https://doi.org/10.1007/s11367-020-01834-5>. Vestas, *LCA of Electricity
@@ -743,8 +890,9 @@ number.
 | AE / PEM / SOEC capital | 432.4 / 260.8 / 362.8 t CO₂e per MW | derived | Hermesmann et al. capital good, scored on ecoinvent 3.9.1 apos and divided out of the per-kg activity |
 | Rated capacity | **1 MW** each | derived | Only PEM states it. AE and SOEC are inferred from lifetime H₂ × specific energy, which lands on 160 GWh/MW for all three to within 0.2 % despite specific energies of 42.3–54.0 kWh/kg. `check_rating()` enforces it |
 | Implied utilisation in the foreground | 160,000 full-load hours, **73 % CF** over 25 y | derived | The trap this module exists to escape: an electrolyser built to run at 20 % CF is under-charged **3.7×** by the per-kg figure |
-| Variable burden | 0.042 / 0.107 / 1.628 kg CO₂e per kg H₂ | derived | Water, heat, electrolyte — genuinely per-kg, so left per-kg |
-| SOEC external heat | 18.9 MJ/kg H₂ on `market group for heat, district or industrial, other than natural gas` [RER] | transcribed | 87 % of SOEC's 1.628 kg/kg. Taken as the underlying LCA paper (Hermesmann et al.) specifies it, not chosen by this study, and open to change. The choice alone decides SOEC against PEM on renewable power: 2.27 against 0.89 kg CO₂e/kg as scored, and SOEC would be 0.22 on zero-burden heat. A zero-burden case is not the obvious alternative — at SOEC temperatures a data centre's own waste heat cannot supply it, so the heat has to come from somewhere. Not costed: see `DATA_GAPS.md`, *Electrolyser consumables cost*. Audit §3.3 |
+| Variable burden | 0.042 / 0.107 / 1.632 kg CO₂e per kg H₂ | derived | Water, heat, electrolyte — genuinely per-kg, so left per-kg |
+| SOEC external heat | 18.864 MJ (5.24 kWh)/kg H₂ on `heat production, natural gas, at boiler modulating >100kW` [Europe without Switzerland], 0.0751 kg CO₂e/MJ | transcribed | Mehmeti et al. 2018 (*J. Clean. Prod.* 199, Table 1 and §2.2): heating the stack inlet flows to 750 °C at 95 % heat-exchange efficiency gives 4.75 kWh/kg, raised to 5.24 for 0.5 %/1,000 h degradation. They supply it from "Heat, natural gas, at boiler modulating", and this is that dataset's v3 successor. >100kW because a 1 MW SOEC draws ~124 kW of heat. Gerloff 2021 (Table 3) carried the 5.24 kWh but modelled it on "heat, district or industrial, other than natural gas" (52 % coal and peat, his §2.2.3), and Hermesmann copied Gerloff. That swap is why this row used to sit on `market group … other than natural gas` [RER]. The two datasets score 0.0749 and 0.0751 kg/MJ, so the switch fixes the provenance and moves GWP by +0.004 kg/kg. It matters more for the non-GWP categories, where Gerloff blames that coal-heavy proxy for SOEC's particulate, ionising-radiation and carcinogen results. Cross-check: Mehmeti's own heat line is 1.294 kg CO₂e/kg H₂ (0.0686/MJ, supplementary Table A1), against 1.417 here. Heat is still 87 % of SOEC's 1.632 kg/kg. The audit's comparison on renewable power (SOEC 2.27 against PEM 0.89, or 0.22 on zero-burden heat) moves by that same +0.004, so the dataset choice no longer swings the ranking; the heat itself still does. A data centre's waste heat cannot supply it at these temperatures. A boiler cannot literally reach 750 °C either, but it is the source's own basis. Not costed: see `DATA_GAPS.md`, *Electrolyser consumables cost*. Audit §3.3 |
+| SOEC heat, electric-boiler scenario | 5.24 kWh ÷ 0.99 = **5.29 kWh/kg H₂** of site electricity, replacing the gas row | assumed | `soec_heat="electric_boiler"` on a `Scenario` (matrix rows 22–25, and a toggle on the optimiser page). `electrolysers.with_heat_source` drops the gas row's 1.417 kg/kg, leaving 0.215 kg/kg of water, and adds the boiler's kWh to `kwh_per_kg`, so the heat costs and emits whatever the LP's electricity does in that hour. Efficiency 99 % from the Danish Energy Agency's *Technology Data*, "Electric boilers", not yet checked against the sheet. `cap_ely` then covers the boiler's draw too, so stack carbon and cost per MW are scaled to the stack's share (≈ 0.90 at a 28 bar tank). **The boiler's own capital is not charged**, in carbon or cost. Resistance heating reaches the ~750 °C inlet, which a gas boiler does not, and it is what commercial SOEC systems use |
 | Plant lifetime | 25 y | transcribed | NESO Green Hydrogen Data Portal, same figure as `electrolyser_costs_clean.csv` |
 
 *No stack/BoP split is possible* — Hermesmann's capital good is one monolithic
@@ -755,19 +903,72 @@ activity, so the whole of it is charged on calendar life. Registered in
 
 | Input | Value | Grade | Source |
 |---|---|---|---|
-| Stack | 97.4 t CO₂e per MW, 32,000 h duty life | derived | Babatunde et al. 2024 Table S1; stack life their §3.4 |
-| Balance of plant | 469.0 t CO₂e per MW, 60,000 h duty life | derived | ecoinvent 3.9.1 "fuel cell production, PEM 2 kW" net of its own stack and of the domestic-CHP hot-water kit |
-| BoP **calendar** life | **25 y** | **assumed** | 60,000 h is a *duty* figure; at 200 h/yr it implies a 300-year asset. No public calendar life found. Charged over the same 25 y as the electrolyser and the data centre |
-| Stack **calendar** life | **25 y** | **assumed** | `fuel_cell.STACK_CALENDAR_LIFETIME_YEARS`, a placeholder. Until 12 Oct the stack took the study horizon as its calendar life. Read from the constant on every call, not from the decomposition cache |
-| Maintenance | 3.11 kg CO₂e per MWh delivered | derived | ecoinvent PEMFC maintenance net of the stack it bundles |
+| Stack | 97.4 t CO₂e per MW, **30,000 h** duty life | derived | Babatunde et al. 2024 Table S1. Duty life: stationary H₂ stacks are refurbished at 24–30k running hours (Nedstack datasheets, as reported); Bionaz et al. 2022 use 40k. Babatunde's 32k was ecoinvent's own figure, so never an independent check |
+| Balance of plant | **44.3 t CO₂e per MW**, **80,000 h** duty life | derived | Rebuilt 14 Oct, below. Duty life: DOE's 100 kW–3 MW stationary class, and ecoinvent's own system life (60,000 h was the 1–25 kW residential target) |
+| BoP **calendar** life | **20 y** | **assumed** (indicative) | Nedstack: 20 y for the BoP of their 120 kW CHP unit, 10 y for their mobile unit; DOE backup-power target, 15-y system life. Sweep 15–25. Was 25 y, matched to the electrolyser. Also sets the cost-side annuity: +8.3 % on the fuel-cell cost line |
+| Stack **calendar** life | **10 y** | **assumed** (indicative) | Clean Hydrogen Partnership stationary PEMFC KPIs are set on a 10-y system life; Nedstack mobile unit 10 y; Gandiglio et al. 2022 replace their 50 kW Engie-EPS unit every 5 y. Binds for an idle backup stack (membranes age at open circuit). Sweep 5 / 10 / 15. Was a 25-y placeholder |
+| Maintenance | **0.003** kg CO₂e per MWh delivered | derived | An air filter and a coolant change per 8,000 h (interval ASSUMED; Battelle 2016 gives one year for backup units), Usai's amounts. Was 3.11, ecoinvent's reformer-catalyst service event |
 | Hydrogen consumption | 63.16 kg H₂ per MWh | derived | 1/(η 0.475 × LHV 33.33 kWh/kg) |
 
 Both replaceable components are charged at
 `max(1/calendar_years, full_load_hours_per_year/duty_hours)` — a maximum of two
 linear functions, exact in an LP. This matters at both ends: charged on duty
-alone a **backup** fuel cell is under-counted **16.4×**; charged on calendar
-alone a **baseload** one is under-counted 3.7×. `check_full_duty()` asserts the
-rule collapses onto the foreground's own per-kWh figure at 8,760 h/yr.
+alone a **backup** fuel cell at 100 h/yr is under-counted **~31×**; charged on
+calendar alone a **baseload** one is under-counted ~2.8×. `check_full_duty()`
+asserts the rule collapses onto the foreground's own per-kWh figure at 8,760 h/yr.
+
+#### The balance of plant — a hydrogen-fed stationary unit, not a micro-CHP
+
+Until 14 Oct it was ecoinvent's `fuel cell production, polymer electrolyte
+membrane, 2kW electrical, future` net of its stack: a **natural-gas domestic
+micro-CHP** ("operation with connection to low pressure gas network"), with
+fuel-processor items, a hot-water kit and 400 km of installer driving, scaled
+linearly from 2 kW to MW — 469 t CO₂e/MW, and reformer-catalyst replacement as
+its maintenance. Audit §3.4.
+
+**No MW-class hydrogen PEM inventory exists.** Checked: Stropnik et al. 2018
+(*Energy* 165:824, 3 kW H₂ UPS — the only stationary H₂ unit with a component
+bill), Gandiglio et al. 2022 (a 50 kW unit, but inventoried as ecoinvent's 2 kW
+stack alone), Gramc, Stropnik et al. 2025 (*IJHE* 104:623, a 48 kW stack only),
+Belmonte 2016/2017 (3 kW, on ecoinvent's 2 kW dataset), Gentilucci et al. 2024
+(SAE 2024-24-0020, 200 kW truck, BoP from Miotti 2017), Syré et al. 2024 (*WEVJ*
+15:114, trucks and buses, Usai's data). A 2026 review (*Energies* 19:3808) finds
+fuel-cell BoP inventories still "simplified using obsolete" bills. So the BoP is
+assembled, per kW, in `optimiser_lca/fuel_cell.py`:
+
+| Part | kg CO₂e/kW | Source |
+|---|---|---|
+| Process loops — air, water, heat, fuel, controller, wiring, frame | 8.81 | **Usai et al. 2021**, *J Cleaner Prod* 280:125086, SI Table 1 (`sources/usai supplementary materials/`): an 80 kW H₂ system per kW net, every line on the ecoinvent process Usai name |
+| Power conversion to AC | 31.86 | ecoinvent `market for inverter, 500kW` [GLO], the battery's power-term dataset. A vehicle's DC/DC boost sits in its drivetrain, so nothing is counted twice |
+| Enclosure | 3.66 | the battery's fire-lined 20 ft container (Jasper 2026, `bess.py`), one per MW — **assumed**, no source gives MW per container for fuel cells; sweep 0.5–2 MW |
+| **Balance of plant** | **44.3** | |
+| Stack (Babatunde) | 97.4 | unchanged |
+| **System** | **141.8** | |
+
+*Two lines of Usai's Table 1 are per system, not per kW.* The 3 coolant pumps
+and 16 m of wiring (Miotti's per-system figure) are printed as per kW net;
+taken literally they rebuild Usai's own heat and "other" results 17× and 35×
+over. Divided by 80 kW they rebuild them. *The rest is as printed*, and rounded
+to two decimals, so the loops land at **0.82×** Usai's own 854 kg CO₂e per 80 kW
+(their results workbook, ecoinvent 3.6): water 0.99, fuel 0.91, air 1.11, the
+radiator and controller lost to rounding. Where Usai's 3.6 GLO market is
+regional in 3.9.1 (sulfur trioxide, rigid PU, nylon 6), RoW stands in.
+
+*What is a vehicle part and stays.* The compression-expansion motor stands in
+for a stationary air blower (errs high, small); the belly pan for the module
+frame.
+
+**Benchmarks**, whole systems cradle-to-gate per kW: Miotti 29, Usai 37.3 (no
+tank), Gentilucci 30.5–51.4 (200 kW truck), Ballard 73 (70 kW module, its own
+note), Stropnik/Bionaz 405 (3 kW UPS). This system's 142 sits above the vehicle
+band because it carries an inverter and an enclosure and because Babatunde's
+2 kW graphite-plate stack (97 kg/kW) is ~3–4× an automotive stack. **The stack
+is now the soft spot**: Gramc 2025's 48 kW stack inventory is the obvious
+sensitivity, rebuilt on this study's boundary.
+
+**Effect**, t CO₂e per MW per year: backup (200 h/yr) 23.3 → **12.0**; baseload
+(8,760 h/yr) 122.4 → **33.3**. At backup duty the stack's 10-y calendar life now
+carries 81 % of it.
 
 Hydrogen is excluded from every coefficient — the LP supplies it explicitly.
 
@@ -778,11 +979,12 @@ Hydrogen is excluded from every coefficient — the LP supplies it explicitly.
 | Gandiglio 28 bar vessel | 312.8 kg steel per kg H₂ → **1,595 kg CO₂e per kg** capacity | transcribed | Gandiglio et al. 2022, Table 3 — the as-built 21.6 m³ stainless vessel at Ginostra |
 | Type I 200 bar cylinder | 100 kg steel per kg H₂ → **250 kg CO₂e per kg** capacity | assumed | ~1 wt% gravimetric capacity, a typical industrial stationary bottle. No Brightway activity exists for it |
 | Vessel lifetime | 25 y, never replaced within it | transcribed | The paper's own plant life |
-| Standing loss | **0 /h** | **assumed** | No boil-off exists for compressed gas at ambient temperature — that is a liquid-H₂ phenomenon. Real losses are fitting leakage, a maintenance question. **Load-bearing**: near-zero standing loss is exactly why hydrogen beats a battery over a season |
+| Standing loss | **0 /h** | **assumed** | No boil-off exists for compressed gas at ambient temperature — that is a liquid-H₂ phenomenon. Real losses are fitting leakage, a maintenance question. Thought load-bearing; **swept 14 Oct and found not to be** at 0–0.1 %/day: < 0.1 % on cost and carbon, no change in which store dominates (`DATA_GAPS.md`). **The sweep range is ASSUMED**, because no source here gives an order for fitting leakage on a welded steel vessel at 28 bar: 0.1 %/day (≈ 3.6 % a year of the stock held) is set equal to the bottom of the battery's 0.1–0.5 %/day band, so at the top of both bands the two stores leak alike per day — the most hydrogen-adverse comparison still plausible for a gas with no boil-off; 0.01 %/day, an order lower, stands for a well-maintained vessel; zero is the default. Replace it from a fugitive-emissions source (candidate: Frazer-Nash for BEIS, 2022). The leaked H₂'s own GWP (~11) is not charged by the LP |
 
 **The design choice is not a detail.** Per kWh *deliverable back through the fuel
-cell*, the 28 bar vessel is 100.7 kg CO₂e/kWh against a Li-ion battery's 98.2 —
-no advantage at all. The 200 bar cylinder is 15.8, six times better. Which
+cell*, the 28 bar vessel is 100.7 kg CO₂e/kWh against a Li-ion battery's 108.6
+per usable kWh — barely any advantage. The 200 bar cylinder is 15.8, about
+seven times better. Which
 vessel the study uses decides whether hydrogen storage has an embodied-carbon
 case. Both are built; run both.
 
@@ -873,7 +1075,7 @@ transport is modelled for any colour.
 
 Tracked in `DATA_GAPS.md`. At the time of writing, on the carbon side: the
 fuel cell's BoP calendar life, hydrogen tank standing loss, battery standing
-loss, and the absence of a stack/BoP split in the electrolyser inventory. On
+loss (both bounded by sweep but unsourced), and the absence of a stack/BoP split in the electrolyser inventory. On
 the cost side: fuel cell capex, hydrogen tank capex, SOEC costs, battery fixed
 OPEX, and demand-side network charges (DUoS/TNUoS) for the data centre's own
 import — the DESNZ connection figures are *generator*-side and are not a

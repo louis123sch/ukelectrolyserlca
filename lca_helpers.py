@@ -62,14 +62,13 @@ def find_database_name(must_contain, prefer=None):
 
 
 def _select_gwp_method():
-    """Pick IPCC 2021 GWP100 if available, else any IPCC GWP/climate-change method.
+    """Pick IPCC 2021 GWP100 with long-term emissions, the variant every
+    coefficient module in ``optimisation/`` scores on.
 
-    Note: with ecoinvent 3.9.1's bundled methods the first GWP100 match in
-    ``bd.methods`` order is the "no LT" (no long-term emissions) variant, and
-    that is what this returns. ``optimiser_lca.grid`` scores the grid with it,
-    so every grid series on disk is on that basis; the coefficient modules in
-    ``optimisation/`` pick the with-LT variant themselves. Registered as a known
-    inconsistency - changing this here would make every grid series stale.
+    ecoinvent 3.9.1 bundles a "no LT" (no long-term emissions) variant too, and
+    it comes first in ``bd.methods`` order, which is what this used to return —
+    so the grid was scored on "no LT" and the assets on with-LT. Excluded by
+    name now; for the grid's sources the two differ by under 0.02 %.
     """
     gwp_methods = [
         m for m in bd.methods
@@ -78,6 +77,7 @@ def _select_gwp_method():
     preferred = [
         m for m in gwp_methods
         if "2021" in str(m) and ("GWP100" in str(m).replace(" ", "") or "GWP 100" in str(m))
+        and "no LT" not in str(m)
     ]
     if not gwp_methods:
         raise ValueError("No IPCC GWP/climate change method found in this Brightway project.")

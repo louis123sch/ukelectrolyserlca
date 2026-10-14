@@ -437,6 +437,16 @@ side.
 
 ### 3.4 Fuel cell — C8, C9, G8, G9, G13, P5, P6
 
+> **Status 14 Oct — carbon side fixed.** G8 is now a hydrogen-fed stationary
+> BoP (Usai et al. 2021 process loops + ecoinvent 500 kW inverter + container):
+> 469,040 → **44,325 kg/MW**. G13 is an air filter and coolant per 8,000 h:
+> 3.114 → **0.003 kg/MWh**. P6: duty lives 30,000 h stack / 80,000 h system;
+> calendar 10 y stack / 20 y BoP, indicative and still flagged. C9's stack share
+> is **frozen** at 0.172 (`h2_capex.FC_STACK_COST_FRACTION`), no longer read from
+> the carbon split. Still open: C8/C9 (the capex job), the stack inventory
+> (Babatunde, 97 kg/kW), and a test pinning a live value now exists
+> (`test_fuel_cell_bop_is_a_hydrogen_unit_not_a_micro_chp`). See `SOURCES.md`.
+
 | Term | Central | Grade | Reproduced | Source checked | Test pins value |
 |---|---|---|---|---|---|
 | C8 `cost_fc` | £160,835/MW/yr = $2,300/kW ÷ 1.28 × (1 − 0.172) × (CRF 6 %/25 y + 3 %) | PROXY (DOE natural-gas CHP, *equipment* cost) | ✔ | DOE row ✔ | ✘ (ordering) |
@@ -900,7 +910,7 @@ But:
   - `dc_inputs.py:398-401`;
   - `transformers.py:354-356`;
   - `tests/test_coefficients.py:429-431`.
-- `SOURCES.md:104-111` and `h2_prices.py:132-135`: "lca_helpers refuses the
+- *(Fixed 13 Oct.)* `SOURCES.md:104-111` and `h2_prices.py:132-135`: "lca_helpers refuses the
   conventional gas dataset for the study's own grid".
 - `DATA_GAPS.md`:
   - "NESO's Low/Central/High vary the LCOH scenario, not the capital cost";
@@ -935,7 +945,10 @@ But:
 
 **A. Fix before any number is quoted again.** Mostly cheap, no sourcing needed.
 
-1. **Grid carbon series.**
+1. **Grid carbon series.** *Done 12–13 Oct 2026: gas on CCGT, UTC clock,
+   imports split by interconnector flows, one high-voltage delivery basis
+   with network carbon, grid solar on Smith, one GWP method. Every series
+   re-scored; baseline 11,114 t. See `DATA_GAPS.md`.*
    - Take gas from GB CCGT, or document why not.
    - Fix the BST clock in notebook 3.1.
    - Review the import weights.

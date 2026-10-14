@@ -10,27 +10,27 @@
     "lifetime_GWh": 159.87654320987653,
     "full_load_hours": 159876.54320987655,
     "implied_capacity_factor": 0.7300298776706692,
-    "capital_kgco2e_per_unit": 432383.70685280376,
-    "capital_kgco2e_per_MW": 432383.70685280376,
-    "capital_kgco2e_per_MW_year": 17295.34827411215,
-    "capital_kgco2e_per_kg_h2": 0.1400923210203084,
-    "variable_kgco2e_per_kg": 0.04160858350925193,
-    "foreground_fixed_kgco2e_per_kg": 0.18169673835362302,
+    "capital_kgco2e_per_unit": 433952.7989809849,
+    "capital_kgco2e_per_MW": 433952.7989809849,
+    "capital_kgco2e_per_MW_year": 17358.111959239395,
+    "capital_kgco2e_per_kg_h2": 0.1406007068698391,
+    "variable_kgco2e_per_kg": 0.04160477208253571,
+    "foreground_fixed_kgco2e_per_kg": 0.18220548385241297,
     "_consumables": [
       [
         "market for water, deionised",
         8.99,
-        0.0026149940797132953
+        0.0026158784863616023
       ],
       [
         "market for water, completely softened",
         88.1,
-        0.029039799548466035
+        0.029035104756068585
       ],
       [
         "market for electrolyte, KOH, LiOH additive",
         0.0037,
-        0.0099537898810726
+        0.009953788840105521
       ]
     ]
   },
@@ -45,27 +45,27 @@
     "lifetime_GWh": 160.23738872403558,
     "full_load_hours": 160237.38872403558,
     "implied_capacity_factor": 0.7316775740823542,
-    "capital_kgco2e_per_unit": 260837.57278137782,
-    "capital_kgco2e_per_MW": 260837.57278137782,
-    "capital_kgco2e_per_MW_year": 10433.502911255113,
-    "capital_kgco2e_per_kg_h2": 0.08790226202732433,
-    "variable_kgco2e_per_kg": 0.10716682636953401,
-    "foreground_fixed_kgco2e_per_kg": 0.19506678389531815,
+    "capital_kgco2e_per_unit": 260870.9117910889,
+    "capital_kgco2e_per_MW": 260870.9117910889,
+    "capital_kgco2e_per_MW_year": 10434.836471643555,
+    "capital_kgco2e_per_kg_h2": 0.08791349727359696,
+    "variable_kgco2e_per_kg": 0.10716288423034334,
+    "foreground_fixed_kgco2e_per_kg": 0.19507637922817447,
     "_consumables": [
       [
         "market for water, deionised",
         8.99,
-        0.0026149940797132953
+        0.0026158784863616023
       ],
       [
         "market for water, completely softened",
         88.1,
-        0.029039799548466035
+        0.029035104756068585
       ],
       [
         "market group for heat, district or industrial, other than natural gas",
         1.008,
-        0.07551203274135468
+        0.07551190098791315
       ]
     ]
   },
@@ -80,27 +80,27 @@
     "lifetime_GWh": 159.9243856332703,
     "full_load_hours": 159924.38563327029,
     "implied_capacity_factor": 0.7302483362249784,
-    "capital_kgco2e_per_unit": 362769.2013179078,
-    "capital_kgco2e_per_MW": 362769.2013179078,
-    "capital_kgco2e_per_MW_year": 14510.76805271631,
-    "capital_kgco2e_per_kg_h2": 0.09595245374858662,
-    "variable_kgco2e_per_kg": 1.6282767947178207,
-    "foreground_fixed_kgco2e_per_kg": 1.7241998872042936,
+    "capital_kgco2e_per_unit": 362820.3593831577,
+    "capital_kgco2e_per_MW": 362820.3593831577,
+    "capital_kgco2e_per_MW_year": 14512.814375326307,
+    "capital_kgco2e_per_kg_h2": 0.09596598505684521,
+    "variable_kgco2e_per_kg": 1.631929012900328,
+    "foreground_fixed_kgco2e_per_kg": 1.72789502167567,
     "_consumables": [
       [
         "market for water, deionised",
         8.99,
-        0.0026149940797132953
+        0.0026158784863616023
       ],
       [
         "market for water, completely softened",
         644.7,
-        0.21250804504989845
+        0.2124736894011058
       ],
       [
-        "market group for heat, district or industrial, other than natural gas",
+        "heat production, natural gas, at boiler modulating >100kW",
         18.864,
-        1.413153755588209
+        1.4168394450128607
       ]
     ]
   }

@@ -70,4 +70,6 @@ def print_dashboard():
     print("Fuel cell:              ", f"eta {fuel_cell.FC_ETA_NET_MEAN:.3f} mean, "
           f"stack {fuel_cell.FC_STACK_LIFETIME_H:,} h, system {fuel_cell.FC_SYSTEM_LIFETIME_H:,} h")
     print("Hydrogen tank design:   ", h2_tank.TANK_DESIGN, f"({TANK_LIFETIME_YEARS} y)")
-    print("Grid sources id:        ", grid.sources_id(), f"loss factor {grid.MARKET_LOSS_FACTOR}")
+    print("Grid basis id:          ", grid.sources_id(),
+          f"(high-voltage delivery x{grid.DELIVERY['high']['gross_up']:.4f} "
+          f"+ {grid.DELIVERY['high']['network_gco2e_per_kwh']:.2f} g/kWh)")

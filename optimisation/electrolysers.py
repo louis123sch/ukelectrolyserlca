@@ -132,6 +132,26 @@ RATING_TOLERANCE = 0.01          # 1 % — the inventories agree to 0.2 %
 # error — a missed exchange, a double count — is orders of magnitude larger.
 RECONSTRUCTION_TOLERANCE = 1e-4
 
+# How SOEC's 5.24 kWh/kg of external heat is raised. A scenario choice, not a
+# fact about the stack.
+#
+# gas_boiler       As inventoried: Mehmeti et al. 2018's natural-gas boiler, a
+#                  fixed 1.417 kg CO2e/kg H2 inside variable_kgco2e_per_kg.
+# electric_boiler  The heat comes off the site's own electricity. The gas row's
+#                  burden is removed and 5.24 kWh / efficiency is added to
+#                  kwh_per_kg, so the heat carries whatever the LP buys or
+#                  generates in that hour, and is paid for at that price.
+#                  Electric steam generators and superheaters are what
+#                  commercial SOEC systems use; resistance heating reaches the
+#                  ~750 °C stack inlet, which a boiler does not.
+SOEC_HEAT_SOURCES = ("gas_boiler", "electric_boiler")
+SOEC_HEAT_DEFAULT = "gas_boiler"
+# ASSUMED. Resistance/electrode boilers convert ~99 % of input to heat (Danish
+# Energy Agency, Technology Data, "Electric boilers"); not yet checked against
+# the sheet. At 0.99 the boiler adds 5.29 kWh/kg.
+ELECTRIC_BOILER_EFFICIENCY = 0.99
+MJ_PER_KWH = 3.6
+
 # NESO Green Hydrogen Data Portal, via electrolyser_costs_clean.csv.
 PLANT_LIFETIME_YEARS = 25.0
 
@@ -241,6 +261,37 @@ def decompose_all(use_cache: bool = True, refresh: bool = False):
     CACHE_PATH.write_text(json.dumps(rows, indent=2), encoding="utf-8")
     _MEMO = rows
     return rows
+
+
+def with_heat_source(row: dict, source: str | None = None) -> dict:
+    """SOEC's decomposed row with its external heat raised the given way.
+
+    ``gas_boiler`` returns the row as inventoried. ``electric_boiler`` moves
+    the heat out of ``variable_kgco2e_per_kg`` and into ``kwh_per_kg``, so the
+    LP charges it at the hour's own electricity. ``heat_kwh_electric_per_kg``
+    says how much of ``kwh_per_kg`` is boiler rather than stack, for anything
+    priced per MW of stack. Other technologies pass through untouched: their
+    heat is not this choice.
+    """
+    source = source or SOEC_HEAT_DEFAULT
+    if source not in SOEC_HEAT_SOURCES:
+        raise ValueError(f"SOEC heat source {source!r}; choose from {SOEC_HEAT_SOURCES}")
+    out = dict(row, heat_source=None, heat_kwh_electric_per_kg=0.0)
+    if row["technology"] != "SOEC operation":
+        return out
+    out["heat_source"] = source
+    if source == "gas_boiler":
+        return out
+    heat = [c for c in row["_consumables"] if "heat" in c[0]]
+    if len(heat) != 1:
+        raise ValueError(f"SOEC: expected exactly 1 heat consumable, found {len(heat)}. "
+                         "The foreground's shape has changed.")
+    _name, heat_mj, heat_score = heat[0]
+    boiler_kwh = heat_mj / MJ_PER_KWH / ELECTRIC_BOILER_EFFICIENCY
+    out["kwh_per_kg"] = row["kwh_per_kg"] + boiler_kwh
+    out["variable_kgco2e_per_kg"] = row["variable_kgco2e_per_kg"] - heat_score
+    out["heat_kwh_electric_per_kg"] = boiler_kwh
+    return out
 
 
 def build():

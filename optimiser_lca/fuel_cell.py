@@ -1,14 +1,18 @@
 """
-PEM fuel cell — Babatunde et al. 2024 stack, and 1 kWh of electricity from it.
+PEM fuel cell — Babatunde 2024 stack, Usai 2021 balance of plant, 1 kWh from it.
 =============================================================================
 
-Two activities in one database:
+Four activities in one database:
 
 * ``pemfc_stack_1kw_babatunde`` — cradle-to-gate manufacture of **one 1 kW
   PEM fuel cell stack**, transcribed from the paper's supplementary Table S1.
+* ``pemfc_bop_stationary_1kw`` — the **balance of plant for 1 kW** of a
+  stationary, hydrogen-fed unit: Usai et al. 2021's process loops, plus an
+  inverter and a share of a container.
+* ``pemfc_service_stationary_1kw`` — **one service of 1 kW**: air filter and
+  coolant.
 * ``pemfc_op_1kwh_h2`` — **1 kWh of net AC electricity, low voltage**, from a
-  1 kW hydrogen-fed PEMFC system: hydrogen, the stack amortised, balance of
-  plant and maintenance from ecoinvent net of the stack they contain.
+  1 kW hydrogen-fed PEMFC system: hydrogen, and the three above amortised.
 
 Stack — source and scope
 ------------------------
@@ -66,30 +70,65 @@ fitted one:
    defensible range and ±0.05 moves the result ±10 %. The 0.95 derate follows
    the convention that end of life is a 10 % drop in cell voltage (Stropnik
    et al. 2022); degrading linearly puts the lifetime mean at 95 % of BOL.
-2. **Stack** = 1 / (1 kW × 32,000 h), the paper's own stated life (§3.4).
-   ecoinvent independently implies 28,414 h from its 0.167-stack-per-service
-   replacement rate — 0.89× the paper, from a separate source.
-3. **Balance of plant** = ecoinvent's whole 2 kW PEMFC system *minus the stack
-   it contains*, over 60,000 h (DOE 2020 stationary target; the inverter,
-   housing and air handling outlive the membrane). The subtraction is exact:
-   the CH system dataset contains precisely 1.0 unit of the CH stack activity,
-   and ``_on_resolve`` asserts it. CH because it is the only location where
-   ecoinvent links the stack directly; RoW routes it through the GLO market.
-4. **Maintenance** = ecoinvent's service event minus the 0.167 of a stack it
-   bundles in (already the stack line above). What is left is the real
-   consumables: platinum top-up, chromium steel, charcoal, TiO₂. The rate is
-   tied to the stack-replacement rate so the two can never drift.
+2. **Stack** = 1 / (1 kW × 30,000 h). Stationary H2 PEM stacks are refurbished
+   at 24-30k running hours (Nedstack datasheets); Bionaz et al. 2022 use 40k;
+   Babatunde's 32k is ecoinvent's own figure, not an independent one.
+3. **Balance of plant** = ``pemfc_bop_stationary_1kw`` below, over 80,000 h
+   (DOE's 100 kW-3 MW stationary class, and ecoinvent's own system life).
+4. **Maintenance** = ``pemfc_service_stationary_1kw`` below, once per 8,000 h.
 
-**The domestic-CHP correction.** ecoinvent's PEMFC is a domestic micro-CHP
-unit, and two of its items are artefacts of that setting: the hot-water /
-hydronic kit inside the system (34 % of the system's GWP) and 200 km of
-passenger-car travel per service visit. Neither survives contact with a data
-centre, where thousands of stacks sit on one site. Both are subtracted by
-default (``FC_DOMESTIC_CHP_ITEMS = False``); together they are worth
-11.5 g CO2e/kWh against 14.0 g/kWh for the whole embodied burden. The
-travel flow and distance are *read out of* ecoinvent's maintenance dataset at
-build time rather than hard-coded, so the subtraction always targets exactly
-what ecoinvent uses.
+Balance of plant — source and scope
+-----------------------------------
+This used to be ecoinvent's ``fuel cell production, polymer electrolyte
+membrane, 2kW electrical, future`` net of its stack: a **natural-gas domestic
+micro-CHP** ("operation with connection to low pressure gas network"), carrying
+fuel-processor items, a hot-water kit and 400 km of installer driving, scaled
+linearly from 2 kW to MW. 469 t CO2e per MW. Its maintenance was reformer-
+catalyst replacement. None of it describes a hydrogen-fed MW-class unit.
+
+No published inventory does, either. A 2026 systematic review (Energies
+19:3808) finds BoP inventories still "simplified using obsolete" bills; the
+only H2-fed *stationary* system with a component bill is a 3 kW UPS (Stropnik
+et al. 2018, Energy 165:824), and every heavy-duty LCA (Gentilucci et al.
+2024, SAE 2024-24-0020, 200 kW; Syré et al. 2024, WEVJ 15:114) reuses an
+automotive one. So the BoP is assembled, the way the battery is:
+
+**Process loops — Usai et al. 2021**, J Cleaner Prod 280:125086, SI Table 1
+(``usai 2021 fc lci per kw.pdf``): an 80 kW H2 PEM system, per kW net, every
+line already named as an ecoinvent process. Air (compression-expansion motor,
+filter, ducting, sensor), water (humidifier, Nafion tubes, pre-cooler,
+demister), heat (fan, pumps, radiators, antifreeze), fuel (blower, ejectors,
+pipes), controller, wiring, frame, fasteners. Two amounts are per *system* in
+the printed table though labelled per kW — the 3 coolant pumps and 16 m of
+wiring (Miotti's per-system figure) — and are divided by 80 here; as printed
+they rebuild Usai's own heat and "other" results 17x and 35x over. Everything
+else is as printed. Rebuilt on 3.9.1 the loops come to ~82 % of Usai's own
+854 kg CO2e/80 kW (their results workbook): the table rounds to two decimals,
+which loses most of the radiator and controller (0.27 and 0.63 of Usai).
+
+**What a vehicle has and a container does not, and the reverse.** The
+compression-expansion motor stands in for a stationary air blower (heavier,
+so it errs high); the belly pan stands in for the module frame. Added for a
+stationary unit, neither of which a vehicle FC system carries:
+- *power conversion*: ecoinvent's 500 kW inverter, the dataset the battery's
+  power term uses. The vehicle's DC/DC boost sits in its drivetrain, not its
+  FC system, so nothing is counted twice.
+- *enclosure*: the battery's own fire-lined 20 ft container (Jasper et al.
+  2026, ``bess.py``), one per ``FC_KW_PER_CONTAINER`` = 1 MW. ASSUMED - no
+  source states MW per container for fuel cells.
+
+**Maintenance** is what an H2-fed unit actually consumes: an air filter and
+a coolant change per service (Usai's own amounts), every 8,000 h (ASSUMED;
+Battelle 2016 gives a one-year interval for backup units). No reformer
+catalyst, no platinum top-up, no installer driving. Stack replacement is not
+maintenance: it is the stack line, on the optimiser's max(calendar, duty)
+rule.
+
+**Benchmarks**, whole systems cradle-to-gate per kW: Usai 37.3 (no tank),
+Miotti 29, Gentilucci 30.5-51.4 (200 kW HD), Ballard 73 (70 kW module, its own
+note), Stropnik/Bionaz 405 (3 kW UPS). The vehicle figures carry no inverter
+or enclosure; this one does, and its stack (Babatunde's 2 kW graphite-plate
+unit) is heavier than any automotive stack.
 
 **No direct biosphere flows — deliberately.** A hydrogen PEMFC emits only
 water, and it is not inventoried, for the same reason ecoinvent's own PEMFC
@@ -97,6 +136,9 @@ operation datasets do not: the product water is the electrolyser's feed water
 coming back out, already counted as consumed upstream. Adding it as a
 ``Water → air`` emission would double-count (ReCiPe's water-use factor for
 water emitted to air is +1.0).
+
+Boundary, as everywhere in this study: cradle-to-gate, no end-of-life, no
+delivery transport.
 
 What the optimiser reads: ``optimisation/fuel_cell.py`` splits the operation
 activity into stack (per MW, replaced on max(calendar, duty)), balance of
@@ -122,26 +164,29 @@ FC_RATED_POWER_KW     = 1.0        # matches the paper's 1 kW stack
 FC_H2_LHV_KWH_PER_KG  = 33.33      # hydrogen lower heating value, 120 MJ/kg
 FC_ETA_NET_BOL        = 0.50       # net AC electrical efficiency at beginning of life, LHV basis
 FC_DEGRADATION_DERATE = 0.95       # mean-over-life efficiency as a fraction of BOL; 1.0 = no degradation
-FC_STACK_LIFETIME_H   = 32_000     # Babatunde et al. 2024, section 3.4 (their own figure)
-FC_SYSTEM_LIFETIME_H  = 60_000     # DOE 2020 stationary target; BoP outlives the stack
-FC_BOP_LOCATION       = "CH"       # the only location where ecoinvent links the stack directly
-FC_DOMESTIC_CHP_ITEMS = False      # True to model a domestic micro-CHP instead
-FC_MAINT_STACK_FRACTION = 0.167    # stack fraction inside one ecoinvent maintenance event
+# Duty lives. Calendar lives are the optimiser's (optimisation/fuel_cell.py).
+FC_STACK_LIFETIME_H   = 30_000     # Nedstack stack refurbishment 24-30k h; Bionaz 2022 40k
+FC_SYSTEM_LIFETIME_H  = 80_000     # DOE 100 kW-3 MW stationary class; ecoinvent's own system life
+FC_SERVICE_INTERVAL_H = 8_000      # ASSUMED; Battelle 2016 gives one year for backup units
 # Which hydrogen the fuel cell burns: (database, code). Any per-kg-H2 activity
 # works — swap in AE_OP / SOEC_OP / SMR for a different supply chain.
 FC_H2_SOURCE = (R.HYDROGEN_DB, R.PEM_OP)
+
+# --- balance of plant: Usai et al. 2021 SI Table 1 -------------------------------
+USAI_SYSTEM_KW = 80.0               # TRANSCRIBED - the system the table describes
+# Printed per kW but per SYSTEM (see the docstring): divided by USAI_SYSTEM_KW.
+USAI_COOLANT_PUMPS_PER_SYSTEM = 3   # "40W pump pc 3"
+USAI_WIRING_M_PER_SYSTEM = 16.0     # "Cables m 16" - Miotti's 16 m per system
+# Stationary additions.
+FC_INVERTER_KW = 500.0              # ecoinvent's 500 kW inverter, as battery.PCS_ACTIVITY
+FC_KW_PER_CONTAINER = 1_000.0       # ASSUMED - one 20 ft container per MW; sweep 500-2,000
 
 # --- derived --------------------------------------------------------------------
 FC_ETA_NET_MEAN  = FC_ETA_NET_BOL * FC_DEGRADATION_DERATE
 FC_H2_PER_KWH    = 1.0 / (FC_ETA_NET_MEAN * FC_H2_LHV_KWH_PER_KG)      # kg H2 / kWh AC
 FC_STACK_PER_KWH = 1.0 / (FC_RATED_POWER_KW * FC_STACK_LIFETIME_H)    # unit / kWh AC
-FC_BOP_PER_KWH   = 1.0 / (FC_RATED_POWER_KW * FC_SYSTEM_LIFETIME_H)   # unit / kWh AC
-# Maintenance events per kWh, tied to the stack-replacement rate so the two can
-# never disagree: ~6 services per stack, then x0.5 for ecoinvent's 2 kW unit.
-FC_MAINT_PER_KWH = (FC_STACK_PER_KWH / FC_MAINT_STACK_FRACTION) * 0.5
-# ecoinvent's 2 kW system scaled to FC_RATED_POWER_KW = 1 kW.
-_BOP   = FC_BOP_PER_KWH * 0.5
-_MAINT = FC_MAINT_PER_KWH          # already carries the same 0.5
+FC_BOP_PER_KWH   = 1.0 / (FC_RATED_POWER_KW * FC_SYSTEM_LIFETIME_H)   # kW of BoP / kWh AC
+FC_SERVICE_PER_KWH = 1.0 / (FC_RATED_POWER_KW * FC_SERVICE_INTERVAL_H)  # kW-services / kWh AC
 
 
 def check_parameters() -> str:
@@ -149,15 +194,15 @@ def check_parameters() -> str:
         raise ValueError("FC_ETA_NET_BOL must be a fraction in (0, 1].")
     if not 0.0 < FC_DEGRADATION_DERATE <= 1.0:
         raise ValueError("FC_DEGRADATION_DERATE must be a fraction in (0, 1].")
-    if FC_STACK_LIFETIME_H <= 0 or FC_SYSTEM_LIFETIME_H <= 0:
-        raise ValueError("Fuel cell lifetimes must be positive.")
-    if not 0.0 < FC_MAINT_STACK_FRACTION <= 1.0:
-        raise ValueError("FC_MAINT_STACK_FRACTION must be a fraction in (0, 1].")
-    # The maintenance subtraction must exactly cancel the stack ecoinvent bundles in.
-    if abs(_MAINT * FC_MAINT_STACK_FRACTION - FC_STACK_PER_KWH * 0.5) > 1e-15:
-        raise AssertionError("Maintenance stack content and the stack line have drifted apart.")
+    if min(FC_STACK_LIFETIME_H, FC_SYSTEM_LIFETIME_H, FC_SERVICE_INTERVAL_H) <= 0:
+        raise ValueError("Fuel cell lifetimes and service interval must be positive.")
+    if FC_SYSTEM_LIFETIME_H < FC_STACK_LIFETIME_H:
+        raise AssertionError("the balance of plant must outlive the stack it carries")
+    if FC_KW_PER_CONTAINER <= 0 or FC_INVERTER_KW <= 0:
+        raise ValueError("container and inverter ratings must be positive")
     return (f"OK - eta {FC_ETA_NET_MEAN:.3f} mean, {FC_H2_PER_KWH:.5f} kg H2/kWh, "
-            f"stack {FC_STACK_PER_KWH:.3e}/kWh, BoP {_BOP:.3e}/kWh, maint {_MAINT:.3e}/kWh")
+            f"stack {FC_STACK_PER_KWH:.3e}/kWh, BoP {FC_BOP_PER_KWH:.3e}/kWh, "
+            f"service {FC_SERVICE_PER_KWH:.3e}/kWh")
 
 
 check_parameters()
@@ -221,34 +266,64 @@ processes = {
     "waste_pvf": Process(
         query="market for waste polyvinylfluoride RoW", pick=0,
         identity=("market for waste polyvinylfluoride", "RoW", "waste polyvinylfluoride")),
-    # --- operation: ecoinvent's own PEMFC system, picked by exact name -------------
-    # The search for the system ranks the *stack* dataset first (its name is a
-    # superstring), so these were never index picks.
-    "fc_system_ecoinvent": Process(
-        query="fuel cell production polymer electrolyte membrane 2kW electrical future",
-        identity=("fuel cell production, polymer electrolyte membrane, 2kW electrical, future",
-                  FC_BOP_LOCATION, "fuel cell, polymer electrolyte membrane, 2kW electrical, future"),
-        why="the whole system - stack + inverter + housing + air handling + hydronic kit"),
-    "fc_stack_ecoinvent": Process(
-        query="fuel cell production stack polymer electrolyte membrane 2kW electrical future",
-        identity=("fuel cell production, stack polymer electrolyte membrane, 2kW electrical, future",
-                  FC_BOP_LOCATION, "fuel cell, stack polymer electrolyte membrane, 2kW electrical, future"),
-        why="subtracted from the system and from maintenance so the paper's stack is counted once"),
-    "chp_hydronics": Process(
-        query="heating and sanitary equipment production mini CHP plant",
-        identity=("heating and sanitary equipment production, mini CHP plant",
-                  FC_BOP_LOCATION, "heating and sanitary equipment, mini CHP plant"),
-        why="the domestic hot-water kit inside ecoinvent's system; 34 % of its GWP"),
-    "maintenance": Process(
-        query="maintenance polymer electrolyte membrane fuel cell 2kW electrical",
-        identity=("maintenance, polymer electrolyte membrane fuel cell 2kW electrical",
-                  FC_BOP_LOCATION, "maintenance, polymer electrolyte membrane fuel cell, 2kW electrical")),
-    # Pinned at build time from the maintenance dataset itself (see _on_resolve),
-    # so the subtraction targets exactly the flow ecoinvent uses.
-    "service_transport": Process(
-        query="transport passenger car RER",
-        identity=("market for transport, passenger car", "RER", "transport, passenger car"),
-        why="the technician driving to a house, read out of ecoinvent's maintenance event"),
+    # --- balance of plant: Usai et al. 2021 SI Table 1, processes as Usai name them.
+    # Where Usai's ecoinvent 3.6 GLO market is regional in 3.9.1, RoW stands in,
+    # Usai having aimed at "global average productions".
+    "bop_al_cast": Process(
+        query="market for aluminium cast alloy GLO",
+        identity=("market for aluminium, cast alloy", "GLO", "aluminium, cast alloy")),
+    "bop_steel_la_hr": Process(
+        query="market for steel low-alloyed hot rolled GLO",
+        identity=("market for steel, low-alloyed, hot rolled", "GLO", "steel, low-alloyed, hot rolled")),
+    "bop_magnet": Process(
+        query="permanent magnet production for electric motor GLO",
+        identity=("permanent magnet production, for electric motor", "GLO",
+                  "permanent magnet, for electric motor"),
+        why="Usai's own provider for the compression-expansion motor's magnets"),
+    "bop_air_filter": Process(
+        query="market for air filter in exhaust air valve GLO",
+        identity=("market for air filter, in exhaust air valve", "GLO", "air filter, in exhaust air valve")),
+    "bop_extrusion_pipes": Process(
+        query="market for extrusion plastic pipes GLO",
+        identity=("market for extrusion, plastic pipes", "GLO", "extrusion, plastic pipes")),
+    "bop_electronics": Process(
+        query="market for electronics for control units GLO",
+        identity=("market for electronics, for control units", "GLO", "electronics, for control units")),
+    "bop_pps": Process(
+        query="market for polyphenylene sulfide GLO",
+        identity=("market for polyphenylene sulfide", "GLO", "polyphenylene sulfide")),
+    "bop_so3": Process(
+        query="market for sulfur trioxide RoW",
+        identity=("market for sulfur trioxide", "RoW", "sulfur trioxide")),
+    "bop_extrusion_film": Process(
+        query="market for extrusion plastic film GLO",
+        identity=("market for extrusion, plastic film", "GLO", "extrusion, plastic film"),
+        why="Usai name 'extrusion production, plastic film' RER, absent from 3.9.1; its market"),
+    "bop_pu_rigid": Process(
+        query="market for polyurethane rigid foam RoW",
+        identity=("market for polyurethane, rigid foam", "RoW", "polyurethane, rigid foam"),
+        why="Usai's proxy for the humidifier's cordierite honeycomb"),
+    "bop_nylon6": Process(
+        query="market for nylon 6 RoW",
+        identity=("market for nylon 6", "RoW", "nylon 6")),
+    "bop_hdpe": Process(
+        query="market for polyethylene high density granulate GLO",
+        identity=("market for polyethylene, high density, granulate", "GLO",
+                  "polyethylene, high density, granulate")),
+    "bop_pump_40w": Process(
+        query="market for pump 40W GLO",
+        identity=("market for pump, 40W", "GLO", "pump, 40W")),
+    "bop_ethylene_glycol": Process(
+        query="market for ethylene glycol GLO",
+        identity=("market for ethylene glycol", "GLO", "ethylene glycol")),
+    "bop_cable": Process(
+        query="market for cable three-conductor cable GLO",
+        identity=("market for cable, three-conductor cable", "GLO", "cable, three-conductor cable")),
+    # --- stationary additions ---------------------------------------------------
+    "inverter_500kw": Process(
+        query="market for inverter 500kW GLO",
+        identity=("market for inverter, 500kW", "GLO", "inverter, 500kW"),
+        why="the same power-conversion dataset as the battery's power term"),
 }
 
 # Table S1's "Inputs from environment" + "Emissions to air/water". Categories fix
@@ -319,6 +394,88 @@ STACK = Activity(
     ],
 )
 
+_m = "meter"
+_U = "Usai et al. 2021 SI Table 1, per kW net"
+_per_sys = 1.0 / USAI_SYSTEM_KW
+
+BOP = Activity(
+    code=R.FC_BOP,
+    name="Fuel cell balance of plant, stationary, hydrogen-fed, per kW",
+    reference_product="fuel cell balance of plant, polymer electrolyte membrane, stationary",
+    unit=_unit, location="GLO",
+    comment="Everything a hydrogen-fed PEM fuel cell needs besides its stack, for 1 kW net. "
+            "Process loops from Usai et al. 2021 (J Cleaner Prod 280:125086) SI Table 1, an "
+            "80 kW H2 system, per kW net, each line on the ecoinvent process Usai name: air "
+            "management (compression-expansion motor, filter, ducting, mass-flow sensor), water "
+            "management (humidifier, Nafion tubes, pre-cooler, demister), heat management (fan, "
+            "coolant pumps, radiators, antifreeze), fuel management (blower, ejectors, pipes), "
+            "controller, wiring, frame and fasteners. The 3 coolant pumps and 16 m of wiring are "
+            f"per system in the printed table and are divided by {USAI_SYSTEM_KW:g} kW here. "
+            f"Stationary additions: ecoinvent's {FC_INVERTER_KW:g} kW inverter, and the battery's "
+            f"fire-lined 20 ft container (Jasper et al. 2026) at one per {FC_KW_PER_CONTAINER:,.0f} "
+            "kW (ASSUMED). Replaces ecoinvent's 2 kW natural-gas micro-CHP net of its stack, "
+            "which carried a fuel processor, a hot-water kit and installer driving. Cradle-to-"
+            "gate; no end-of-life; no delivery transport.",
+    technosphere=[
+        # --- air management ---
+        ("steel_chromium_188",  0.02,  _kg, f"{_U}: compression-expansion motor, chromium steel"),
+        ("bop_al_cast",         0.04,  _kg, f"{_U}: compression-expansion motor, aluminium"),
+        ("bop_steel_la_hr",     0.01,  _kg, f"{_U}: compression-expansion motor, low-alloyed steel"),
+        ("bop_magnet",          0.01,  _kg, f"{_U}: compression-expansion motor, permanent magnet"),
+        ("bop_air_filter",      0.013, _unit, f"{_U}: air filter"),
+        ("tetrafluoroethylene", 0.001, _kg, f"{_U}: air ducting"),
+        ("bop_extrusion_pipes", 0.03,  _kg, f"{_U}: air ducting, plastic pipes"),
+        ("bop_electronics",     0.004, _kg, f"{_U}: mass flow sensor"),
+        # --- water management ---
+        ("bop_pps",             0.01,  _kg, f"{_U}: humidifier housing"),
+        ("bop_so3",             0.0,   _kg, f"{_U}: Nafion tubes, sulfur trioxide (printed 0.00)"),
+        ("tetrafluoroethylene", 0.01,  _kg, f"{_U}: Nafion tubes"),
+        ("bop_extrusion_film",  0.01,  _kg, f"{_U}: Nafion tubes, extrusion"),
+        ("aluminium_wrought",   0.08825, _kg, f"{_U}: air pre-cooler"),
+        ("bop_pu_rigid",        0.019, _kg, f"{_U}: humidifier honeycomb, proxy for cordierite"),
+        ("bop_nylon6",          0.03,  _kg, f"{_U}: demister"),
+        # --- heat management ---
+        ("bop_hdpe",            0.01,  _kg, f"{_U}: fan"),
+        ("bop_pump_40w",        USAI_COOLANT_PUMPS_PER_SYSTEM * _per_sys, _unit,
+         f"{_U}: coolant pumps, printed '3' - per system, so / {USAI_SYSTEM_KW:g} kW"),
+        ("bop_al_cast",         0.01,  _kg, f"{_U}: radiators"),
+        ("bop_ethylene_glycol", 0.01,  _kg, f"{_U}: antifreeze"),
+        # --- fuel management ---
+        ("bop_steel_la_hr",     0.06,  _kg, f"{_U}: hydrogen blower"),
+        ("steel_chromium_188",  0.02,  _kg, f"{_U}: hydrogen blower"),
+        ("aluminium_wrought",   0.03,  _kg, f"{_U}: blower, ejectors, pipes"),
+        # --- controller and other ---
+        ("bop_electronics",     0.03,  _kg, f"{_U}: controller"),
+        ("bop_cable",           USAI_WIRING_M_PER_SYSTEM * _per_sys, _m,
+         f"{_U}: wiring, printed '16 m' - per system (Miotti), so / {USAI_SYSTEM_KW:g} kW"),
+        ("aluminium_wrought",   0.10,  _kg, f"{_U}: mounting and belly pan - the module frame here"),
+        ("bop_steel_la_hr",     0.013, _kg, f"{_U}: fasteners"),
+        # --- stationary additions ---
+        ("inverter_500kw", 1.0 / FC_INVERTER_KW, _unit,
+         f"Power conversion to AC: ecoinvent's {FC_INVERTER_KW:g} kW inverter, per kW"),
+        (FG(R.BESS_PARTS["container"], database=R.BESS_DB), 1.0 / FC_KW_PER_CONTAINER, _unit,
+         f"Enclosure: the battery's fire-lined 20 ft container (Jasper 2026), one per "
+         f"{FC_KW_PER_CONTAINER:,.0f} kW - ASSUMED"),
+    ],
+)
+
+SERVICE = Activity(
+    code=R.FC_SERVICE,
+    name="Fuel cell service, stationary, hydrogen-fed, per kW",
+    reference_product="maintenance, polymer electrolyte membrane fuel cell, stationary",
+    unit=_unit, location="GLO",
+    comment="One service of 1 kW of a hydrogen-fed PEM fuel cell: the air filter and the "
+            "antifreeze replaced, in Usai et al. 2021's own amounts. Battelle 2016 lists these, "
+            "with a de-ionisation polisher whose resin no source quantifies, as the recurring "
+            "items of an H2 backup unit. No reformer catalyst, no platinum top-up, no driving - "
+            "the replaced ecoinvent event was a natural-gas micro-CHP's. Stack replacement is "
+            "the stack line, not maintenance.",
+    technosphere=[
+        ("bop_air_filter",      0.013, _unit, f"{_U}: air filter, replaced"),
+        ("bop_ethylene_glycol", 0.01,  _kg,   f"{_U}: antifreeze, replaced"),
+    ],
+)
+
 OPERATION = Activity(
     code=R.FC_OP,
     name="Electricity, low voltage, from PEM fuel cell (hydrogen)",
@@ -329,78 +486,30 @@ OPERATION = Activity(
             f"{FC_H2_LHV_KWH_PER_KG} kWh/kg), where eta is a NET AC efficiency "
             f"({FC_ETA_NET_BOL:.2f} at beginning of life x {FC_DEGRADATION_DERATE:.2f} for "
             "degradation to a 10% cell-voltage end-of-life criterion), so parasitic loads are "
-            f"inside it. Stack (Babatunde et al. 2024) amortised over {FC_STACK_LIFETIME_H:,} h "
-            "- the paper's own stated life - which doubles as the stack-replacement/maintenance "
-            "model. Balance of plant is ecoinvent's whole 2 kW PEMFC system minus its own stack "
-            f"(exact subtraction, no double counting), over {FC_SYSTEM_LIFETIME_H:,} h; "
-            f"maintenance is ecoinvent's service event minus the stack it bundles in, at "
-            f"{1/FC_MAINT_STACK_FRACTION:.1f} services per stack"
-            + ("" if FC_DOMESTIC_CHP_ITEMS else
-               ", with the domestic hot-water kit and technician-driving subtracted as "
-               "artefacts of ecoinvent's micro-CHP setting")
-            + ". No direct biosphere flows: the product water is the electrolyser's feed water "
-            "returning, already counted as consumed upstream.",
+            f"inside it. Stack (Babatunde et al. 2024) over {FC_STACK_LIFETIME_H:,} h; balance "
+            f"of plant (Usai et al. 2021 + inverter + container) over {FC_SYSTEM_LIFETIME_H:,} h; "
+            f"one service every {FC_SERVICE_INTERVAL_H:,} h. No direct biosphere flows: the "
+            "product water is the electrolyser's feed water returning, already counted as "
+            "consumed upstream.",
     technosphere=[
         (FG(FC_H2_SOURCE[1], database=FC_H2_SOURCE[0]), FC_H2_PER_KWH, _kg,
          f"Hydrogen — 1 / (eta {FC_ETA_NET_MEAN:.3f} x LHV {FC_H2_LHV_KWH_PER_KG} kWh/kg)"),
         (FG(R.FC_STACK), FC_STACK_PER_KWH, _unit,
          f"Stack (Babatunde et al. 2024) over {FC_STACK_LIFETIME_H:,} h"),
-        # Balance of plant = ecoinvent's whole system minus its own stack.
-        ("fc_system_ecoinvent", _BOP, _unit,
-         f"BoP: ecoinvent's whole 2 kW PEMFC system, over {FC_SYSTEM_LIFETIME_H:,} h"),
-        ("fc_stack_ecoinvent", -_BOP, _unit,
-         "BoP: minus ecoinvent's own stack, so the paper's stack above is not double-counted"),
-        # Maintenance = ecoinvent's service event minus the stack it bundles in.
-        ("maintenance", _MAINT, _unit,
-         f"Maintenance: platinum top-up, chromium steel, consumables — {1/FC_MAINT_STACK_FRACTION:.1f} services per stack"),
-        ("fc_stack_ecoinvent", -_MAINT * FC_MAINT_STACK_FRACTION, _unit,
-         "Maintenance: minus the stack ecoinvent bundles into a service event — already counted above"),
-    ] + ([] if FC_DOMESTIC_CHP_ITEMS else [
-        ("chp_hydronics", -0.65 * _BOP, _unit,
-         "Domestic-CHP artefact: minus the hot-water/hydronic kit — no such kit in a data centre"),
-        # The driving exchange is appended by _on_resolve, with the distance read
-        # from ecoinvent's maintenance dataset.
-    ]),
+        (FG(R.FC_BOP), FC_BOP_PER_KWH, _unit,
+         f"Balance of plant over {FC_SYSTEM_LIFETIME_H:,} h"),
+        (FG(R.FC_SERVICE), FC_SERVICE_PER_KWH, _unit,
+         f"One service every {FC_SERVICE_INTERVAL_H:,} h"),
+    ],
 )
 
-activities = [STACK, OPERATION]
-
-SERVICE_TRANSPORT_KM = None   # filled by _on_resolve
-
-
-def _on_resolve(resolved: dict) -> None:
-    """Guards that only Brightway can check, and the one exchange whose amount
-    is read out of ecoinvent rather than written here."""
-    global SERVICE_TRANSPORT_KM
-    system, stack = resolved["fc_system_ecoinvent"], resolved["fc_stack_ecoinvent"]
-    stack_in_system = [e.amount for e in system.technosphere() if e.input.key == stack.key]
-    if stack_in_system != [1.0]:
-        raise ValueError(
-            f"Expected exactly one 1.0-unit stack exchange inside {system.get('name')!r} "
-            f"({FC_BOP_LOCATION}), found {stack_in_system}. The BoP subtraction would not be "
-            "exact — FC_BOP_LOCATION must be CH.")
-    drive = [e for e in resolved["maintenance"].technosphere()
-             if "transport, passenger car" in e.input.get("name", "")]
-    if len(drive) != 1:
-        raise ValueError(f"Expected exactly 1 passenger-car transport exchange in ecoinvent's "
-                         f"PEMFC maintenance dataset, found {len(drive)}.")
-    if drive[0].input.key != resolved["service_transport"].key:
-        raise ValueError(
-            f"ecoinvent's maintenance event drives {drive[0].input} but 'service_transport' "
-            f"is pinned to {processes['service_transport'].identity}; re-pin it.")
-    SERVICE_TRANSPORT_KM = float(drive[0].amount)
-    if not FC_DOMESTIC_CHP_ITEMS and not any(
-            k == "service_transport" for k, *_ in OPERATION.technosphere):
-        OPERATION.technosphere.append(
-            ("service_transport", -SERVICE_TRANSPORT_KM * _MAINT, "kilometer",
-             f"Domestic-CHP artefact: minus {SERVICE_TRANSPORT_KM:g} km of technician driving per "
-             "service — thousands of stacks on one site, not one unit per house"))
+activities = [STACK, BOP, SERVICE, OPERATION]
 
 
 def inventory() -> Inventory:
-    return Inventory(name="PEM fuel cell (Babatunde 2024)", database=R.FUEL_CELL_DB,
-                     processes=processes, flows=flows, activities=activities,
-                     on_resolve=_on_resolve)
+    return Inventory(name="PEM fuel cell (Babatunde 2024 stack, Usai 2021 BoP)",
+                     database=R.FUEL_CELL_DB, processes=processes, flows=flows,
+                     activities=activities)
 
 
 def describe() -> str:
@@ -409,9 +518,10 @@ def describe() -> str:
         f"  hydrogen         {FC_H2_PER_KWH:>12.5f} kg    "
         f"(eta {FC_ETA_NET_BOL:.2f} BOL x {FC_DEGRADATION_DERATE:.2f} degradation = {FC_ETA_NET_MEAN:.3f})",
         f"  stack            {FC_STACK_PER_KWH:>12.4e} unit  (1 / {FC_RATED_POWER_KW:g} kW / {FC_STACK_LIFETIME_H:,} h)",
-        f"  balance of plant {_BOP:>12.4e} unit  (1 / {FC_RATED_POWER_KW:g} kW / {FC_SYSTEM_LIFETIME_H:,} h, net of its stack)",
-        f"  maintenance      {_MAINT:>12.4e} unit  ({1/FC_MAINT_STACK_FRACTION:.1f} services per stack, net of its stack)",
-        f"  domestic-CHP items {'INCLUDED' if FC_DOMESTIC_CHP_ITEMS else 'excluded'}",
+        f"  balance of plant {FC_BOP_PER_KWH:>12.4e} kW    (1 / {FC_RATED_POWER_KW:g} kW / {FC_SYSTEM_LIFETIME_H:,} h)",
+        f"  service          {FC_SERVICE_PER_KWH:>12.4e} kW    (one per {FC_SERVICE_INTERVAL_H:,} h)",
+        f"  BoP: Usai 2021 loops + {FC_INVERTER_KW:g} kW inverter + one container per "
+        f"{FC_KW_PER_CONTAINER:,.0f} kW",
         f"  hydrogen source  {FC_H2_SOURCE[1]!r} in {FC_H2_SOURCE[0]!r}",
         f"  stack scale      {FC_SCALE:.9f} (= {FC_KW_SCALE} kW-scale x {FC_S1_SCALE} Table-S1 correction)",
     ])

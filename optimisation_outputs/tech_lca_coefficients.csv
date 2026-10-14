@@ -1,4 +1,4 @@
-# built_at,2026-10-13T13:18:25+00:00
+# built_at,2026-10-14T09:46:24+00:00
 # cost_case,central
 asset,capacity_unit,capital_kgco2e_per_capacity_unit,calendar_lifetime_years,duty_lifetime_hours,variable_kgco2e_per_unit,variable_output_unit,throughput_kgco2e_per_MWh,source,grade,note
 onshore_wind,MW,658235.1354532151,35.0,,,,0.13103363686519515,"ecoinvent 3.9.1 apos capital exchange, decomposed; DESNZ/Arup 2024 lifetime",derived,
@@ -6,9 +6,9 @@ offshore_wind,MW,890286.9757754836,35.0,,,,0.21964685453892963,"ecoinvent 3.9.1 
 solar_pv,MWp,895319.4146201009,38.0,,,,,"Smith et al. 2024 (NREL/TP-7A40-87372) utility-scale inventory, fixed tilt, rescored on ecoinvent 3.9.1 apos; DESNZ/Arup 2024 lifetime",derived,solar is not scored on ecoinvent — its GB activity is a 2008 plant. Basis: smith_2024_upv_fixed_tilt. See SOURCES.md
 battery_power,MW,31861.72,15.0,,,,,"ecoinvent 3.9.1 apos (LFP pack, 500 kW inverter); Modo Energy asset life",derived,power conversion system
 battery_energy,MWh,98200.17021276595,15.0,,,,,"ecoinvent 3.9.1 apos (LFP pack, 500 kW inverter); Modo Energy asset life",derived,LFP pack; container/racking/HVAC still missing — see DATA_GAPS.md
-electrolyser_ae,MW,432383.70685280376,25.0,,0.04160858350925193,kg H2,,"Hermesmann et al. capital good, decomposed; NESO 25 y plant life",derived,51.8 kWh/kg; capital was amortised at 73% CF in the foreground; no stack/BoP split
-electrolyser_pem,MW,260837.57278137782,25.0,,0.10716682636953401,kg H2,,"Hermesmann et al. capital good, decomposed; NESO 25 y plant life",derived,54.0 kWh/kg; capital was amortised at 73% CF in the foreground; no stack/BoP split
-electrolyser_soec,MW,362769.2013179078,25.0,,1.6282767947178207,kg H2,,"Hermesmann et al. capital good, decomposed; NESO 25 y plant life",derived,42.3 kWh/kg; capital was amortised at 73% CF in the foreground; no stack/BoP split
+electrolyser_ae,MW,433952.7989809849,25.0,,0.04160477208253571,kg H2,,"Hermesmann et al. capital good, decomposed; NESO 25 y plant life",derived,51.8 kWh/kg; capital was amortised at 73% CF in the foreground; no stack/BoP split
+electrolyser_pem,MW,260870.9117910889,25.0,,0.10716288423034334,kg H2,,"Hermesmann et al. capital good, decomposed; NESO 25 y plant life",derived,54.0 kWh/kg; capital was amortised at 73% CF in the foreground; no stack/BoP split
+electrolyser_soec,MW,362820.3593831577,25.0,,1.631929012900328,kg H2,,"Hermesmann et al. capital good, decomposed; NESO 25 y plant life",derived,42.3 kWh/kg; capital was amortised at 73% CF in the foreground; no stack/BoP split
 fuel_cell_bop,MW,469039.76390894264,25.0,60000.0,,,,ecoinvent 3.9.1 2 kW PEMFC net of stack; DOE 2020 duty life,assumed,calendar life ASSUMED — no public figure; see DATA_GAPS.md
 fuel_cell_stack,MW,97431.26099890245,25.0,32000.0,,,,Babatunde et al. 2024 Table S1; stack life their §3.4,assumed,calendar life ASSUMED (placeholder) — sweep 10/15/25 y; see DATA_GAPS.md
 fuel_cell_maintenance,MW,0.0,,,,,3.11420656644904,"ecoinvent 3.9.1 PEMFC maintenance, net of bundled stack",derived,pure throughput term

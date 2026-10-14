@@ -19,27 +19,35 @@ Grid carbon, per half-hour
    (% gas, wind, nuclear, imports, ...) for each half-hour. Its own
    ``intensity`` figure is kept as ``carbon_intensity`` for reference only:
    it counts direct combustion, not life cycle.
-2. Each fuel maps to one ecoinvent activity, named by its exact identity in
+2. Elexon's FUELHH gives every interconnector's flow for the same half-hours.
+   The region's imports are split across exporting countries from those flows,
+   weighted by how much of each link reaches the region
+   (``optimiser_lca.grid.IMPORT_ATTRIBUTION``, fitted by
+   ``fit_import_attribution``). Recorded per row as ``imp_<CC>``.
+3. Each fuel maps to one activity, named by its exact identity in
    ``optimiser_lca.grid.SOURCES`` and resolved by exact match — never by search
    ranking — then scored once per process for GWP100. Those per-kWh scores are
-   life cycle: plant construction, fuel supply chain and combustion. Wind and
-   imports are split across sub-technologies by ``optimiser_lca.grid`` fixed
-   weights. Everything LCA about the series is in that one module.
-3. ``custom_electricity_score`` = Σ share × (1 + market loss share) × score.
-   That column is what the LP reads (``profiles.load_grid_and_price``).
+   life cycle: plant construction, fuel supply chain and combustion.
+   Everything LCA about the series is in that one module.
+4. ``generation_kgco2e_per_kwh`` = Σ share × score, per kWh generated, and
+   ``custom_electricity_score`` = that delivered at high voltage (losses plus
+   network). The LP reads the generation column and delivers it at the site's
+   own voltage (``dc_inputs.build_series``).
 
-Every file records which sources scored it
-------------------------------------------
-``grid_sources_id()`` is a short hash of ``optimiser_lca.grid.GRID_SOURCES``. Each grid
-CSV carries it in a ``grid_sources`` column, with the datasets and their scores
+Every file records what scored it
+---------------------------------
+``grid_sources_id()`` is a short hash of ``optimiser_lca.grid.basis()`` —
+sources, method, weights, import attribution and delivery terms. Each grid CSV
+carries it in a ``grid_sources`` column, with the basis and the scored sources
 in a ``.sources.json`` beside it, and ``profiles`` ignores a series scored on
-any other table. Changing a source therefore makes every series stale rather
+any other basis. Changing any of it therefore makes every series stale rather
 than silently mixing bases; ``rescore()`` (``--rescore`` on the command line)
-re-scores the files already on disk from the fuel mix each one recorded, with
-no API calls.
+re-scores the files already on disk from the fuel mix each one recorded. The
+first rescore of a file written before the import split fetches its window's
+interconnector flows; after that it needs no API calls.
 
-Output file names and columns match what notebook 3.1 wrote, minus its
-per-hydrogen-technology columns, so every series already on disk still reads.
+Output file names match what notebook 3.1 wrote, so every series already on
+disk still reads.
 
 Every series is UTC
 --------------------
@@ -53,6 +61,7 @@ defined on the UK clock (DUoS time bands) converts from UTC itself.
 
 Run:  python -m optimisation.grid_build 13 2025-06-02 2025-06-09
       python -m optimisation.grid_build --rescore
+      python -m optimisation.grid_build --fit-imports
 """
 from __future__ import annotations
 
@@ -77,14 +86,15 @@ CARBON_API_MAX_DAYS_PER_REQUEST = 13      # the API refuses longer ranges
 CARBON_API_REQUEST_SLEEP_S = 0.05
 CI_FUELS = ["gas", "coal", "biomass", "nuclear", "hydro", "imports", "other",
             "wind", "solar", "storage"]
-# API fuel -> the row key lca_helpers.TECH_SPECS scores it under. Wind and
-# imports are split into sub-technologies inside custom_electricity_score_for_row.
+# API fuel -> the row key optimiser_lca.grid.TECH_SPECS scores it under. Wind
+# and imports are split into sub-technologies inside grid.score_row.
 FUEL_TO_ROW_KEY = {"gas": "GAS", "coal": "COAL", "biomass": "BIOMASS",
                    "nuclear": "NUCLEAR", "hydro": "HYDRO", "imports": "IMPORTS",
                    "other": "OTHER", "wind": "WIND", "solar": "SOLAR",
                    "storage": "STORAGE"}
 
 ELEXON_API_BASE = "https://data.elexon.co.uk/bmrs/api/v1"
+ELEXON_FUELHH = f"{ELEXON_API_BASE}/datasets/FUELHH/stream"
 ELEXON_PROVIDER = "APXMIDP"
 ELEXON_FALLBACK_PROVIDER = "N2EXMIDP"
 ELEXON_CHUNK_DAYS = 7
@@ -247,16 +257,15 @@ def fetch_mix(region: int, start, end_inclusive) -> pd.DataFrame:
 # Generation mix -> kg CO2e per kWh
 # -----------------------------------------------------------------------------
 def grid_sources_id() -> str:
-    """Short, stable id of ``optimiser_lca.grid.GRID_SOURCES``. No Brightway needed."""
+    """Short, stable id of ``optimiser_lca.grid.basis()``. No Brightway needed."""
     from optimiser_lca import grid
     return grid.sources_id()
 
 
 def source_table() -> dict:
-    """``{key: {name, location, product, kgco2e_per_kwh}}`` for every source.
-
-    Resolved by exact identity from ``optimiser_lca.grid.SOURCES`` and scored
-    once per process. Requires the Brightway project named in
+    """``{key: {name, location, product, database, kgco2e_per_kwh}}`` for every
+    source. Resolved by exact identity from ``optimiser_lca.grid.SOURCES`` and
+    scored once per process. Requires the Brightway project named in
     ``dc_config.PROJECT_NAME``.
     """
     from optimiser_lca import grid
@@ -264,30 +273,173 @@ def source_table() -> dict:
 
 
 def source_scores() -> dict:
-    """GWP100 of 1 kWh from each GB generation source, from ecoinvent."""
+    """GWP100 of 1 kWh from each GB generation source."""
     return {k: v["kgco2e_per_kwh"] for k, v in source_table().items()}
 
 
-def score_mix(mix: pd.DataFrame, scores: dict | None = None) -> pd.DataFrame:
-    """Add the ``*_perc`` share columns and the per-kWh score to a mix frame."""
+# -----------------------------------------------------------------------------
+# Elexon interconnector flows -> where the imports came from
+# -----------------------------------------------------------------------------
+def _month_starts(lo: pd.Timestamp, hi: pd.Timestamp):
+    cur = pd.Timestamp(lo.year, lo.month, 1)
+    while cur <= hi:
+        yield cur
+        cur = cur + pd.offsets.MonthBegin(1)
+
+
+def _fuelhh_month(month: pd.Timestamp) -> pd.DataFrame:
+    """One settlement month of interconnector rows, cached once the month is
+    over (a month still in progress is always refetched)."""
+    from optimiser_lca import grid
+    API_CACHE_DIR.mkdir(exist_ok=True)
+    path = API_CACHE_DIR / f"elexon_fuelhh_interconnectors_{month:%Y-%m}.csv"
+    if path.exists():
+        return pd.read_csv(path)
+    last = month + pd.offsets.MonthEnd(0)
+    payload = _get_json(ELEXON_FUELHH, params={
+        "settlementDateFrom": f"{month:%Y-%m-%d}", "settlementDateTo": f"{last:%Y-%m-%d}"},
+        timeout=ELEXON_TIMEOUT_S)
+    recs = payload.get("data", payload) if isinstance(payload, dict) else payload
+    df = pd.DataFrame(recs)
+    if df.empty:
+        return pd.DataFrame(columns=["startTime", "fuelType", "generation"])
+    df = df[df["fuelType"].astype(str).str.startswith("INT")]
+    unknown = sorted(set(df["fuelType"]) - set(grid.LINKS))
+    if unknown:
+        raise ValueError(f"Elexon reports interconnectors {unknown} that "
+                         "optimiser_lca.grid.INTERCONNECTORS does not map to a country. "
+                         "Add them there before building.")
+    df = df[["startTime", "fuelType", "generation"]]
+    today = pd.Timestamp.now(tz="UTC").tz_localize(None).normalize()
+    if last.normalize() < today - pd.Timedelta(days=2):
+        df.to_csv(path, index=False)
+    time.sleep(ELEXON_REQUEST_SLEEP_S)
+    return df
+
+
+def fetch_interconnector_flows(start, end_inclusive) -> pd.DataFrame:
+    """Half-hourly flow on every GB interconnector, MW, positive into GB.
+
+    Indexed by naive-UTC half-hour start, one column per Elexon fuel type in
+    ``optimiser_lca.grid.LINKS`` (a link not yet built reads 0).
+    """
+    from optimiser_lca import grid
+    # Settlement days are UK days, so ask for a day either side of the window.
+    lo = _utc(start).tz_localize(None) - pd.Timedelta(days=1)
+    hi = _utc(end_inclusive).tz_localize(None) + pd.Timedelta(days=1)
+    rows = pd.concat([_fuelhh_month(m) for m in _month_starts(lo, hi)], ignore_index=True)
+    if rows.empty:
+        raise RuntimeError(f"Elexon FUELHH returned no interconnector flows for "
+                           f"{start} to {end_inclusive}.")
+    rows["DATETIME"] = pd.to_datetime(rows["startTime"], utc=True).dt.tz_localize(None)
+    flows = (rows.drop_duplicates(["DATETIME", "fuelType"], keep="last")
+             .pivot(index="DATETIME", columns="fuelType", values="generation")
+             .reindex(columns=grid.LINKS).fillna(0.0).astype(float))
+    w_lo, w_hi = _utc(start).tz_localize(None), _utc(end_inclusive).tz_localize(None)
+    return flows[(flows.index >= w_lo) & (flows.index <= w_hi)]
+
+
+def attach_import_shares(df: pd.DataFrame, flows: pd.DataFrame | None = None) -> pd.DataFrame:
+    """Add ``imp_<CC>`` and ``import_basis`` to a mix frame with ``DATETIME``.
+
+    Flows are fetched for the frame's window when not given and the region
+    imports anything. If they cannot be had, every half-hour falls back to the
+    region's 2025 split and says so in ``import_basis``.
+    """
+    from optimiser_lca import grid
+    df = df.copy()
+    region = int(df["api_region_id"].iloc[0]) if "api_region_id" in df.columns else None
+    imports = df["api_imports"].fillna(0.0) if "api_imports" in df.columns else pd.Series(0.0, index=df.index)
+    if flows is None and (imports > 0).any():
+        try:
+            flows = fetch_interconnector_flows(df["DATETIME"].min(), df["DATETIME"].max())
+        except Exception as exc:                # an outage must not lose the build
+            print(f"  ! no interconnector flows ({exc}); imports use the 2025 split")
+            flows = None
+    lookup = flows.to_dict("index") if flows is not None else {}
+    shares, basis = [], []
+    for t in df["DATETIME"]:
+        sh, b = grid.import_shares(region, lookup.get(pd.Timestamp(t)))
+        shares.append(sh)
+        basis.append(b)
+    for c in grid.COUNTRIES:
+        df[f"imp_{c}"] = [sh.get(c, 0.0) for sh in shares]
+    df["import_basis"] = basis
+    return df
+
+
+def fit_import_attribution(mix: pd.DataFrame, flows: pd.DataFrame) -> dict:
+    """How much of each link reaches a region, from NESO's own regional share.
+
+    Non-negative least squares of the region's API import share (%) on every
+    link's import flow (GW): ``api_imports[t] ~ sum_k beta_k * flow_k[t]``.
+    Returns beta normalised to sum 1, the fit's R2, the region's mean import
+    share, and its annual split by country (the mean of beta x flow). The
+    numbers in ``optimiser_lca.grid.IMPORT_ATTRIBUTION`` are this, over 2025.
+    """
+    from scipy.optimize import nnls
+    from optimiser_lca import grid
+    j = (mix.set_index("DATETIME")[["api_imports"]]
+         .join(flows.clip(lower=0.0) / 1000.0, how="inner").dropna())
+    A, b = j[grid.LINKS].to_numpy(), j["api_imports"].to_numpy()
+    beta, _ = nnls(A, b)
+    fitted = A @ beta
+    r2 = 1.0 - ((b - fitted) ** 2).sum() / ((b - b.mean()) ** 2).sum()
+    contrib = (A * beta).mean(axis=0)
+    total = beta.sum()
+    return {"beta": {k: float(v / total) if total > 0 else 0.0 for k, v in zip(grid.LINKS, beta)},
+            "r2": float(r2), "mean_import_perc": float(b.mean()), "n": int(len(j)),
+            "annual": grid._by_country(dict(zip(grid.LINKS, contrib)))}
+
+
+def fit_all_regions(start="2025-01-01 00:00:00", end="2025-12-31 23:30:00") -> dict:
+    """``IMPORT_ATTRIBUTION`` as it should be: every region whose fit passes
+    ``IMPORT_FIT_MIN_R2`` and ``IMPORT_FIT_MIN_SHARE_PERC``. Fetches a year of
+    mix per region (cached) and of flows."""
+    from optimiser_lca import grid
+    flows = fetch_interconnector_flows(start, end)
+    out = {}
+    for region in range(1, 15):
+        fit = fit_import_attribution(fetch_mix(region, start, end), flows)
+        ok = (fit["r2"] >= grid.IMPORT_FIT_MIN_R2
+              and fit["mean_import_perc"] >= grid.IMPORT_FIT_MIN_SHARE_PERC)
+        print(f"  region {region:>2}: R2 {fit['r2']:.2f}, imports "
+              f"{fit['mean_import_perc']:.1f} % -> {'fitted' if ok else 'national flows'}")
+        if ok:
+            out[region] = {"beta": {k: round(v, 4) for k, v in fit["beta"].items() if v > 0},
+                           "r2": round(fit["r2"], 3),
+                           "annual": {c: round(v, 4) for c, v in fit["annual"].items()}}
+    return out
+
+
+def score_mix(mix: pd.DataFrame, scores: dict | None = None,
+              flows: pd.DataFrame | None = None) -> pd.DataFrame:
+    """Add the share columns, the import split and both scores to a mix frame."""
     from optimiser_lca import grid
     scores = source_scores() if scores is None else scores
     df = mix.copy()
     for fuel, key in FUEL_TO_ROW_KEY.items():
         df[f"{key}_perc"] = df[f"api_{fuel}"].astype(float)
     df["WIND_EMB_perc"] = 0.0           # the API reports wind as one figure
-    out = [grid.score_row(row, scores) for _, row in df.iterrows()]
-    df["custom_electricity_score"] = [s for s, _ in out]
-    df["custom_electricity_input_kwh_per_kwh"] = [a for _, a in out]
+    recorded = (set(grid.IMPORT_SHARE_COLS) <= set(df.columns)
+                and not df[grid.IMPORT_SHARE_COLS].isna().any().any())
+    if not recorded:
+        df = attach_import_shares(df, flows)
+    gen = np.array([grid.score_row(row, scores) for _, row in df.iterrows()])
+    df["generation_kgco2e_per_kwh"] = gen
+    df["custom_electricity_score"] = grid.delivered(gen, grid.REFERENCE_VOLTAGE)
+    df["custom_electricity_input_kwh_per_kwh"] = grid.delivery(grid.REFERENCE_VOLTAGE)["gross_up"]
     return df
 
 
-_GRID_COLUMNS = (
-    ["datetime", "carbon_intensity", "custom_electricity_score",
-     "custom_electricity_input_kwh_per_kwh", "api_scope", "api_region_id",
-     "api_region_name", "api_total_perc", "carbon_intensity_forecast",
-     "carbon_intensity_actual", "carbon_intensity_index"]
-    + [f"api_{f}" for f in CI_FUELS])
+def _grid_columns() -> list:
+    from optimiser_lca import grid
+    return (["datetime", "carbon_intensity", "generation_kgco2e_per_kwh",
+             "custom_electricity_score", "custom_electricity_input_kwh_per_kwh",
+             "api_scope", "api_region_id", "api_region_name", "api_total_perc",
+             "carbon_intensity_forecast", "carbon_intensity_actual", "carbon_intensity_index"]
+            + [f"api_{f}" for f in CI_FUELS]
+            + grid.IMPORT_SHARE_COLS + ["import_basis"])
 
 
 def build_grid(region: int, start, end, out_dir: Path | None = None) -> Path:
@@ -304,7 +456,7 @@ def build_grid(region: int, start, end, out_dir: Path | None = None) -> Path:
           f"({mix['api_region_name'].iloc[0]}).")
     df = score_mix(mix)
     df = df.rename(columns={"DATETIME": "datetime"})
-    cols = _GRID_COLUMNS + [f"{c}_perc" for c in grid.FUEL_COLS]
+    cols = _grid_columns() + [f"{c}_perc" for c in grid.FUEL_COLS]
     df = df[cols].copy()
     df["grid_data_source"] = "carbon_api"
     df["clock"] = CLOCK
@@ -329,25 +481,32 @@ def _write_scored(df: pd.DataFrame, path: Path) -> None:
     df.to_csv(path, index=False)
     sources_sidecar(path).write_text(json.dumps(
         {"grid_sources_id": grid_sources_id(),
-         "market_loss_factor": grid.MARKET_LOSS_FACTOR,
+         "basis": grid.basis(),
          "sources": source_table()}, indent=2), encoding="utf-8")
 
 
 def rescore(path: Path) -> float:
     """Re-score one grid CSV in place from the fuel mix it recorded.
 
-    The API shares are already in the file, so only the ecoinvent side is
-    redone: no API calls. Returns the new mean in g CO2e/kWh.
+    The API shares are already in the file, so only the scoring side is
+    redone. A file written before the import split also gets its window's
+    interconnector flows fetched, once. Returns the new mean of
+    ``custom_electricity_score`` in g CO2e/kWh.
     """
+    from optimiser_lca import grid
     path = Path(path)
     df = pd.read_csv(path)
     if df.get("clock", pd.Series(["?"])).iloc[0] != CLOCK:
         raise ValueError(f"{path.name} is not on the {CLOCK} clock; rebuild it instead.")
     mix = df.rename(columns={"datetime": "DATETIME"})
-    out = score_mix(mix).rename(columns={"DATETIME": "datetime"})
-    df["custom_electricity_score"] = out["custom_electricity_score"].to_numpy()
-    df["custom_electricity_input_kwh_per_kwh"] = (
-        out["custom_electricity_input_kwh_per_kwh"].to_numpy())
+    mix["DATETIME"] = pd.to_datetime(mix["DATETIME"])
+    out = score_mix(mix)
+    for col in (["generation_kgco2e_per_kwh", "custom_electricity_score",
+                 "custom_electricity_input_kwh_per_kwh", "import_basis"]
+                + grid.IMPORT_SHARE_COLS):
+        df[col] = out[col].to_numpy()
+    first = [c for c in _grid_columns() if c in df.columns]
+    df = df[first + [c for c in df.columns if c not in first]]
     _write_scored(df, path)
     return float(df["custom_electricity_score"].mean() * 1000.0)
 
@@ -462,6 +621,9 @@ def build_prices(start, end, out_dir: Path | None = None) -> Path:
 if __name__ == "__main__":
     if sys.argv[1:] == ["--rescore"]:
         rescore_all()
+    elif sys.argv[1:] == ["--fit-imports"]:
+        import pprint
+        pprint.pprint(fit_all_regions(), width=110, sort_dicts=False)
     else:
         region, lo, hi = int(sys.argv[1]), sys.argv[2], sys.argv[3]
         from optimisation import sites

@@ -106,13 +106,20 @@ def build(cost_case: str = "central") -> pd.DataFrame:
 
     # --- battery --------------------------------------------------------
     be = batt.embodied_components()
-    b_src = "ecoinvent 3.9.1 apos (LFP pack, 500 kW inverter); Modo Energy asset life"
+    b_src = "ecoinvent 3.9.1 apos 500 kW inverter; Modo Energy asset life"
+    e_src = ("Jasper et al. 2026 liquid-cooled LFP container + Voß et al. 2025 cell, "
+             "on ecoinvent 3.9.1 apos (optimiser_lca/bess.py); Modo Energy asset life"
+             if batt.EMBODIED_BASIS == "jasper_voss_2026"
+             else "ecoinvent 3.9.1 apos LFP EV pack (legacy); Modo Energy asset life")
     rows.append(_row("battery_power", "MW", be["power_kgco2e_per_kW"] * 1000.0,
                      calendar=batt.ASSET_LIFE_YEARS, source=b_src, grade="derived",
                      note="power conversion system"))
     rows.append(_row("battery_energy", "MWh", be["energy_kgco2e_per_kWh"] * 1000.0,
-                     calendar=batt.ASSET_LIFE_YEARS, source=b_src, grade="derived",
-                     note="LFP pack; container/racking/HVAC still missing — see DATA_GAPS.md"))
+                     calendar=batt.ASSET_LIFE_YEARS, source=e_src, grade="derived",
+                     note=(f"per usable MWh: nameplate / USABLE_FRACTION {batt.USABLE_FRACTION:g}; "
+                           "cells made in China; excludes PCS, transformer, foundation"
+                           if batt.EMBODIED_BASIS == "jasper_voss_2026"
+                           else "LFP EV pack; no container/racking/HVAC")))
 
     # --- electrolysers --------------------------------------------------
     e_src = "Hermesmann et al. capital good, decomposed; NESO 25 y plant life"

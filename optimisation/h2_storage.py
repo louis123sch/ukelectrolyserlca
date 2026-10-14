@@ -40,9 +40,11 @@ losses are permeation through the wall, which is negligible for steel at this
 pressure, and fitting and valve leakage, which is a maintenance-quality
 question rather than a physical constant. ``LEAKAGE_FRAC_PER_HOUR`` is exposed
 for the optimiser and **defaults to zero with no source**, which is the honest
-position but not a verified one. It matters: near-zero standing loss is
-precisely why hydrogen beats a battery over a season, so the parameter that
-decides that contest is currently an assumption. Registered in ``DATA_GAPS.md``.
+position but not a verified one. It was thought to decide the seasonal
+hydrogen-versus-battery contest; swept over 0-0.1 %/day on 14 Oct (an ASSUMED
+range, through ``build_tech(tank_leakage_per_hour=...)``) it moves cost and
+carbon by under 0.1 % and does not change which store dominates. Registered,
+with the band, in ``DATA_GAPS.md``.
 
 If it is ever set non-zero, the leaked hydrogen should also be charged as a
 greenhouse gas in its own right — H2 is an indirect GHG — from DESNZ / Warwick
@@ -270,8 +272,8 @@ def run():
         print(f"  {r['design']:<22}{per_kwh:>28,.1f}{per_kwh / b_energy:>12,.1f}x")
     print(f"  {'Li-ion battery (LFP)':<22}{b_energy:>28,.1f}{1.0:>12,.1f}x")
     print("\n  The 28 bar steel vessel is a Gandiglio as-built low-pressure buffer, and")
-    print("  per deliverable kWh it is no better than a lithium battery. The 200 bar")
-    print("  Type I cylinder is roughly six times better. Which design the study uses")
+    print("  per deliverable kWh it is barely better than a lithium battery. The 200 bar")
+    print("  Type I cylinder is roughly seven times better. Which design the study uses")
     print("  is therefore not a detail — it decides whether hydrogen storage has an")
     print("  embodied-carbon advantage at all. Run both.")
 

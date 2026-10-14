@@ -2,7 +2,7 @@
 Running the matrix — caching, parallelism, and results on disk.
 =============================================================================
 
-21 configurations x a 13-point Pareto sweep is 273 LP solves. At half-hourly
+25 configurations x a 13-point Pareto sweep is 325 LP solves. At half-hourly
 resolution that is hours; hourly resampling and eight cores brings it to
 minutes. This module owns that arithmetic so neither the CLI nor the Streamlit
 page has to.
@@ -104,6 +104,8 @@ def run_one(scenario: A.Scenario, *, site, start: str, end: str,
             unserved_fraction: float, out_root: Path,
             gwp_target_kg_per_year: float | None = None,
             green_h2_grid_share: float | None = None,
+            batt_standing_loss_per_hour: float | None = None,
+            tank_leakage_per_hour: float | None = None,
             save_dispatch: bool = False, refresh: bool = False,
             progress=None, notice=None) -> dict:
     """Solve one configuration's Pareto front and write it to disk.
@@ -139,6 +141,10 @@ def run_one(scenario: A.Scenario, *, site, start: str, end: str,
         # the price and the burden of bought green hydrogen, so a cached run at
         # a different share is a different answer.
         "green_h2_grid_share": green_h2_grid_share,
+        # Same reason: each moves one store's losses, so a run cached at the
+        # default (None) is not an answer at any other point of the band.
+        "batt_standing_loss_per_hour": batt_standing_loss_per_hour,
+        "tank_leakage_per_hour": tank_leakage_per_hour,
         "coefficients": _coefficient_identity(),
     }
     h = config_hash(cfg)
@@ -181,7 +187,10 @@ def run_one(scenario: A.Scenario, *, site, start: str, end: str,
     tech = I.build_tech(site, meta, ely_tech=scenario.ely_tech or "PEM operation",
                         tank_design=scenario.tank_design, h2_colour=scenario.h2_colour,
                         h2_colour_2=scenario.h2_colour_2,
+                        soec_heat=scenario.soec_heat,
                         green_h2_grid_share=green_h2_grid_share,
+                        batt_standing_loss_per_hour=batt_standing_loss_per_hour,
+                        tank_leakage_per_hour=tank_leakage_per_hour,
                         cost_case=cost_case, horizon_years=horizon_years,
                         size_mw_it=size_mw_it, pue=pue)
     # The ceiling the band was read from is the ceiling the LP is held to.
@@ -221,8 +230,12 @@ def run_one(scenario: A.Scenario, *, site, start: str, end: str,
     summary = {
         "key": scenario.key, "n": scenario.n, "label": scenario.label,
         "architecture": scenario.architecture, "ely_tech": scenario.ely_tech,
+        "soec_heat": tech.labels.get("soec_heat"),
         "h2_colour": scenario.h2_colour, "h2_colour_2": scenario.h2_colour_2,
         "green_h2_grid_share": tech.labels.get("green_h2_grid_share"),
+        # The values used, defaults included (both zero and ASSUMED).
+        "batt_standing_loss_per_hour": tech.labels.get("batt_standing_loss_per_hour"),
+        "tank_leakage_per_hour": tech.labels.get("tank_leakage_per_hour"),
         "strategy": scenario.strategy,
         "site": site.key, "site_name": site.name,
         "lat": site.lat, "lon": site.lon,
@@ -266,6 +279,7 @@ def run_matrix(scenarios=None, *, site=sites.DEFAULT_PRESET, start="2025-01-01",
                horizon_years=25.0, unserved_fraction=0.0,
                gwp_target_kg_per_year=None, connection_headroom=None,
                green_h2_grid_share=None,
+               batt_standing_loss_per_hour=None, tank_leakage_per_hour=None,
                out_root: Path | None = None, workers=None,
                save_dispatch=False, refresh=False, progress=print) -> pd.DataFrame:
     """Solve every configuration, in parallel, and return the comparison table."""
@@ -279,6 +293,8 @@ def run_matrix(scenarios=None, *, site=sites.DEFAULT_PRESET, start="2025-01-01",
               horizon_years=horizon_years, unserved_fraction=unserved_fraction,
               gwp_target_kg_per_year=gwp_target_kg_per_year,
               green_h2_grid_share=green_h2_grid_share,
+              batt_standing_loss_per_hour=batt_standing_loss_per_hour,
+              tank_leakage_per_hour=tank_leakage_per_hour,
               connection_headroom=connection_headroom, out_root=out_root, save_dispatch=save_dispatch, refresh=refresh)
 
     results, t0 = [], time.time()
@@ -336,7 +352,8 @@ def comparison_table(summaries) -> pd.DataFrame:
             rows.append({
                 "n": s["n"], "key": s["key"], "label": s["label"],
                 "architecture": s["architecture"], "strategy": s["strategy"],
-                "ely": (s["ely_tech"] or "-").split()[0],
+                "ely": (s["ely_tech"] or "-").split()[0]
+                       + (" (e-boiler)" if s.get("soec_heat") == "electric_boiler" else ""),
                 "h2_colour": " + ".join(
                     c for c in (s["h2_colour"], s.get("h2_colour_2")) if c) or "-",
                 "point": point, "degenerate": s["degenerate"],

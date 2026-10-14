@@ -1,0 +1,494 @@
+{
+  "grid_sources_id": "055e53f4b11b",
+  "basis": {
+    "sources": {
+      "BIOMASS": [
+        "heat and power co-generation, wood chips, 6667 kW, state-of-the-art 2014",
+        "GB",
+        "electricity, high voltage"
+      ],
+      "COAL": [
+        "electricity production, hard coal",
+        "GB",
+        "electricity, high voltage"
+      ],
+      "GAS": [
+        "electricity production, natural gas, combined cycle power plant",
+        "GB",
+        "electricity, high voltage"
+      ],
+      "HYDRO": [
+        "electricity production, hydro, run-of-river",
+        "GB",
+        "electricity, high voltage"
+      ],
+      "IMPORTS_BE": [
+        "electricity, high voltage, import from BE",
+        "GB",
+        "electricity, high voltage"
+      ],
+      "IMPORTS_DK": [
+        "market for electricity, high voltage",
+        "DK",
+        "electricity, high voltage"
+      ],
+      "IMPORTS_FR": [
+        "electricity, high voltage, import from FR",
+        "GB",
+        "electricity, high voltage"
+      ],
+      "IMPORTS_IE": [
+        "electricity, high voltage, import from IE",
+        "GB",
+        "electricity, high voltage"
+      ],
+      "IMPORTS_NL": [
+        "electricity, high voltage, import from NL",
+        "GB",
+        "electricity, high voltage"
+      ],
+      "IMPORTS_NO": [
+        "market for electricity, high voltage",
+        "NO",
+        "electricity, high voltage"
+      ],
+      "NUCLEAR": [
+        "electricity production, nuclear, boiling water reactor",
+        "GB",
+        "electricity, high voltage"
+      ],
+      "OTHER": [
+        "electricity production, oil",
+        "GB",
+        "electricity, high voltage"
+      ],
+      "SOLAR": [
+        "UPV, GB grid solar fleet, electricity per kWh",
+        "GB",
+        "electricity, low voltage",
+        "solar foreground"
+      ],
+      "STORAGE": [
+        "electricity production, hydro, pumped storage",
+        "GB",
+        "electricity, high voltage"
+      ],
+      "WIND_13_OFFSHORE": [
+        "electricity production, wind, 1-3MW turbine, offshore",
+        "GB",
+        "electricity, high voltage"
+      ],
+      "WIND_13_ONSHORE": [
+        "electricity production, wind, 1-3MW turbine, onshore",
+        "GB",
+        "electricity, high voltage"
+      ],
+      "WIND_EMB": [
+        "electricity production, wind, <1MW turbine, onshore",
+        "GB",
+        "electricity, high voltage"
+      ],
+      "WIND_GT3_ONSHORE": [
+        "electricity production, wind, >3MW turbine, onshore",
+        "GB",
+        "electricity, high voltage"
+      ]
+    },
+    "method": "IPCC 2021, climate change, GWP100 (with long-term emissions)",
+    "wind": {
+      "WIND_GT3_ONSHORE": 0.042697994349993544,
+      "WIND_13_OFFSHORE": 0.34956451352711987,
+      "WIND_13_ONSHORE": 0.6077374921228865
+    },
+    "interconnectors": {
+      "INTFR": "FR",
+      "INTIFA2": "FR",
+      "INTELEC": "FR",
+      "INTNEM": "BE",
+      "INTNED": "NL",
+      "INTNSL": "NO",
+      "INTVKL": "DK",
+      "INTIRL": "IE",
+      "INTEW": "IE",
+      "INTGRNL": "IE"
+    },
+    "link_share_2025": {
+      "INTFR": 0.2424,
+      "INTIFA2": 0.1362,
+      "INTELEC": 0.1361,
+      "INTNEM": 0.0852,
+      "INTNED": 0.0662,
+      "INTNSL": 0.2146,
+      "INTVKL": 0.1082,
+      "INTIRL": 0.0032,
+      "INTEW": 0.0014,
+      "INTGRNL": 0.0064
+    },
+    "import_attribution": {
+      "3": {
+        "beta": {
+          "INTIFA2": 0.0548,
+          "INTELEC": 0.0533,
+          "INTNEM": 0.0478,
+          "INTNED": 0.0362,
+          "INTNSL": 0.8078
+        },
+        "r2": 0.56,
+        "annual": {
+          "FR": 0.0757,
+          "BE": 0.021,
+          "NL": 0.0123,
+          "NO": 0.891,
+          "DK": 0.0,
+          "IE": 0.0
+        }
+      },
+      "4": {
+        "beta": {
+          "INTFR": 0.041,
+          "INTIFA2": 0.0052,
+          "INTELEC": 0.0834,
+          "INTNEM": 0.0208,
+          "INTNED": 0.0067,
+          "INTNSL": 0.8429
+        },
+        "r2": 0.695,
+        "annual": {
+          "FR": 0.1073,
+          "BE": 0.0086,
+          "NL": 0.0022,
+          "NO": 0.8819,
+          "DK": 0.0,
+          "IE": 0.0
+        }
+      },
+      "5": {
+        "beta": {
+          "INTNSL": 0.3104,
+          "INTVKL": 0.0046,
+          "INTIRL": 0.3172,
+          "INTEW": 0.0604,
+          "INTGRNL": 0.3075
+        },
+        "r2": 0.199,
+        "annual": {
+          "FR": 0.0,
+          "BE": 0.0,
+          "NL": 0.0,
+          "NO": 0.9492,
+          "DK": 0.0071,
+          "IE": 0.0437
+        }
+      },
+      "6": {
+        "beta": {
+          "INTFR": 0.027,
+          "INTELEC": 0.0716,
+          "INTNED": 0.0125,
+          "INTNSL": 0.3435,
+          "INTEW": 0.5454
+        },
+        "r2": 0.296,
+        "annual": {
+          "FR": 0.1778,
+          "BE": 0.0,
+          "NL": 0.0091,
+          "NO": 0.805,
+          "DK": 0.0,
+          "IE": 0.0081
+        }
+      },
+      "8": {
+        "beta": {
+          "INTFR": 0.0868,
+          "INTIFA2": 0.2248,
+          "INTELEC": 0.0941,
+          "INTNEM": 0.1511,
+          "INTNED": 0.2675,
+          "INTNSL": 0.1253,
+          "INTIRL": 0.0504
+        },
+        "r2": 0.393,
+        "annual": {
+          "FR": 0.5279,
+          "BE": 0.1054,
+          "NL": 0.1452,
+          "NO": 0.2202,
+          "DK": 0.0,
+          "IE": 0.0013
+        }
+      },
+      "9": {
+        "beta": {
+          "INTFR": 0.0526,
+          "INTIFA2": 0.0347,
+          "INTELEC": 0.001,
+          "INTNED": 0.172,
+          "INTNSL": 0.0965,
+          "INTVKL": 0.068,
+          "INTIRL": 0.2782,
+          "INTEW": 0.1544,
+          "INTGRNL": 0.1425
+        },
+        "r2": 0.178,
+        "annual": {
+          "FR": 0.2981,
+          "BE": 0.0,
+          "NL": 0.1928,
+          "NO": 0.3504,
+          "DK": 0.1246,
+          "IE": 0.034
+        }
+      },
+      "10": {
+        "beta": {
+          "INTFR": 0.0612,
+          "INTELEC": 0.0581,
+          "INTNEM": 0.0871,
+          "INTNED": 0.7009,
+          "INTVKL": 0.0114,
+          "INTEW": 0.0813
+        },
+        "r2": 0.685,
+        "annual": {
+          "FR": 0.2918,
+          "BE": 0.0952,
+          "NL": 0.5958,
+          "NO": 0.0,
+          "DK": 0.0158,
+          "IE": 0.0014
+        }
+      },
+      "11": {
+        "beta": {
+          "INTFR": 0.0623,
+          "INTIFA2": 0.495,
+          "INTELEC": 0.0864,
+          "INTNEM": 0.0984,
+          "INTNSL": 0.0582,
+          "INTVKL": 0.0048,
+          "INTIRL": 0.0637,
+          "INTGRNL": 0.1312
+        },
+        "r2": 0.195,
+        "annual": {
+          "FR": 0.8077,
+          "BE": 0.0718,
+          "NL": 0.0,
+          "NO": 0.107,
+          "DK": 0.0044,
+          "IE": 0.009
+        }
+      },
+      "12": {
+        "beta": {
+          "INTFR": 0.155,
+          "INTIFA2": 0.5407,
+          "INTELEC": 0.0584,
+          "INTNEM": 0.1706,
+          "INTNED": 0.0215,
+          "INTIRL": 0.02,
+          "INTGRNL": 0.0337
+        },
+        "r2": 0.647,
+        "annual": {
+          "FR": 0.88,
+          "BE": 0.1073,
+          "NL": 0.0105,
+          "NO": 0.0,
+          "DK": 0.0,
+          "IE": 0.0021
+        }
+      },
+      "13": {
+        "beta": {
+          "INTFR": 0.3505,
+          "INTIFA2": 0.0721,
+          "INTELEC": 0.0681,
+          "INTNEM": 0.2651,
+          "INTNED": 0.1678,
+          "INTNSL": 0.0133,
+          "INTIRL": 0.063
+        },
+        "r2": 0.699,
+        "annual": {
+          "FR": 0.739,
+          "BE": 0.1604,
+          "NL": 0.079,
+          "NO": 0.0203,
+          "DK": 0.0,
+          "IE": 0.0014
+        }
+      },
+      "14": {
+        "beta": {
+          "INTFR": 0.4265,
+          "INTIFA2": 0.059,
+          "INTELEC": 0.1071,
+          "INTNEM": 0.2509,
+          "INTNSL": 0.0641,
+          "INTVKL": 0.0047,
+          "INTIRL": 0.0742,
+          "INTGRNL": 0.0134
+        },
+        "r2": 0.713,
+        "annual": {
+          "FR": 0.778,
+          "BE": 0.132,
+          "NL": 0.0,
+          "NO": 0.0849,
+          "DK": 0.0031,
+          "IE": 0.002
+        }
+      }
+    },
+    "storage_kwh_in": 1.43,
+    "solar_fleet": [
+      28842.0,
+      30.0
+    ],
+    "delivery": {
+      "high": {
+        "gross_up": 1.03379915593905,
+        "network_gco2e_per_kwh": 1.9318200445737765
+      },
+      "medium": {
+        "gross_up": 1.045413872956057,
+        "network_gco2e_per_kwh": 4.893252997861607
+      },
+      "low": {
+        "gross_up": 1.1132474252952393,
+        "network_gco2e_per_kwh": 11.295551508863387
+      }
+    },
+    "reference_voltage": "high"
+  },
+  "sources": {
+    "GAS": {
+      "name": "electricity production, natural gas, combined cycle power plant",
+      "location": "GB",
+      "product": "electricity, high voltage",
+      "database": "ecoinvent-3.9.1-apos",
+      "kgco2e_per_kwh": 0.3872941871213688
+    },
+    "COAL": {
+      "name": "electricity production, hard coal",
+      "location": "GB",
+      "product": "electricity, high voltage",
+      "database": "ecoinvent-3.9.1-apos",
+      "kgco2e_per_kwh": 1.060539036311036
+    },
+    "NUCLEAR": {
+      "name": "electricity production, nuclear, boiling water reactor",
+      "location": "GB",
+      "product": "electricity, high voltage",
+      "database": "ecoinvent-3.9.1-apos",
+      "kgco2e_per_kwh": 0.007409321489916732
+    },
+    "WIND_GT3_ONSHORE": {
+      "name": "electricity production, wind, >3MW turbine, onshore",
+      "location": "GB",
+      "product": "electricity, high voltage",
+      "database": "ecoinvent-3.9.1-apos",
+      "kgco2e_per_kwh": 0.02377010398193452
+    },
+    "WIND_13_OFFSHORE": {
+      "name": "electricity production, wind, 1-3MW turbine, offshore",
+      "location": "GB",
+      "product": "electricity, high voltage",
+      "database": "ecoinvent-3.9.1-apos",
+      "kgco2e_per_kwh": 0.017133747878833594
+    },
+    "WIND_13_ONSHORE": {
+      "name": "electricity production, wind, 1-3MW turbine, onshore",
+      "location": "GB",
+      "product": "electricity, high voltage",
+      "database": "ecoinvent-3.9.1-apos",
+      "kgco2e_per_kwh": 0.014465892541442467
+    },
+    "WIND_EMB": {
+      "name": "electricity production, wind, <1MW turbine, onshore",
+      "location": "GB",
+      "product": "electricity, high voltage",
+      "database": "ecoinvent-3.9.1-apos",
+      "kgco2e_per_kwh": 0.0138665370880208
+    },
+    "HYDRO": {
+      "name": "electricity production, hydro, run-of-river",
+      "location": "GB",
+      "product": "electricity, high voltage",
+      "database": "ecoinvent-3.9.1-apos",
+      "kgco2e_per_kwh": 0.004381645420712587
+    },
+    "IMPORTS_FR": {
+      "name": "electricity, high voltage, import from FR",
+      "location": "GB",
+      "product": "electricity, high voltage",
+      "database": "ecoinvent-3.9.1-apos",
+      "kgco2e_per_kwh": 0.07409661081468559
+    },
+    "IMPORTS_BE": {
+      "name": "electricity, high voltage, import from BE",
+      "location": "GB",
+      "product": "electricity, high voltage",
+      "database": "ecoinvent-3.9.1-apos",
+      "kgco2e_per_kwh": 0.17832181202291184
+    },
+    "IMPORTS_NL": {
+      "name": "electricity, high voltage, import from NL",
+      "location": "GB",
+      "product": "electricity, high voltage",
+      "database": "ecoinvent-3.9.1-apos",
+      "kgco2e_per_kwh": 0.47887889969495817
+    },
+    "IMPORTS_NO": {
+      "name": "market for electricity, high voltage",
+      "location": "NO",
+      "product": "electricity, high voltage",
+      "database": "ecoinvent-3.9.1-apos",
+      "kgco2e_per_kwh": 0.021771218598327834
+    },
+    "IMPORTS_DK": {
+      "name": "market for electricity, high voltage",
+      "location": "DK",
+      "product": "electricity, high voltage",
+      "database": "ecoinvent-3.9.1-apos",
+      "kgco2e_per_kwh": 0.20695701594473112
+    },
+    "IMPORTS_IE": {
+      "name": "electricity, high voltage, import from IE",
+      "location": "GB",
+      "product": "electricity, high voltage",
+      "database": "ecoinvent-3.9.1-apos",
+      "kgco2e_per_kwh": 0.35176675681817227
+    },
+    "BIOMASS": {
+      "name": "heat and power co-generation, wood chips, 6667 kW, state-of-the-art 2014",
+      "location": "GB",
+      "product": "electricity, high voltage",
+      "database": "ecoinvent-3.9.1-apos",
+      "kgco2e_per_kwh": 0.05510910807028511
+    },
+    "OTHER": {
+      "name": "electricity production, oil",
+      "location": "GB",
+      "product": "electricity, high voltage",
+      "database": "ecoinvent-3.9.1-apos",
+      "kgco2e_per_kwh": 1.3990718507796875
+    },
+    "SOLAR": {
+      "name": "UPV, GB grid solar fleet, electricity per kWh",
+      "location": "GB",
+      "product": "electricity, low voltage",
+      "database": "solar foreground",
+      "kgco2e_per_kwh": 0.03091227749988343
+    },
+    "STORAGE": {
+      "name": "electricity production, hydro, pumped storage",
+      "location": "GB",
+      "product": "electricity, high voltage",
+      "database": "ecoinvent-3.9.1-apos",
+      "kgco2e_per_kwh": 0.050529098537260585
+    }
+  }
+}

@@ -376,7 +376,7 @@ def get(spec, **kw) -> Site:
 # -----------------------------------------------------------------------------
 def available_grid_regions() -> dict[int, list[str]]:
     """Which Carbon Intensity regions have a usable cached half-hourly series:
-    UTC clock, and scored on today's dc_config.GRID_SOURCES."""
+    UTC clock, and scored on today's optimiser_lca.grid.basis()."""
     import re
     from optimisation.profiles import grid_file_is_current
     out: dict[int, list[str]] = {}

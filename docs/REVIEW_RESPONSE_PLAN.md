@@ -178,31 +178,38 @@ Both numbers are right. They measure four different things, and the docs call th
 |---|---|---|---|---|
 | **118** | NESO FES 2025, GB grid carbon intensity | national | 2024 | direct (combustion) — confirm the definition in the FES workbook |
 | **139** | NESO Carbon Intensity API, the study's own half-hourly series, time-mean | London (region 13) | 2025 | direct, on NESO's per-fuel factors |
-| **237** | The model's grid factor: the same half-hourly mix, each fuel scored on its ecoinvent 3.9.1 inventory. Imports are split ⅓ FR/IE/NL, and 3.16 % losses are added | London | 2025 | life-cycle, IPCC 2021 GWP100 |
-| **252** (≈250 in the docs) | Grid-only *total* per MWh of load: 237 plus the facility's own embodied burden (~15 g) and the connection | London | 2025 | a whole-system footprint, **not a grid intensity** |
+| **159** | The model's grid factor: the same half-hourly mix, each fuel scored on its life-cycle inventory, imports split by the half-hour's interconnector flows, delivered at high voltage (3.38 % losses + 1.93 g/kWh network) | London | 2025 | life-cycle, IPCC 2021 GWP100 |
+| **174** (≈250 in the docs) | Grid-only *total* per MWh of load: 159 plus the facility's own embodied burden (~15 g) | London | 2025 | a whole-system footprint, **not a grid intensity** |
 
-The 237 and 139 are computed from
-`custom_grid_lca_outputs/…_r13_…2025….csv`, and the 252 is from
-`optimisation_outputs/option_summary.csv`. The docs quote 250.1 from
-`VALIDATION.md`, which was built on 2026-08-24 on earlier coefficients.
+The 159 and 139 are computed from
+`custom_grid_lca_outputs/…_r13_…2025….csv`, and the 174 is from
+`optimisation_outputs/option_summary.csv` (13 Oct 2026). The docs quote 250.1
+from `VALIDATION.md`, which was built on 2026-08-24 on earlier coefficients.
+
+How the life-cycle figure got from 237 to 159, all on 13 Oct 2026: gas scored on
+the combined-cycle plant, not the conventional one (237 → 188); imports split by
+the interconnector flows that actually reach London — 74 % French nuclear-heavy
+power — not ecoinvent's FR 63 / NL 30 / IE 7 (−29); grid solar on the Smith plant
+(−3); high-voltage delivery with network carbon in place of a flat 3.16 % loss
+(+2).
 
 **Line to add** in the Overview near §7, and as a footnote to the brief's §4 and §11:
 
 > The 118 gCO₂/kWh is NESO's national, direct-emissions figure for 2024. This
 > study's London grid in 2025 averaged 139 g/kWh on the same direct basis, and
-> 237 g/kWh once every generator is scored on its life-cycle inventory (fuel
-> supply chains, plant construction, imports, network losses). The ~250 g/kWh in
-> the worked example is the whole grid-only footprint per MWh consumed — that
+> 159 g/kWh once every generator is scored on its life-cycle inventory (fuel
+> supply chains, plant construction, imports, network losses and the network
+> itself). The grid-only footprint per MWh consumed is 174 g/kWh — that
 > life-cycle grid plus the facility's own embodied burden — not a grid intensity.
 
-**And fix the phrase** "a system sized against a 250 gCO₂/kWh grid" (Overview §8, brief §11). It should say "today's grid, 237 g/kWh on a life-cycle basis".
+**And fix the phrase** "a system sized against a 250 gCO₂/kWh grid" (Overview §8, brief §11). It should say "today's grid, 159 g/kWh on a life-cycle basis". The worked example's ~250 itself goes when the figures are regenerated (TODO).
 
 **The consequence for the roadmap matters more than the wording.**
-- FES pathways are *direct* intensities. The life-cycle uplift, 98 g/kWh or +70 % here, does not fall to zero with them: wind, solar and nuclear keep their embodied burden.
+- FES pathways are *direct* intensities. The life-cycle uplift, 20 g/kWh or +14 % here, does not fall to zero with them: wind, solar and nuclear keep their embodied burden.
 - So "the grid heads to ~zero by 2050" (brief §11) is overstated for a life-cycle model.
 - The forward-trajectory work must take FES **generation mixes** and score them through the same per-fuel inventories, ideally `premise`-projected. It must not drop FES intensities in directly, or the model will mix bases.
 
-**Worth a follow-up check.** Imports are 30 % of London's 2025 mix, scored as ⅓ Ireland and ⅓ Netherlands (both gas-heavy). That assumption probably drives a large share of the 98 g uplift, and a reviewer will ask about it next.
+**Checked (13 Oct 2026).** Imports are 30 % of London's 2025 mix. They were scored FR 63 / NL 30 / IE 7 % (ecoinvent's GB-market shares, not the "⅓ each" this plan first said) and drove much of the uplift. They are now split each half-hour by the interconnector flows that reach London — FR 74 / BE 16 / NL 8 / NO 2 % over 2025, fitted to NESO's regional import share (R² 0.70) — which took 29 g/kWh off London. `DATA_GAPS.md` has the method.
 
 ---
 
@@ -330,6 +337,8 @@ What the three workbooks do offer:
 - So **the battery's embodied carbon is probably overstated by roughly 25–35 %**.
 - That biases the carbon objective *against* the battery.
 - The two workbooks are not independent of ecoinvent's dataset (all three are Argonne/Dai lineage). But they are *newer* versions of the same lineage, which is the relevant point.
+
+> **Superseded 14 Oct 2026.** The comparison above is EV pack against EV pack, and holds only at that level. A grid battery also carries a container, racks, liquid cooling and fire suppression (18–23 % of a DC block), and the LP's `cap_batt_e` is usable, not nameplate, energy. Rebuilt instead from Jasper et al. 2026's liquid-cooled LFP container around Voß et al. 2025's cell (`optimiser_lca/bess.py`): **97.75 kg CO₂e per nameplate kWh, 108.6 per usable kWh** — about **10 % above** the old 98.2, not 25–35 % below. Neither BatPaC option 3 nor EverBatt option 1 below is needed. See `SOURCES.md`, *Battery storage*.
 
 **Weaknesses of the model it addresses.**
 

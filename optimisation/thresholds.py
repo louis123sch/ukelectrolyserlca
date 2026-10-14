@@ -461,6 +461,7 @@ def prepare(scenario, *, site, start, end, size_mw_it, pue, resample_hours,
     tech = I.build_tech(site, meta, ely_tech=scenario.ely_tech or "PEM operation",
                         tank_design=scenario.tank_design, h2_colour=h2_colour,
                         h2_colour_2=scenario.h2_colour_2,
+                        soec_heat=scenario.soec_heat,
                         green_h2_grid_share=green_h2_grid_share,
                         cost_case=cost_case, horizon_years=horizon_years,
                         size_mw_it=size_mw_it, pue=pue)

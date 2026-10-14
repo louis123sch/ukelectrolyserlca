@@ -8,7 +8,7 @@ duplicate codes), the registry complete for every database, the grid sources
 id unchanged (every series on disk carries it), each module's own ``check()``.
 
 With Brightway (skipped if the project is absent): every pinned identity
-resolves, and is still among the search hits for its query; and the six
+resolves, and is still among the search hits for its query; and the seven
 databases in the project hold exactly the activities and exchanges the modules
 declare, so a module edit without a rebuild is caught here.
 """
@@ -51,18 +51,58 @@ def test_codes_are_unique_across_databases():
 
 
 def test_grid_sources_id_is_the_one_every_series_carries():
-    assert grid.sources_id() == "158704fcb705"
+    assert grid.sources_id() == "055e53f4b11b"   # = test_grid_build.GRID_BASIS_ID
     assert set(grid.GRID_SOURCES) == set(grid.TECH_SPECS)
     assert abs(sum(grid.WIND_GROUP_WEIGHTS.values()) - 1) < 1e-9
-    assert abs(sum(grid.IMPORT_GROUP_WEIGHTS.values()) - 1) < 1e-9
+    for fit in grid.IMPORT_ATTRIBUTION.values():
+        assert abs(sum(fit["beta"].values()) - 1) < 1e-3
+        assert abs(sum(fit["annual"].values()) - 1) < 1e-3
+        assert fit["r2"] >= grid.IMPORT_FIT_MIN_R2
 
 
-def test_grid_score_row_is_share_times_loss_times_score():
+def test_grid_score_row_is_share_times_score():
     scores = {k: 0.0 for k in grid.TECH_SPECS}
     scores.update(GAS=0.4, NUCLEAR=0.01)
-    s, a = grid.score_row({"GAS_perc": 50.0, "NUCLEAR_perc": 50.0}, scores)
-    assert s == pytest.approx(grid.MARKET_LOSS_FACTOR * (0.5 * 0.4 + 0.5 * 0.01))
-    assert a == pytest.approx(grid.MARKET_LOSS_FACTOR)
+    g = grid.score_row({"GAS_perc": 50.0, "NUCLEAR_perc": 50.0}, scores)
+    assert g == pytest.approx(0.5 * 0.4 + 0.5 * 0.01)
+
+
+def test_grid_imports_use_the_recorded_country_split():
+    scores = {k: 0.0 for k in grid.TECH_SPECS}
+    scores.update(IMPORTS_FR=0.07, IMPORTS_NO=0.02)
+    row = {"IMPORTS_perc": 100.0, **{f"imp_{c}": 0.0 for c in grid.COUNTRIES}}
+    row.update(imp_FR=0.5, imp_NO=0.5)
+    assert grid.score_row(row, scores) == pytest.approx(0.045)
+
+
+def test_pumped_storage_returns_the_grids_own_electricity():
+    """Its plant, plus 1.43 kWh of the half-hour's other generation per kWh."""
+    scores = {k: 0.0 for k in grid.TECH_SPECS}
+    scores.update(GAS=0.4, STORAGE=0.05)
+    g = grid.score_row({"GAS_perc": 90.0, "STORAGE_perc": 10.0}, scores)
+    assert g == pytest.approx(0.9 * 0.4 + 0.1 * (0.05 + grid.STORAGE_KWH_IN * 0.4))
+
+
+def test_delivery_grows_down_the_voltages():
+    hv, mv, lv = (grid.DELIVERY[v] for v in grid.VOLTAGES)
+    assert 1.0 < hv["gross_up"] < mv["gross_up"] < lv["gross_up"] < 1.2
+    assert 0.0 < hv["network_gco2e_per_kwh"] < mv["network_gco2e_per_kwh"] < lv["network_gco2e_per_kwh"]
+    assert grid.delivered(0.1, "medium") == pytest.approx(
+        0.1 * mv["gross_up"] + mv["network_gco2e_per_kwh"] / 1000.0)
+    with pytest.raises(ValueError):
+        grid.delivered(0.1, "extra high")
+
+
+def test_one_delivery_basis_for_data_centre_and_hydrogen_seller():
+    """The TODO this closes: grid imports and bought green H2 were delivered on
+    different bases. Both now read grid.DELIVERY at a stated voltage."""
+    from optimisation import h2_prices, network_charges as nc
+    seller = grid.DELIVERY[h2_prices.GREEN_H2_SELLER_VOLTAGE]
+    assert h2_prices.GRID_DELIVERY_LOSS_GROSS_UP == seller["gross_up"]
+    assert h2_prices.GRID_DELIVERY_NETWORK_GCO2E_PER_KWH == seller["network_gco2e_per_kwh"]
+    assert nc.delivery_voltage(True, "T-Demand4") == "high"
+    assert nc.delivery_voltage(False, "EHV2") == "high"
+    assert nc.delivery_voltage(False, "HV1") == "medium"
 
 
 def test_module_checks_pass():
@@ -72,10 +112,18 @@ def test_module_checks_pass():
     assert upv.check().startswith("OK")
 
 
-def test_fuel_cell_maintenance_cancels_its_stack_content():
+def test_fuel_cell_bop_is_hydrogen_fed_and_per_kw():
+    """The BoP is Usai's per-kW table plus inverter and container - no micro-CHP left."""
     from optimiser_lca import fuel_cell as fc
-    assert fc._MAINT * fc.FC_MAINT_STACK_FRACTION == pytest.approx(fc.FC_STACK_PER_KWH * 0.5, rel=1e-12)
     assert fc.FC_H2_PER_KWH == pytest.approx(1 / (0.5 * 0.95 * 33.33))
+    keys = {k for k, *_ in fc.BOP.technosphere if isinstance(k, str)}
+    assert {"inverter_500kw", "bop_pump_40w", "bop_cable"} <= keys
+    assert not {k for k in fc.processes if "ecoinvent" in k or "hydronics" in k or "transport" in k}
+    # The two per-system lines of Usai's Table 1, divided once by the 80 kW system.
+    amt = {k: a for k, a, *_ in fc.BOP.technosphere if isinstance(k, str)}
+    assert amt["bop_pump_40w"] == pytest.approx(3 / 80)
+    assert amt["bop_cable"] == pytest.approx(16 / 80)
+    assert fc.FC_SYSTEM_LIFETIME_H > fc.FC_STACK_LIFETIME_H > fc.FC_SERVICE_INTERVAL_H
 
 
 def test_tank_as_built_is_313_kg_steel_per_kg_h2():
@@ -90,6 +138,19 @@ def test_transformer_bills_reconcile_to_their_sources():
     assert sum(tx.TX_LENG_BOX_KG.values()) == pytest.approx(282_343.0)
     assert sum(tx.UPV_TX_MATERIALS_KG.values()) + tx.UPV_TX_FIBREBOARD_KG == pytest.approx(5_680.0, abs=1.0)
     assert tx.UPV_TX_UNITS_PER_MWP == pytest.approx(0.4)
+
+
+def test_grid_intake_transformer_is_lengs_main_unit():
+    """Table S1's XZ11-100000/110: 71,458.6 kg on 100 MVA, the 715 kg/MVA SOURCES.md quotes."""
+    from optimiser_lca import stepup_transformers as tx
+    from optimisation import grid_connection as gc
+    assert sum(tx.TX_LENG_MAIN_KG.values()) == pytest.approx(71_458.6)
+    assert tx.TX_LENG_MAIN_MVA == 100.0
+    assert sum(tx.TX_GRID_KG_PER_MVA.values()) == pytest.approx(714.586)
+    assert gc.transformer_kg_per_mva() == pytest.approx(714.586)
+    assert set(tx.TX_LENG_MAIN_KG) == set(tx.TX_LENG_BOX_KG)   # same materials, same mapping
+    assert gc.TRANSFORMER_CODE == registry.TX_GRID
+    assert registry.TX_GRID in registry.CODES_BY_DATABASE[registry.TRANSFORMER_DB]
 
 
 def test_fuel_cell_stack_amounts_are_as_printed_and_scaled_once():

@@ -102,6 +102,17 @@ def test_fuel_cell_excludes_its_own_hydrogen():
     assert rebuilt == pytest.approx(non_fuel, rel=1e-6)
 
 
+def test_fuel_cell_bop_is_a_hydrogen_unit_not_a_micro_chp():
+    """Live values, not identities. The ecoinvent natural-gas micro-CHP gave a BoP
+    of 469 t/MW and 3.1 kg/MWh of reformer upkeep; the 14 Oct rebuild (Usai 2021
+    loops + inverter + container) is ~44 t/MW with almost no maintenance."""
+    _cached(fuel_cell)
+    d = fuel_cell.decompose()
+    assert 30_000 < d["bop_kgco2e_per_MW"] < 60_000, d["bop_kgco2e_per_MW"]
+    assert d["maintenance_kgco2e_per_MWh"] < 0.1
+    assert d["bop_duty_lifetime_hours"] == 80_000 and d["stack_lifetime_hours"] == 30_000
+
+
 def test_backup_duty_costs_far_more_than_the_per_kwh_convention():
     """The finding that justifies the split: a backup machine is not nearly free."""
     _cached(fuel_cell)
@@ -583,3 +594,28 @@ def test_solar_module_reproduces_smiths_published_epeat_result():
         f"module is {per_kwdc:,.0f} kg CO2e/kWdc; Smith reports his "
         "average-import module above the 630 EPEAT threshold")
     assert per_kwdc < 900.0, "implausibly high — check the chain links"
+
+
+def test_soec_electric_boiler_moves_heat_onto_electricity():
+    """The electric boiler swaps the gas row's burden for kWh, and nothing else."""
+    _cached(electrolysers)
+    rows = {r["technology"]: r for r in electrolysers.decompose_all()}
+    soec = rows["SOEC operation"]
+    gas = electrolysers.with_heat_source(soec, "gas_boiler")
+    ele = electrolysers.with_heat_source(soec, "electric_boiler")
+    assert gas["kwh_per_kg"] == soec["kwh_per_kg"]
+    assert gas["variable_kgco2e_per_kg"] == soec["variable_kgco2e_per_kg"]
+    heat_mj, heat_score = next((a, s) for n, a, s in soec["_consumables"] if "heat" in n)
+    added = heat_mj / 3.6 / electrolysers.ELECTRIC_BOILER_EFFICIENCY
+    assert ele["kwh_per_kg"] == pytest.approx(soec["kwh_per_kg"] + added)
+    assert ele["heat_kwh_electric_per_kg"] == pytest.approx(added)
+    assert ele["variable_kgco2e_per_kg"] == pytest.approx(
+        soec["variable_kgco2e_per_kg"] - heat_score)
+    # Water is all that is left once the heat is off the books.
+    assert 0 < ele["variable_kgco2e_per_kg"] < 0.3
+    assert ele["capital_kgco2e_per_MW"] == soec["capital_kgco2e_per_MW"]
+    # Not a choice for the other technologies.
+    pem = rows["PEM operation"]
+    assert electrolysers.with_heat_source(pem, "electric_boiler")["kwh_per_kg"] == pem["kwh_per_kg"]
+    with pytest.raises(ValueError):
+        electrolysers.with_heat_source(soec, "heat_pump")

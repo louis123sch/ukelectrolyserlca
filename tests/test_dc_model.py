@@ -538,3 +538,61 @@ def test_wind_and_solar_are_both_on_real_transformer_bills():
     # the same place. Solar carries factory energy that wind does not, so it is
     # the higher of the two, but only just.
     assert 0.8 < solar / wind < 1.5
+
+
+# =============================================================================
+# Storage standing-loss overrides (the sweep hooks). No LP is solved.
+# =============================================================================
+def test_storage_loss_overrides_reach_the_tech(tech):
+    from optimisation import dc_inputs as I
+    out = I.with_storage_losses(tech, batt_standing_loss_per_hour=1e-4,
+                                tank_leakage_per_hour=2e-5)
+    assert out.batt_leakage_per_hour == pytest.approx(1e-4)
+    assert out.tank_leakage_per_hour == pytest.approx(2e-5)
+    # Recorded, so a result says which point of the band it was solved at...
+    assert out.labels["batt_standing_loss_per_hour"] == pytest.approx(1e-4)
+    assert out.labels["tank_leakage_per_hour"] == pytest.approx(2e-5)
+    # ...and the shared fixture is not mutated underneath the other tests.
+    assert tech.batt_leakage_per_hour == 0.0 and tech.tank_leakage_per_hour == 0.0
+    # One override leaves the other store alone.
+    only_tank = I.with_storage_losses(tech, tank_leakage_per_hour=3e-6)
+    assert only_tank.batt_leakage_per_hour == tech.batt_leakage_per_hour
+    assert only_tank.tank_leakage_per_hour == pytest.approx(3e-6)
+
+
+def test_none_keeps_the_default_storage_losses(tech):
+    from dataclasses import replace
+    from optimisation import dc_inputs as I
+    base = replace(tech, batt_leakage_per_hour=3e-5, tank_leakage_per_hour=7e-6)
+    out = I.with_storage_losses(base)
+    assert out.batt_leakage_per_hour == 3e-5
+    assert out.tank_leakage_per_hour == 7e-6
+    assert out.labels["batt_standing_loss_per_hour"] == 3e-5
+    assert out.labels["tank_leakage_per_hour"] == 7e-6
+
+
+@pytest.mark.parametrize("kwarg", ["batt_standing_loss_per_hour",
+                                   "tank_leakage_per_hour"])
+@pytest.mark.parametrize("bad", [-1e-6, float("nan"), float("inf"), 0.01, 0.5])
+def test_bad_storage_loss_is_refused(tech, kwarg, bad):
+    from optimisation import dc_inputs as I
+    with pytest.raises(ValueError):
+        I.with_storage_losses(tech, **{kwarg: bad})
+
+
+def test_build_tech_refuses_a_negative_loss_before_loading_anything():
+    # An empty meta would raise KeyError once the coefficients were assembled,
+    # so a ValueError here proves the check runs first — no cache, no Brightway.
+    from optimisation import dc_inputs as I
+    for kwarg in ("batt_standing_loss_per_hour", "tank_leakage_per_hour"):
+        with pytest.raises(ValueError, match=kwarg):
+            I.build_tech("london", {}, **{kwarg: -1e-4})
+
+
+def test_shipped_storage_losses_are_zero_and_flagged_assumed():
+    # The sweep bounds them; it does not set them. DATA_GAPS.md carries the band.
+    from optimisation import battery, h2_storage
+    assert battery.STANDING_LOSS_PER_HOUR == 0.0
+    assert battery.STANDING_LOSS_IS_ASSUMED
+    assert h2_storage.LEAKAGE_FRAC_PER_HOUR == 0.0
+    assert h2_storage.LEAKAGE_IS_ASSUMED

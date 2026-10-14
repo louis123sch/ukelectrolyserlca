@@ -231,6 +231,14 @@
     "region_name": "North East England",
     "tnuos_zone": 3
   },
+  "55.3,-4.08": {
+    "carbon_api_region": 2,
+    "outcode": "DG4",
+    "place": "Dumfries and Galloway",
+    "postcode": null,
+    "region_name": "South Scotland",
+    "tnuos_zone": 2
+  },
   "55.35,-2.56": {
     "carbon_api_region": 2,
     "outcode": "TD8",

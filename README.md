@@ -89,14 +89,23 @@ Carbon Intensity API's regional data begins, to yesterday.
 `optimisation/grid_build.py`, called with a region and a window:
 
 1. fetches the region's half-hourly generation mix from the Carbon Intensity
-   API (raw responses cached in `carbon_intensity_api_cache/`, gitignored);
-2. scores each fuel with one ecoinvent activity, named by exact identity in
-   `dc_config.GRID_SOURCES` (no search ranking), and writes kg CO₂e per kWh
-   delivered to `custom_grid_lca_outputs/`, stamped with an id of that table;
-   a series scored on a different table is ignored until re-scored with
-   `python -m optimisation.grid_build --rescore` (no API calls);
-3. when asked, fetches Elexon Market Index prices for the same window into
+   API, and every interconnector's flow from Elexon FUELHH (raw responses
+   cached in `carbon_intensity_api_cache/`, gitignored);
+2. splits the region's imports across exporting countries by those flows
+   (weighted per region by `optimiser_lca.grid.IMPORT_ATTRIBUTION`);
+3. scores each fuel with one activity, named by exact identity in
+   `optimiser_lca.grid.SOURCES` (no search ranking), and writes kg CO₂e per kWh
+   generated, and delivered at high voltage, to `custom_grid_lca_outputs/`,
+   stamped with an id of the whole scoring basis; a series scored on a
+   different basis is ignored until re-scored with
+   `python -m optimisation.grid_build --rescore` (no API calls once a file
+   carries its import split);
+4. when asked, fetches Elexon Market Index prices for the same window into
    `price_outputs/`.
+
+The LP delivers the generation column at the site's own connection voltage
+(`network_charges.delivery_voltage`), with the same loss and network terms a
+bought-hydrogen seller pays.
 
 ```bash
 python -m optimisation.grid_build 2 2025-03-03 2025-03-05
@@ -119,10 +128,10 @@ foreground databases do not exist yet, the first grid build runs
 
 ### Results
 
-21 configurations, 18 of them involving hydrogen, each solved as a linear
+25 configurations, 22 of them involving hydrogen, each solved as a linear
 program that sizes nine assets *jointly* with ~8,700 hourly dispatch decisions.
 Results land in `optimisation_outputs/dc_runs/`, which is **gitignored** —
-they are regenerable, and a 21-scenario matrix is ~90 files. The results that
+they are regenerable, and a 25-scenario matrix is ~110 files. The results that
 matter are tracked: `optimisation/VALIDATION.md` and the executed outputs in
 `6.datacentre_optimiser.ipynb`, both generated from a real run. A fresh clone
 has no `dc_runs/`; run the command above once (~15 min on 8 cores) and the
@@ -185,7 +194,7 @@ the pick), and the foreground activities it writes:
 
 | module | what | database |
 | --- | --- | --- |
-| `grid.py` | GB grid carbon: the ecoinvent source per Carbon Intensity API fuel, losses, wind/imports splits, the closed-form score, network delivery terms | (scores a series, no database) |
+| `grid.py` | GB grid carbon: the source per Carbon Intensity API fuel, the wind split, the interconnector import attribution, pass-through storage, the closed-form score, and delivery (losses + network) per voltage | (scores a series, no database) |
 | `hydrogen.py` | Hermesmann SMR, SMR-CCS + CCS, MP-E, AE/PEM/SOEC build + operation | `hydrogen foreground` |
 | `data_centre.py` | Zhang et al. 2025 hyperscale facility | `data centre foreground` |
 | `fuel_cell.py` | Babatunde et al. 2024 stack, and 1 kWh of electricity from it | `fuel cell foreground` |

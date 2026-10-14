@@ -147,6 +147,12 @@ def build_series(site, start: str, end: str, size_mw_it: float,
                                 transmission_connected=transmission)
     price = df["price_GBP_per_MWh"].to_numpy() + \
         charges["volumetric_GBP_per_MWh"].to_numpy()
+    # Grid carbon is delivered at the site's own voltage: generation, grossed
+    # up for losses down to it, plus the network's embodied carbon. The same
+    # constants charge a bought-hydrogen seller's grid delivery.
+    from optimiser_lca import grid as grid_lca
+    voltage = nc.delivery_voltage(transmission, tdr_band)
+    grid_gwp = grid_lca.delivered(df["grid_generation_kgco2e_per_kwh"].to_numpy(), voltage)
 
     series = dc_model.Series(
         index=index,
@@ -154,7 +160,7 @@ def build_series(site, start: str, end: str, size_mw_it: float,
         demand_mw=np.full(len(index), size_mw_it * pue),
         cf_wind=df["wind_cf"].to_numpy(),
         cf_solar=df["solar_cf"].to_numpy(),
-        grid_gwp_per_mwh=df["grid_kgco2e_per_kwh"].to_numpy() * 1000.0,
+        grid_gwp_per_mwh=grid_gwp * 1000.0,
         grid_price_per_mwh=price,
     )
     meta["network_charges"] = charges["components"]
@@ -169,6 +175,8 @@ def build_series(site, start: str, end: str, size_mw_it: float,
         else sites.CONNECTION_HEADROOM_ASSUMED)
     meta["transmission_connected"] = transmission
     meta["connection_tier_note"] = tier_note
+    meta["grid_delivery_voltage"] = voltage
+    meta["mean_grid_delivered_kgco2e_per_kwh"] = float(grid_gwp.mean())
     meta["site"] = site.key
     meta["site_name"] = site.name
     meta["lat"], meta["lon"] = site.lat, site.lon
@@ -230,7 +238,10 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
                green_h2_basis: str | None = None,
                green_h2_grid_share: float | None = None,
                h2_colour_2: str | None = None,
-               h2_variant_2: str | None = None) -> dc_model.Tech:
+               h2_variant_2: str | None = None,
+               soec_heat: str | None = None,
+               batt_standing_loss_per_hour: float | None = None,
+               tank_leakage_per_hour: float | None = None) -> dc_model.Tech:
     """Resolve every coefficient the LP needs. Touches Brightway only via caches.
 
     ``solar_basis`` selects the inventory behind solar's embodied carbon and
@@ -259,7 +270,27 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
     must differ from ``h2_colour``: two streams of one colour are the same
     commodity at the same price, and the split between them would be arbitrary.
     ``h2_variant_2`` pins its row the way ``h2_variant`` pins the first.
+
+    ``soec_heat`` is how SOEC's external heat is raised, one of
+    ``electrolysers.SOEC_HEAT_SOURCES``, defaulting to the inventoried gas
+    boiler. ``"electric_boiler"`` puts the heat on the site's electricity; see
+    ``electrolysers.with_heat_source``. Ignored for AE and PEM.
+
+    ``batt_standing_loss_per_hour`` and ``tank_leakage_per_hour`` override the
+    two storage standing losses, as a fraction of the stock lost per *hour*
+    held (``dc_model`` multiplies by the step length, so the same number means
+    the same thing at half-hourly and hourly resolution). They default to
+    ``battery.STANDING_LOSS_PER_HOUR`` and the tank design's
+    ``leakage_frac_per_hour``, both zero and ASSUMED. They exist to sweep, not
+    to change the defaults: the two push in opposite directions in the
+    hydrogen-versus-battery seasonal contest, and DATA_GAPS.md records the band
+    the sweep measured. A %/day figure converts as ``pct / 100 / 24``.
     """
+    # Validated before anything is loaded, so a bad sweep value fails at once
+    # rather than after the caches (and Brightway) have been read.
+    _standing_loss(batt_standing_loss_per_hour, "batt_standing_loss_per_hour")
+    _standing_loss(tank_leakage_per_hour, "tank_leakage_per_hour")
+
     import dc_config as cfg
     from optimisation import battery as batt
     from optimisation import electrolysers as ely
@@ -303,7 +334,8 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
     be = batt.embodied_components()
 
     # electrolyser
-    ely_row = next(r for r in ely.decompose_all() if r["technology"] == ely_tech)
+    ely_row = ely.with_heat_source(
+        next(r for r in ely.decompose_all() if r["technology"] == ely_tech), soec_heat)
     ely_costs = hc.electrolyser_costs()
     key = "electrolyser_" + ely_tech.split()[0].lower()
     ec = ely_costs[(ely_costs.asset == key) & (ely_costs.case == cost_case)].iloc[0]
@@ -378,17 +410,29 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
             "split between them is arbitrary and the result says nothing. Pick "
             "two different colours, or leave the second one unset.")
 
+    # From the electrolyser that actually feeds this tank, not from the tank's
+    # pressure alone. h2_storage cannot know which technology was chosen; this
+    # is the only place that does.
+    compression_kwh = h2s.compression_kwh_per_kg(
+        ely.DELIVERY_PRESSURE_BAR[ely_tech], tank_row["pressure_bar"])
+    # cap_ely is the electrolyser's whole electrical input: dc_model divides it
+    # by ely_kwh_per_kg + compression. An electric boiler adds to that input but
+    # is not stack, so stack carbon and cost per MW go on the stack's share only.
+    # The boiler's own capital is not charged (see SOURCES.md).
+    ely_input_kwh = ely_row["kwh_per_kg"] + compression_kwh
+    stack_share = (ely_input_kwh - ely_row["heat_kwh_electric_per_kg"]) / ely_input_kwh
+
     dc = data_centre_coefficients()
     # PUE reaches the facility only through demand, which the energy-driven part
     # is charged against. The IT-driven part must not move with it.
     scale_it = size_mw_it / dc["reference_it_mw"]
 
-    return dc_model.Tech(
+    tech = dc_model.Tech(
         gwp_wind=gen_gwp("onshore_wind"), gwp_offshore=gen_gwp("offshore_wind"),
         gwp_solar=gen_gwp("solar_pv"),
         gwp_batt_p=be["power_kgco2e_per_kW"] * 1000.0 / batt.ASSET_LIFE_YEARS,
         gwp_batt_e=be["energy_kgco2e_per_kWh"] * 1000.0 / batt.ASSET_LIFE_YEARS,
-        gwp_ely=ely_row["capital_kgco2e_per_MW"] / ely.PLANT_LIFETIME_YEARS,
+        gwp_ely=ely_row["capital_kgco2e_per_MW"] / ely.PLANT_LIFETIME_YEARS * stack_share,
         gwp_tank=tank_row["kgco2e_per_kg_capacity_year"],
         gwp_fc_bop_per_mw=d["bop_kgco2e_per_MW"],
         gwp_fc_stack_per_mw=d["stack_kgco2e_per_MW"],
@@ -410,7 +454,8 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
         cost_solar=gen_cost("solar_pv"),
         cost_batt_p=bc["power_GBP_per_kW"] * 1000.0 * annuity_b,
         cost_batt_e=bc["energy_GBP_per_kWh"] * 1000.0 * annuity_b,
-        cost_ely=float(ec.capex_GBP_per_kWe) * 1000.0 * (crf_e + float(ec.fixed_opex_frac)),
+        cost_ely=(float(ec.capex_GBP_per_kWe) * 1000.0 * (crf_e + float(ec.fixed_opex_frac))
+                  * stack_share),
         cost_tank=float(tkc.annual_GBP_per_kg_year),
         cost_fc=float(fcr.annual_GBP_per_MW_year),
         cost_fc_stack_per_mw=float(fcr.stack_GBP_per_MW),
@@ -419,11 +464,7 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
         cost_grid_fixed_per_year=meta["fixed_GBP_per_year"],
         ely_kwh_per_kg=ely_row["kwh_per_kg"],
         ely_variable_gwp_per_kg=ely_row["variable_kgco2e_per_kg"],
-        # From the electrolyser that actually feeds this tank, not from the
-        # tank's pressure alone. h2_storage cannot know which technology was
-        # chosen; this is the only place that does.
-        tank_compression_kwh_per_kg=h2s.compression_kwh_per_kg(
-            ely.DELIVERY_PRESSURE_BAR[ely_tech], tank_row["pressure_bar"]),
+        tank_compression_kwh_per_kg=compression_kwh,
         tank_leakage_per_hour=tank_row["leakage_frac_per_hour"],
         batt_rte=batt.ROUND_TRIP_EFFICIENCY,
         batt_leakage_per_hour=batt.STANDING_LOSS_PER_HOUR,
@@ -434,6 +475,7 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
         dc_other_gwp_per_mwh=dc["energy_kgco2e_per_mwh"],
         horizon_years=horizon_years,
         labels={"site": getattr(site, "key", site), "ely_tech": ely_tech, "tank_design": tank_design,
+                "soec_heat": ely_row["heat_source"],
                 "h2_colour": h2_colour, "cost_case": cost_case, "solar_basis": solar_basis,
                 "h2_variant": h2_variant, "green_h2_basis": green_h2_basis,
                 "h2_colour_2": h2_colour_2, "h2_variant_2": h2_variant_2,
@@ -441,6 +483,55 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
                     h2_prices._resolve_grid_share(green_h2_grid_share)
                     if "green" in (h2_colour, h2_colour_2) else None)},
     )
+    return with_storage_losses(
+        tech, batt_standing_loss_per_hour=batt_standing_loss_per_hour,
+        tank_leakage_per_hour=tank_leakage_per_hour)
+
+
+# Ceiling on a storage standing loss, per hour. A loss term is a small leak on
+# a store that otherwise holds; at 1 %/h (24 %/day) a store loses over 60 % of
+# its contents in four days and is no longer the technology being modelled. It
+# also keeps dc_model's keep factor, 1 - loss x dt, far from zero at any step
+# length the study uses. ASSUMED as a sanity bound, not a physical limit.
+MAX_STANDING_LOSS_PER_HOUR = 0.01
+
+
+def with_storage_losses(tech: dc_model.Tech, *,
+                        batt_standing_loss_per_hour: float | None = None,
+                        tank_leakage_per_hour: float | None = None) -> dc_model.Tech:
+    """``tech`` with either storage standing loss overridden; None keeps it.
+
+    The seam ``build_tech`` returns through, split out so the override can be
+    checked on a hand-built ``Tech`` without the caches and Brightway that
+    ``build_tech`` reads. Both values used — defaults included — are written
+    into ``labels``, so every result says which point of the band it was
+    solved at.
+    """
+    from dataclasses import replace
+    b = _standing_loss(batt_standing_loss_per_hour, "batt_standing_loss_per_hour")
+    t = _standing_loss(tank_leakage_per_hour, "tank_leakage_per_hour")
+    b = tech.batt_leakage_per_hour if b is None else b
+    t = tech.tank_leakage_per_hour if t is None else t
+    return replace(tech, batt_leakage_per_hour=b, tank_leakage_per_hour=t,
+                   labels={**(tech.labels or {}),
+                           "batt_standing_loss_per_hour": b,
+                           "tank_leakage_per_hour": t})
+
+
+def _standing_loss(value: float | None, name: str) -> float | None:
+    """Check one storage-loss override. None passes through as "the default"."""
+    if value is None:
+        return None
+    v = float(value)
+    if not np.isfinite(v) or v < 0.0:
+        raise ValueError(f"{name} must be a non-negative fraction per hour, "
+                         f"got {value!r}")
+    if v >= MAX_STANDING_LOSS_PER_HOUR:
+        raise ValueError(
+            f"{name}={v!r} per hour is {v * 24:.0%} per day — not a standing "
+            f"loss. It must be below {MAX_STANDING_LOSS_PER_HOUR} per hour; a "
+            f"%/day figure converts as pct / 100 / 24.")
+    return v
 
 
 _H2_GWP_CACHE = OUT_DIR / "bought_h2_gwp_cache.json"

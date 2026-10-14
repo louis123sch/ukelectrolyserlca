@@ -87,6 +87,14 @@ FC_USD_PER_KW = {
 FC_FIXED_OPEX_FRAC = {"low": 0.02, "central": 0.03, "high": 0.05}
 FC_INCLUDES_REFORMER = True     # biases every figure high for a H2-fed unit
 FC_DISCOUNT_RATE = 0.06         # as sizing.Electrolyser, for consistency
+# Stack share of fuel-cell capex. FROZEN on 14 Oct 2026 at the value the old
+# carbon split gave (stack / (stack + BoP), ecoinvent micro-CHP BoP), because it
+# used to be read live from the LCA: rebuilding the fuel cell's *carbon* would
+# have silently moved both cost coefficients. A carbon split was never the right
+# basis for a cost split — Battelle's cost-based stack share is 22-41 % for a
+# hydrogen-fed unit (audit §3.4). Sourcing it is the fuel-cell capex job (TODO).
+FC_STACK_COST_FRACTION = 0.1719969013679964
+FC_STACK_COST_FRACTION_IS_ASSUMED = True
 
 # -----------------------------------------------------------------------------
 # Hydrogen vessel — ASSUMED
@@ -110,11 +118,12 @@ def capital_recovery_factor(rate, lifetime_years):
 
 
 def fc_stack_cost_fraction() -> float:
-    """Stack share of fuel cell capital, taken from the LCA's own split."""
-    from optimisation import fuel_cell as fc
-    d = fc.decompose()
-    stack, bop = d["stack_kgco2e_per_MW"], d["bop_kgco2e_per_MW"]
-    return stack / (stack + bop)
+    """Stack share of fuel cell capital: ``FC_STACK_COST_FRACTION``, frozen.
+
+    It used to be the LCA's carbon split, read live, which coupled cost to any
+    carbon rebuild. See the constant.
+    """
+    return FC_STACK_COST_FRACTION
 
 
 def fuel_cell_costs():
@@ -127,16 +136,12 @@ def fuel_cell_costs():
     rows = []
     for case in CASES:
         capex = FC_USD_PER_KW[case] / USD_PER_GBP_2025
-        # Split capital between stack and balance of plant on the *same*
-        # fraction the LCA uses, because it is the same physical decomposition
-        # and a second free parameter would only invite the two to drift apart.
-        # DOE's independent finding agrees with the shape: for stationary PEM
-        # systems the stack is under 50 % of system cost and typically under
-        # 15 % at volume, with BoP dominating. This study's carbon split puts
-        # the stack at 17 %, inside that range.
+        # Split capital between stack and balance of plant on
+        # FC_STACK_COST_FRACTION (17 %), frozen at what the old carbon split
+        # gave; see the constant for why it is no longer read from the LCA.
         #
-        # It matters because the stack wears out on *duty* — 32,000 hours — while
-        # BoP runs to calendar. Charging the whole system on calendar life made
+        # It matters because the stack wears out on *duty* while BoP runs to
+        # calendar. Charging the whole system on calendar life made
         # running the fuel cell hard free in cost while still costing carbon, so
         # the two objectives were pricing different physics for one machine.
         stack_frac = fc_stack_cost_fraction()

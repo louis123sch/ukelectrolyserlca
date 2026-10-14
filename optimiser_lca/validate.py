@@ -233,49 +233,38 @@ def fc_operation_sanity():
     print(f"{'hydrogen':<58}{'':>13}{h2*1000:>12.3f}{h2/total*100:>7.1f}%")
     print(f"{'stack + balance of plant (embodied)':<58}{'':>13}{capital*1000:>12.3f}{capital/total*100:>7.1f}%")
 
-    # --- Cross-check the capital amortisation against ecoinvent's own PEMFC -------
-    # ecoinvent's operation dataset is a natural-gas domestic micro-CHP, APOS-
-    # allocated between electricity and heat, so its fuel line is not comparable.
-    # Its *capital* lines model the same quantity this activity does, less the
-    # domestic artefacts this activity strips out.
-    try:
-        ng = H.resolve_exact("natural gas, burned in polymer electrolyte membrane fuel cell 2kWe, future",
-                             fc.FC_BOP_LOCATION, "electricity, low voltage")
-    except ValueError:
-        ng = None
-    if ng is not None:
-        ei_lines = {e.input.get("name", ""): (e.amount, gwp(e.input, e.amount))
-                    for e in ng.technosphere()
-                    if "natural gas" not in e.input.get("name", "").lower()}
-        ei_raw = sum(v[1] for v in ei_lines.values())
-        tank = sum(v[1] for k, v in ei_lines.items() if "storage production" in k)
-        sys_amount = next((v[0] for k, v in ei_lines.items()
-                           if k == "fuel cell production, polymer electrolyte membrane, 2kW electrical, future"), 0.0)
-        maint_amount = next((v[0] for k, v in ei_lines.items() if k.startswith("maintenance,")), 0.0)
-        hydronics = gwp(H.resolve_exact(*fc.processes["chp_hydronics"].identity), 0.65 * sys_amount)
-        km = fc.SERVICE_TRANSPORT_KM
-        if km is None:   # not built in this session: read it the way the build does
-            m = H.resolve_exact(*fc.processes["maintenance"].identity)
-            km = next(e.amount for e in m.technosphere() if "transport, passenger car" in e.input["name"])
-        driving = gwp(H.resolve_exact(*fc.processes["service_transport"].identity), km * maint_amount)
-        ei_like = ei_raw - tank - hydronics - driving
-        print()
-        print("=" * 92)
-        print("Cross-check — embodied burden per kWh of electricity")
-        print("=" * 92)
-        print(f"  ecoinvent PEMFC 2kWe operation, as published      {ei_raw*1000:>8.2f} g CO2e/kWh")
-        print(f"     minus hot-water storage tank                   {-tank*1000:>8.2f}")
-        print(f"     minus hydronic/CHP kit inside the system       {-hydronics*1000:>8.2f}")
-        print(f"     minus {km:g} km/service technician driving       {-driving*1000:>8.2f}")
-        print(f"  ecoinvent, like-for-like with this activity       {ei_like*1000:>8.2f} g CO2e/kWh")
-        print(f"  this activity (stack + BoP + maintenance)         {capital*1000:>8.2f} g CO2e/kWh")
-        print(f"  ratio {capital/ei_like:.2f}")
-        ei_stack_rate = maint_amount * fc.FC_MAINT_STACK_FRACTION * 2      # 2 kW stack -> per kW
-        print(f"\n  Independent corroboration of the stack lifetime: ecoinvent replaces")
-        print(f"  {ei_stack_rate:.3e} kW-stack/kWh, implying a {1/ei_stack_rate:,.0f} h stack life, against the")
-        print(f"  {fc.FC_STACK_LIFETIME_H:,} h taken from the paper — a "
-              f"{1/ei_stack_rate/fc.FC_STACK_LIFETIME_H:.2f}x agreement between two separate sources.")
-
+    # --- The system against published fuel-cell systems ---------------------------
+    # Whole systems cradle-to-gate per kW. The vehicle ones carry no inverter and no
+    # enclosure; this one does, and its stack is ecoinvent's 2 kW graphite-plate
+    # unit, heavier than any automotive stack. So it should sit above the vehicle
+    # band and below the 3 kW UPS, whose fixed parts are not spread over scale.
+    stack_kw = gwp(bd.get_activity((R.FUEL_CELL_DB, R.FC_STACK)))
+    bop_act = bd.get_activity((R.FUEL_CELL_DB, R.FC_BOP))
+    bop_kw = gwp(bop_act)
+    parts = {"process loops (Usai 2021)": 0.0, "inverter": 0.0, "container": 0.0}
+    for exc in bop_act.technosphere():
+        note = exc.get("comment", "").lower()
+        key = "inverter" if "inverter" in note else "container" if "container" in note \
+            else "process loops (Usai 2021)"
+        parts[key] += gwp(exc.input, exc.amount)
+    print()
+    print("=" * 92)
+    print("The system per kW, against published fuel-cell systems (cradle-to-gate)")
+    print("=" * 92)
+    print(f"  stack (Babatunde 2024)                          {stack_kw:>8.1f} kg CO2e/kW")
+    for k, v in parts.items():
+        print(f"  balance of plant: {k:<29}{v:>8.1f}")
+    print(f"  this system                                     {stack_kw + bop_kw:>8.1f}")
+    usai_loops = 854.05416864 / 80.0     # Usai's own BoP result, results workbook
+    print(f"\n  Usai's process loops rebuilt on 3.9.1: {parts['process loops (Usai 2021)']:.2f} "
+          f"against their own {usai_loops:.2f} kg CO2e/kW (ecoinvent 3.6) - "
+          f"{parts['process loops (Usai 2021)'] / usai_loops:.2f}x; the printed table rounds to "
+          "two decimals.")
+    for label, v in (("Miotti 2017, 80 kW car", 29.0), ("Usai 2021, 80 kW car, no tank", 37.3),
+                     ("Gentilucci 2024, 200 kW truck", "30.5-51.4"),
+                     ("Ballard FCmove-HD, 70 kW module", 73.0),
+                     ("Stropnik 2018 via Bionaz 2022, 3 kW UPS", 405.5)):
+        print(f"  {label:<46}{v!s:>10}")
     # --- How hard does the efficiency assumption push? -----------------------------
     print()
     print("=" * 92)

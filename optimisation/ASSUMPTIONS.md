@@ -88,8 +88,8 @@ since the electrolyser already delivers at ~30 bar.
 **Bought green hydrogen is green by definition, and that rests on certificates.**
 Decided 2–3 Sep. The grid-connected share of bought green
 (`h2_prices.GREEN_H2_GRID_SHARE`, 0.5) is scored on a *renewable* electricity
-basis plus a network delivery burden — 1.469 kg CO₂e/kg against 0.976 behind the
-meter — not on the grid mix the electrolyser physically draws from. That is a
+basis plus the grid's high-voltage delivery terms — 1.107 kg CO₂e/kg against
+0.976 behind the meter — not on the grid mix the electrolyser physically draws from. That is a
 market-based reading, and it holds only if the seller's grid electricity is
 backed by matched renewable certificates (REGOs, or an RFNBO-style hourly match).
 Two things follow that the numbers do not show on their own:
@@ -99,11 +99,44 @@ Two things follow that the numbers do not show on their own:
   the electricity, not of the claim to it.
 - The LP's **own** grid electrolyser (`grid_h2`) is scored on the real
   location-based grid mix instead. Same physical setup, two bases: about
-  **13.3 kg CO₂e/kg** made on site against **1.50** bought. The asymmetry favours
+  **8.8 kg CO₂e/kg** made on site at London's 2025 annual mean against **1.06**
+  bought. The asymmetry favours
   buying, and it is deliberate — the study assumes a buyer can contract for
   certified green hydrogen but does not assume the data centre certifies its own
   imports. Anyone comparing `grid_h2` with bought green should read the gap as
   partly an accounting convention, not only physics. Audit §3.6.
+
+## 2b. Grid carbon is an average, attributional, life-cycle figure
+
+**Average, not marginal.** Every grid import is charged the half-hour's
+*average* life-cycle intensity of the region's generation mix, never the
+marginal plant's. That is the attributional reading, and it matches every
+other coefficient in the study: an asset is charged its own inventory, not the
+change it causes elsewhere. A marginal (consequential) factor answers a
+different question — what the system emits *because* the data centre draws one
+more kWh — and would change what avoiding an import is worth: Hawkes puts GB's
+long-run marginal at 0.26–0.53 kg CO₂/kWh now against a 0.69 short-run, both
+well above today's average. Using it would need a consequential treatment of
+every asset as well, so it is out of scope, and the Overview lists it as an
+extension. Which way it would move the answer is not one-signed — a marginal
+factor values an avoided import differently and swings differently across the
+day — so this is recorded as a limitation, not a bias of known direction.
+
+**Delivered at the connection voltage.** A kWh imported carries the losses and
+the network's embodied carbon down to the voltage the site connects at
+(`optimiser_lca.grid.DELIVERY`, ecoinvent's GB voltage chain). Every site this
+study prices connects at high voltage — transmission, or an EHV distribution
+band — so imports pay ×1.0338 on generation plus 1.93 g/kWh. A bought-hydrogen
+seller's grid electricity is delivered on the same constants
+(`h2_prices.GREEN_H2_SELLER_VOLTAGE`), so the two grid users share one basis.
+
+**Imports follow the flows that reach the region.** The API reports a region's
+imports as one figure. It is split across exporting countries each half-hour by
+Elexon's interconnector flows, weighted by a per-region attribution fitted to
+NESO's own regional import share (`optimiser_lca.grid.IMPORT_ATTRIBUTION`). The
+fit is a calibration to NESO's regional model, not a physical flow trace;
+every exporter is scored on its own country's average HV market, not on the
+plant at its margin.
 
 ## 3a. The site is a coordinate, and everything follows from it
 
@@ -192,11 +225,12 @@ Every foreground already meets this without modification:
 |---|---|
 | Data centre | Material production + operation only; disposal and recycling excluded by scope choice |
 | H2 storage tank | Steel mass only; end-of-life listed among its stated omissions |
-| Grid connection | Transformer and line capital only |
+| Grid connection | Transformer materials only (Leng 2026's 100 MVA, 110 kV main transformer, per MVA, × 2 for N-1), plus a line term reported but not charged per MW; no switchgear, protection, civils, manufacturing energy, losses or end-of-life |
 | Generation step-up transformers | Transformer capital only; no switchgear, protection or civils, no manufacturing energy, and no losses |
+| Grid battery | Jasper/Voß cradle-to-gate manufacture including the cell factory's energy; Jasper's EOL sheet not taken, every delivery-transport row left out (and subtracted where a source folded it into a factor), no foundation |
 | Electrolysers | Capital good plus consumables; no end-of-life exchange |
 | Fuel cell stack | Babatunde et al. cradle-to-gate manufacture, no use or end-of-life phase |
-| Fuel cell BoP / maintenance | ecoinvent PEMFC net of stack; the negative terms are micro-CHP artefacts, not end-of-life |
+| Fuel cell BoP / maintenance | Usai et al. 2021 process loops + inverter + container, cradle-to-gate; service consumables only. No end-of-life, no delivery transport |
 
 The SMR-CCS chain's "CCS waste treatment" activity is **not** an exception: it
 is the capture and storage leg of a production route, inside the gate.

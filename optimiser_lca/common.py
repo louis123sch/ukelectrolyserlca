@@ -45,6 +45,7 @@ UNITS = {
     "kilogram", "cubic meter", "kilowatt hour", "megajoule", "unit", "meter",
     "kilometer", "square meter", "square meter-year", "tonne", "megawatt",
     "ton kilometer", "hour", "kilogram day",
+    "megavolt ampere",      # transformer rating (stepup_transformers.TX_GRID)
 }
 
 
@@ -62,12 +63,15 @@ class Process:
                per unit under the same name.
     query/pick the search that found it, for show() and pin().
     why        the reason this one and not its neighbours.
+    database   where to resolve it, when that is a foreground database rather
+               than ecoinvent.
     """
     identity: tuple | None = None
     query: str | None = None
     pick: int = 0
     why: str = ""
     unit: str | None = None
+    database: str | None = None
 
 
 @dataclass
@@ -194,7 +198,7 @@ def resolve_process(p: Process):
     H = _handles()
     if p.identity is None:
         raise ValueError(f"process has no identity - run pin() first ({p.query!r})")
-    return H.resolve_exact(*p.identity, unit=p.unit)
+    return H.resolve_exact(*p.identity, unit=p.unit, database=p.database)
 
 
 def resolve_flow(f: Flow):

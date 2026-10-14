@@ -66,8 +66,12 @@ DC_DRIVERS = (
 #   GRID_CSV  — written by grid_build.build_grid (originally notebook 3.1) from the
 #               NESO Carbon Intensity API, regional scope, region 13 (London),
 #               (the London reference site). Its custom_electricity_score
-#               column is kg CO2e per kWh delivered, already carrying
-#               dc_config.MARKET_LOSS_SHARE.
+#               column is kg CO2e per kWh delivered at HIGH voltage — losses
+#               and network embodied carbon included (optimiser_lca.grid
+#               section 5). That is this facility's level: at 7.3 MW it is
+#               banded EHV2 (network_charges.tdr_band_for), and
+#               network_charges.delivery_voltage puts every EHV connection at
+#               ecoinvent's high voltage, as the LP does.
 #   PRICE_CSV — written by grid_build.build_prices (originally notebook 5) from Elexon BMRS Market Index Data,
 #               provider APXMIDP (N2EXMIDP is the documented fallback).
 GRID_CSV = ROOT / "custom_grid_lca_outputs" / (

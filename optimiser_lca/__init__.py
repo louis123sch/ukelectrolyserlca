@@ -13,6 +13,8 @@ One module per inventory, each readable top to bottom on its own:
     h2_tank               Gandiglio et al. 2022 steel vessel
     stepup_transformers   Leng et al. 2026 wind, IEA PVPS 2026 solar
     upv                   Smith et al. 2024 utility PV, rescored on apos
+    bess                  Jasper et al. 2026 liquid-cooled container, Voß et al.
+                          2025 LFP cell
 
 Every inventory module has the same four sections, in this order: source and
 scope (the docstring), parameters, processes, activities. ``common`` supplies

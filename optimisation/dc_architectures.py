@@ -134,6 +134,9 @@ class Scenario:
     tank_design: str | None = None
     note: str = ""
     assets: dict | None = None          # only for architecture == "custom"
+    # How SOEC's external heat is raised; None is the inventoried gas boiler.
+    # See electrolysers.SOEC_HEAT_SOURCES. Meaningless for AE and PEM.
+    soec_heat: str | None = None
 
     @property
     def key(self) -> str:
@@ -144,6 +147,10 @@ class Scenario:
             bits.append(on or "none")
         if self.ely_tech:
             bits.append(self.ely_tech.split()[0].lower())
+        # Only a non-default heat source changes the key, so every run cached
+        # before this field existed keeps its folder.
+        if self.soec_heat == "electric_boiler" and self.ely_tech == "SOEC operation":
+            bits.append("eboiler")
         if self.h2_colour:
             bits.append(self.h2_colour)
         if self.h2_colour_2:
@@ -154,7 +161,8 @@ class Scenario:
 
 
 def core_matrix() -> list[Scenario]:
-    """The 21 configurations. 18 involve hydrogen; all six pathways appear."""
+    """The 25 configurations. 22 involve hydrogen; all six pathways appear, and
+    SOEC appears with both heat sources."""
     S, n = [], 0
 
     def add(**kw):
@@ -188,6 +196,17 @@ def core_matrix() -> list[Scenario]:
         note="control: the configuration anyone would actually build. Buying "
              "hydrogen is locked off because no colour is priced here — it "
              "builds its own instead")
+
+    # Appended rather than placed beside the gas-boiler SOEC rows so that no
+    # earlier scenario is renumbered: n is part of every cached run's key.
+    for arch, where in (("grid_h2", "Grid"), ("res_h2", "Renewables")):
+        for strat in ("baseload", "flexible"):
+            add(architecture=arch,
+                label=f"{where} + H2 (SOEC, electric boiler)"
+                      + (", islanded" if arch == "res_h2" else ""),
+                ely_tech="SOEC operation", strategy=strat, soec_heat="electric_boiler",
+                note="SOEC's heat off the site's electricity instead of a gas boiler"
+                     if strat == "baseload" else "")
     return S
 
 
@@ -198,6 +217,7 @@ def table() -> pd.DataFrame:
         rows.append({
             "n": s.n, "key": s.key, "architecture": s.architecture,
             "label": s.label, "ely": s.ely_tech.split()[0] if s.ely_tech else "-",
+            "soec_heat": s.soec_heat or "-",
             "h2_colour": s.h2_colour or "-", "strategy": s.strategy,
             "grid": a.grid, "wind_solar": a.wind or a.solar, "battery": a.battery,
             "electrolyser": a.electrolyser, "tank": a.tank, "fuel_cell": a.fuel_cell,
