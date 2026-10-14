@@ -241,7 +241,11 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
                h2_variant_2: str | None = None,
                soec_heat: str | None = None,
                batt_standing_loss_per_hour: float | None = None,
-               tank_leakage_per_hour: float | None = None) -> dc_model.Tech:
+               tank_leakage_per_hour: float | None = None,
+               fc_stack_calendar_years: float | None = None,
+               fc_bop_calendar_years: float | None = None,
+               fc_kw_per_container: float | None = None,
+               batt_usable_fraction: float | None = None) -> dc_model.Tech:
     """Resolve every coefficient the LP needs. Touches Brightway only via caches.
 
     ``solar_basis`` selects the inventory behind solar's embodied carbon and
@@ -285,11 +289,31 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
     to change the defaults: the two push in opposite directions in the
     hydrogen-versus-battery seasonal contest, and DATA_GAPS.md records the band
     the sweep measured. A %/day figure converts as ``pct / 100 / 24``.
+
+    ``fc_stack_calendar_years``, ``fc_bop_calendar_years``,
+    ``fc_kw_per_container`` and ``batt_usable_fraction`` override four more
+    ASSUMED constants for a sweep (``optimisation/sensitivity.py``): the fuel
+    cell's two calendar lives (``fuel_cell.STACK_CALENDAR_LIFETIME_YEARS``,
+    ``BOP_CALENDAR_LIFETIME_YEARS``), the kW of fuel cell one container houses
+    (``optimiser_lca.fuel_cell.FC_KW_PER_CONTAINER``) and the battery's usable
+    share of nameplate (``battery.USABLE_FRACTION``). None keeps the default.
+    The BoP life moves the cost annuity as well as the carbon replacement
+    count; the container count rescales only the container's share of the BoP
+    carbon, which ``fuel_cell.decompose`` scores separately, so no inventory is
+    rebuilt.
     """
     # Validated before anything is loaded, so a bad sweep value fails at once
     # rather than after the caches (and Brightway) have been read.
     _standing_loss(batt_standing_loss_per_hour, "batt_standing_loss_per_hour")
     _standing_loss(tank_leakage_per_hour, "tank_leakage_per_hour")
+    for name, v in (("fc_stack_calendar_years", fc_stack_calendar_years),
+                    ("fc_bop_calendar_years", fc_bop_calendar_years),
+                    ("fc_kw_per_container", fc_kw_per_container)):
+        if v is not None and not (np.isfinite(v) and v > 0):
+            raise ValueError(f"{name} must be a positive number, got {v!r}")
+    if batt_usable_fraction is not None and not 0.5 <= batt_usable_fraction <= 1.0:
+        raise ValueError(f"batt_usable_fraction must be in [0.5, 1.0], "
+                         f"got {batt_usable_fraction!r}")
 
     import dc_config as cfg
     from optimisation import battery as batt
@@ -331,7 +355,7 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
     bc = batt.cost_components()[cost_case]
     crf_b = batt.capital_recovery_factor(batt.WACC_REAL, batt.ASSET_LIFE_YEARS)
     annuity_b = crf_b + batt.FIXED_OPEX_PCT_CAPEX[cost_case]
-    be = batt.embodied_components()
+    be = batt.embodied_components(usable_fraction=batt_usable_fraction)
 
     # electrolyser
     ely_row = ely.with_heat_source(
@@ -348,7 +372,14 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
 
     # fuel cell
     d = fc.decompose()
-    fcc = hc.fuel_cell_costs()
+    if "bop_container_kgco2e_per_MW" not in d:      # a cache from before the split
+        d = fc.decompose(refresh=True)
+    fc_bop_years = float(fc_bop_calendar_years or d["bop_calendar_lifetime_years"])
+    fc_stack_years = float(fc_stack_calendar_years or d["stack_calendar_lifetime_years"])
+    fc_kw_box = float(fc_kw_per_container or d["bop_kw_per_container"])
+    gwp_fc_bop = (d["bop_kgco2e_per_MW"] - d["bop_container_kgco2e_per_MW"]
+                  + d["bop_container_kgco2e_per_MW"] * d["bop_kw_per_container"] / fc_kw_box)
+    fcc = hc.fuel_cell_costs(bop_calendar_years=fc_bop_years)
     fcr = fcc[fcc.case == cost_case].iloc[0]
 
     # bought hydrogen — one stream per colour bought, priced independently
@@ -434,7 +465,7 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
         gwp_batt_e=be["energy_kgco2e_per_kWh"] * 1000.0 / batt.ASSET_LIFE_YEARS,
         gwp_ely=ely_row["capital_kgco2e_per_MW"] / ely.PLANT_LIFETIME_YEARS * stack_share,
         gwp_tank=tank_row["kgco2e_per_kg_capacity_year"],
-        gwp_fc_bop_per_mw=d["bop_kgco2e_per_MW"],
+        gwp_fc_bop_per_mw=gwp_fc_bop,
         gwp_fc_stack_per_mw=d["stack_kgco2e_per_MW"],
         gwp_fc_maint_per_mwh=d["maintenance_kgco2e_per_MWh"],
         gwp_grid_per_mw=gc.kgco2e_per_mw_year(),
@@ -444,11 +475,13 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
         # materials, built as a foreground activity by optimiser_lca; solar is
         # still the old invented plant-rated unit on ecoinvent's electronics
         # transformer. The two are NOT on one basis: see transformers.py.
-        gwp_tx_wind_per_mw=tx.kgco2e_per_mw_year("onshore_wind"),
-        gwp_tx_solar_per_mwp=tx.kgco2e_per_mw_year("solar_pv"),
-        fc_bop_calendar_years=d["bop_calendar_lifetime_years"],
+        gwp_tx_wind_per_mw=tx.kgco2e_per_mw_year(
+            "onshore_wind", life_years=float(emb.loc["onshore_wind"].study_lifetime_years)),
+        gwp_tx_solar_per_mwp=tx.kgco2e_per_mw_year(
+            "solar_pv", life_years=float(emb.loc["solar_pv"].study_lifetime_years)),
+        fc_bop_calendar_years=fc_bop_years,
         fc_bop_duty_hours=d["bop_duty_lifetime_hours"],
-        fc_stack_calendar_years=d["stack_calendar_lifetime_years"],
+        fc_stack_calendar_years=fc_stack_years,
         fc_stack_duty_hours=d["stack_lifetime_hours"],
         cost_wind=gen_cost("onshore_wind"), cost_offshore=gen_cost("offshore_wind"),
         cost_solar=gen_cost("solar_pv"),
@@ -479,6 +512,11 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
                 "h2_colour": h2_colour, "cost_case": cost_case, "solar_basis": solar_basis,
                 "h2_variant": h2_variant, "green_h2_basis": green_h2_basis,
                 "h2_colour_2": h2_colour_2, "h2_variant_2": h2_variant_2,
+                "fc_stack_calendar_years": fc_stack_years,
+                "fc_bop_calendar_years": fc_bop_years,
+                "fc_kw_per_container": fc_kw_box,
+                "batt_usable_fraction": (batt.USABLE_FRACTION if batt_usable_fraction is None
+                                         else float(batt_usable_fraction)),
                 "green_h2_grid_share": (
                     h2_prices._resolve_grid_share(green_h2_grid_share)
                     if "green" in (h2_colour, h2_colour_2) else None)},

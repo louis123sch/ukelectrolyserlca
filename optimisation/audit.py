@@ -80,11 +80,25 @@ DIRECT_BOUND: dict[str, tuple[str, ...]] = {
     "cap_fc": ("p_fc",),
 }
 
+# Capacities sized by a *stock* rather than a flow: the energy a store can
+# hold. Slack is the capacity above the largest stock it ever held.
+STOCK_BOUND: dict[str, str] = {
+    "cap_batt_e": "soc",
+    "cap_tank": "tank",
+}
+
 # Variables that are accounting devices rather than kit, so an objective may
 # reasonably ignore them.
-NOT_ASSETS = {"unserved", "fc_bop_units", "fc_stack_units", "soc", "tank",
-              "exp", "imp", "ch", "dis", "h2_fc", "h2_buy", "h2_buy_2",
+NOT_ASSETS = {"fc_bop_units", "fc_stack_units", "soc", "tank",
+              "exp", "imp", "ch", "dis", "h2_fc",
               "p_wind", "p_offshore", "p_solar", "p_ely", "p_fc"}
+
+# Streams that are neither kit nor dispatch of kit, but are still something the
+# site *gets* — energy or fuel from outside, or demand it fails to meet. Each
+# must carry a term in both objectives, or one objective gets it for free:
+# unserved load was carbon-free until 14 Oct, so a min-GWP solve with any
+# allowance shed the dirtiest hours as an emissions cut.
+STREAMS = ("imp", "h2_buy", "h2_buy_2", "unserved")
 
 
 # Findings that are real, understood, and not defects of plumbing — a missing
@@ -136,11 +150,17 @@ ACCEPTED: dict[str, str] = {
     "geography:PV embodied carbon is not GB-sourced":
         "ecoinvent's GB open-ground PV activity is a 2008 plant at a 12.95 % "
         "module, and is byte-identical in 3.10.1, so the database cannot fix "
-        "it. Solar is therefore scored on IEA PVPS Task 12's 2023 update "
-        "instead — European rather than GB, but their 976 kWh/kWp reference "
-        "yield is within 10 % of the DESNZ GB load factor, so it transfers "
-        "with no irradiance correction. No UK source exists; see DATA_GAPS.md. "
-        "Pass solar_basis='ecoinvent' to get the old figure back.",
+        "it. Solar is therefore scored on Smith et al. (2024, NREL) utility-"
+        "scale fixed-tilt c-Si, rescored on ecoinvent 3.9.1 apos as a "
+        "foreground — a US-built plant amortised at the DESNZ GB load factor. "
+        "No UK inventory exists; see DATA_GAPS.md. Pass solar_basis='ecoinvent' "
+        "to get the old figure back.",
+    "coverage:p_fc's own term moves carbon but not cost (cap_fc)":
+        "Fuel cell service consumables — an air filter and coolant per "
+        "8,000 h, 0.003 kg CO2e/MWh since 14 Oct — are charged per MWh in "
+        "carbon, while the cost side's maintenance sits in the fixed opex "
+        "fraction on capacity. Both are real; the carbon term is three orders "
+        "of magnitude below the replacement terms and cannot move a build.",
 }
 
 
@@ -265,6 +285,31 @@ def check_objective_coverage(series, assets, tech):
                f"physics for the same machine. Either both should carry the "
                f"duty term or neither should.")
 
+        # The flow's own term, apart from its linked variables. Pooled, the fuel
+        # cell's per-MWh maintenance (carbon only) hid behind the replacement
+        # counts, which both objectives charge.
+        if via:
+            cf, gf = cost.get(flow, 0.0), gwp.get(flow, 0.0)
+            if (cf > 0) != (gf > 0):
+                dearer, cheaper = ("carbon", "cost") if gf > 0 else ("cost", "carbon")
+                report("coverage", "warn",
+                       f"{flow}'s own term moves {dearer} but not {cheaper} ({cap})",
+                       f"Its replacement counts are charged on both sides, but "
+                       f"the per-MWh term on {flow} itself is in {dearer} only.")
+
+    for flow in STREAMS:
+        if flow not in V or float(np.asarray(m.variables[flow].upper).max()) == 0.0:
+            continue
+        c, g = cost.get(flow, 0.0), gwp.get(flow, 0.0)
+        if c > 0 and g > 0:
+            continue
+        side = "carbon" if c > 0 else ("cost" if g > 0 else "either objective")
+        report("coverage", "error",
+               f"{flow} is free in {side}",
+               "A stream from outside the site, or demand left unmet, that one "
+               "objective does not charge is a free substitute for building "
+               "anything. NOT_ASSETS used to hide this.")
+
     if not [f for f in FINDINGS if f.check == "coverage"]:
         report("coverage", "ok", f"all {len(rows)} live capacities are priced in both")
     return pd.DataFrame(rows, columns=["variable", "cost_coeff", "gwp_coeff"])
@@ -311,6 +356,25 @@ def check_degeneracy_and_slack(series, assets, tech, objective="gwp"):
                    f"{cap} = {size:,.2f} exceeds its own peak flow by {slack:,.2f}",
                    f"peak {flow} is {peak:,.2f}; the excess is not required by "
                    f"any constraint")
+    for cap, stock in STOCK_BOUND.items():
+        if cap not in V:
+            continue
+        size = float(V[cap].solution)
+        if size <= 1e-6:
+            continue
+        peak = float(d[stock].max())
+        slack = size - peak
+        if active.get(cap, 0.0) == 0.0:
+            clean = False
+            report("degeneracy", "error",
+                   f"{cap} = {size:,.2f} is unpinned under {objective!r}",
+                   f"zero coefficient in the active objective; any value above "
+                   f"the {peak:,.2f} peak of {stock} is equally optimal")
+        elif slack > max(size, 1.0) * 1e-6:
+            clean = False
+            report("degeneracy", "warn",
+                   f"{cap} = {size:,.2f} exceeds the largest {stock} it holds by {slack:,.2f}",
+                   "the excess store is not required by any constraint")
     if clean:
         report("degeneracy", "ok", f"every sized capacity is pinned under {objective!r}")
 
@@ -350,6 +414,23 @@ def check_lifetime_agreement():
                   float(fc.decompose()["bop_calendar_lifetime_years"])))
     pairs.append(("battery", float(batt.ASSET_LIFE_YEARS),
                   float(batt.ASSET_LIFE_YEARS)))
+    # The step-up transformers have no cost line of their own: DESNZ/Arup
+    # capex already reaches the point of connection, so each is paid for inside
+    # its generator's annuity. Their carbon life must therefore match the life
+    # that annuity is taken over. Read back out of the coefficient build_tech
+    # charges, so this fails if anything amortises the box over another life
+    # (solar's did: 35 y against a 38-y annuity, until 14 Oct).
+    from optimisation import transformers as tx
+    for asset in ("onshore_wind", "solar_pv"):
+        cost_life = float(ann[(ann.asset == asset) & (ann.case == "central")]
+                          .iloc[0].lifetime_years)
+        gen_life = float(emb.loc[asset].study_lifetime_years)
+        charged = tx.kgco2e_per_mw_year(asset, life_years=gen_life)
+        per_mw = tx.kgco2e_per_mw_year(asset, life_years=1.0)
+        pairs.append((f"{asset} step-up transformer", cost_life, per_mw / charged))
+    # The grid connection has no pair: its cost is an annual tariff, with no
+    # capital and so no life. Its carbon is amortised over
+    # grid_connection.py's own asset life.
 
     t = pd.DataFrame(pairs, columns=["asset", "cost_life_yr", "carbon_life_yr"])
     t["agree"] = np.isclose(t.cost_life_yr, t.carbon_life_yr)
@@ -519,8 +600,9 @@ def check_geography(site, start, end, size_mw_it=300.0, pue=1.2):
         "fuel cell capex": "US DOE, USD converted at a fixed 2025 rate",
         "data centre foreground": "Zhang et al., Virginia (US-SERC); the "
                                   "electricity is swapped for GB, the rest is not",
-        "PV embodied carbon": "IEA PVPS Task 12 2023, European reference system "
-                              "(ecoinvent's GB dataset is a 2008 plant)",
+        "PV embodied carbon": "Smith et al. 2024 (NREL) utility fixed-tilt, US-built, "
+                              "rescored on ecoinvent 3.9.1 apos (ecoinvent's GB "
+                              "dataset is a 2008 plant)",
     }
     for k, v in foreign.items():
         report("geography", "warn", f"{k} is not GB-sourced", v)
@@ -548,10 +630,11 @@ def run(site=None, start="2025-01-01", end="2025-02-01",
 
     series, meta = I.build_series(site, start, end, size_mw_it, pue=pue)
     series = I.resample(series, 1.0)
+    # Bought hydrogen on, priced green, so the stream checks see it.
     tech = I.build_tech(site, meta, ely_tech="SOEC operation", cost_case="central",
-                        size_mw_it=size_mw_it, pue=pue)
+                        size_mw_it=size_mw_it, pue=pue, h2_colour="green")
     assets = M.Assets(grid=True, wind=True, solar=True, battery=True,
-                      electrolyser=True, tank=True, fuel_cell=True)
+                      electrolyser=True, tank=True, fuel_cell=True, buy_h2=True)
 
     cov = check_objective_coverage(series, assets, tech)
     print()

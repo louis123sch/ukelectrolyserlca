@@ -355,65 +355,14 @@ def build_model(series: Series, assets: Assets, tech: Tech, *,
     apply_strategy(m, V, series, assets, ely_strategy, islanded_baseload_uses_cf_floor)
 
     # --- objectives ------------------------------------------------------
-    scale = series.annual_scale
-    price = series_da(series.grid_price_per_mwh)
-    ci = series_da(series.grid_gwp_per_mwh)
-
-    # Constants are held out of the LP expression: linopy refuses them in an
-    # objective, and they cannot change an argmin anyway. They are added back
-    # for reporting, and — importantly — netted off any epsilon limit, which is
-    # stated against the *total* the user sees, not the variable part.
-    # The fixed connection charge belongs to the connection. An islanded build
-    # has none, so charging it here put £271k/yr (London) to £4.67m/yr on
-    # every architecture that never touches the grid.
-    cost_const = tech.cost_grid_fixed_per_year if assets.grid else 0.0
-    gwp_const = (tech.dc_fixed_gwp_per_year
-                 + tech.dc_other_gwp_per_mwh
-                 * float(series.demand_mw.sum() * dt) * scale)
-
-    cost = (
-        tech.cost_wind * V["cap_wind"] + tech.cost_offshore * V["cap_offshore"]
-        + tech.cost_solar * V["cap_solar"]
-        + tech.cost_batt_p * V["cap_batt_p"] + tech.cost_batt_e * V["cap_batt_e"]
-        + tech.cost_ely * V["cap_ely"] + tech.cost_tank * V["cap_tank"]
-        + tech.cost_fc * V["cap_fc"]
-        # Stack and BoP replacements, on the same convex max(calendar, duty)
-        # counts the carbon side uses. Without them, running the fuel cell hard
-        # buys extra kit in carbon and nothing in cost.
-        + tech.cost_fc_stack_per_mw * V["fc_stack_units"]
-        + tech.cost_fc_bop_per_mw * V["fc_bop_units"]
-        + tech.cost_grid_per_mw_year * V["cap_grid"]
-        + scale * (price * V["imp"] * dt).sum()
-        + scale * (tech.bought_h2_gbp_per_kg * V["h2_buy"]).sum()
-        + scale * (tech.bought_h2_2_gbp_per_kg * V["h2_buy_2"]).sum()
-        + scale * (VOLL_GBP_PER_MWH * V["unserved"] * dt).sum()
-        - scale * (price * V["exp"] * dt).sum()
-    )
-    gwp = (
-        tech.gwp_wind * V["cap_wind"] + tech.gwp_offshore * V["cap_offshore"]
-        + tech.gwp_solar * V["cap_solar"]
-        + tech.gwp_batt_p * V["cap_batt_p"] + tech.gwp_batt_e * V["cap_batt_e"]
-        + tech.gwp_ely * V["cap_ely"] + tech.gwp_tank * V["cap_tank"]
-        + tech.gwp_fc_bop_per_mw * V["fc_bop_units"]
-        + tech.gwp_fc_stack_per_mw * V["fc_stack_units"]
-        # The connection is a built asset like any other. Without this term a
-        # carbon-only solve cannot see cap_grid at all, and — once a
-        # transmission-connected site in a floored TNUoS zone pays nothing per
-        # MW either — neither objective can, leaving its size to the solver's
-        # stopping vertex. See grid_connection.py.
-        + tech.gwp_grid_per_mw * V["cap_grid"]
-        # Step-up transformers, on capacity rather than output: a transformer is
-        # sized to the peak MVA it must pass and does not care how many hours a
-        # year that happens. Solar is charged per MWp against an AC-rated asset,
-        # which is why its coefficient already carries the DC:AC ratio.
-        + tech.gwp_tx_wind_per_mw * (V["cap_wind"] + V["cap_offshore"])
-        + tech.gwp_tx_solar_per_mwp * V["cap_solar"]
-        + scale * (tech.gwp_fc_maint_per_mwh * V["p_fc"] * dt).sum()
-        + scale * (ci * V["imp"] * dt).sum()
-        + scale * (tech.bought_h2_gwp_per_kg * V["h2_buy"]).sum()
-        + scale * (tech.bought_h2_2_gwp_per_kg * V["h2_buy_2"]).sum()
-        + scale * (tech.ely_variable_gwp_per_kg * kg_per_mwh_in * V["p_ely"] * dt).sum()
-    )
+    # One definition, shared with contributions() and myopic.evaluate, so a
+    # term added here cannot be missing from the breakdown or the bracket.
+    terms = objective_terms(V, series, tech,
+                            price=series_da(series.grid_price_per_mwh),
+                            ci=series_da(series.grid_gwp_per_mwh))
+    cost = _total(terms["cost_capital"], terms["cost_operational"])
+    gwp = _total(terms["gwp_embodied"], terms["gwp_operational"])
+    cost_const, gwp_const = objective_constants(series, tech, grid=assets.grid)
 
     if gwp_limit is not None:
         m.add_constraints(gwp <= gwp_limit - gwp_const, name="gwp_epsilon")
@@ -440,6 +389,123 @@ def build_model(series: Series, assets: Assets, tech: Tech, *,
 
     return m, V, {"cost": cost, "gwp": gwp,
                   "cost_const": cost_const, "gwp_const": gwp_const}
+
+
+def objective_terms(q, series: Series, tech: Tech, *, price, ci) -> dict:
+    """Every term of both objectives, labelled, from one set of quantities.
+
+    ``q`` maps the LP's variable names to quantities: linopy variables when the
+    model is built, plain floats and arrays when a solution or a myopic dispatch
+    is scored. ``price`` and ``ci`` are the half-hourly import price and carbon
+    in whichever of those two forms ``q`` is in. Every term is linear in ``q``,
+    so the same arithmetic serves both.
+
+    This is the only place an objective term is written. ``build_model`` sums
+    it, ``contributions`` reports it line by line, and ``myopic.evaluate``
+    scores a merit-order dispatch with it — before it existed those were three
+    hand-written copies, and the myopic one had drifted (no grid connection
+    carbon, no bought hydrogen).
+    """
+    dt, scale = series.dt_hours, series.annual_scale
+    kg_per_mwh_in = 1000.0 / (tech.ely_kwh_per_kg + tech.tank_compression_kwh_per_kg)
+
+    # Two bought colours are two line items, not one: the whole reason for
+    # buying both is that they differ in price and in burden, and a single
+    # merged row would hide exactly the trade being made. Named by colour where
+    # build_tech recorded one, so the reader knows which is which.
+    def bought_row(key: str, fallback: str) -> str:
+        colour = (tech.labels or {}).get(key)
+        return f"bought H2 ({colour})" if colour else fallback
+
+    buy_1, buy_2 = (bought_row("h2_colour", "bought H2"),
+                    bought_row("h2_colour_2", "bought H2, second colour"))
+    if buy_1 == buy_2:                       # the same colour on both streams
+        buy_2 += ", second stream"
+
+    gwp_embodied = {
+        "wind": tech.gwp_wind * q["cap_wind"],
+        "offshore wind": tech.gwp_offshore * q["cap_offshore"],
+        "solar": tech.gwp_solar * q["cap_solar"],
+        "battery": tech.gwp_batt_p * q["cap_batt_p"] + tech.gwp_batt_e * q["cap_batt_e"],
+        "electrolyser": tech.gwp_ely * q["cap_ely"],
+        "H2 tank": tech.gwp_tank * q["cap_tank"],
+        "fuel cell": (tech.gwp_fc_bop_per_mw * q["fc_bop_units"]
+                      + tech.gwp_fc_stack_per_mw * q["fc_stack_units"]),
+        # The connection is a built asset like any other. Without this term a
+        # carbon-only solve cannot see cap_grid at all, and — once a
+        # transmission-connected site in a floored TNUoS zone pays nothing per
+        # MW either — neither objective can, leaving its size to the solver's
+        # stopping vertex. See grid_connection.py.
+        "grid connection": tech.gwp_grid_per_mw * q["cap_grid"],
+        # Step-up transformers, on capacity rather than output: a transformer is
+        # sized to the peak MVA it must pass and does not care how many hours a
+        # year that happens. Solar is charged per MWp against an AC-rated asset,
+        # which is why its coefficient already carries the DC:AC ratio. Its own
+        # line rather than folded into wind and solar: it is a different asset,
+        # on a different life.
+        "generation step-up transformers": (
+            tech.gwp_tx_wind_per_mw * (q["cap_wind"] + q["cap_offshore"])
+            + tech.gwp_tx_solar_per_mwp * q["cap_solar"]),
+    }
+    gwp_operational = {
+        "grid import": scale * (ci * q["imp"] * dt).sum(),
+        buy_1: scale * (tech.bought_h2_gwp_per_kg * q["h2_buy"]).sum(),
+        buy_2: scale * (tech.bought_h2_2_gwp_per_kg * q["h2_buy_2"]).sum(),
+        "electrolyser consumables": scale * (tech.ely_variable_gwp_per_kg
+                                             * kg_per_mwh_in * q["p_ely"] * dt).sum(),
+        "fuel cell maintenance": scale * (tech.gwp_fc_maint_per_mwh * q["p_fc"] * dt).sum(),
+    }
+    cost_capital = {
+        "wind": tech.cost_wind * q["cap_wind"],
+        "offshore wind": tech.cost_offshore * q["cap_offshore"],
+        "solar": tech.cost_solar * q["cap_solar"],
+        "battery": tech.cost_batt_p * q["cap_batt_p"] + tech.cost_batt_e * q["cap_batt_e"],
+        "electrolyser": tech.cost_ely * q["cap_ely"],
+        "H2 tank": tech.cost_tank * q["cap_tank"],
+        # Stack and BoP replacements, on the same convex max(calendar, duty)
+        # counts the carbon side uses. Without them, running the fuel cell hard
+        # buys extra kit in carbon and nothing in cost.
+        "fuel cell": (tech.cost_fc * q["cap_fc"]
+                      + tech.cost_fc_stack_per_mw * q["fc_stack_units"]
+                      + tech.cost_fc_bop_per_mw * q["fc_bop_units"]),
+        "grid connection": tech.cost_grid_per_mw_year * q["cap_grid"],
+    }
+    cost_operational = {
+        "grid energy + network": scale * (price * q["imp"] * dt).sum(),
+        buy_1: scale * (tech.bought_h2_gbp_per_kg * q["h2_buy"]).sum(),
+        buy_2: scale * (tech.bought_h2_2_gbp_per_kg * q["h2_buy_2"]).sum(),
+        "unserved (VoLL)": scale * (VOLL_GBP_PER_MWH * q["unserved"] * dt).sum(),
+        "export credit": -scale * (price * q["exp"] * dt).sum(),
+    }
+    return {"gwp_embodied": gwp_embodied, "gwp_operational": gwp_operational,
+            "cost_capital": cost_capital, "cost_operational": cost_operational}
+
+
+def objective_constants(series: Series, tech: Tech, *, grid: bool) -> tuple[float, float]:
+    """The parts of each objective no decision variable moves: (cost, gwp).
+
+    Held out of the LP expression: linopy refuses constants in an objective,
+    and they cannot change an argmin anyway. They are added back for reporting,
+    and — importantly — netted off any epsilon limit, which is stated against
+    the *total* the user sees, not the variable part.
+
+    The fixed connection charge belongs to the connection. An islanded build
+    has none, so charging it put £271k/yr (London) to £4.67m/yr on every
+    architecture that never touches the grid.
+    """
+    cost_const = tech.cost_grid_fixed_per_year if grid else 0.0
+    gwp_const = (tech.dc_fixed_gwp_per_year
+                 + tech.dc_other_gwp_per_mwh
+                 * float(series.demand_mw.sum() * series.dt_hours) * series.annual_scale)
+    return cost_const, gwp_const
+
+
+def _total(*groups):
+    """Sum labelled terms. ``sum()`` would start from int 0, which a linopy
+    expression accepts but a reader should not have to wonder about."""
+    from functools import reduce
+    import operator
+    return reduce(operator.add, [v for g in groups for v in g.values()])
 
 
 def apply_strategy(m, V, series, assets, strategy, islanded_uses_cf_floor):
@@ -534,79 +600,38 @@ def contributions(V, obj, series, tech, assets) -> dict:
     whether an option is actually better or has just moved its burden upstream.
     """
     dt, scale = series.dt_hours, series.annual_scale
-    cap = {k: float(V[k].solution) for k in
-           ("cap_wind", "cap_offshore", "cap_solar", "cap_batt_p", "cap_batt_e",
-            "cap_ely", "cap_tank", "cap_fc")}
-    ser = {k: V[k].solution.values for k in
-           ("imp", "p_ely", "p_fc", "h2_buy", "h2_buy_2", "unserved")}
-    kg_per_mwh_in = 1000.0 / (tech.ely_kwh_per_kg + tech.tank_compression_kwh_per_kg)
-
-    # Two bought colours are two line items, not one: the whole reason for
-    # buying both is that they differ in price and in burden, and a single
-    # merged row would hide exactly the trade being made. Named by colour where
-    # build_tech recorded one, so the reader knows which is which.
-    def bought_row(key: str, fallback: str) -> str:
-        colour = (tech.labels or {}).get(key)
-        return f"bought H2 ({colour})" if colour else fallback
-
-    buy_1, buy_2 = (bought_row("h2_colour", "bought H2"),
-                    bought_row("h2_colour_2", "bought H2, second colour"))
-
-    gwp = {
-        "wind": tech.gwp_wind * cap["cap_wind"],
-        "offshore wind": tech.gwp_offshore * cap["cap_offshore"],
-        "solar": tech.gwp_solar * cap["cap_solar"],
-        "battery": tech.gwp_batt_p * cap["cap_batt_p"] + tech.gwp_batt_e * cap["cap_batt_e"],
-        "electrolyser": tech.gwp_ely * cap["cap_ely"],
-        "H2 tank": tech.gwp_tank * cap["cap_tank"],
-        "fuel cell": (tech.gwp_fc_bop_per_mw * float(V["fc_bop_units"].solution)
-                      + tech.gwp_fc_stack_per_mw * float(V["fc_stack_units"].solution)),
-        "grid connection": tech.gwp_grid_per_mw * float(V["cap_grid"].solution),
-        # Its own line rather than folded into wind and solar: it is a different
-        # asset, on a different life, and the only one whose coefficient depends
-        # on whether the capacity it serves is rated AC or DC.
-        "generation step-up transformers": (
-            tech.gwp_tx_wind_per_mw * (cap["cap_wind"] + cap["cap_offshore"])
-            + tech.gwp_tx_solar_per_mwp * cap["cap_solar"]),
-    }
-    gwp_op = {
-        "grid import": scale * float((series.grid_gwp_per_mwh * ser["imp"] * dt).sum()),
-        buy_1: scale * tech.bought_h2_gwp_per_kg * float(ser["h2_buy"].sum()),
-        buy_2: scale * tech.bought_h2_2_gwp_per_kg * float(ser["h2_buy_2"].sum()),
-        "electrolyser consumables": scale * tech.ely_variable_gwp_per_kg
-                                    * kg_per_mwh_in * float((ser["p_ely"] * dt).sum()),
-        "fuel cell maintenance": scale * tech.gwp_fc_maint_per_mwh
-                                 * float((ser["p_fc"] * dt).sum()),
-    }
-    cost = {
-        "wind": tech.cost_wind * cap["cap_wind"],
-        "offshore wind": tech.cost_offshore * cap["cap_offshore"],
-        "solar": tech.cost_solar * cap["cap_solar"],
-        "battery": tech.cost_batt_p * cap["cap_batt_p"] + tech.cost_batt_e * cap["cap_batt_e"],
-        "electrolyser": tech.cost_ely * cap["cap_ely"],
-        "H2 tank": tech.cost_tank * cap["cap_tank"],
-        "fuel cell": (tech.cost_fc * cap["cap_fc"]
-                      + tech.cost_fc_stack_per_mw * float(V["fc_stack_units"].solution)
-                      + tech.cost_fc_bop_per_mw * float(V["fc_bop_units"].solution)),
-        "grid connection": tech.cost_grid_per_mw_year * float(V["cap_grid"].solution),
-    }
-    cost_op = {
-        "grid energy + network": scale * float((series.grid_price_per_mwh * ser["imp"] * dt).sum()),
-        buy_1: scale * tech.bought_h2_gbp_per_kg * float(ser["h2_buy"].sum()),
-        buy_2: scale * tech.bought_h2_2_gbp_per_kg * float(ser["h2_buy_2"].sum()),
-        "unserved (VoLL)": scale * VOLL_GBP_PER_MWH * float((ser["unserved"] * dt).sum()),
-        "connection fixed": obj["cost_const"],
-    }
+    terms = score(solution_quantities(V), series, tech)
+    terms["cost_operational"]["connection fixed"] = obj["cost_const"]
     mwh = float(series.demand_mw.sum() * dt) * scale
     return {
-        "gwp_embodied": gwp, "gwp_operational": gwp_op,
+        "gwp_embodied": terms["gwp_embodied"],
+        "gwp_operational": terms["gwp_operational"],
         "gwp_facility": {"data centre, IT capacity": tech.dc_fixed_gwp_per_year,
                          "data centre, cooling consumables":
                              tech.dc_other_gwp_per_mwh * mwh},
-        "cost_capital": cost, "cost_operational": cost_op,
+        "cost_capital": terms["cost_capital"],
+        "cost_operational": terms["cost_operational"],
         "demand_MWh_per_year": mwh,
         "totals": totals(obj),
     }
+
+
+def solution_quantities(V) -> dict:
+    """A solved model's variables as plain numbers: floats for the scalars,
+    arrays for the per-step flows — the form ``score`` takes."""
+    out = {}
+    for k, var in V.items():
+        sol = var.solution
+        out[k] = float(sol) if sol.ndim == 0 else np.asarray(sol.values, dtype=float)
+    return out
+
+
+def score(q: dict, series: Series, tech: Tech) -> dict:
+    """``objective_terms`` evaluated on numbers, every term a float."""
+    terms = objective_terms(q, series, tech,
+                            price=np.asarray(series.grid_price_per_mwh, dtype=float),
+                            ci=np.asarray(series.grid_gwp_per_mwh, dtype=float))
+    return {g: {k: float(v) for k, v in d.items()} for g, d in terms.items()}
 
 
 # The order demand is attributed to sources in serve_stack, and the labels the

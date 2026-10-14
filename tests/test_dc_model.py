@@ -44,29 +44,31 @@ def series():
 
 @pytest.fixture(scope="module")
 def tech():
+    # Today's central coefficients (London, 6.36 MW IT, 14 Oct 2026), so the
+    # synthetic solves exercise the magnitudes the study actually uses. Network
+    # charges and bought hydrogen are the synthetic ones.
     return M.Tech(
-        gwp_wind=18_800, gwp_offshore=25_400, gwp_solar=60_600,
-        gwp_batt_p=2_124, gwp_batt_e=6_547,
-        gwp_ely=10_433, gwp_tank=63.8,
-        gwp_fc_bop_per_mw=469_040, gwp_fc_stack_per_mw=97_431,
-        gwp_fc_maint_per_mwh=3.11,
-        gwp_grid_per_mw=333.5,
+        gwp_wind=19_244, gwp_offshore=26_408, gwp_solar=23_561,
+        gwp_batt_p=2_124, gwp_batt_e=7_241,
+        gwp_ely=10_435, gwp_tank=63.8,
+        gwp_fc_bop_per_mw=44_325, gwp_fc_stack_per_mw=97_431,
+        gwp_fc_maint_per_mwh=0.0032,
+        gwp_grid_per_mw=137.7,
         # BoP annuity net of its calendar replacement, which cost_fc_bop_per_mw
-        # charges; the old 194_244 was the pre-split *full-system* annuity and
-        # counted the stack twice. Central case of h2_capex.fuel_cell_costs.
+        # charges. Central case of h2_capex.fuel_cell_costs.
         cost_fc_stack_per_mw=308_698.0, cost_fc_bop_per_mw=1_486_089.0,
-        fc_bop_calendar_years=25.0, fc_bop_duty_hours=60_000.0,
-        fc_stack_calendar_years=25.0, fc_stack_duty_hours=32_000.0,
-        cost_wind=150_000, cost_offshore=230_000, cost_solar=95_000,
-        cost_batt_p=30_000, cost_batt_e=10_000,
-        cost_ely=220_000, cost_tank=64.6, cost_fc=101_391,
+        fc_bop_calendar_years=20.0, fc_bop_duty_hours=80_000.0,
+        fc_stack_calendar_years=10.0, fc_stack_duty_hours=30_000.0,
+        cost_wind=147_073, cost_offshore=419_201, cost_solar=48_368,
+        cost_batt_p=34_903, cost_batt_e=11_634,
+        cost_ely=212_511, cost_tank=64.6, cost_fc=99_842,
         cost_grid_per_mw_year=40_949, cost_grid_fixed_per_year=271_192,
         ely_kwh_per_kg=54.0, ely_variable_gwp_per_kg=0.1072,
         tank_compression_kwh_per_kg=0.0, tank_leakage_per_hour=0.0,
         batt_rte=0.88, batt_leakage_per_hour=0.0,
         fc_kg_h2_per_mwh=63.164,
         bought_h2_gbp_per_kg=3.0, bought_h2_gwp_per_kg=10.0,
-        dc_fixed_gwp_per_year=841_457, dc_other_gwp_per_mwh=0.0,
+        dc_fixed_gwp_per_year=999_453, dc_other_gwp_per_mwh=1.809,
         horizon_years=25.0,
     )
 
@@ -159,7 +161,11 @@ def test_constants_are_excluded_from_the_objective_but_not_the_total(series, tec
     M.solve(m)
     tot = M.totals(obj)
     assert tot["cost_const_GBP_per_year"] == tech.cost_grid_fixed_per_year
-    assert tot["gwp_const_kgco2e_per_year"] == tech.dc_fixed_gwp_per_year
+    # The facility's IT-driven part plus its energy-driven part on gross demand.
+    mwh = float(series.demand_mw.sum() * DT) * series.annual_scale
+    assert tot["gwp_const_kgco2e_per_year"] == pytest.approx(
+        tech.dc_fixed_gwp_per_year + tech.dc_other_gwp_per_mwh * mwh, rel=1e-12)
+    assert tech.dc_other_gwp_per_mwh > 0          # or the line above tests nothing
     assert tot["cost_GBP_per_year"] > float(obj["cost"].solution)
 
 
@@ -596,3 +602,60 @@ def test_shipped_storage_losses_are_zero_and_flagged_assumed():
     assert battery.STANDING_LOSS_IS_ASSUMED
     assert h2_storage.LEAKAGE_FRAC_PER_HOUR == 0.0
     assert h2_storage.LEAKAGE_IS_ASSUMED
+
+
+# =============================================================================
+# One objective: the LP, contributions() and myopic.evaluate agree
+# =============================================================================
+PARITY = {
+    "grid_only": M.Assets(grid=True),
+    "grid_res_battery": M.Assets(grid=True, wind=True, solar=True, battery=True),
+    "grid_h2": M.Assets(grid=True, electrolyser=True, tank=True, fuel_cell=True),
+    "grid_h2_bought": DUTY_FC,
+    "all": ALL,
+    "islanded": M.Assets(grid=False, wind=True, solar=True, battery=True,
+                         electrolyser=True, tank=True, fuel_cell=True,
+                         grid_limit_mw=0.0),
+}
+
+
+@pytest.mark.parametrize("objective", ["cost", "gwp"])
+@pytest.mark.parametrize("name", list(PARITY))
+def test_myopic_scores_the_lp_dispatch_exactly(series, tech, name, objective):
+    # Feed the LP's own dispatch to the myopic scorer. Any difference would be
+    # a term one side has and the other lacks — which is how myopic drifted
+    # (no grid connection carbon, no bought hydrogen) before both read
+    # objective_terms.
+    from dataclasses import replace
+    from optimisation import myopic
+    t = replace(tech, batt_leakage_per_hour=2e-5, tank_leakage_per_hour=4e-6)
+    assets = PARITY[name]
+    V, obj = _solve(series, t, assets, objective=objective, unserved_fraction=0.01)
+    q = M.solution_quantities(V)
+    caps = {k: q[k] for k in myopic.CAPACITIES}
+    df = pd.DataFrame({k: q[k] for k in myopic.FLOWS}, index=series.index)
+    got = myopic.evaluate(df, series, t, caps, grid=assets.grid)
+    lp = M.totals(obj)
+    # The LP's unit counts sit on max(calendar, duty) only at an optimum where
+    # they carry a positive price, which both objectives give them.
+    assert got["cost_GBP_per_year"] == pytest.approx(lp["cost_GBP_per_year"], rel=1e-6)
+    assert got["gwp_kgco2e_per_year"] == pytest.approx(lp["gwp_kgco2e_per_year"], rel=1e-6)
+
+
+@pytest.mark.parametrize("name", list(PARITY))
+def test_contributions_add_up_to_the_totals(series, tech, name):
+    V, obj = _solve(series, tech, PARITY[name], objective="cost")
+    c = M.contributions(V, obj, series, tech, PARITY[name])
+    gwp = sum(sum(c[g].values()) for g in ("gwp_embodied", "gwp_operational", "gwp_facility"))
+    cost = sum(sum(c[g].values()) for g in ("cost_capital", "cost_operational"))
+    assert gwp == pytest.approx(c["totals"]["gwp_kgco2e_per_year"], rel=1e-9)
+    assert cost == pytest.approx(c["totals"]["cost_GBP_per_year"], rel=1e-9)
+
+
+def test_myopic_buys_hydrogen_when_the_build_may(series, tech):
+    from optimisation import myopic
+    caps = {"cap_fc": 5.0, "cap_grid": 0.0}
+    df = myopic.dispatch(series, tech, caps, buy_h2=True)
+    assert df.unserved.sum() < 1e-9 * series.n or df.h2_buy.sum() > 0
+    assert df.h2_buy.sum() == pytest.approx(
+        (df.p_fc * tech.fc_kg_h2_per_mwh * DT).sum() - 0.0, rel=1e-9)

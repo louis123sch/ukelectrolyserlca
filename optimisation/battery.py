@@ -221,11 +221,18 @@ def lifetime_throughput_mwh_per_mwh():
     return WARRANTED_CYCLES * mean_capacity
 
 
-def embodied_components(basis: str | None = None):
-    """Embodied carbon split the same way as cost: per kW and per usable kWh."""
+def embodied_components(basis: str | None = None, usable_fraction: float | None = None):
+    """Embodied carbon split the same way as cost: per kW and per usable kWh.
+
+    ``usable_fraction`` overrides ``USABLE_FRACTION`` (ASSUMED) for a sweep; it
+    applies to the default basis only, whose inventory is per nameplate kWh.
+    """
     basis = basis or EMBODIED_BASIS
+    usable = USABLE_FRACTION if usable_fraction is None else float(usable_fraction)
+    if not 0.5 <= usable <= 1.0:
+        raise ValueError(f"usable_fraction must be in [0.5, 1.0], got {usable!r}")
     if basis == "jasper_voss_2026":
-        energy = BESS_KGCO2E_PER_KWH_NAMEPLATE / USABLE_FRACTION
+        energy = BESS_KGCO2E_PER_KWH_NAMEPLATE / usable
     elif basis == "ecoinvent_ev_pack":
         kg_per_kwh = 1.0 / PACK_KWH_PER_KG
         energy = kg_per_kwh * PACK_KGCO2E_PER_KG * (1.0 + CONTAINER_UPLIFT_FRACTION)

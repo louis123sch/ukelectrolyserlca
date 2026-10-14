@@ -49,7 +49,8 @@ from optimisation import dc_model as M
 
 def dispatch(series: M.Series, tech: M.Tech, caps: dict,
              initial_soc_frac: float = 0.5,
-             initial_tank_frac: float = 0.5) -> pd.DataFrame:
+             initial_tank_frac: float = 0.5,
+             buy_h2: bool = False) -> pd.DataFrame:
     """Chronological merit-order dispatch of a fixed build. No foresight.
 
     Storage starts part-full because a myopic operator has no reason to start
@@ -58,11 +59,19 @@ def dispatch(series: M.Series, tech: M.Tech, caps: dict,
     the myopic run is allowed to end the year emptier than it started, which
     flatters it slightly. The bracket is still valid — it makes the lower bound
     a little generous, not a little harsh.
+
+    ``buy_h2``: the build may buy hydrogen (first stream). A fuel cell short of
+    stored hydrogen buys the rest at the gate, as an operator with a supply
+    contract would; nothing is bought to fill the tank ahead of need, since
+    that would take a forecast.
     """
     dt = series.dt_hours
     n = series.n
     eta = float(np.sqrt(tech.batt_rte))
     kg_per_mwh_in = 1000.0 / (tech.ely_kwh_per_kg + tech.tank_compression_kwh_per_kg)
+    # The same standing losses the LP applies, per step on the stock held.
+    keep_b = 1.0 - tech.batt_leakage_per_hour * dt
+    keep_h = 1.0 - tech.tank_leakage_per_hour * dt
 
     cap_w = caps.get("cap_wind", 0.0) + caps.get("cap_offshore", 0.0)
     cap_s = caps.get("cap_solar", 0.0)
@@ -76,10 +85,12 @@ def dispatch(series: M.Series, tech: M.Tech, caps: dict,
     soc = initial_soc_frac * cap_be
     tank = initial_tank_frac * cap_tank
     out = {k: np.zeros(n) for k in
-           ("direct", "ch", "dis", "soc", "p_ely", "tank", "p_fc", "imp",
-            "unserved", "curtailed")}
+           ("direct", "ch", "dis", "soc", "p_ely", "tank", "p_fc", "h2_buy",
+            "imp", "unserved", "curtailed")}
 
     for i in range(n):
+        soc *= keep_b
+        tank *= keep_h
         gen = avail[i]
         need = demand[i]
 
@@ -106,16 +117,24 @@ def dispatch(series: M.Series, tech: M.Tech, caps: dict,
             dis = min(short, cap_bp, soc * eta / dt)
             soc -= dis / eta * dt
             short -= dis
-        p_fc = 0.0
+        p_fc = h2_buy = 0.0
         if short > 0 and cap_fc > 0:
-            p_fc = min(short, cap_fc, tank / tech.fc_kg_h2_per_mwh / dt)
-            tank -= p_fc * tech.fc_kg_h2_per_mwh * dt
+            if buy_h2:
+                p_fc = min(short, cap_fc)
+                need_kg = p_fc * tech.fc_kg_h2_per_mwh * dt
+                from_tank = min(tank, need_kg)
+                h2_buy = need_kg - from_tank
+                tank -= from_tank
+            else:
+                p_fc = min(short, cap_fc, tank / tech.fc_kg_h2_per_mwh / dt)
+                tank -= p_fc * tech.fc_kg_h2_per_mwh * dt
             short -= p_fc
         imp = min(short, cap_grid) if short > 0 else 0.0
         short -= imp
 
         out["direct"][i] = direct; out["ch"][i] = ch; out["dis"][i] = dis
         out["p_ely"][i] = p_ely; out["p_fc"][i] = p_fc; out["imp"][i] = imp
+        out["h2_buy"][i] = h2_buy
         out["unserved"][i] = max(0.0, short); out["curtailed"][i] = surplus
         out["soc"][i] = soc; out["tank"][i] = tank
 
@@ -127,81 +146,73 @@ def dispatch(series: M.Series, tech: M.Tech, caps: dict,
     return df
 
 
-def evaluate(df: pd.DataFrame, series: M.Series, tech: M.Tech, caps: dict) -> dict:
-    """Annualised cost and carbon of a myopic dispatch, on the LP's own basis.
+CAPACITIES = ("cap_wind", "cap_offshore", "cap_solar", "cap_batt_p", "cap_batt_e",
+              "cap_ely", "cap_tank", "cap_fc", "cap_grid")
+# Every per-step quantity the shared objective reads. A dispatch that has no
+# column for one (the merit order never exports, nor buys on a second stream)
+# scores it as zero.
+FLOWS = ("imp", "exp", "p_ely", "p_fc", "h2_buy", "h2_buy_2", "unserved",
+         "soc", "tank")
 
-    Uses exactly the same coefficients the LP uses, so any difference between
-    the two is dispatch and nothing else. The fuel cell replacement rule is
-    applied the same way — max(calendar, duty) — rather than approximated.
+
+def evaluate(df: pd.DataFrame, series: M.Series, tech: M.Tech, caps: dict,
+             grid: bool | None = None) -> dict:
+    """Annualised cost and carbon of a dispatch, on the LP's own basis.
+
+    Scored by ``dc_model.objective_terms`` — the very terms the LP minimises —
+    so any difference between the two is dispatch and nothing else. The fuel
+    cell replacement rule is applied the same way, max(calendar, duty).
+
+    ``grid``: whether the build has a grid connection, which decides the fixed
+    connection charge. Defaults to "it has a non-zero ``cap_grid``"; pass the
+    architecture's own flag where it is known, as the LP uses that.
     """
     dt, scale = series.dt_hours, series.annual_scale
-    kg_per_mwh_in = 1000.0 / (tech.ely_kwh_per_kg + tech.tank_compression_kwh_per_kg)
     cap_fc = caps.get("cap_fc", 0.0)
-    fc_mwh = float((df.p_fc * dt).sum()) * scale
-    h = (fc_mwh / cap_fc) if cap_fc else 0.0
-    bop_units = cap_fc * max(1.0 / tech.fc_bop_calendar_years, h / tech.fc_bop_duty_hours) \
-        if cap_fc else 0.0
-    stack_units = cap_fc * max(1.0 / tech.fc_stack_calendar_years, h / tech.fc_stack_duty_hours) \
-        if cap_fc else 0.0
+    fc_mwh = float((df.p_fc * dt).sum()) * scale if "p_fc" in df else 0.0
+    bop_units = max(cap_fc / tech.fc_bop_calendar_years, fc_mwh / tech.fc_bop_duty_hours)
+    stack_units = max(cap_fc / tech.fc_stack_calendar_years, fc_mwh / tech.fc_stack_duty_hours)
 
-    gwp = (tech.gwp_wind * caps.get("cap_wind", 0.0)
-           + tech.gwp_offshore * caps.get("cap_offshore", 0.0)
-           + tech.gwp_solar * caps.get("cap_solar", 0.0)
-           + tech.gwp_batt_p * caps.get("cap_batt_p", 0.0)
-           + tech.gwp_batt_e * caps.get("cap_batt_e", 0.0)
-           + tech.gwp_ely * caps.get("cap_ely", 0.0)
-           + tech.gwp_tank * caps.get("cap_tank", 0.0)
-           + tech.gwp_fc_bop_per_mw * bop_units
-           + tech.gwp_fc_stack_per_mw * stack_units
-           # Step-up transformers, on the same capacities the LP charges them
-           # against — a myopic dispatch builds the same kit, so leaving these
-           # out would make the bracket look cleaner than the LP by an amount
-           # that has nothing to do with foresight.
-           + tech.gwp_tx_wind_per_mw * (caps.get("cap_wind", 0.0)
-                                        + caps.get("cap_offshore", 0.0))
-           + tech.gwp_tx_solar_per_mwp * caps.get("cap_solar", 0.0)
-           + scale * float((tech.gwp_fc_maint_per_mwh * df.p_fc * dt).sum())
-           + scale * float((series.grid_gwp_per_mwh * df.imp * dt).sum())
-           + scale * tech.ely_variable_gwp_per_kg * kg_per_mwh_in
-                   * float((df.p_ely * dt).sum())
-           + tech.dc_fixed_gwp_per_year
-           + tech.dc_other_gwp_per_mwh * float(series.demand_mw.sum() * dt) * scale)
-    cost = (tech.cost_wind * caps.get("cap_wind", 0.0)
-            + tech.cost_offshore * caps.get("cap_offshore", 0.0)
-            + tech.cost_solar * caps.get("cap_solar", 0.0)
-            + tech.cost_batt_p * caps.get("cap_batt_p", 0.0)
-            + tech.cost_batt_e * caps.get("cap_batt_e", 0.0)
-            + tech.cost_ely * caps.get("cap_ely", 0.0)
-            + tech.cost_tank * caps.get("cap_tank", 0.0)
-            + tech.cost_fc * cap_fc
-            + tech.cost_fc_stack_per_mw * stack_units
-            + tech.cost_fc_bop_per_mw * bop_units
-            + tech.cost_grid_per_mw_year * caps.get("cap_grid", 0.0)
-            + (tech.cost_grid_fixed_per_year if caps.get("cap_grid", 0.0) > 0 else 0.0)
-            + scale * float((series.grid_price_per_mwh * df.imp * dt).sum())
-            + scale * M.VOLL_GBP_PER_MWH * float((df.unserved * dt).sum()))
+    q = {k: float(caps.get(k, 0.0)) for k in CAPACITIES}
+    q.update({k: (df[k].to_numpy(dtype=float) if k in df else np.zeros(series.n))
+              for k in FLOWS})
+    q["fc_bop_units"], q["fc_stack_units"] = bop_units, stack_units
+    terms = M.score(q, series, tech)
+    if grid is None:
+        grid = caps.get("cap_grid", 0.0) > 0
+    cost_const, gwp_const = M.objective_constants(series, tech, grid=grid)
+
+    gwp = sum(terms["gwp_embodied"].values()) + sum(terms["gwp_operational"].values()) \
+        + gwp_const
+    cost = sum(terms["cost_capital"].values()) + sum(terms["cost_operational"].values()) \
+        + cost_const
     mwh = float(series.demand_mw.sum() * dt) * scale
     return {
         "cost_GBP_per_year": cost, "gwp_kgco2e_per_year": gwp,
         "gwp_g_per_kWh": gwp / mwh, "cost_GBP_per_MWh": cost / mwh,
         "import_MWh_per_year": float((df.imp * dt).sum()) * scale,
         "unserved_MWh_per_year": float((df.unserved * dt).sum()) * scale,
-        "curtailed_MWh_per_year": float((df.curtailed * dt).sum()) * scale,
+        "curtailed_MWh_per_year": (float((df.curtailed * dt).sum()) * scale
+                                   if "curtailed" in df else float("nan")),
         "soc_end_frac": (df.soc.iloc[-1] / caps["cap_batt_e"]) if caps.get("cap_batt_e") else float("nan"),
         "tank_end_frac": (df.tank.iloc[-1] / caps["cap_tank"]) if caps.get("cap_tank") else float("nan"),
     }
 
 
-def bracket(series, tech, caps, lp_totals, lp_vars=None) -> pd.DataFrame:
+def bracket(series, tech, caps, lp_totals, lp_vars=None, assets=None) -> pd.DataFrame:
     """LP against merit order for the same build — the value of foresight.
 
     Report unserved energy alongside cost, because cost alone is misleading
     here: a myopic dispatch that fails to serve load is charged VoLL, which is a
     diagnostic penalty rather than a price anyone pays. £33 m of "cost"
     difference is really 332 MWh of lost load wearing a price tag.
+
+    ``assets``: the architecture, so the merit order may buy hydrogen when the
+    LP could, and the connection charge follows the same flag.
     """
-    dis = dispatch(series, tech, caps)
-    myo = evaluate(dis, series, tech, caps)
+    dis = dispatch(series, tech, caps, buy_h2=bool(assets and assets.buy_h2))
+    myo = evaluate(dis, series, tech, caps,
+                   grid=(assets.grid if assets is not None else None))
     dt, scale = series.dt_hours, series.annual_scale
     mwh = float(series.demand_mw.sum() * dt) * scale
 
@@ -248,7 +259,7 @@ if __name__ == "__main__":
     print("=" * 88)
     print("  build: " + ", ".join(f"{k[4:]} {v:.2f}" for k, v in caps.items() if v > 0.01))
     print()
-    b = bracket(series, tech, caps, M.totals(obj), V)
+    b = bracket(series, tech, caps, M.totals(obj), V, assets=assets)
     print(b.round(3).to_string(index=False))
     lost = b.unserved_MWh_per_year.iloc[1]
     print(f"\n  The merit order leaves {lost:,.0f} MWh unserved "

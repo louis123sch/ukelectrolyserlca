@@ -12,6 +12,8 @@
   "stack_kgco2e_per_MWh": 3.2477095781559386,
   "bop_kgco2e_per_MW": 44324.55668313031,
   "bop_kgco2e_per_MW_year": 2216.227834156515,
+  "bop_container_kgco2e_per_MW": 3657.698520802372,
+  "bop_kw_per_container": 1000.0,
   "maintenance_kgco2e_per_MWh": 0.0032037756522448986,
   "_per_kwh": {
     "fuel": 1.0738510144402174,

@@ -619,3 +619,58 @@ def test_soec_electric_boiler_moves_heat_onto_electricity():
     assert electrolysers.with_heat_source(pem, "electric_boiler")["kwh_per_kg"] == pem["kwh_per_kg"]
     with pytest.raises(ValueError):
         electrolysers.with_heat_source(soec, "heat_pump")
+
+
+# =============================================================================
+# Sweep overrides on build_tech (CARBON_PLAN.md 1.2)
+# =============================================================================
+_NO_NETWORK = {"capacity_GBP_per_MW_year": 0.0, "fixed_GBP_per_year": 0.0}
+
+
+def test_fuel_cell_container_is_scored_separately():
+    _cached(fuel_cell)
+    d = fuel_cell.decompose()
+    # 3.7 of the BoP's 44 t/MW, at one 20 ft container per MW.
+    assert d["bop_kw_per_container"] == 1000.0
+    assert 0.05 < d["bop_container_kgco2e_per_MW"] / d["bop_kgco2e_per_MW"] < 0.15
+
+
+def test_sweep_overrides_reach_the_tech():
+    _cached(fuel_cell)
+    from optimisation import battery
+    from optimisation import dc_inputs as I
+    base = I.build_tech("london", _NO_NETWORK)
+    d = fuel_cell.decompose()
+    t = I.build_tech("london", _NO_NETWORK, fc_stack_calendar_years=5.0,
+                     fc_bop_calendar_years=15.0, fc_kw_per_container=500.0,
+                     batt_usable_fraction=0.80)
+    assert (t.fc_stack_calendar_years, t.fc_bop_calendar_years) == (5.0, 15.0)
+    # Half a container per MW more: the container term doubles, nothing else moves.
+    assert t.gwp_fc_bop_per_mw - base.gwp_fc_bop_per_mw == pytest.approx(
+        d["bop_container_kgco2e_per_MW"], rel=1e-9)
+    assert t.gwp_batt_e == pytest.approx(
+        base.gwp_batt_e * battery.USABLE_FRACTION / 0.80, rel=1e-9)
+    # The BoP life moves the cost annuity too, not just the carbon count.
+    assert t.cost_fc != pytest.approx(base.cost_fc, rel=1e-6)
+    assert t.labels["fc_kw_per_container"] == 500.0
+    # Defaults reproduce the module constants.
+    assert base.gwp_fc_bop_per_mw == pytest.approx(d["bop_kgco2e_per_MW"], rel=1e-12)
+    assert base.fc_stack_calendar_years == fuel_cell.STACK_CALENDAR_LIFETIME_YEARS
+
+
+@pytest.mark.parametrize("kw,bad", [("fc_stack_calendar_years", 0.0),
+                                    ("fc_bop_calendar_years", -5.0),
+                                    ("fc_kw_per_container", float("nan")),
+                                    ("batt_usable_fraction", 1.2)])
+def test_bad_sweep_override_is_refused_before_loading(kw, bad):
+    from optimisation import dc_inputs as I
+    with pytest.raises(ValueError, match=kw):
+        I.build_tech("london", {}, **{kw: bad})
+
+
+def test_sensitivity_variant_lists():
+    from optimisation import sensitivity as S
+    v = S.one_at_a_time({"a": [1, None, 2], "b": [3]})
+    assert v == [{}, {"a": 1}, {"a": 2}, {"b": 3}]
+    assert S.grid({"a": [1, 2], "b": [3, 4]}) == [
+        {"a": 1, "b": 3}, {"a": 1, "b": 4}, {"a": 2, "b": 3}, {"a": 2, "b": 4}]

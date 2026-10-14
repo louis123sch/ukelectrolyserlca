@@ -126,12 +126,17 @@ def fc_stack_cost_fraction() -> float:
     return FC_STACK_COST_FRACTION
 
 
-def fuel_cell_costs():
-    """£/kW installed, and the annualised £/kW/year that follows."""
+def fuel_cell_costs(bop_calendar_years: float | None = None):
+    """£/kW installed, and the annualised £/kW/year that follows.
+
+    ``bop_calendar_years`` overrides ``fuel_cell.BOP_CALENDAR_LIFETIME_YEARS``
+    for a sweep, so the cost annuity moves with the life the carbon side's
+    replacement count uses.
+    """
     from optimisation import fuel_cell as fc
     # From the constant, not the decomposition cache: an assumption edited in
     # fuel_cell.py must reach the cost side without a Brightway rerun.
-    life = fc.BOP_CALENDAR_LIFETIME_YEARS
+    life = float(bop_calendar_years or fc.BOP_CALENDAR_LIFETIME_YEARS)
     crf = capital_recovery_factor(FC_DISCOUNT_RATE, life)
     rows = []
     for case in CASES:

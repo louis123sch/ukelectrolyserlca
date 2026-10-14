@@ -353,21 +353,35 @@ def decompose(refresh: bool = False) -> dict:
     return out
 
 
-def kgco2e_per_mw_year(technology: str, refresh: bool = False) -> float:
+def kgco2e_per_mw_year(technology: str, refresh: bool = False,
+                       life_years: float | None = None) -> float:
     """Annual embodied burden per unit of that technology's capacity variable.
 
     ``onshore_wind`` and ``offshore_wind`` are per MW of nameplate and carry the
-    turbine step-ups Leng measured. ``solar_pv`` is per MWp (DC) and still
-    carries the legacy plant-rated unit, so the two are not on one basis — see
-    the module docstring and DATA_GAPS.md.
+    turbine step-ups Leng measured. ``solar_pv`` is per MWp (DC) and carries
+    IEA PVPS T12-33:2026's 2.5 MVA inverter-station units (``SOLAR_BASIS``);
+    the legacy plant-rated unit is kept only to reproduce old runs.
+
+    ``life_years`` re-amortises over the life of the generator the unit
+    serves. A step-up has no cost line of its own (DESNZ/Arup capex reaches
+    the point of connection), so it is paid for inside its generator's annuity
+    and must be amortised over the same life in carbon. ``build_tech`` passes
+    the generator's life for the cost case; the cached figure is at
+    ``TX_ASSET_LIFE_YEARS``. Found by ``audit.check_lifetime_agreement``:
+    solar's life is 38 y and its transformer was amortised over 35.
     """
     d = decompose(refresh)
     try:
-        return float(d["per_MW_year"][technology])
+        per_year = float(d["per_MW_year"][technology])
     except KeyError:
         raise ValueError(
             f"technology must be one of {list(TECHNOLOGIES)}, "
             f"got {technology!r}") from None
+    if life_years is None:
+        return per_year
+    if not life_years > 0:
+        raise ValueError(f"life_years must be positive, got {life_years!r}")
+    return per_year * float(d["asset_life_years"]) / float(life_years)
 
 
 def check(d: dict | None = None) -> str:

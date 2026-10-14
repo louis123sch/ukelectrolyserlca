@@ -185,6 +185,7 @@ def decompose(use_cache: bool = True, refresh: bool = False) -> dict:
     act = bd.get_activity((R.FUEL_CELL_DB, R.FC_OP))
 
     groups = {"fuel": 0.0, "stack": 0.0, "bop": 0.0, "maint": 0.0}
+    container_per_kwh = 0.0
     h2_kg_per_kwh = 0.0
     stack_units_per_kwh = 0.0
     parts = []
@@ -198,6 +199,13 @@ def decompose(use_cache: bool = True, refresh: bool = False) -> dict:
             h2_kg_per_kwh += amount
         if kind == "stack":
             stack_units_per_kwh += amount
+        if kind == "bop":
+            # The enclosure, scored on its own so its ASSUMED one-per-MW count
+            # can be swept without rebuilding the inventory.
+            for sub in e.input.technosphere():
+                if sub.input.key == (R.BESS_DB, R.BESS_PARTS["container"]):
+                    container_per_kwh += (H.run_lca_score(sub.input, method)
+                                          * float(sub["amount"]) * amount)
         parts.append({"name": name, "amount": amount, "kind": kind, "kgco2e_per_kwh": score})
 
     # The inventory's own amortisation bases, read back out of the amounts so
@@ -225,6 +233,9 @@ def decompose(use_cache: bool = True, refresh: bool = False) -> dict:
         "stack_kgco2e_per_MWh": stack_per_mw / stack_hours,
         "bop_kgco2e_per_MW": bop_per_mw,
         "bop_kgco2e_per_MW_year": bop_per_mw / BOP_CALENDAR_LIFETIME_YEARS,
+        # Of which the container, at the inventory's own kW per container.
+        "bop_container_kgco2e_per_MW": container_per_kwh * bop_hours * 1000.0,
+        "bop_kw_per_container": cfg.FC_KW_PER_CONTAINER,
         "maintenance_kgco2e_per_MWh": groups["maint"] * 1000.0,
 
         "_per_kwh": dict(groups),

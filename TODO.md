@@ -124,8 +124,6 @@ Either the source is named and public, or no new sourcing is needed at all.
 - [ ] **EHV band boundaries against DCUSA Schedule 32.**
       `network_charges.EHV_BAND_KVA` came from secondary summaries and has
       never been checked against the primary.
-- [ ] **Add a wind-operational row to `DATA_GAPS.md`** when that work lands —
-      it is not in the register at all yet.
 - [ ] **`myopic.evaluate` has drifted from the LP.** Stack and BoP costs
       were added on 12 Oct, but there is still no grid connection carbon and no
       bought-H₂ path at all — so the no-foresight bracket is wrong for any
@@ -147,8 +145,8 @@ Either the source is named and public, or no new sourcing is needed at all.
       after the FC fixes, but the Overview and brief still quote 2026-08-24
       numbers (16,014 t baseline, 6,605 t optimised). The grid-only baseline is
       now 11,114 t/yr at 174 g/kWh after the 13 Oct grid fixes (gas, imports,
-      delivery, solar). Fix `validate.py`'s IT-vs-facility sizing first
-      (audit §7 A4), or the regenerated figures inherit that bug.
+      delivery, solar). `validate.py` and `myopic.py` already size Zhang's
+      7.31 MW as facility draw at `DC_REFERENCE_PUE` (audit §7 A4 is done).
 - [ ] **Unserved load is carbon-free.** A min-GWP solve with any allowance
       sheds the dirtiest hours, and every g/kWh and £/MWh divides by gross
       demand. Audit §3.7.
