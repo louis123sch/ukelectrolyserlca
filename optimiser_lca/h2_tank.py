@@ -20,7 +20,7 @@ foundations, no end-of-life.
 
 Functional unit here is **1 kg of hydrogen storage capacity**; the paper
 divides the steel by the plant's 25-year output instead (15,652 kg ÷ 25 y ×
-171.5 MWh/y = 3.65e-3 kg/kWh, their Table 3). Keeping it per kg of capacity
+171.5 MWh/y = 3.65e-3 kg/kWh, their Table 5). Keeping it per kg of capacity
 lets ``optimisation/h2_storage.py`` amortise it over
 ``dc_config.TANK_LIFETIME_YEARS`` and survive a change of tank size.
 
@@ -69,7 +69,7 @@ TANK_DESIGNS = {
     "gandiglio_28bar": {
         "steel_process": "steel_chromium_188",
         "steel_kg": 15_652.0, "volume_m3": 21.6, "pressure_bar": 28.0,
-        "note": "Gandiglio et al. 2022, Table 3 - as-built 21.6 m3 stainless vessel at Ginostra",
+        "note": "Gandiglio et al. 2022, Table 5 - as-built 21.6 m3 stainless vessel at Ginostra",
     },
     # Type I all-steel cylinder at 200 bar, sized from ~1 wt% gravimetric
     # capacity. Roughly 3x lighter per kg H2 than the 28 bar design above.

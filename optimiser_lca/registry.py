@@ -77,6 +77,8 @@ H2_TANK = "h2_tank_steel_1kg_capacity"          # per kg of storage capacity
 TX_WIND  = "wind_turbine_stepup_per_mw"         # per MW of wind connected
 TX_SOLAR = "solar_inverter_stepup_per_mwp"      # per MWp of PV connected
 TX_GRID  = "grid_intake_transformer_per_mva"    # per MVA of grid-intake capacity
+TX_LV_CONTAINER = "containerised_lv_stepup_per_mw"   # per MW of inverter rating: battery PCS, fuel cell
+TX_SOLAR_REPL30 = "solar_inverter_stepup_replacements_30y_per_mwp"   # Smith A15's 30 % over 30 y
 
 # --- utility-scale PV ------------------------------------------------------------
 UPV_TABLES = {                                   # Smith Appendix A table -> code
@@ -126,5 +128,5 @@ CODES_BY_DATABASE = {
                                                  BESS_DC_BLOCK_KWH],
     FUEL_CELL_DB:   [FC_STACK, FC_STACK_GRAMC, FC_BOP, FC_SERVICE, FC_OP],
     H2_STORAGE_DB:  [H2_TANK],
-    TRANSFORMER_DB: [TX_WIND, TX_SOLAR, TX_GRID],
+    TRANSFORMER_DB: [TX_WIND, TX_SOLAR, TX_GRID, TX_LV_CONTAINER, TX_SOLAR_REPL30],
 }

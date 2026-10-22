@@ -141,7 +141,7 @@ optimiser_lca/
   fuel_cell.py           Babatunde stack + the per-kWh operation activity
   h2_tank.py             Gandiglio vessel, both designs
   stepup_transformers.py Leng wind + IEA PVPS solar
-  upv.py                 Smith plant, IEA mounting, O&M (reads upv_smith_bill.json)
+  upv.py                 Smith plant: every Appendix A table used, written out; IEA mounting; O&M
   build.py               python -m optimiser_lca.build  → writes every DB in order
   validate.py            FC stack vs paper tables, FC op sanity, DC vs paper
 ```
@@ -315,8 +315,9 @@ Steps 1, 2 and 5 are independent and can be done in any order; 3–4 depend on
   `optimisation/transformers.py` already exists, hence
   `optimiser_lca/stepup_transformers.py`.
 - **Data format**: Python literals throughout, as the notebook and
-  `dc_config` are today; the one JSON bill (`upv_smith_bill.json`) stays as
-  it is. No spreadsheets or CSV loaders.
+  `dc_config` are today. Smith's Appendix A tables are written out in
+  `optimiser_lca/upv.py`, one `Activity` per table (14 Oct 2026); the JSON
+  bill that used to hold them is gone. No spreadsheets, CSV or JSON loaders.
 - **Search-based picking**: kept, as `Process(query, pick, identity, why)`
   above. The search stays on screen; only the identity builds.
   `pick_candidate` in `lca_helpers` remains the exploration helper.

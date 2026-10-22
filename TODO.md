@@ -53,6 +53,11 @@ Work where a number the study reports is not currently defensible.
       plus CCL — about +50 % on the grid-only bill, and it flatters import
       against every on-site asset. `ELECTRICITY_DELIVERED_UPLIFT` cannot reach
       the LP (`profiles.py` never reads `price_timeslices`). Audit §3.5.
+- [ ] **Connection tier and band follow the cap, not the connection built**
+      (19 Oct, supervisor point 4). Replace the assumed 100 MW threshold with
+      GB's voltage rule (ENWL ES216, 240 MVA in England and Wales; 132 kV in
+      Scotland), and bound `cap_grid` below by its band's floor. Moves the
+      London headline. Sequenced in `docs/CONNECTION_TIER_PLAN.md`.
 
 ## Cheap wins
 
@@ -140,6 +145,28 @@ Either the source is named and public, or no new sourcing is needed at all.
 - [ ] **Export is refused until it is modelled** (`dc_model.build_model`
       raises since 12 Oct). To build it: credit at an export price, not demand
       rates; give it a carbon credit; add it to `contributions()`. Audit §3.5.
+- [ ] **State a cut-off rule and test every exclusion against it** (14 Oct;
+      rule agreed 20 Oct). Per technology: each excluded flow under 1 % of its
+      technology's carbon, all of them under 5 %, and adding them back must not
+      change the best design. Sequenced in `docs/CUTOFF_RULE_PLAN.md`. Keep it
+      separate from ecoinvent's cut-off *system model*, which is a different
+      thing. Source diff done 21 Oct: `docs/SOURCE_DIFF.md`; its restores are
+      built (184 tests pass). Still open there: D2 (Leng's booster-station
+      civils for the grid intake), #11 (SOEC La₂O₃/SrCO₃ amount); wind
+      step-up replacement rate and wind/battery transformer factory energy
+      (unsourced) go on the cut-off register. S1 settled 22 Oct as a stated
+      substitution; get Hunziker et al. (2020) to confirm the on-load tap
+      changer behind Jasper's electronics row. Re-run the reference cases: `option_summary.csv`, the
+      sensitivity CSVs and the LCA map are stale.
+- [ ] **LCA assurance: cut-off register, source re-read, map rebuild, structure
+      sweep** (22 Oct). Every inventory checked against `docs/LCA_STYLE.md`
+      (Python only, one shape, locator-first notes; a style test to hold it).
+      The map is the 15 Oct snapshot: `scripts/check_lca_map.py --no-brightway`
+      finds 29 problems (9 coefficients moved, 19 activities with changed rows,
+      the solar transformer replacements have no box) and crashes on a cp1252
+      console without `PYTHONUTF8=1`. No staleness test holds it. The 21 Oct
+      source diff kept no row ledgers and did not cover wind, grid, bought H2
+      or the transcribed scalars. Sequenced in `docs/LCA_ASSURANCE_PLAN.md`.
 
 ## Balance of plant not counted
 
@@ -157,11 +184,13 @@ is what is *actually* absent rather than what sounds absent.
       loading compressor below. `h2_storage.py`, audit §3.3.
 
 **Closed 4 Sep as negligible** — not to be reopened without new evidence:
-battery and fuel-cell step-up transformers, connection and
-step-up switchgear, and the data centre's own electrical distribution.
-Sized against the North Norfolk 100 MW run, all of them together are at most
-~1.6 % of total carbon at the knee point and under 0.2 % at minimum cost, so
-none can move a ranking. Recorded in `DATA_GAPS.md` on 12 Oct.
+connection and step-up switchgear, and the data centre's own electrical
+distribution (inside the PUE). Sized against the North Norfolk 100 MW run,
+together under ~1.6 % of total carbon at the knee point and under 0.2 % at
+minimum cost. The battery and fuel-cell step-up transformers were closed with
+them and are **modelled since 15 Oct** — carbon per MW of `cap_batt_p` and
+`cap_fc`, losses in the LP (`transformers.py`, `conversion_losses.py`) — so
+the bound now covers only what is left. Recorded in `DATA_GAPS.md`.
 
 ## Parked
 

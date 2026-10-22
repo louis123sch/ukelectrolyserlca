@@ -298,7 +298,7 @@ remains — smaller, and now in one place rather than two.
 | Cycling limit | 1–2 per day, warranty-aligned | transcribed | Same |
 | Round-trip efficiency | 88 % | transcribed (weakly) | Modo's standard assumption, but **not** on the model-assumptions page itself — the least firmly sourced number in this module |
 | Fixed OPEX | 2 % of capex/year | **assumed** | Modo do not publish it. FES routes battery opex to BEIS 2022 *Benefits of Long Duration Electricity Storage* instead. Flagged `OPEX_IS_PROXY = True` |
-| Energy-term embodied carbon | **97.75 kg CO₂e per kWh nameplate** → **108.6 per usable kWh** | derived | `battery foreground`, built by `optimiser_lca/bess.py` (below): Jasper et al. 2026's liquid-cooled LFP container around Voß et al. 2025's LFP cell, made in China, on ecoinvent 3.9.1 apos, IPCC 2021 GWP100. Pinned as `BESS_KGCO2E_PER_KWH_NAMEPLATE` |
+| Energy-term embodied carbon | **101.11 kg CO₂e per kWh nameplate** → **112.3 per usable kWh** (21 Oct 2026: Jasper's 43.9 t concrete block and Voß's in-China material legs restored; was 97.91) | derived | `battery foreground`, built by `optimiser_lca/bess.py` (below): Jasper et al. 2026's liquid-cooled LFP container around Voß et al. 2025's LFP cell, made in China, on ecoinvent 3.9.1 apos, IPCC 2021 GWP100. Pinned as `BESS_KGCO2E_PER_KWH_NAMEPLATE` |
 | Usable fraction | 0.90 of nameplate | **assumed** | `cap_batt_e` is the energy the LP can swing (`soc` runs 0..`cap_batt_e`) and Modo's costs are per usable kWh, while both sources report per kWh of cells. 0.90 is commercial operating practice; Jasper's 80 % depth of discharge would make it 122.2 |
 | PCS embodied carbon | 15,930.86 kg CO₂e/unit = 31.9 /kW | transcribed | ecoinvent 3.9.1 apos, `market for inverter, 500kW` [GLO]. Unchanged; Jasper's own 800 kg PCS is excluded from the energy term so it is not charged twice |
 | Legacy: EV pack | 11.368 kg CO₂e/kg at 0.1158 kWh/kg = 98.2 /kWh | transcribed | ecoinvent 3.9.1 apos, `market for battery, Li-ion, LFP, rechargeable, prismatic` [GLO]. The basis before 14 Oct 2026, kept as `EMBODIED_BASIS = "ecoinvent_ev_pack"` to reproduce old runs only |
@@ -333,16 +333,28 @@ mismatch.
 
 | Part | kg CO₂e/kWh nameplate | Jasper Fig. 4, LC LFP (3.11, EF 3.1) |
 |---|---|---|
-| Cells (made in China) | **79.48** | 95.44 |
-| Modules without cells | 6.55 | 6.57 |
-| Racks | 6.85 | 6.59 |
-| Container | 1.22 | 3.50 |
+| Cells (made in China) | **80.58** | 95.44 |
+| Modules without cells | 6.59 | 6.57 |
+| Racks | 6.91 | 6.59 |
+| Container, incl. the 43.9 t concrete block since 21 Oct | 3.37 (1.22 container + 2.15 block) | 3.50 + 2.06 foundation |
 | Liquid cooling | 2.58 | 2.64 |
 | Fire suppression | 0.76 | 0.76 |
 | Others (BESS controller) | 0.32 | 0.25 |
-| **DC block** | **97.75** | 115.75 (140.11 less PCS, transformer, foundation) |
+| **DC block** | **101.11** | 117.81 (140.11 less PCS and transformer) |
 
-Every non-cell part reproduces Jasper's to within 4 % except the container,
+**Transport (20 Oct 2026).** Only delivery to site is excluded, because the site
+is not known; upstream transport is in. Jasper's SI has two patterns of row:
+1,000 km lorry + 8,000 km sea + 1,000 km European rail per tonne on the
+container, cooling, fire suppression, PCS and transformer, which ships finished
+parts from his Chinese factory to his German site (left out); and ecoinvent's
+default 100 km lorry + 600 km rail per tonne on the modules, racks and rack
+housing, which brings materials to those factories (kept since 20 Oct, +0.10 kg
+CO₂e/kWh). Voß's China-to-Berlin legs serve their German factory, so the
+China-made cell does not take them; from the natural-graphite factor only the
+sea and European legs are subtracted, and the 1,000 km in-China lorry leg
+stays (+0.05 kg/kWh on the cell). Together +0.15 % on the DC block.
+
+Every non-cell part reproduces Jasper's to within 5 % except the container,
 where ecoinvent 3.9.1's 20 ft intermodal container (2.9 t CO₂e) is about a
 third of whatever 3.11 carries; this is built as the inventory says, on the
 study's database, and the gap is stated rather than patched. The cell gap is
@@ -355,8 +367,8 @@ blend (65:35 against 75:25).
 | Check | Rebuilt | Voß |
 |---|---|---|
 | Synthetic graphite, Acheson powder route (Table S5) | 24.51 kg/kg, +0.51 of Voß's transport = 25.02 | 25.1 |
-| Natural graphite (Engels 2022) | 4.675 kg/kg, +0.515 transport = 5.19 | 5.19 |
-| Cell, German factory, 75:25 | 72.45 kg/kWh | 71.2 |
+| Natural graphite (Engels 2022) | 4.675 kg/kg, +0.515 transport = 5.19 (built: 4.869, keeping only the in-China leg) | 5.19 |
+| Cell, German factory, 75:25 | 72.50 kg/kWh | 71.2 |
 
 The German cell lands 1.8 % high *despite* leaving out the transport and
 processing materials Voß include, so like for like it is ~6 % high. The
@@ -501,13 +513,13 @@ different system model.
 | per MWp | t CO₂e |
 |---|---|
 | module (A1–A8) | 683.8 |
-| fixed-tilt mounting (IEA PVPS T12-33:2026) | 148.6 |
+| fixed-tilt mounting (IEA PVPS T12-33:2026), incl. its upstream transport, packaging waste and land rows since 21 Oct 2026 | 161.4 (was 148.6) |
 | electrical balance of system | 30.8 |
 | inverters | 11.7 |
 | fence | 1.3 |
 | installation energy | 1.3 |
 | O&M, 30 y prorated to 38 y | 17.8 |
-| **total** | **895.3** |
+| **total** | **908.1** (was 895.3) |
 
 **Four substitutions, each stated.** Smith's system is single-axis **tracked**;
 GB utility-scale is fixed tilt, so Table A9 is replaced by IEA PVPS T12-33:2026
@@ -535,9 +547,12 @@ the annual charge is `capital/life + om30/30`. The O&M term is life-independent
 once annualised, so the 30 → 38 year scaling moves only the reported per-kWh
 columns, never the LP.
 
-Issues knowingly parked are listed in `data/UPV-DEFERRED-ISSUES.md`; the frozen
-bill is `data/upv_smith_bill.json`, and the parsing heuristics that produced it
-ran once and are not shipped. IEA PVPS's multi-Si figure is **not** offered as a basis — see
+Issues knowingly parked are listed in `data/UPV-DEFERRED-ISSUES.md`. Every
+Smith table this study uses (A1–A8, A10, A12, A13) is written out in
+`optimiser_lca/upv.py`, one activity per table with the rows as printed,
+checked against the transcription in `data/smith-nrel-2024-life-cycle-inventory.md`;
+the parsing heuristics that first read the PDF ran once and are not shipped.
+IEA PVPS's multi-Si figure is **not** offered as a basis — see
 below for why it is evidence rather than a scenario.
 
 Source: Stucki M., Götz M., de Wild-Scholten M. & Frischknecht R. (2024),
@@ -676,10 +691,11 @@ study's own 35-year life:
 
 | capacity variable | kg CO₂e per unit per year | basis |
 |---|---|---|
-| `cap_wind`, `cap_offshore` (MW) | **278.7** | Leng turbine step-ups |
-| `cap_solar` (MWp) | **296.0** | IEA PVPS T12-33:2026 inverter-station step-ups |
+| `cap_wind`, `cap_offshore` (MW) | **328.6** = 278.7 transformers + 49.9 foundations | Leng turbine step-ups; Leng Table S3 box-transformer pads since 21 Oct 2026 |
+| `cap_solar` (MWp) | **447.6** = 296.0 transformers + 47.3 station building + 104.4 replacements | IEA PVPS T12-33:2026 inverter-station step-ups; Z-PV-238 building and Smith A15's 30.2 % replacement over 30 y (its own activity, charged per year) since 21 Oct 2026. At solar's 38-y cost life the unit re-amortises to 420.5 |
 
-278.7 is **1.45 %** of onshore wind's 19,244 kg CO₂e/MW/year.
+328.6 is **1.71 %** of onshore wind's 19,244 kg CO₂e/MW/year (the transformers
+alone, 278.7, are 1.45 %).
 
 *"Iron" is the one judgement.* Leng lists Steel and Iron separately and does not
 say what the second is. Read here as core steel, since a transformer contains no
@@ -705,7 +721,7 @@ totalling 324 MW, reported per kWh rather than in tonnes. Converted onto this
 study's basis their turbine-level transformers are **228–333 kg CO₂e/MW/year**,
 the range being which of their two capacity factors the inventory is built on
 (they publish design factors of 0.34–0.36 and realised ones of 0.17–0.32, and do
-not say which). Leng's 278.7 sits inside that band. Two teams, two countries, two
+not say which). Leng's 278.7 (transformers only, before the pads) sits inside that band. Two teams, two countries, two
 reporting formats, one answer. Teffera also resolves the "Iron" question above,
 and adds aluminium and porcelain bushings that Leng omits — so Leng errs low.
 
@@ -740,11 +756,17 @@ but small, and the insulating-gas term is already carried for imported power,
 since ecoinvent's medium-voltage market allocates high-voltage switchgear SF₆ to
 medium-voltage demand. Registered in DATA_GAPS.md.
 
-**No manufacturing energy.** Leng's own published figures (342 t CO₂e for the
-grid-end unit, 1,793 t for the fifty box transformers) are higher than this
-rebuild because they add factory electricity on the Chinese grid. Materials only
-is consistent with every other foreground here, and it makes this the lower of
-the two available numbers.
+**No manufacturing energy, because Leng publish none.** Their Table S1 is a
+materials bill, S2 transport and S3 civils; no factory electricity appears for
+either transformer (checked against the SI and main text, 21 Oct 2026). Leng's
+own published figures (342 t CO₂e for the grid-end unit, 1,793 t for the fifty
+box transformers) sit above this rebuild because they score on ecoinvent 3.11
+with RoW steel proxies, not because a flow was dropped. **Civils** (21 Oct):
+Leng's Table S3 box-transformer foundations are on the wind units — per MW of
+wind, 7.28 m³ excavation, 0.56 m³ C15 and 2.80 m³ C30 concrete, 196 kg rebar,
+and the welding and truck energy of the pad works (machine-team units
+ASSUMED). The booster-station civils that belong to the grid intake await a
+decision (`docs/SOURCE_DIFF.md` D2).
 
 **Charged on capacity, never on output**, and **carbon only** — DESNZ/Arup capex
 is plant-plus-connection-to-the-point-of-connection, so a £/MW charge would
@@ -813,9 +835,11 @@ silently inside the LCA.
 **Two sources, two technologies, one answer.** Solar's **296.0** against wind's
 **278.7** kg CO₂e per unit of capacity per year, for step-ups of comparable
 rating (2.5 and 2.2 MVA) transcribed by different teams from different
-countries. The one asymmetry is deliberate and stated: **solar carries factory
-electricity and heat and wind does not**, because Leng publish theirs and this
-study excludes it. Process energy is ~6 % of the solar unit, so materials-only
+countries (transformers only; both carry their civils on top since 21 Oct
+2026). The one asymmetry is stated: **solar carries factory electricity and
+heat and wind does not**, because IEA PVPS publish theirs and Leng publish
+none (corrected 21 Oct 2026: there is no Leng figure to take). Process energy
+is ~6 % of the solar unit, so materials-only
 the two land within ~1 % of each other — which is what makes the agreement a
 corroboration rather than a coincidence. It also means **wind now errs low
 relative to solar**, and that is the direction to fix next.
@@ -851,8 +875,9 @@ Scored materials-only on ecoinvent 3.9.1 apos: **2,753 kg CO₂e per MVA**
 (3.85 kg CO₂e/kg — above the box units' 3.46 because copper is 23.5 % of the
 mass rather than 16.6 %, and half the carbon). × 2 MVA/MW (N-1 ÷ power factor
 1.0) ÷ 40 years = **137.7 kg CO₂e/MW/year**, −59 % on the old basis. Leng's own
-342 t CO₂e for this unit includes factory electricity on the Chinese grid; the
-275 t here does not, for consistency with the wind units.
+342 t CO₂e for this unit against the 275 t here is a scoring difference
+(ecoinvent 3.11 with RoW steel proxies against 3.9.1 apos); Leng publish no
+factory energy for it (corrected 21 Oct 2026).
 
 *The voltage judgement.* The unit is wound for **110 kV**, which fits a GB
 **132 kV** EHV/DNO connection — the common case for a ~100 MW data centre. For a
@@ -874,6 +899,53 @@ transformers (Monselice), EPDItaly rev. 3, 2022 —
 ABB, *Environmental Product Declaration, Power transformer TrafoStar 500 MVA*,
 S-P 00020 —
 <https://library.e.abb.com/public/566748ad75116903c1256d630042f1af/ProductdeclarationStarTrafo500.pdf>.
+### Battery and fuel-cell step-ups — Jasper's mass on the IEA composition (a stated substitution)
+
+Added 15 Oct 2026, after being closed as negligible on 4 Sep. A battery's PCS
+and a fuel cell's inverters put out 400 V, so each container carries the same
+LV → 20 kV step the PV inverter stations do. Jasper et al. (2026)'s liquid-cooled
+CSS bill lists one "transformer, for grid connection" of **5,500 kg per
+1,600 kW container** (`bess.CSS_EXCLUDED`). The mass is spread over the IEA PVPS
+Table 49 unit's composition, forming and factory energy per kg.
+
+**Why not Jasper's own recipe — a stated substitution (22 Oct 2026).** Jasper
+give one (SI air-cooled sheet rows 225–236, per kg: Cu cathode 0.25 + wire
+drawing, grain-oriented electrical steel 0.31, low-alloyed steel 0.14, base oil
+0.14, electronics for control units 0.09, ecoinvent "transformer, high voltage
+use" 0.07, metal working 0.31 + 0.14). It was missed when this unit was built
+on 15 Oct, because the liquid-cooled sheet carries only the mass and the
+recipe sits on the air-cooled sheet; the code said "no material split", which
+was wrong. On reading it, it is set aside on **technological
+representativeness** (ISO 14044 data quality): Jasper §2.4.3 derive it from
+Hunziker et al. (2020), *Sustainability assessment of novel transformer
+technologies in distribution grid applications*, a **630 kVA** line-frequency
+transformer **with an on-load tap changer**, scaled by mass to 1,800 kVA using
+commercial unit weights. The IEA unit is a current 2,500 kVA, 20/0.4 kV
+oil-immersed distribution transformer built from product documentation — the
+machine a container step-up is. Scored on 3.9.1 (grain-oriented steel on the
+IEA route), Jasper's recipe is **7.85 kg CO₂e/kg against 4.57** (+72 %); 2.90 of
+the 7.85 is the electronics row, plausibly the tap changer's control gear. As a
+sensitivity it raises the battery step-up from 1,046 to 1,799 kg/MW/yr (about
++2 % on a 4-hour battery) and the fuel cell's from 785 to 1,349 (about +4 %).
+Hunziker 2020 is not held; confirming the tap-changer reading needs it.
+Built as `transformer foreground/containerised_lv_stepup_per_mw`, **per MW of
+inverter rating**: 3,437.5 kg/MW (on the measured curve: 2,566 kg/MVA at
+2.2 MVA, 2,272 at 2.5), **15,674 kg CO₂e/MW**, 4.56 kg CO₂e/kg — identical per
+kg to solar's unit by construction (`transformers.check`).
+
+Charged per MW of `cap_batt_p` over the battery's 15-year life (**1,045 kg
+CO₂e/MW/yr**, +49 % on the power term and ~+3 % on a 4-hour battery) and per
+MW of `cap_fc` over the fuel cell's BoP calendar life (**784 kg/MW/yr** at 20 y,
++6.6 % on its per-MW capital; a swept BoP life carries its transformer with it).
+Amortising over the asset's life rather than the transformer's 35 y errs high,
+the study's convention; the other basis is one `life_years=` away. Carbon only,
+like every transformer here: Modo's £/kW and the fuel-cell capex are taken as
+reaching the point of connection. `fuel_cell.FC_KW_PER_CONTAINER` (1 MW,
+ASSUMED) sets how many containers a MW of fuel cell is, not the mass — the unit
+is per MW of rating however it is packaged. Why now: once the inventory and
+the loss model existed, leaving these two out was a one-way bias against the
+generation chains, which pay for theirs.
+
 ## Hydrogen chain — embodied carbon per unit of capacity
 `electrolysers.py`, `fuel_cell.py`, `h2_storage.py`, assembled by `coefficients.py`
 
@@ -887,7 +959,7 @@ number.
 
 | Input | Value | Grade | Source |
 |---|---|---|---|
-| AE / PEM / SOEC capital | 432.4 / 260.8 / 362.8 t CO₂e per MW | derived | Hermesmann et al. capital good, scored on ecoinvent 3.9.1 apos and divided out of the per-kg activity |
+| AE / PEM / SOEC capital | 433.7 / 260.9 / 362.8 t CO₂e per MW (AE −0.05 % on 21 Oct 2026: a doubled "(2 ×)" gas-separator line and a 405-for-400 diaphragm row corrected against Gerloff SI Fig. 1) | derived | Gerloff 2021 (J. Energy Storage 43, 102759) capital good — SI Figs 1–5 and Tables 3–6; misattributed to Hermesmann until 21 Oct 2026 — scored on ecoinvent 3.9.1 apos and divided out of the per-kg activity |
 | Rated capacity | **1 MW** each | derived | Only PEM states it. AE and SOEC are inferred from lifetime H₂ × specific energy, which lands on 160 GWh/MW for all three to within 0.2 % despite specific energies of 42.3–54.0 kWh/kg. `check_rating()` enforces it |
 | Implied utilisation in the foreground | 160,000 full-load hours, **73 % CF** over 25 y | derived | The trap this module exists to escape: an electrolyser built to run at 20 % CF is under-charged **3.7×** by the per-kg figure |
 | Variable burden | 0.042 / 0.107 / 1.632 kg CO₂e per kg H₂ | derived | Water, heat, electrolyte — genuinely per-kg, so left per-kg |
@@ -895,7 +967,7 @@ number.
 | SOEC heat, electric-boiler scenario | 5.24 kWh ÷ 0.99 = **5.29 kWh/kg H₂** of site electricity, replacing the gas row | assumed | `soec_heat="electric_boiler"` on a `Scenario` (matrix rows 22–25, and a toggle on the optimiser page). `electrolysers.with_heat_source` drops the gas row's 1.417 kg/kg, leaving 0.215 kg/kg of water, and adds the boiler's kWh to `kwh_per_kg`, so the heat costs and emits whatever the LP's electricity does in that hour. Efficiency 99 % from the Danish Energy Agency's *Technology Data*, "Electric boilers", not yet checked against the sheet. `cap_ely` then covers the boiler's draw too, so stack carbon and cost per MW are scaled to the stack's share (≈ 0.90 at a 28 bar tank). **The boiler's own capital is not charged**, in carbon or cost. Resistance heating reaches the ~750 °C inlet, which a gas boiler does not, and it is what commercial SOEC systems use |
 | Plant lifetime | 25 y | transcribed | NESO Green Hydrogen Data Portal, same figure as `electrolyser_costs_clean.csv` |
 
-*No stack/BoP split is possible* — Hermesmann's capital good is one monolithic
+*No stack/BoP split is possible* — Gerloff's capital good is one monolithic
 activity, so the whole of it is charged on calendar life. Registered in
 `DATA_GAPS.md`.
 
@@ -1074,6 +1146,8 @@ coefficient — the lost kWh is generated or imported by plant already charged.
 | Wind turbine step-up (Leng) | 2.2 MVA | 16,400 W | 1,413 W | Table I.1 Tier 2, interpolated 2,000–2,500 kVA | transcribed + derived |
 | Solar inverter station (IEA PVPS) | 2.5 MVA | 18,500 W | 1,575 W | Table I.1 Tier 2 | transcribed |
 | Grid intake (Leng main unit) | 100 MVA | 0.288 % of S | 0.046 % of S | Table I.7 Tier 2, PEI ≥ 100 MVA 99.770 %, split at k_PEI 0.4 | transcribed + **assumed** split |
+| Battery container step-up (Jasper CSS, 15 Oct) | 1.6 MVA | 12,040 W | 1,060 W | Table I.1 Tier 2, interpolated 1,000–2,000 kVA | transcribed + derived |
+| Fuel-cell container step-up (15 Oct) | 1.0 MVA | 7,600 W | 693 W | Table I.1 Tier 2 | transcribed |
 
 Retained Commission Regulation (EU) No 548/2014, Annex I, Tier 2 (1 July
 2021), read on legislation.gov.uk on 14 Oct 2026 —
@@ -1087,7 +1161,13 @@ Per MW: wind 1.1 MVA/MW (50 × 2.2 MVA per 100 MW), solar 1.0 MVA/MWp (4 ×
 carrying half). No-load loss is drawn at the node on installed capacity every
 step; load loss is linearised at the energy-weighted loading Σx²/Σx of the
 window's own capacity factors (`dc_model.loss_factors`) and, for the intake,
-at an ASSUMED 0.5.
+at an ASSUMED 0.5. The battery's and fuel cell's units (15 Oct) are one MVA per
+MW of inverter rating, at ASSUMED loadings of 0.5 and 1.0 (`BATTERY_TX_X_EFF`,
+`FC_TX_X_EFF`): the battery's load loss applies to charging and discharging,
+and the fuel cell's unit is kept energised on standby (`FC_TX_ENERGISED`,
+decision 15 Oct), so its no-load loss — 0.069 % of `cap_fc`, every hour — is
+the one place these losses matter for the asset itself: ~2–3 % of a backup
+unit's own output. All three are swept (`sensitivity.CARBON_KNOBS`).
 
 ## Hydrogen as a greenhouse gas — `dc_model.H2_GWP100`
 

@@ -263,8 +263,17 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
                batt_usable_fraction: float | None = None,
                wind_life_extension: str | None = None,
                fc_stack_basis: str | None = None,
-               batt_cell_basis: str | None = None) -> dc_model.Tech:
+               batt_cell_basis: str | None = None,
+               batt_tx_x_eff: float | None = None,
+               fc_tx_x_eff: float | None = None,
+               fc_tx_energised: bool | None = None) -> dc_model.Tech:
     """Resolve every coefficient the LP needs. Touches Brightway only via caches.
+
+    ``batt_tx_x_eff`` and ``fc_tx_x_eff`` are the ASSUMED energy-weighted
+    loadings of the battery's and fuel cell's container step-ups, and
+    ``fc_tx_energised`` whether a standby fuel cell's unit draws its no-load
+    loss every hour (it does by default). All three default to
+    ``conversion_losses.py`` and are recorded in ``labels``.
 
     ``pue`` is accepted for symmetry with ``build_series`` and ignored: PUE
     reaches the facility's carbon only through demand, which the series
@@ -508,6 +517,12 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
             "onshore_wind", life_years=float(emb.loc["onshore_wind"].study_lifetime_years)),
         gwp_tx_solar_per_mwp=tx.kgco2e_per_mw_year(
             "solar_pv", life_years=float(emb.loc["solar_pv"].study_lifetime_years)),
+        # The battery's and fuel cell's containerised LV → 20 kV step-ups
+        # (Jasper 2026's unit on the IEA PVPS composition), each over the
+        # asset's own life: the battery's 15 y, the fuel cell's BoP calendar
+        # life — so a swept BoP life carries its transformer with it.
+        gwp_tx_batt_per_mw=tx.kgco2e_per_mw_year("battery", life_years=float(batt.ASSET_LIFE_YEARS)),
+        gwp_tx_fc_per_mw=tx.kgco2e_per_mw_year("fuel_cell", life_years=float(fc_bop_years)),
         fc_bop_calendar_years=fc_bop_years,
         fc_bop_duty_hours=d["bop_duty_lifetime_hours"],
         fc_stack_calendar_years=fc_stack_years,
@@ -558,13 +573,21 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
     from dataclasses import replace as _replace
     from optimisation import conversion_losses as cl
     lw, ls, lg = cl.stepup("onshore_wind"), cl.stepup("solar_pv"), cl.grid_intake()
+    lb = cl.container_stepup("battery", x_eff=batt_tx_x_eff)
+    lfc = cl.container_stepup("fuel_cell", x_eff=fc_tx_x_eff, energised=fc_tx_energised)
     tech = _replace(tech,
                     loss_wind_noload=lw["noload_mw_per_mw"],
                     loss_wind_load_at_full=lw["load_loss_per_mw_at_full_loading"],
                     loss_solar_noload=ls["noload_mw_per_mw"],
                     loss_solar_load_at_full=ls["load_loss_per_mw_at_full_loading"],
                     loss_grid_noload=lg["noload_mw_per_mw"],
-                    loss_grid_load=lg["load_loss_fraction"])
+                    loss_grid_load=lg["load_loss_fraction"],
+                    loss_batt_noload=lb["noload_mw_per_mw"],
+                    loss_batt_load=lb["load_loss_fraction"],
+                    loss_fc_noload=lfc["noload_mw_per_mw"],
+                    loss_fc_load=lfc["load_loss_fraction"],
+                    labels={**tech.labels, "batt_tx_x_eff": lb["x_eff"],
+                            "fc_tx_x_eff": lfc["x_eff"], "fc_tx_energised": lfc["energised"]})
     return with_storage_losses(
         tech, batt_standing_loss_per_hour=batt_standing_loss_per_hour,
         tank_leakage_per_hour=tank_leakage_per_hour)

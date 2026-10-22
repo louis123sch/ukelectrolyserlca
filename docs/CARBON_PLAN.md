@@ -46,6 +46,7 @@ a genset's intensity; conversion losses **go into the LP**.
 | 3.8 Haulage, turquoise pressure | not done — conditional, no colour is load-bearing yet | — |
 | 3.9 Small items | not done — supergrid transformer EPD, wind factory energy, electrolyser stack split | `DATA_GAPS.md` |
 | 3.10 SOEC heat availability | closed on the carbon side | `DATA_GAPS.md` |
+| 3.11 Battery and fuel-cell step-ups | done 15 Oct — Jasper's 5,500 kg / 1,600 kW on the IEA composition, 15,674 kg CO₂e/MW; 1,045 (battery, 15 y) and 784 (fuel cell, 20 y) kg/MW/yr; losses in the LP, fuel-cell unit energised on standby | `stepup_transformers.py`, `transformers.py`, `conversion_losses.py` |
 | 4 Sweeps | see `optimisation_outputs/sensitivity_carbon_*.csv` | — |
 | 5 Regenerate | see below | — |
 
@@ -375,6 +376,36 @@ data centre's waste heat. Availability holds by construction, and the
 electric-boiler scenario buys power. No check is needed on the carbon side.
 Close it in `DATA_GAPS.md`, and leave the *cost* of that heat with the cost-side
 TODO item.
+
+### 3.11 Battery and fuel-cell step-up transformers (S, done 15 Oct)
+
+Closed as negligible on 4 Sep (≤ 1.6 % of total carbon at the knee point) when
+counting them would have meant a new inventory. By 15 Oct the transformer
+inventory and the loss model existed, and the omission was one-directional:
+storage chains delivered lossless, uncharged power to the bus while wind, solar
+and the grid paid for theirs. Decisions (user, 15 Oct): amortise over **the
+asset's own life** (15 y battery, the BoP calendar life for the fuel cell — the
+study's safe direction), and treat a standby fuel cell's transformer as
+**energised** (black-start readiness), so its no-load loss is drawn every hour.
+
+- **Inventory.** `transformer foreground/containerised_lv_stepup_per_mw`: Jasper
+  2026's "transformer, for grid connection", 5,500 kg per 1,600 kW container,
+  spread over the IEA PVPS 20/0.4 kV unit's composition and process energy
+  (Jasper publish no split). 3,437.5 kg/MW, 15,674 kg CO₂e/MW, 4.56 kg/kg —
+  identical per kg to solar's unit, which `transformers.check` asserts.
+  `stepup_transformers.check` holds the mass and rating to `bess.CSS_EXCLUDED`.
+- **LP.** Two terms, `battery step-up transformers` on `cap_batt_p` and
+  `fuel cell step-up transformers` on `cap_fc` (1,045 and 784 kg CO₂e/MW/yr),
+  in `CHAINS`; `(1 − lf) · dis`, `ch / (1 − lf)`, `(1 − lf) · p_fc` in the
+  balance; no-load on both capacities. `myopic.dispatch` mirrors it.
+- **Losses.** `conversion_losses.container_stepup`: Table I.1 at 1,600 and
+  1,000 kVA; ASSUMED loadings 0.5 (battery) and 1.0 (fuel cell);
+  `FC_TX_ENERGISED`. Overrides `batt_tx_x_eff`, `fc_tx_x_eff`,
+  `fc_tx_energised` on `build_tech`, all three in `CARBON_KNOBS`.
+- **Effect.** +49 % on the battery's power term (~+3 % on a 4-hour battery);
+  +6.6 % on the fuel cell's per-MW capital, plus the standby no-load. Inside
+  the 4 Sep bound; no ranking should move. Switchgear and the data centre's own
+  distribution stay closed as negligible.
 
 ---
 

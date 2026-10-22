@@ -80,15 +80,19 @@ def dispatch(series: M.Series, tech: M.Tech, caps: dict,
     cap_fc, cap_grid = caps.get("cap_fc", 0.0), caps.get("cap_grid", 0.0)
 
     # The same transformer losses the LP applies: generation delivered net of
-    # its step-up, imports net of the intake, and every unit's no-load loss
-    # added to what the site must serve.
+    # its step-up, imports net of the intake, the battery's and fuel cell's
+    # output net of their container units (the battery's charge drawn grossed
+    # up by its), and every unit's no-load loss added to what the site must
+    # serve — the fuel cell's unit included, energised on standby.
     lf = M.loss_factors(series, tech)
     avail = ((1.0 - lf["wind"]) * series.cf_wind * cap_w
              + (1.0 - lf["solar"]) * series.cf_solar * cap_s)
     noload = (tech.loss_wind_noload * cap_w + tech.loss_solar_noload * cap_s
-              + tech.loss_grid_noload * cap_grid)
+              + tech.loss_grid_noload * cap_grid
+              + tech.loss_batt_noload * cap_bp + tech.loss_fc_noload * cap_fc)
     demand = series.demand_mw + noload
     eta_imp = 1.0 - lf["grid"]
+    eta_bt, eta_ft = 1.0 - lf["battery"], 1.0 - lf["fc"]
 
     soc = initial_soc_frac * cap_be
     tank = initial_tank_frac * cap_tank
@@ -109,9 +113,9 @@ def dispatch(series: M.Series, tech: M.Tech, caps: dict,
         # 2. surplus: battery, then hydrogen, then curtail
         ch = 0.0
         if surplus > 0 and cap_be > 0:
-            ch = min(surplus, cap_bp, (cap_be - soc) / eta / dt)
+            ch = min(surplus * eta_bt, cap_bp, (cap_be - soc) / eta / dt)
             soc += ch * eta * dt
-            surplus -= ch
+            surplus -= ch / eta_bt
         p_ely = 0.0
         if surplus > 0 and cap_ely > 0 and cap_tank > 0:
             room_kg = cap_tank - tank
@@ -122,21 +126,21 @@ def dispatch(series: M.Series, tech: M.Tech, caps: dict,
         # 3. shortfall: battery, then fuel cell, then grid
         dis = 0.0
         if short > 0 and cap_be > 0:
-            dis = min(short, cap_bp, soc * eta / dt)
+            dis = min(short / eta_bt, cap_bp, soc * eta / dt)
             soc -= dis / eta * dt
-            short -= dis
+            short -= dis * eta_bt
         p_fc = h2_buy = 0.0
         if short > 0 and cap_fc > 0:
             if buy_h2:
-                p_fc = min(short, cap_fc)
+                p_fc = min(short / eta_ft, cap_fc)
                 need_kg = p_fc * tech.fc_kg_h2_per_mwh * dt
                 from_tank = min(tank, need_kg)
                 h2_buy = need_kg - from_tank
                 tank -= from_tank
             else:
-                p_fc = min(short, cap_fc, tank / tech.fc_kg_h2_per_mwh / dt)
+                p_fc = min(short / eta_ft, cap_fc, tank / tech.fc_kg_h2_per_mwh / dt)
                 tank -= p_fc * tech.fc_kg_h2_per_mwh * dt
-            short -= p_fc
+            short -= p_fc * eta_ft
         imp = min(short / eta_imp, cap_grid) if short > 0 else 0.0
         short -= imp * eta_imp
 
@@ -148,7 +152,7 @@ def dispatch(series: M.Series, tech: M.Tech, caps: dict,
 
     df = pd.DataFrame(out, index=series.index)
     df["demand"] = series.demand_mw
-    served = df.direct + df.dis + df.p_fc + eta_imp * df.imp + df.unserved
+    served = df.direct + eta_bt * df.dis + eta_ft * df.p_fc + eta_imp * df.imp + df.unserved
     if not np.allclose(served, demand, atol=1e-6):
         raise AssertionError("myopic dispatch broke the demand balance")
     return df

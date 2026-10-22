@@ -1,5 +1,5 @@
 {
-  "basis": "leng_wind_iea_pvps_2026_solar",
+  "basis": "leng_wind_iea_pvps_2026_solar_jasper_2026_container_civils_repl_2026-10-21",
   "solar_basis": "iea_pvps_2026",
   "asset_life_years": 35.0,
   "site_collection_kV": 20.0,
@@ -23,8 +23,10 @@
       "silica": 11.43
     },
     "kg_per_MW": 2823.43,
-    "kgco2e_per_MW": 9755.281228486365,
-    "kgco2e_per_MW_year": 278.72232081389615
+    "kgco2e_per_MW": 11501.378966580554,
+    "kgco2e_per_MW_year": 328.61082761658724,
+    "kgco2e_per_MW_transformer": 9755.281222476153,
+    "civils_kgco2e_per_MW": 1746.0977441044015
   },
   "solar": {
     "database": "transformer foreground",
@@ -49,10 +51,15 @@
       "rubber": 0.2,
       "paint": 13.61
     },
-    "kg_per_unit": 5679.942,
-    "kg_per_MWp": 2271.9768,
-    "kgco2e_per_MWp": 10359.464074795136,
-    "kgco2e_per_MWp_year": 295.9846878512896
+    "kg_per_unit": 5670.002,
+    "kg_per_MWp": 2268.0008000000003,
+    "kgco2e_per_MWp": 12012.029059701626,
+    "kgco2e_per_MWp_year": 447.5709695552522,
+    "kgco2e_per_MWp_transformer": 10356.72892453976,
+    "civils_kgco2e_per_MWp": 1655.3001351618655,
+    "replacement_kgco2e_per_MWp_30y": 3131.104178341886,
+    "replacement_reference_years": 30.0,
+    "replacement_fraction": 0.3023255813953488
   },
   "solar_legacy": {
     "activity": "market for transformer, high voltage use",
@@ -62,9 +69,21 @@
     "MVA_per_MWp": 0.8421052631578947,
     "kgco2e_per_MWp_year": 184.16205748152075
   },
+  "container": {
+    "database": "transformer foreground",
+    "code": "containerised_lv_stepup_per_mw",
+    "source": "Jasper et al. 2026, CSS (liquid cooled) bill, 'transformer, for grid connection'; composition IEA PVPS T12-33:2026 Table 49",
+    "container_kW": 1600.0,
+    "kg_per_container": 5500.0,
+    "kg_per_MW": 3437.5,
+    "kgco2e_per_MW": 15697.197651576273,
+    "kgco2e_per_MW_year": 448.4913614736078
+  },
   "per_MW_year": {
-    "onshore_wind": 278.72232081389615,
-    "offshore_wind": 278.72232081389615,
-    "solar_pv": 295.9846878512896
+    "onshore_wind": 328.61082761658724,
+    "offshore_wind": 328.61082761658724,
+    "solar_pv": 447.5709695552522,
+    "battery": 448.4913614736078,
+    "fuel_cell": 448.4913614736078
   }
 }

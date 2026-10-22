@@ -218,12 +218,27 @@ the facility's footprint; it is the wrong basis for claiming that shifting a
 load reduces real-world emissions. Any timing-based result should be reported
 against both.
 
+**No credits anywhere; co-products carry no burden away.** Decided 21 Oct
+2026. The study takes no avoided-burden credits: not for recycling (§6), and
+not for co-products. The one case in the inventories is methane pyrolysis,
+where Hermesmann & Müller credit the 3 kg of solid carbon per kg H₂ against
+carbon black; here the whole burden sits on the hydrogen. Electrolysis oxygen
+is likewise an unallocated co-product. This keeps the study attributional
+throughout, at the cost of making turquoise hydrogen look worse than its
+source reports.
+
 ## 6. No end-of-life, anywhere
 
 The study is **cradle-to-gate on every input**, with the functional unit being
 the data centre powered at a given size, year and location. Nothing is followed
 past the site gate on the way out: no demolition, decommissioning, disposal or
 recycling, and no recycling credit, for the facility or for any energy asset.
+
+**Transport to site is outside the boundary, and nothing else is.** No capital
+good, cable or hydrogen is carried to the site, for any technology, because
+where the site will be is not known. Transport further up the supply chain does
+not depend on the site and is kept: ecoinvent's market transport, legs between
+manufacturing stages, materials to a factory.
 
 Every foreground already meets this without modification:
 
@@ -233,7 +248,8 @@ Every foreground already meets this without modification:
 | H2 storage tank | Steel mass only; end-of-life listed among its stated omissions |
 | Grid connection | Transformer materials only (Leng 2026's 100 MVA, 110 kV main transformer, per MVA, × 2 for N-1), plus a line term reported but not charged per MW; no switchgear, protection, civils, manufacturing energy, losses or end-of-life |
 | Generation step-up transformers | Transformer capital (wind materials-only; solar with IEA PVPS process energy); no switchgear, protection or civils. Losses are charged as energy in the LP (`conversion_losses.py`), not as a coefficient |
-| Grid battery | Jasper/Voß cradle-to-gate manufacture including the cell factory's energy; Jasper's EOL sheet not taken, every delivery-transport row left out (and subtracted where a source folded it into a factor), no foundation |
+| Battery and fuel-cell step-ups (15 Oct) | Jasper 2026's container transformer mass on the IEA PVPS composition (with its process energy), a stated substitution for Jasper's own Hunziker-derived recipe on representativeness (SOURCES.md, 22 Oct), per MW of inverter rating, over the asset's own life; no switchgear, protection or civils. Losses in the LP at ASSUMED loadings (0.5 battery, 1.0 fuel cell), the fuel cell's unit energised on standby |
+| Grid battery | Jasper/Voß cradle-to-gate manufacture including the cell factory's energy and upstream transport; Jasper's EOL sheet not taken, his delivery-to-site rows left out (Voß's legs to a German factory not taken, and subtracted where folded into a factor), no foundation |
 | Electrolysers | Capital good plus consumables; no end-of-life exchange |
 | Fuel cell stack | Babatunde et al. cradle-to-gate manufacture, no use or end-of-life phase |
 | Fuel cell BoP / maintenance | Usai et al. 2021 process loops + inverter + container, cradle-to-gate; service consumables only. No end-of-life, no delivery transport |

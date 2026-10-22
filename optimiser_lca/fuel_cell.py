@@ -298,7 +298,8 @@ processes = {
     "bop_extrusion_film": Process(
         query="market for extrusion plastic film GLO",
         identity=("market for extrusion, plastic film", "GLO", "extrusion, plastic film"),
-        why="Usai name 'extrusion production, plastic film' RER, absent from 3.9.1; its market"),
+        why="Usai name 'extrusion production, plastic film' RER; 3.9.1 carries it as 'extrusion, "
+            "plastic film' (RER/RoW); the GLO market is taken, 0.01 kg"),
     "bop_pu_rigid": Process(
         query="market for polyurethane rigid foam RoW",
         identity=("market for polyurethane, rigid foam", "RoW", "polyurethane, rigid foam"),

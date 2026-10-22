@@ -61,18 +61,27 @@ What is deliberately NOT here — the study's own boundary
 --------------------------------------------------------
 * **End-of-life**, as everywhere (ASSUMPTIONS.md §6). Jasper's
   ``treatment of used CSS`` and the whole EOL sheet are not taken.
-* **Delivery transport.** Every transport row in both sources is left out, as
-  ``upv.py`` leaves out Smith's: Voß's China-to-Berlin legs (18.5 t·km sea,
-  1.0 and 0.7 t·km lorry per kg) and Jasper's rail, lorry and sea rows. Where a
-  source folded those legs into a single published factor (Voß's natural
-  graphite), they are taken back out with negative exchanges, as
-  ``fuel_cell.py`` does with ecoinvent's service driving.
+* **Transport to site.** The study excludes delivery to site and nothing else,
+  because the site is not known; upstream transport is in. Jasper's rows split
+  on exactly that line (see ``_no_transport`` below): his 1,000 km lorry +
+  8,000 km sea + 1,000 km rail legs ship finished parts from China to his
+  German site and are left out, as ``upv.py`` leaves out Smith's A14; his
+  100 km lorry + 600 km rail legs bring materials to the module and rack
+  factories and are kept. Voß's China-to-Berlin legs (18.5 t·km sea, 1.0 and
+  0.7 t·km lorry per kg) carry materials to *their* German factory, which this
+  China-made cell does not have, so they are not taken; where Voß folded them
+  into a published factor (natural graphite), the sea and European legs are
+  removed with negative exchanges and the Chinese lorry leg stays. The same
+  Chinese lorry leg is carried on every other cell material (ESI §3.1.3 add it
+  "additionally" to each), as the upstream haul to the cell factory.
 * **The power conversion system** (800 kg), charged separately by
   ``battery.PCS_ACTIVITY`` on the power term.
-* **The battery transformer** (5,500 kg). Battery step-up transformers were
-  closed as negligible on 4 Sep and are not charged anywhere (TODO.md).
-* **The concrete foundation** (43.9 t). Civils are outside every capital
-  inventory in this study (``stepup_transformers.py``, ``grid_connection.py``).
+* **The battery transformer** (5,500 kg). Charged separately since 15 Oct, per
+  MW of ``cap_batt_p``, by ``optimisation/transformers.py``: its mass from this
+  bill, its composition from the IEA PVPS unit
+  (``stepup_transformers.CSS_TX_KG``, which ``check()`` holds to this row).
+  Jasper's own per-kg recipe (Hunziker 2020, a 630 kVA unit with an on-load
+  tap changer) is set aside as a stated substitution; see stepup_transformers.
 * **Voß's processing materials** (NMP, argon, nitrogen, compressed air), which
   they draw from Degen's source data and do not tabulate. Small; this errs low.
 
@@ -174,9 +183,13 @@ BIMETALLIC_COPPER_SHARE = 0.5
 # What Jasper's DC block carries and this study does not (see the docstring).
 CSS_EXCLUDED = {
     "Power conversion system for CSS": (800.0, "kg", "battery.PCS_ACTIVITY charges the power term"),
-    "transformer, for grid connection": (5_500.0, "kg", "battery step-up closed as negligible 4 Sep"),
-    "concrete block": (43_900.0, "kg", "civils are outside every capital inventory here"),
+    "transformer, for grid connection": (5_500.0, "kg", "charged per MW of cap_batt_p by transformers.py since "
+                                                        "15 Oct (stepup_transformers.CSS_TX_KG reads this row)"),
 }
+# Jasper's 43.9 t concrete block was in this table until 21 Oct 2026 ("civils
+# are outside every capital inventory here"). That was a consistency policy,
+# not a study boundary; the block is in the source and inside the boundary, so
+# it is now on the container activity, where the fuel cell shares it.
 
 # Jasper's Fig. 4 for the liquid-cooled LFP system, kg CO2e per kWh, on
 # ecoinvent 3.11 cut-off at EF 3.1, with transport. A comparison, not a target.
@@ -194,11 +207,14 @@ BESS_SCOPE = {
     "cell": "Voß et al. 2025 LFP/graphite prismatic cell, 176.6 Wh/kg, on ecoinvent 3.9.1; "
             f"made in {CELL_FACTORY}; graphite {GRAPHITE_SYNTHETIC_SHARE:.0%} synthetic.",
     "end_of_life": "EXCLUDED, as everywhere else in this study.",
-    "transport": "EXCLUDED - every delivery row in both sources; Voß's natural-graphite factor "
-                 "has its folded-in legs subtracted.",
+    "transport": "Delivery to site EXCLUDED (Jasper's China-to-Germany rows); upstream legs to the "
+                 "module and rack factories INCLUDED. Voß's legs to a German factory not taken, "
+                 "the sea and European legs subtracted from the natural-graphite factor.",
     "pcs": "EXCLUDED here - charged by battery.PCS_ACTIVITY on the power term.",
-    "transformer": "EXCLUDED - battery step-up closed as negligible on 4 Sep.",
-    "foundation": "EXCLUDED - civils are outside every capital inventory in this study.",
+    "transformer": "EXCLUDED here - charged per MW of cap_batt_p by transformers.py (Jasper's 5,500 kg on "
+                   "the IEA PVPS composition, a stated substitution for Jasper's Hunziker-derived "
+                   "recipe on representativeness, stepup_transformers.py).",
+    "foundation": "INCLUDED since 21 Oct 2026 - Jasper's 43.9 t concrete block, on the container activity.",
     "processing_materials": "EXCLUDED - Voß do not tabulate NMP, argon, N2 or compressed air.",
 }
 
@@ -296,13 +312,29 @@ processes = {
     "sheet_rolling_cu": _p("market for sheet rolling, copper", "GLO", "market for sheet rolling copper GLO"),
     "pet_bottle": _p("market for polyethylene terephthalate, granulate, bottle grade", "GLO",
                      "market for polyethylene terephthalate granulate bottle grade GLO"),
-    # --- transport, only ever subtracted --------------------------------------
+    # --- transport --------------------------------------------------------------
+    # Voß's legs to a German factory, only ever subtracted (see the natural graphite):
     "sea_container": _p("market for transport, freight, sea, container ship", "GLO",
                         "market for transport freight sea container ship GLO"),
-    "lorry_euro3_row": _p("market for transport, freight, lorry 16-32 metric ton, EURO3", "RoW",
-                          "market for transport freight lorry 16-32 metric ton EURO3 RoW"),
     "lorry_euro3_rer": _p("market for transport, freight, lorry 16-32 metric ton, EURO3", "RER",
                           "market for transport freight lorry 16-32 metric ton EURO3 RER"),
+    # Voß's 1,000 km "Truck China" leg (ESI §3.1.1.1), kept on every cell
+    # material as the upstream haul to a Chinese factory. Positive here, and
+    # inside the natural-graphite factor already.
+    "lorry_euro3_row": _p("market for transport, freight, lorry 16-32 metric ton, EURO3", "RoW",
+                          "market for transport freight lorry 16-32 metric ton EURO3 RoW"),
+    # Jasper's provider for the container's concrete block.
+    "concrete_block_de": _p("concrete block production", "DE", "concrete block production DE"),
+    # Jasper's upstream material legs, kept (ecoinvent's default 100 km lorry +
+    # 600 km rail per tonne to the module and rack factories). His 3.11 "train,
+    # fleet average" is 3.9.1's market group for freight train.
+    "lorry_euro5_row": _p("market for transport, freight, lorry 16-32 metric ton, EURO5", "RoW",
+                          "market for transport freight lorry 16-32 metric ton EURO5 RoW"),
+    "lorry_euro6_row": _p("market for transport, freight, lorry 16-32 metric ton, EURO6", "RoW",
+                          "market for transport freight lorry 16-32 metric ton EURO6 RoW"),
+    "train_glo": _p("market group for transport, freight train", "GLO",
+                    "market group for transport freight train GLO",
+                    "Jasper's 'transport, freight, train, fleet average' [GLO] on 3.11"),
     # --- Jasper: modules, racks ------------------------------------------------
     "cu_cathode": _p("market for copper, cathode", "GLO", "market for copper cathode GLO",
                      "ASSUMED for the Ellingsen copper busbars"),
@@ -443,11 +475,13 @@ voss_activities = [
                 "ecoinvent 3.9.1's own synthetic graphite models the Acheson BLOCK route, which "
                 "Voß show underestimates battery-grade graphite. The crucible and packaging "
                 "lines are Carrère's footprints, not inventories (" + _voss_proxy + "). "
-                "Voß's China-to-Berlin transport rows are excluded, as in every inventory here.",
+                "Voß's China-to-Berlin transport rows are not taken: they carry materials to Voß's "
+                "German factory, and this cell is made in China.",
         technosphere=[
             ("petroleum_coke",       1.179, _kg,   "Table S5 calcination: green coke ('needle coke feed')"),
             ("heat_gas_small_row",   2.0,   _MJ,   "Table S5 calcination: natural gas"),
             ("electricity_mv_cn",   16.0,   _kwh,  "Table S5 graphitisation: electricity, CN"),
+            ("lorry_euro3_row",     VOSS_LORRY_CN_TKM, _tkm, "Table S5 'Truck China', 1,000 km: upstream, kept"),
         ],
         biosphere=[
             ("co2", 0.190, _kg, "Table S5: direct CO2, calcination (rotary kiln and incinerator)"),
@@ -465,12 +499,12 @@ voss_activities = [
         reference_product="natural graphite", unit=_kg, location="CN",
         comment="Voß ESI §3.1.1.2: Engels et al. 2022's 9.62 kg CO2e/kg from a Chinese producer, "
                 "less the coating step and 25 % of spheronisation, plus transport China to Europe, "
-                "= 5.19 kg CO2e/kg. " + _voss_proxy + ". The transport Voß folded in is taken "
-                "back out with the same three legs, negative, so this sits on the study's "
-                "no-delivery-transport boundary like every other material here.",
+                "= 5.19 kg CO2e/kg. " + _voss_proxy + ". Voß's sea and European lorry legs take "
+                "the graphite to their German factory; this cell is made in China, so those two "
+                "are taken back out, negative. The 1,000 km lorry leg in China stays, as the "
+                "upstream haul to a Chinese cell factory (ASSUMED the same distance).",
         technosphere=[
-            ("sea_container",  -VOSS_SEA_TKM,      _tkm, "removes Voß's sea leg, 18,500 km"),
-            ("lorry_euro3_row", -VOSS_LORRY_CN_TKM, _tkm, "removes Voß's lorry leg in China, 1,000 km"),
+            ("sea_container",  -VOSS_SEA_TKM,      _tkm, "removes Voß's sea leg to Europe, 18,500 km"),
             ("lorry_euro3_rer", -VOSS_LORRY_EU_TKM, _tkm, "removes Voß's lorry leg in Europe, 700 km"),
         ],
         biosphere=[("co2", NGR_KGCO2E_PER_KG, _kg, "Voß §3.1.1.2, 5.19 kg CO2e/kg - " + _voss_proxy)],
@@ -494,8 +528,10 @@ voss_activities = [
         code=_LFP, name="LFP cathode active material, carbon coated (Voß 2025)",
         reference_product="lithium iron phosphate, carbon coated", unit=_kg, location="CN",
         comment="Voß ESI Table S31, after Quan et al.'s spray-drying and calcination route, with "
-                "stoichiometric precursors. Transport rows excluded.",
+                "stoichiometric precursors. The in-China lorry leg is kept; Voß's sea and "
+                "European legs serve their German factory and are not taken.",
         technosphere=[
+            ("lorry_euro3_row",    VOSS_LORRY_CN_TKM, _tkm, "Table S31 'Truck China', 1,000 km: upstream, kept"),
             (FG(_FEPO4),           0.91,  _kg,  "Table S31: FePO4"),
             ("lithium_carbonate",  0.22,  _kg,  "Table S31: Li2CO3"),
             ("glucose",            0.13,  _kg,  "Table S31: glucose (the carbon coating)"),
@@ -509,8 +545,10 @@ voss_activities = [
     Activity(
         code=_SBR, name="Styrene-butadiene rubber binder (Voß 2025)",
         reference_product="styrene-butadiene rubber", unit=_kg, location="CN",
-        comment="Voß ESI Table S35, after Chordia et al. Transport rows excluded.",
+        comment="Voß ESI Table S35, after Chordia et al. The in-China lorry leg is kept; the sea "
+                "and European legs serve Voß's German factory and are not taken.",
         technosphere=[
+            ("lorry_euro3_row",    VOSS_LORRY_CN_TKM, _tkm, "Table S35 'Truck China', 1,000 km: upstream, kept"),
             ("butadiene",          0.757,  _kg,  "Table S35"),
             ("styrene",            0.252,  _kg,  "Table S35"),
             ("chemical_organic",   0.008,  _kg,  "Table S35: DDM"),
@@ -545,8 +583,10 @@ voss_activities = [
                 "to 0.987 kg per kg as printed rather than 1.25. ASSUMED: the whole 330 g is "
                 "charged on this table. Voß say fixing and isolation materials (Table S37, all "
                 "PET) are part of the housing but give no split, and S36 already carries PET; "
-                "putting part of the 330 g on S37 instead would lower the housing.",
+                "putting part of the 330 g on S37 instead would lower the housing. The in-China "
+                "lorry leg is kept; the sea and European legs are not taken.",
         technosphere=[
+            ("lorry_euro3_row",     VOSS_LORRY_CN_TKM, _tkm, "S36 'Truck China', 1,000 km: upstream, kept"),
             ("al_wrought",          0.204, _kg, "S36 cap metal sheet"),
             ("sheet_rolling_al",    0.204, _kg, "S36 cap metal sheet"),
             ("cu_anode",            0.061, _kg, "S36 busbar anode, copper"),
@@ -599,6 +639,16 @@ voss_activities.append(Activity(
         ("electrolyte",       _g["electrolyte"] / 1000,     _kg, "Table 3 electrolyte"),
         (FG(_SEP),            _g["separator"] / 1000,       _kg, "Table 3 separator"),
         (FG(_HOUSING),        _g["housing"] / 1000,         _kg, "Table 3 cell housing"),
+        # Voß ESI §3.1.3 add the standard legs "additionally" to every material
+        # they take from a dataset or a published factor. The in-China lorry leg
+        # is the upstream haul to the cell factory and is kept, 1 t·km per kg;
+        # the graphite, LFP-C, SBR and housing carry theirs inside their own
+        # activities, and the natural graphite inside its factor.
+        ("lorry_euro3_row", VOSS_LORRY_CN_TKM * (_g["anode_cmc"] + _g["anode_carbon"] + _g["cathode_carbon"]
+                                                 + _g["anode_cu_foil"] + _g["cathode_al_foil"]
+                                                 + _g["cathode_pvdf"] + _g["electrolyte"]
+                                                 + _g["separator"]) / 1000, _tkm,
+         "§3.1.3 'Truck China', 1,000 km, on CMC, carbon black, both foils, PVDF, electrolyte and separator"),
     ],
 ))
 
@@ -638,7 +688,13 @@ _DAMPER, _CONTAINER, _HFC, _TANK = _P["damper"], _P["container"], _P["hfc"], _P[
 _PANEL, _FIRE, _CSS = _P["panel"], _P["fire"], _P["css"]
 
 _J = "Jasper et al. 2026 SI"
-_no_transport = " Transport rows excluded."
+# Jasper's transport rows come in two patterns. Per tonne of component, 1,000 km
+# lorry + 8,000 km sea + 1,000 km European rail is the part leaving his Chinese
+# factory for his German site: delivery to site, outside this study's boundary.
+# 100 km lorry + 600 km rail is ecoinvent's default for materials reaching a
+# factory: upstream, so it is kept (module, rack, rack housing).
+_no_transport = " Jasper's delivery-to-site rows excluded."
+_upstream_legs = " Jasper's upstream material legs kept; no delivery to site."
 
 jasper_activities = [
     Activity(
@@ -648,7 +704,7 @@ jasper_activities = [
                 "series, module packaging after Baumann et al. (2020) and Ellingsen et al. (2014). "
                 f"The cells are Voß's, made in {CELL_FACTORY}. Ellingsen's busbars are not in the SI "
                 f"and are mapped to their metals (ASSUMED, {BIMETALLIC_COPPER_SHARE:.0%} copper for "
-                "the bimetallic set)." + _no_transport,
+                "the bimetallic set)." + _upstream_legs,
         technosphere=[
             (FG(CELL_CODE), CSS_MODULE_KWH, _kwh, "'LFP based LIB (Voß et al.)', 47000/176.6 kg = 47 kWh"),
             ("al_wrought",       3.1302, _kg, "Aluminium endbars (Ellingsen) - ASSUMED wrought Al"),
@@ -665,29 +721,35 @@ jasper_activities = [
             ("polypropylene",          2.7838,  _kg,  _J),
             ("pwb_through_hole",       0.6442,  _kg,  _J),
             ("steel_low_alloyed",      28.4727, _kg,  _J),
+            ("lorry_euro5_row",        3.9857,  _tkm, _J + ", upstream: materials to the module factory"),
+            ("train_glo",             23.9144,  _tkm, _J + ", upstream: materials to the module factory"),
         ],
     ),
     Activity(
         code=_RACK_HOUSING, name="Battery rack housing, steel, per kg (Jasper 2026)",
         reference_product="battery rack housing", unit=_kg, location="GLO",
-        comment=f"{_J}, 'Rack, 48x43, for stationary battery storage system'." + _no_transport,
+        comment=f"{_J}, 'Rack, 48x43, for stationary battery storage system'." + _upstream_legs,
         technosphere=[
             ("metal_working_factory", 4.58e-10, _unit, _J),
             ("mw_steel",              1.0,      _kg,   _J),
             ("powder_coat_steel",     0.055,    "square meter", _J),
             ("steel_low_alloyed",     1.0,      _kg,   _J),
+            ("lorry_euro5_row",       0.10053075, _tkm, _J + ", upstream: materials to the rack factory"),
+            ("train_glo",             0.6031845,  _tkm, _J + ", upstream: materials to the rack factory"),
         ],
     ),
     Activity(
         code=_RACK, name="Battery rack, liquid-cooled, 8 modules, 376 kWh (Jasper 2026)",
         reference_product="battery rack", unit=_unit, location="GLO",
         comment=f"{_J}, 'Battery rack (liquid cooled)'. The HV control box is ecoinvent's "
-                "electronics for control units, as Jasper name it." + _no_transport,
+                "electronics for control units, as Jasper name it." + _upstream_legs,
         technosphere=[
             (FG(_MODULE),        CSS_MODULES_PER_RACK, _unit, _J),
             ("cable",            17.907, _kg, _J),
             ("electronics_control", 15.5, _kg, "High voltage control box (electronics for control units)"),
             (FG(_RACK_HOUSING),  431.8,  _kg, _J),
+            ("lorry_euro6_row",  0.0962, _tkm, _J + ", upstream"),
+            ("train_glo",        0.58,   _tkm, _J + ", upstream"),
         ],
     ),
     Activity(
@@ -875,6 +937,9 @@ jasper_activities = [
             ("steel_low_alloyed_hr", 5.0,  _kg,   _J),
             ("wood_wool_board",    0.19,   "cubic meter", _J),
             ("zinc_coat",          3.18,   "square meter", _J),
+            # Jasper list the block on the CSS, one per container; it sits here so
+            # the fuel cell, which takes this container at one per MW, shares it.
+            ("concrete_block_de",  43_900.0, _kg, _J + ", 'concrete block' 43.9 t on the CSS (liquid cooled)"),
         ],
     ),
     Activity(
@@ -930,9 +995,9 @@ jasper_activities = [
                 f"{CSS_KWH:,.0f} kWh nameplate, {CSS_KW:,.0f} kW. The BESS controller has no "
                 "inventory in the SI and is charged as electronics for control units (ASSUMED). "
                 "EXCLUDES, from Jasper's own CSS: the 800 kg power conversion system (battery.py "
-                "charges the power term separately); the 5,500 kg transformer (battery step-up "
-                "closed as negligible, 4 Sep); the 43.9 t concrete foundation (civils are outside "
-                "every capital inventory here); all transport; end-of-life.",
+                "charges the power term separately); the 5,500 kg transformer (charged per MW of "
+                "cap_batt_p by transformers.py since 15 Oct); delivery to site; end-of-life. The 43.9 t "
+                "concrete block is on the container activity (since 21 Oct).",
         technosphere=[
             (FG(_RACK),           CSS_RACKS, _unit, _J),
             ("electronics_control", 30.0,    _kg,   "BESS controller - ASSUMED electronics for control units"),
@@ -969,7 +1034,7 @@ def describe() -> str:
         f"Cell: Voß et al. 2025 Table 3, {CELL_WH:g} Wh, {sum(CELL_BILL_G.values()):,.1f} g, "
         f"{CELL_STATED_WH_PER_KG:g} Wh/kg -> {CELLS_PER_KWH:.4f} cells/kWh",
         f"  graphite {GRAPHITE_SYNTHETIC_SHARE:.0%} synthetic (Acheson powder, Table S5) / "
-        f"{1 - GRAPHITE_SYNTHETIC_SHARE:.0%} natural (Engels, 5.19 less transport)",
+        f"{1 - GRAPHITE_SYNTHETIC_SHARE:.0%} natural (Engels, 5.19 less the legs to Europe)",
         f"  factory {CELL_FACTORY}: {CELL_FACTORY_KWH_ELECTRICITY:g} kWh electricity + "
         f"{CELL_FACTORY_KWH_GAS:g} kWh gas per kWh (Degen 2023 via Jasper)",
         f"  Voß's own German cell, with transport and processing materials: "

@@ -68,10 +68,13 @@ electrical steel, which no LCI database carries; the report disaggregates it
 into converter-route steel + MG-silicon + hot and cold rolling.
 
 **A unit error in the source workbook, corrected.** The hardboard cell reads
-36.96 m³ ≈ 47 tonnes, eight times the whole transformer. The report's own
-total is ~5,680 kg; the transcribed materials sum to 5,633.04, leaving
-46.9 kg = 0.03696 m³ at hardboard's ~1,270 kg/m³. So the cell is dm³
-mislabelled as m³; ``check()`` guards the reconciliation.
+36.96 with unit m³ ≈ 47 tonnes, eight times the whole transformer. Its own
+comment reads "Al × 0.115 × 0.52 = 36.96 kg", and the end-of-life sheet's
+paper row is 71.07 kg = 34.11 kraft + 36.96 pressboard, so the cell is kg
+mislabelled as m³: 36.96 kg = 0.0291 m³ at hardboard's ~1,270 kg/m³. The bill
+then sums to 5,670.0 kg against the report's "approximately 5,680";
+``check()`` holds it within 0.5 %. (Until 21 Oct 2026 the row was back-solved
+to 46.9 kg to hit 5,680 exactly, which reconciled on the wrong lever.)
 
 Grid intake — Leng et al. 2026, the farm's main transformer
 -----------------------------------------------------------
@@ -91,19 +94,57 @@ connected at **275/400 kV** it errs LOW: supergrid transformers carry more
 insulation and are heavier per MVA. Leng's unit is used for every site as the
 default; it is stated in DATA_GAPS.md rather than varied by voltage.
 
-**Materials only**, like the wind step-ups. Leng's own published figure for
-this unit (342 t CO₂e) adds factory electricity on the Chinese grid; that is
-left out here for the same reason it is left out of the wind bill.
+**Materials only, because that is all Leng publish.** Their Table S1 is a
+materials bill, S2 is transport and S3 is civils; no factory energy appears
+for either transformer (checked against the SI and main text, 21 Oct 2026).
+Their own 342 t CO₂e for this unit against ~275 t here is a scoring
+difference — ecoinvent 3.11 with RoW steel proxies against 3.9.1 apos GLO
+markets — not a dropped flow. The civils Leng attribute to the transformers
+(Table S3) are a different matter: the box-transformer foundations are
+carried on the wind step-ups since 21 Oct; the booster-station buildings and
+outdoor venue are the grid intake's and await a decision (SOURCE_DIFF.md D2).
 
-What is deliberately NOT here (all three): the grid-*export* transformer
+Battery and fuel cell — Jasper et al. 2026's mass on the IEA composition
+-------------------------------------------------------------------------
+A battery's PCS and a fuel cell's inverters put out LOW voltage too, so each
+container needs the same LV → 20 kV step. Jasper et al. (2026)'s liquid-cooled
+CSS bill (``bess.py``) lists one "transformer, for grid connection" of
+**5,500 kg per 1,600 kW container**. That mass is spread over the IEA PVPS
+20/0.4 kV unit's composition, forming and factory energy per kg.
+
+**A stated substitution, on technological representativeness** (22 Oct 2026).
+Jasper do give a per-kg recipe (air-cooled sheet rows 225–236; until 21 Oct
+this module wrongly said they did not). Their §2.4.3 says it is derived from
+Hunziker et al. (2020): a **630 kVA** line-frequency transformer with an
+**on-load tap changer**, scaled by mass to the 1,800 kVA unit the container
+needs. The IEA unit is a current **2,500 kVA, 20/0.4 kV oil-immersed
+distribution transformer**, built from product documentation, at exactly the
+step the container makes. The parent source's recipe is set aside because it
+represents a different machine, not because it is missing. Jasper's recipe
+scores 7.85 kg CO₂e/kg against 4.57 here (+72 %), most of the gap being its
+0.09 kg/kg of control electronics, plausibly the tap changer's; it is carried
+as the sensitivity case (SOURCES.md). Hunziker 2020 is not held, so the link
+between the tap changer and the electronics row is inferred.
+
+One activity, **per MW of inverter rating**, serves the
+battery (``cap_batt_p``) and the fuel cell (``cap_fc``; one container of
+``fuel_cell.FC_KW_PER_CONTAINER`` with the same 500 kW inverters), each
+amortised over the asset's own life. Closed as negligible on 4 Sep 2026 and
+modelled on 15 Oct: once the inventory and loss machinery existed, leaving
+them out was a one-way bias against the generation chains, which pay for
+theirs.
+
+What is deliberately NOT here (all four): the grid-*export* transformer
 charged to generation (this study's generation is behind the meter; Leng's
 grid-end unit is used for the grid *intake* instead, charged per MW of
 ``cap_grid`` by ``grid_connection.py``); any step between the collection
-network and the data centre (both sit in the medium-voltage band); switchgear,
-protection and civils (absent from the grid intake too, so a level shift
-rather than a bias); losses; end-of-life. **Manufacturing energy** is in the
-solar bill (~6 % of it) and in neither Leng bill; materials-only wind and
-solar land within 1 %.
+network and the data centre (both sit in the medium-voltage band); switchgear
+and protection (absent from the grid intake too, so a level shift rather than
+a bias); losses; end-of-life. **Manufacturing energy** is in the solar bill
+(~6 % of it) and in neither Leng bill, because Leng do not publish it;
+materials-only wind and solar land within 1 %. **Civils**: the wind units
+carry Leng's box-transformer foundations and the solar units the IEA PVPS
+transformer station building, both since 21 Oct 2026.
 
 What the optimiser reads: ``optimisation/transformers.py`` scores the two
 step-ups and amortises them over ``dc_config.TX_ASSET_LIFE_YEARS``;
@@ -190,10 +231,13 @@ UPV_TX_MATERIALS_KG = {           # TRANSCRIBED except where noted
     "rubber":               0.2,
     "paint":               13.61,
 }
-# Hardboard pressboard: the workbook's 36.96 m3 is dm3 mislabelled (see docstring).
-UPV_TX_FIBREBOARD_M3   = 0.03696   # DERIVED, checked by check()
-UPV_TX_FIBREBOARD_KG   = 46.9      # only used to reconcile the stated total
-UPV_TX_STATED_TOTAL_KG = 5_680.0   # TRANSCRIBED - the report's own figure
+# Hardboard pressboard: the workbook's "36.96 m3" is 36.96 kg mislabelled (its
+# own cell comment and the EoL sheet both say kg; see docstring).
+UPV_TX_FIBREBOARD_KG   = 36.96     # TRANSCRIBED, from the cell's comment
+UPV_TX_FIBREBOARD_DENSITY_KG_M3 = 1_270.0   # hardboard, ASSUMED
+UPV_TX_FIBREBOARD_M3   = UPV_TX_FIBREBOARD_KG / UPV_TX_FIBREBOARD_DENSITY_KG_M3   # 0.0291, the row's unit
+UPV_TX_STATED_TOTAL_KG = 5_680.0   # TRANSCRIBED - the report's "approximately 5680"; the bill sums to 5,670.0
+UPV_TX_TOTAL_TOLERANCE = 0.005     # check(): within 0.5 % of the rounded figure
 # Forming and process energy, per unit. Rolling and metal-working rows are
 # FORMING of mass already counted, held apart so they are never summed into it.
 UPV_TX_FORMING_KG = {
@@ -204,6 +248,25 @@ UPV_TX_FORMING_KG = {
 }
 UPV_TX_ELECTRICITY_KWH = 2_368.3
 UPV_TX_HEAT_MJ         = 9_903.8
+# Smith 2024 Table A15 replaces 1.30E-05 transformers per m2 over 30 years
+# against 4.30E-05 installed (A14): 30.2 % of the fleet. The same ratio
+# upv.UPV_PV_OM_REPLACEMENT_FRACTION applies to the inverters in the same row;
+# until 21 Oct 2026 the transformer half was dropped when A11 was substituted.
+# Carried as its own 30-year activity, like upv's O&M, so transformers.py can
+# charge it per year whatever life the unit itself is amortised over.
+UPV_TX_REPLACEMENT_FRACTION_30Y = 1.30e-5 / 4.30e-5
+UPV_TX_REPLACEMENT_REFERENCE_YEARS = 30.0
+
+# --- battery and fuel cell: the containerised LV step-up, Jasper's mass on the IEA unit ---
+CSS_TX_SOURCE    = "Jasper et al. 2026, CSS (liquid cooled) bill, 'transformer, for grid connection'"
+CSS_TX_KG        = 5_500.0     # TRANSCRIBED - one unit per container; check() holds it to bess.CSS_EXCLUDED
+CSS_TX_KW        = 1_600.0     # TRANSCRIBED - the container's PCS rating, bess.CSS_KW
+CSS_TX_KG_PER_MW = CSS_TX_KG / CSS_TX_KW * 1000.0
+# The composition is per kg of the IEA unit, so every Table 49 row is scaled by
+# the mass ratio: how many of that unit one MW of container step-up weighs. On
+# the transcribed bill's own mass (5,679.94 kg), not the report's rounded
+# 5,680, so per kg the two activities score identically.
+CSS_TX_UNITS_PER_MW = CSS_TX_KG_PER_MW / (sum(UPV_TX_MATERIALS_KG.values()) + UPV_TX_FIBREBOARD_KG)
 
 
 def check() -> str:
@@ -219,10 +282,10 @@ def check() -> str:
             f"the IEA PVPS unit is wound {UPV_TX_PRIMARY_KV:g}/{UPV_TX_SECONDARY_KV:g} kV but "
             f"the site collects at {TX_SITE_COLLECTION_KV:g} kV - one of them has moved")
     mass = sum(UPV_TX_MATERIALS_KG.values()) + UPV_TX_FIBREBOARD_KG
-    if abs(mass - UPV_TX_STATED_TOTAL_KG) > 1.0:
+    if abs(mass - UPV_TX_STATED_TOTAL_KG) > UPV_TX_TOTAL_TOLERANCE * UPV_TX_STATED_TOTAL_KG:
         raise AssertionError(
             f"UPV transformer bill sums to {mass:,.2f} kg against the report's stated "
-            f"{UPV_TX_STATED_TOTAL_KG:,.0f} kg per unit")
+            f"~{UPV_TX_STATED_TOTAL_KG:,.0f} kg per unit")
     for key in list(UPV_TX_MATERIALS_KG) + list(UPV_TX_FORMING_KG):
         if "upv_" + key not in processes:
             raise AssertionError(f"no ecoinvent process mapped for UPV transformer row {key!r}")
@@ -239,9 +302,18 @@ def check() -> str:
         unmapped = set(bill) - set(TX_MATERIAL_PROCESSES)
         if unmapped:
             raise AssertionError(f"Leng {label} transformer rows {sorted(unmapped)} have no process")
+    # The container step-up's mass and rating are Jasper's, read from the battery
+    # inventory's own excluded-rows table, so the two modules cannot drift apart.
+    from optimiser_lca import bess
+    jasper_kg = bess.CSS_EXCLUDED["transformer, for grid connection"][0]
+    if abs(jasper_kg - CSS_TX_KG) > 1e-9 or abs(bess.CSS_KW - CSS_TX_KW) > 1e-9:
+        raise AssertionError(
+            f"the containerised step-up reads {CSS_TX_KG:,.0f} kg per {CSS_TX_KW:,.0f} kW but "
+            f"bess.py's Jasper bill says {jasper_kg:,.0f} kg per {bess.CSS_KW:,.0f} kW")
     return (f"OK - wind {sum(TX_KG_PER_MW.values()):,.0f} kg/MW; solar {mass:,.0f} kg per "
             f"{UPV_TX_UNIT_MVA:g} MVA unit, {UPV_TX_UNITS_PER_MWP:g} units/MWp; "
             f"grid intake {main / TX_LENG_MAIN_MVA:,.1f} kg/MVA; "
+            f"container step-up {CSS_TX_KG_PER_MW:,.1f} kg/MW; "
             f"site collects at {TX_SITE_COLLECTION_KV:g} kV")
 
 
@@ -312,7 +384,45 @@ processes = {
     "upv_heat":                Process(identity=("heat production, natural gas, at industrial furnace >100kW",
                                                  "Europe without Switzerland"), unit="megajoule",
                                        query="heat production natural gas industrial furnace >100kW"),
+    # --- civils, in since 21 Oct 2026: Leng Table S3 box-transformer foundations
+    #     (wind) and IEA PVPS Z-PV-238's transformer station building (solar) ---
+    "excavation":              Process(identity=("market for excavation, hydraulic digger", "GLO"), unit="cubic meter",
+                                       query="market for excavation hydraulic digger GLO"),
+    "concrete_20mpa":          Process(identity=("market for concrete, 20MPa", "RoW"), unit="cubic meter",
+                                       query="market for concrete 20MPa RoW",
+                                       why="Leng's C15 cushion concrete; 20 MPa is the nearest grade in 3.9.1"),
+    "concrete_normal":         Process(identity=("market for concrete, normal strength", "RoW"), unit="cubic meter",
+                                       query="market for concrete normal strength RoW",
+                                       why="Leng's C30 cushion concrete"),
+    "reinforcing_steel_glo":   Process(identity=("market for reinforcing steel", "GLO"), unit=_kg,
+                                       query="market for reinforcing steel GLO"),
+    "diesel_building_machine": Process(identity=("market for diesel, burned in building machine", "GLO"),
+                                       unit="megajoule", query="market for diesel burned in building machine GLO"),
+    "building_hall":           Process(identity=("market for building, hall, steel construction", "GLO"),
+                                       unit="square meter", query="market for building hall steel construction GLO"),
 }
+
+# Leng Table S3, "Transformer substation foundation project" under wind-turbine
+# engineering: the pads the fifty box transformers stand on (main text §2.3,
+# "installed on ... concrete foundations"). Per 100 MW farm, TRANSCRIBED. The
+# machinery column gives machine-teams x a rating with no printed unit; read as
+# kWh per team for the welder and litres of diesel per team for the truck
+# (ASSUMED), 35.95 MJ per litre.
+TX_LENG_PAD_PER_FARM = {
+    "excavation_m3": 728.0, "concrete_c15_m3": 56.0, "concrete_c30_m3": 280.0,
+    "rebar_kg": 19_600.0, "welding_kwh": 2.5 * 60.27, "truck_diesel_l": 202.5 * 32.19,
+}
+DIESEL_MJ_PER_L = 0.84 * 42.8
+_pad = {k: v / TX_LENG_FARM_MW for k, v in TX_LENG_PAD_PER_FARM.items()}   # per MW of wind
+_wind_pad_exchanges = [
+    ("excavation",              _pad["excavation_m3"],  "cubic meter", "Leng S3 pad: earthwork backfill"),
+    ("concrete_20mpa",          _pad["concrete_c15_m3"], "cubic meter", "Leng S3 pad: cushion concrete C15"),
+    ("concrete_normal",         _pad["concrete_c30_m3"], "cubic meter", "Leng S3 pad: cushion concrete C30"),
+    ("reinforcing_steel_glo",   _pad["rebar_kg"],       _kg,           "Leng S3 pad: reinforcement"),
+    ("upv_electricity",         _pad["welding_kwh"],    "kilowatt hour", "Leng S3 pad: AC welding (unit ASSUMED kWh)"),
+    ("diesel_building_machine", _pad["truck_diesel_l"] * DIESEL_MJ_PER_L, "megajoule",
+                                "Leng S3 pad: heavy truck 5 t (unit ASSUMED litres)"),
+]
 flows = {}
 
 check()
@@ -350,11 +460,40 @@ _solar_exchanges = (
     [_solar_row(k, kg, _kg, f"{k} in the solar inverter-station step-ups")
      for k, kg in UPV_TX_MATERIALS_KG.items()]
     + [_solar_row("fibreboard", UPV_TX_FIBREBOARD_M3, "cubic meter",
-                  "hardboard pressboard (workbook 36.96 m3 corrected to dm3; see docstring)")]
+                  "hardboard pressboard (workbook '36.96 m3' is 36.96 kg; see docstring)")]
     + [_solar_row(k, kg, _kg, f"{k}, forming of mass already counted")
        for k, kg in UPV_TX_FORMING_KG.items()]
     + [_solar_row("electricity", UPV_TX_ELECTRICITY_KWH, "kilowatt hour", "factory electricity"),
        _solar_row("heat", UPV_TX_HEAT_MJ, "megajoule", "factory heat")]
+    # Z-PV-238 (Table 50) puts a steel-construction transformer station on the
+    # 10 MWp plant: 4 x 10 m2 for its four units. In since 21 Oct 2026.
+    + [("building_hall", 10.0 * _per_mwp, "square meter",
+        f"transformer station building - IEA PVPS T12-33:2026 Z-PV-238, 10 m2 per unit x {_per_mwp:g} units/MWp")]
+)
+# The unit rows only (no building), x Smith's 30-year replacement fraction.
+_solar_replacement_exchanges = [
+    (k, amt * UPV_TX_REPLACEMENT_FRACTION_30Y, unit,
+     f"replacement over {UPV_TX_REPLACEMENT_REFERENCE_YEARS:.0f} y, "
+     f"{UPV_TX_REPLACEMENT_FRACTION_30Y:.1%} of the installed units (Smith 2024 A15) - {note}")
+    for k, amt, unit, note in _solar_exchanges if str(k).startswith("upv_")
+]
+
+
+def _container_row(key, amount_per_unit, unit, note):
+    return ("upv_" + key, amount_per_unit * CSS_TX_UNITS_PER_MW, unit,
+            f"{note} - {CSS_TX_SOURCE}: {CSS_TX_KG:,.0f} kg per {CSS_TX_KW:,.0f} kW = "
+            f"{CSS_TX_KG_PER_MW:,.1f} kg/MW, as {CSS_TX_UNITS_PER_MW:.4f} of the IEA PVPS Table 49 "
+            f"unit's composition ({amount_per_unit:,.3f} per {UPV_TX_STATED_TOTAL_KG:,.0f} kg unit)")
+
+
+_container_exchanges = (
+    [_container_row(k, kg, _kg, f"{k} in the battery / fuel-cell container step-up")
+     for k, kg in UPV_TX_MATERIALS_KG.items()]
+    + [_container_row("fibreboard", UPV_TX_FIBREBOARD_M3, "cubic meter", "hardboard pressboard")]
+    + [_container_row(k, kg, _kg, f"{k}, forming of mass already counted")
+       for k, kg in UPV_TX_FORMING_KG.items()]
+    + [_container_row("electricity", UPV_TX_ELECTRICITY_KWH, "kilowatt hour", "factory electricity"),
+       _container_row("heat", UPV_TX_HEAT_MJ, "megajoule", "factory heat")]
 )
 
 activities = [
@@ -382,14 +521,16 @@ activities = [
             "which lands within the same band by a different route. "
             "Functional unit is 1 MW of wind CONNECTED - amortise over "
             "TX_ASSET_LIFE_YEARS (dc_config). "
+            "INCLUDES (since 21 Oct 2026) the box-transformer foundations from Leng "
+            "Table S3, per MW of the same farm. "
             "EXCLUDES: the grid-export transformer (this study is behind the meter, "
             "there is nothing to export into, and the grid intake is charged by "
             "grid_connection.py); any step between the collection network and the "
-            "data centre (both sit in the medium-voltage band); switchgear, "
-            "protection and civils; manufacturing energy, which Leng include and "
-            "this does not, making this the lower of the two; losses; end-of-life."
+            "data centre (both sit in the medium-voltage band); switchgear and "
+            "protection; losses; end-of-life. Leng publish no factory energy for "
+            "the unit, so none is charged."
         ),
-        technosphere=_wind_exchanges,
+        technosphere=_wind_exchanges + _wind_pad_exchanges,
     ),
     Activity(
         code=R.TX_SOLAR,
@@ -415,19 +556,41 @@ activities = [
             "needed. The magnetic core is grain-oriented electrical steel, "
             "disaggregated by the source into converter-route steel + MG-silicon + "
             "hot and cold rolling because no LCI database carries a GOES dataset. "
-            "The workbook's 36.96 m3 hardboard cell is out by 1000x and is corrected "
-            "to 0.03696 m3; the corrected bill reconciles to the report's own stated "
-            "unit mass to three significant figures (stepup_transformers.check). "
+            "The workbook's '36.96 m3' hardboard cell is 36.96 kg mislabelled (its own "
+            "comment says kg), carried as 0.0291 m3; the bill then sums to 5,670 kg "
+            "against the report's 'approximately 5,680' (stepup_transformers.check). "
             "Functional unit is 1 MWp of PV CONNECTED - amortise over "
             "TX_ASSET_LIFE_YEARS (dc_config). "
             "INCLUDES factory electricity and heat, which the wind bill does not - "
             "process energy is ~6% here, so materials-only the two land within 1% of "
             "each other; the asymmetry is stated in SOURCES.md. "
+            "INCLUDES (since 21 Oct 2026) the transformer station building from "
+            "Z-PV-238, 10 m2 per unit. "
             "EXCLUDES: the grid-export transformer (behind the meter); any step "
             "between collection and the data centre (both medium voltage); "
-            "switchgear, protection and civils; losses; end-of-life."
+            "switchgear and protection; losses; end-of-life."
         ),
         technosphere=_solar_exchanges,
+    ),
+    Activity(
+        code=R.TX_SOLAR_REPL30,
+        name="Solar inverter-station step-up transformer replacements, 30 years, per MWp of PV connected",
+        reference_product="30 years of solar step-up transformer replacements, per MWp",
+        unit="megawatt", location="GLO",
+        comment=(
+            "Smith 2024 Table A15 charges 1.30E-05 transformer replacements per m2 of "
+            "module over 30 years against 4.30E-05 installed (A14): "
+            f"{UPV_TX_REPLACEMENT_FRACTION_30Y:.1%} of the fleet, the same fraction "
+            "upv.py keeps for the inverters in the same row. The fraction transfers to "
+            "this study's unit and count where Smith's absolute number (for his 2.7 MVA "
+            "A11 unit) would not. Functional unit is 30 years of replacements for 1 MWp "
+            "of PV CONNECTED; transformers.py charges it per year, independently of the "
+            "life the unit itself is amortised over. In since 21 Oct 2026; the wind "
+            "step-ups have no replacement rate because Leng publish none (an unsourced "
+            "flow, registered for the cut-off test). Same boundary as the unit: no "
+            "delivery to site, no end-of-life."
+        ),
+        technosphere=_solar_replacement_exchanges,
     ),
     Activity(
         code=R.TX_GRID,
@@ -453,18 +616,51 @@ activities = [
             "the common case for a ~100 MW data centre; for a 275/400 kV "
             "transmission-connected site it errs LOW, supergrid transformers being "
             "heavier per MVA. Used for every site as the default. "
-            "EXCLUDES: switchgear, protection, the bay and civils; the line to the "
-            "site (grid_connection.py reports it separately); manufacturing energy, "
-            "which Leng include on the Chinese grid (their 342 t CO2e for this unit) "
-            "and this does not, as for the wind units; losses; end-of-life."
+            "EXCLUDES: switchgear, protection, the bay and civils (Leng's booster-"
+            "station civils are in their Table S3 and await a decision, "
+            "SOURCE_DIFF.md D2); the line to the site (grid_connection.py reports it "
+            "separately); losses; end-of-life. Leng publish no factory energy for "
+            "this unit; their 342 t CO2e against ~275 t here is a scoring difference "
+            "(ecoinvent 3.11 v 3.9.1), not a dropped flow."
         ),
         technosphere=_grid_exchanges,
+    ),
+    Activity(
+        code=R.TX_LV_CONTAINER,
+        name="Containerised LV step-up transformer, per MW of inverter rating (battery PCS, fuel cell)",
+        reference_product="containerised step-up transformer capacity",
+        unit="megawatt", location="GLO",
+        comment=(
+            "The transformer that steps a battery container's PCS output, or a fuel-cell "
+            "container's inverter output, from LOW voltage (400 V) up to the site collection "
+            f"voltage ({TX_SITE_COLLECTION_KV:g} kV). Functional unit is 1 MW of inverter rating: "
+            "transformers.py charges it per MW of cap_batt_p and per MW of cap_fc, each amortised "
+            "over the asset's own life (the battery's 15 y; the fuel cell's BoP calendar life). "
+            f"MASS from {CSS_TX_SOURCE}: {CSS_TX_KG:,.0f} kg per {CSS_TX_KW:,.0f} kW container = "
+            f"{CSS_TX_KG_PER_MW:,.1f} kg/MW, on the measured curve (2,566 kg/MVA at 2.2 MVA, 2,272 at "
+            "2.5). COMPOSITION, forming and factory energy per kg from the IEA PVPS T12-33:2026 Table "
+            "49 20/0.4 kV oil-immersed unit, a STATED SUBSTITUTION for Jasper's own recipe on "
+            "technological representativeness (decided 22 Oct 2026). Jasper give a per-kg split "
+            "(air-cooled sheet rows 225-236), but their §2.4.3 says it is derived from Hunziker et "
+            "al. (2020): a 630 kVA line-frequency transformer with an ON-LOAD TAP CHANGER, scaled "
+            "by mass to 1,800 kVA. The IEA unit is a current 2,500 kVA distribution transformer "
+            "built from product documentation at exactly the 20/0.4 kV step the container needs. "
+            "Jasper's recipe scores 7.85 kg CO2e/kg against 4.57 here (+72 %, mostly its 0.09 kg/kg "
+            "of control electronics, likely the tap changer's); it is the sensitivity case. "
+            "Closed as negligible on 4 Sep 2026 and modelled on 15 Oct: the inventory and "
+            "loss machinery existed by then, and leaving it out favoured the storage chains against "
+            "the generation chains, which pay for theirs. "
+            "EXCLUDES: switchgear, protection and civils (as every transformer here); losses, which "
+            "conversion_losses.py charges as energy; end-of-life."
+        ),
+        technosphere=_container_exchanges,
     ),
 ]
 
 
 def inventory() -> Inventory:
-    return Inventory(name="power transformers (Leng 2026 wind + grid intake, IEA PVPS 2026 solar)",
+    return Inventory(name="power transformers (Leng 2026 wind + grid intake, IEA PVPS 2026 solar, "
+                          "Jasper 2026 container step-up)",
                      database=R.TRANSFORMER_DB, processes=processes, flows=flows,
                      activities=activities)
 
@@ -483,6 +679,8 @@ def describe() -> str:
         f"per unit; at {UPV_TX_PRIMARY_KV:g} kV: {amps(UPV_TX_UNIT_MVA, UPV_TX_PRIMARY_KV * 1e3):,.0f} A",
         f"Grid intake: Leng main transformer XZ11-100000/110, {TX_LENG_MAIN_MVA:.0f} MVA at "
         f"{TX_LENG_MAIN_KV:.0f} kV -> {sum(TX_GRID_KG_PER_MVA.values()):,.1f} kg/MVA",
+        f"Container step-up (battery PCS, fuel cell): {CSS_TX_SOURCE}, {CSS_TX_KG:,.0f} kg per "
+        f"{CSS_TX_KW:,.0f} kW -> {CSS_TX_KG_PER_MW:,.1f} kg/MW on the IEA unit's composition",
         "Step-ups amortised over TX_ASSET_LIFE_YEARS in optimisation/transformers.py; "
         "the grid intake over ASSET_LIFE_YEARS in optimisation/grid_connection.py.",
     ])

@@ -1,0 +1,1046 @@
+<meta charset="utf-8">
+<title>Data Centre LCA Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one full-height workbench — toolbar on top, the process tree on a pannable
+   drafting canvas, and a datasheet panel docked right (a bottom sheet on phones). */
+:root {
+  --bg: #eef1ef;           /* drafting ground, a grey with a green bias */
+  --surface: #ffffff;
+  --surface-2: #f6f8f7;    /* background-dataset cards */
+  --ink: #16201e;
+  --muted: #5a6763;
+  --line: #c9d2ce;
+  --grid: #dfe5e2;
+  --accent: #0d6670;       /* petrol: selection, focus, controls */
+  --accent-ink: #ffffff;
+  --link: #9fb0ab;
+  --g-transcribed: #2867c9;
+  --g-derived: #7446c4;
+  --g-assumed: #b07800;
+  --g-proxy: #cf4f25;
+  --g-background: #87928e;
+  --g-biosphere: #23845a;
+  --gap-open: #c22d47;
+  --gap-closed: #23845a;
+  --gap-known: #b07800;
+  --gap-absent: #87928e;
+  --c-sun: #c48a00; --c-wind: #3a86b8; --c-dc: #c4432a; --c-lv: #2867c9; --c-mv: #0d6670;
+  --c-hv: #6a3fb8; --c-h2: #1d8a68; --c-gas: #8a5a2b; --c-off: #9aa5a1;
+  --shadow: 0 1px 2px rgb(22 32 30 / 0.08), 0 4px 14px rgb(22 32 30 / 0.06);
+  --font-ui: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-node: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111716; --surface: #1a2220; --surface-2: #151c1b; --ink: #e3ebe8; --muted: #93a29d;
+    --line: #2f3b38; --grid: #1c2523; --accent: #4bb7bf; --accent-ink: #06201f; --link: #4a5955;
+    --g-transcribed: #6a9cf0; --g-derived: #a688e8; --g-assumed: #e0aa35; --g-proxy: #ee7a52;
+    --g-background: #7d8a86; --g-biosphere: #4fbf86; --gap-open: #f0647b; --gap-closed: #4fbf86;
+    --gap-known: #e0aa35; --gap-absent: #7d8a86;
+    --c-sun: #e6b43c; --c-wind: #6fb3e0; --c-dc: #ef7a5e; --c-lv: #6a9cf0; --c-mv: #4bb7bf;
+    --c-hv: #a688e8; --c-h2: #4fc79d; --c-gas: #c69563; --c-off: #5d6a66;
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 4px 14px rgb(0 0 0 / 0.3);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111716; --surface: #1a2220; --surface-2: #151c1b; --ink: #e3ebe8; --muted: #93a29d;
+  --line: #2f3b38; --grid: #1c2523; --accent: #4bb7bf; --accent-ink: #06201f; --link: #4a5955;
+  --g-transcribed: #6a9cf0; --g-derived: #a688e8; --g-assumed: #e0aa35; --g-proxy: #ee7a52;
+  --g-background: #7d8a86; --g-biosphere: #4fbf86; --gap-open: #f0647b; --gap-closed: #4fbf86;
+  --gap-known: #e0aa35; --gap-absent: #7d8a86;
+  --c-sun: #e6b43c; --c-wind: #6fb3e0; --c-dc: #ef7a5e; --c-lv: #6a9cf0; --c-mv: #4bb7bf;
+  --c-hv: #a688e8; --c-h2: #4fc79d; --c-gas: #c69563; --c-off: #5d6a66;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 4px 14px rgb(0 0 0 / 0.3);
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-ui); font-size: 14px;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+button, input { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ---------------------------------------------------------------- toolbar */
+.bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px;
+  padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--surface);
+  position: relative; z-index: 3;
+}
+.brand { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.brand h1 {
+  margin: 0; font-family: var(--font-node); font-weight: 600; font-size: 18px;
+  letter-spacing: 0.01em; text-wrap: balance;
+}
+.brand .sub { font-size: 12px; color: var(--muted); }
+.stats { display: flex; gap: 14px; flex-wrap: wrap; font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+.stats b { color: var(--ink); font-weight: 500; font-variant-numeric: tabular-nums; }
+.stats .open b { color: var(--gap-open); }
+.tools { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; align-items: center; }
+.btn {
+  border: 1px solid var(--line); background: var(--surface); padding: 5px 10px; border-radius: 6px;
+  cursor: pointer; font-size: 13px; white-space: nowrap;
+}
+.btn:hover { border-color: var(--accent); color: var(--accent); }
+.btn.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.search { position: relative; }
+.search input {
+  width: min(280px, 70vw); padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--bg);
+}
+.results {
+  position: absolute; top: calc(100% + 4px); right: 0; width: min(440px, 92vw); max-height: 60vh;
+  overflow-y: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+  box-shadow: var(--shadow); z-index: 10;
+}
+.results button {
+  display: block; width: 100%; text-align: left; padding: 8px 12px; border: 0; background: none;
+  cursor: pointer; border-bottom: 1px solid var(--grid);
+}
+.results button:hover, .results button:focus-visible { background: var(--bg); }
+.results .r-name { font-family: var(--font-node); font-size: 14px; }
+.results .r-path { font-size: 11px; color: var(--muted); margin-top: 2px; overflow-wrap: anywhere; }
+
+/* ---------------------------------------------------------------- canvas */
+.work { flex: 1; display: flex; min-height: 0; position: relative; }
+.canvas { flex: 1; min-width: 0; position: relative; }
+svg#tree { width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; }
+svg#tree:active { cursor: grabbing; }
+.link { fill: none; stroke: var(--link); }
+.card rect.body { fill: var(--surface); stroke: var(--line); stroke-width: 1; }
+.card.k-ecoinvent rect.body, .card.k-pointer rect.body { fill: var(--surface-2); }
+.card.k-biosphere rect.body { fill: var(--surface-2); stroke-dasharray: 4 3; }
+.card.k-group rect.body, .card.k-root rect.body { fill: var(--surface); stroke: var(--ink); stroke-width: 1.2; }
+.card.k-term rect.body { stroke: var(--ink); stroke-width: 1.2; }
+.card.k-step .name { font-weight: 500; }
+.card.k-more rect.body { fill: none; stroke-dasharray: 3 3; }
+.card.k-jump rect.body { stroke: var(--accent); stroke-dasharray: 5 3; }
+.card.k-fu rect.body { fill: var(--surface); stroke: var(--ink); stroke-width: 2; }
+.card.k-fu .name { font-weight: 600; }
+.card.k-stage rect.body { fill: var(--surface); stroke: var(--ink); stroke-width: 1.2; }
+.card.k-stage .name { font-weight: 500; }
+.card.k-part rect.body { fill: var(--surface); }
+.card.s-not rect.body { fill: var(--bg); stroke: var(--muted); stroke-dasharray: 5 4; }
+.card.s-not .name { fill: var(--muted); }
+.card.selected rect.body { stroke: var(--accent); stroke-width: 2.5; }
+.card { cursor: pointer; }
+.card:hover rect.body { stroke: var(--accent); }
+.card .kind { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.06em; fill: var(--muted); text-transform: uppercase; }
+.card .name { font-family: var(--font-node); font-size: 12.5px; fill: var(--ink); }
+.card.k-root .name, .card.k-group .name, .card.k-term .name { font-weight: 600; }
+.card .val { font-family: var(--font-mono); font-size: 10.5px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+.card .val.big { fill: var(--ink); }
+.card .count { font-family: var(--font-mono); font-size: 10px; fill: var(--muted); }
+.card .gapbadge rect { fill: var(--gap-open); }
+.card .gapbadge text { fill: #fff; font-family: var(--font-mono); font-size: 9.5px; font-weight: 500; }
+.toggle circle { fill: var(--surface); stroke: var(--ink); stroke-width: 1; }
+.toggle text { font-family: var(--font-mono); font-size: 11px; fill: var(--ink); text-anchor: middle; dominant-baseline: central; }
+
+.legend {
+  position: absolute; left: 16px; bottom: 16px; background: var(--surface); border: 1px solid var(--line);
+  border-radius: 8px; padding: 10px 12px; font-size: 12px; box-shadow: var(--shadow); max-width: calc(100% - 32px);
+  display: grid; gap: 6px;
+}
+.legend { border: 1px solid var(--line); }
+.legend > summary { cursor: pointer; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink); }
+.legend:not([open]) { padding: 6px 10px; }
+.legend h2 { margin: 0; font-size: 11px; font-family: var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+.legend .row { display: flex; flex-wrap: wrap; gap: 6px 12px; }
+.legend .sw { display: inline-flex; align-items: center; gap: 6px; }
+.legend .sw i { width: 12px; height: 12px; border-radius: 2px; display: inline-block; }
+.legend .note { color: var(--muted); font-size: 11.5px; max-width: 44ch; }
+.hint { position: absolute; right: 16px; bottom: 16px; font-size: 12px; color: var(--muted); background: var(--surface); border: 1px solid var(--line); padding: 6px 10px; border-radius: 6px; }
+
+/* ---------------------------------------------------------------- datasheet */
+.panel {
+  width: min(440px, 42vw); border-left: 1px solid var(--line); background: var(--surface);
+  overflow-y: auto; padding: 16px 18px 40px; display: flex; flex-direction: column; gap: 14px; min-width: 0;
+}
+.panel h2 { margin: 0; font-family: var(--font-node); font-size: 20px; font-weight: 600; line-height: 1.2; text-wrap: balance; overflow-wrap: anywhere; }
+.panel .crumbs { font-size: 11.5px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 2px 6px; }
+.panel .crumbs button { border: 0; background: none; padding: 0; color: var(--muted); cursor: pointer; text-decoration: underline; text-decoration-color: var(--line); }
+.panel .crumbs button:hover { color: var(--accent); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-family: var(--font-mono); font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 1px solid currentColor; letter-spacing: 0.03em; }
+.panel section { display: grid; gap: 6px; }
+.panel h3 { margin: 0; font-size: 11px; font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); font-weight: 500; }
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; font-size: 13px; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.mono { font-family: var(--font-mono); font-size: 12.5px; }
+.prose { font-size: 13.5px; line-height: 1.5; overflow-wrap: anywhere; max-width: 68ch; }
+.prose p { margin: 0 0 8px; }
+.prose code, .md code { font-family: var(--font-mono); font-size: 12px; background: var(--bg); padding: 0 3px; border-radius: 3px; }
+.bars { display: grid; gap: 4px; }
+.barrow { display: grid; grid-template-columns: 1fr 64px; gap: 8px; align-items: center; font-size: 12.5px; }
+.barrow button { text-align: left; border: 0; background: none; padding: 0; cursor: pointer; min-width: 0; }
+.barrow .bn { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-node); }
+.barrow .bt { height: 5px; border-radius: 3px; background: var(--grid); margin-top: 3px; overflow: hidden; }
+.barrow .bt i { display: block; height: 100%; background: var(--accent); }
+.barrow .bt i.neg { background: var(--g-biosphere); }
+.barrow .bv { font-family: var(--font-mono); font-size: 11.5px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+.gapcard { border: 1px solid var(--line); border-left: 4px solid var(--gap-open); border-radius: 6px; padding: 8px 10px; display: grid; gap: 6px; }
+.gapcard .gt { font-weight: 600; font-size: 13.5px; }
+.gapcard .gb { font-size: 12.5px; line-height: 1.45; color: var(--ink); overflow-wrap: anywhere; }
+.gapcard button { justify-self: start; }
+details { border: 1px solid var(--line); border-radius: 6px; }
+details > summary { cursor: pointer; padding: 7px 10px; font-size: 13px; font-weight: 500; }
+details > div { padding: 0 12px 10px; }
+.md { font-size: 12.5px; line-height: 1.5; overflow-wrap: anywhere; }
+.md h4 { margin: 10px 0 4px; font-size: 13px; }
+.md p { margin: 0 0 8px; }
+.md ul { margin: 0 0 8px; padding-left: 18px; }
+.md .tw { overflow-x: auto; margin-bottom: 8px; }
+.md table { border-collapse: collapse; font-size: 11.5px; }
+.md th, .md td { border: 1px solid var(--line); padding: 4px 6px; vertical-align: top; text-align: left; min-width: 80px; }
+.md th { background: var(--bg); }
+.md a, .prose a { color: var(--accent); }
+pre.doc { white-space: pre-wrap; font-family: var(--font-mono); font-size: 11.5px; line-height: 1.45; margin: 0; overflow-wrap: anywhere; }
+.empty { color: var(--muted); font-size: 13px; }
+.close { display: none; }
+
+.tabs { display: flex; gap: 2px; padding: 0 16px; background: var(--surface); border-bottom: 1px solid var(--line); }
+.tabs button {
+  border: 0; background: none; padding: 9px 14px 8px; cursor: pointer; font-family: var(--font-node);
+  font-size: 15px; font-weight: 500; color: var(--muted); border-bottom: 3px solid transparent;
+}
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs button:hover { color: var(--accent); }
+svg#flow { width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; }
+.lanehead { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; fill: var(--muted); text-anchor: middle; }
+.laneband { fill: var(--grid); opacity: 0.45; }
+.rowlabel { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; fill: var(--muted); }
+.fnode rect.body { fill: var(--surface); stroke: var(--line); stroke-width: 1; }
+.fnode.s-not rect.body { fill: var(--bg); stroke-dasharray: 5 4; stroke: var(--muted); }
+.fnode.s-inside rect.body { fill: var(--surface-2); }
+.fnode.s-option rect.body { stroke-dasharray: 8 3; }
+.fnode.k-source rect.body { stroke: var(--ink); }
+.fnode.k-storage rect.body { stroke: var(--ink); stroke-width: 2; }
+.fnode.k-load rect.body { fill: var(--surface); stroke: var(--ink); stroke-width: 1.5; }
+.fnode.k-bus rect.body { fill: var(--ink); stroke: var(--ink); }
+.fnode.k-bus .fname, .fnode.k-bus .frate { fill: var(--surface); }
+.fnode.selected rect.body { stroke: var(--accent); stroke-width: 2.5; }
+.fnode { cursor: pointer; }
+.fnode:hover rect.body { stroke: var(--accent); }
+.fnode .fkind { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.06em; fill: var(--muted); }
+.fnode .fname { font-family: var(--font-node); font-size: 12.5px; font-weight: 600; fill: var(--ink); }
+.fnode .frate { font-family: var(--font-mono); font-size: 9.5px; fill: var(--muted); }
+.fnode .flp { font-family: var(--font-mono); font-size: 9.5px; fill: var(--accent); }
+.fedge path.line { fill: none; stroke-width: 2.6; }
+.fedge path.hit { fill: none; stroke: transparent; stroke-width: 14; cursor: pointer; }
+.fedge.st-not path.line { stroke-dasharray: 7 5; }
+.fedge.st-inside path.line { stroke-dasharray: 2 4; }
+.fedge.st-option path.line { stroke-dasharray: 10 4; }
+.fedge.st-off path.line { stroke-dasharray: 1 5; stroke: var(--c-off) !important; }
+.fedge text { font-family: var(--font-mono); font-size: 9.5px; fill: var(--ink); paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round; pointer-events: none; }
+.dim { opacity: 0.12; }
+.fedge.hl path.line { stroke-width: 4.2; }
+.routes {
+  position: absolute; left: 16px; top: 12px; right: 16px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+  pointer-events: none;
+}
+.routes > * { pointer-events: auto; }
+.routes .lbl { font-family: var(--font-mono); font-size: 11px; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; background: var(--surface); padding: 3px 6px; border-radius: 4px; }
+.flowlegend .ln { display: inline-flex; align-items: center; gap: 6px; }
+.flowlegend svg { width: 28px; height: 8px; }
+@media (max-width: 760px) {
+  .panel {
+    position: absolute; left: 0; right: 0; bottom: 0; width: auto; max-height: 62%;
+    border-left: 0; border-top: 1px solid var(--line); box-shadow: var(--shadow); z-index: 4;
+    padding-bottom: calc(40px + env(safe-area-inset-bottom, 0px));
+  }
+  .close { display: inline-block; align-self: flex-end; }
+  .legend { bottom: auto; top: 12px; }
+  .hint { display: none; }
+  .brand .sub { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<header class="bar">
+  <div class="brand">
+    <h1>Data Centre LCA Map</h1>
+    <div class="sub" id="sub"></div>
+  </div>
+  <div class="stats" id="stats"></div>
+  <div class="tools">
+    <div class="search tree-only">
+      <input id="q" type="search" placeholder="Find an activity, flow or gap" autocomplete="off" aria-label="Search the tree">
+      <div class="results" id="results" hidden></div>
+    </div>
+    <button class="btn tree-only" id="expand" title="Open one more level under the selected box">Open level</button>
+    <button class="btn tree-only" id="collapse" title="Close everything below the top levels">Collapse</button>
+    <button class="btn" id="fit">Fit</button>
+    <button class="btn tree-only" id="bg" title="Show or hide ecoinvent background datasets and elementary flows">Background: shown</button>
+  </div>
+</header>
+
+<nav class="tabs" role="tablist" aria-label="Map views">
+  <button role="tab" id="tab-tree" aria-selected="true" aria-controls="view-tree">LCA tree</button>
+  <button role="tab" id="tab-flow" aria-selected="false" aria-controls="view-flow">Energy flow</button>
+</nav>
+<div class="work">
+  <div class="canvas" id="view-tree" role="tabpanel" aria-labelledby="tab-tree">
+    <svg id="tree" role="img" aria-label="LCA tree, top-down"></svg>
+    <details class="legend" id="legend" open>
+      <summary>Legend</summary>
+      <h2>Provenance</h2>
+      <div class="row">
+        <span class="sw"><i style="background:var(--g-transcribed)"></i>Transcribed</span>
+        <span class="sw"><i style="background:var(--g-derived)"></i>Derived</span>
+        <span class="sw"><i style="background:var(--g-assumed)"></i>Assumed</span>
+        <span class="sw"><i style="background:var(--g-proxy)"></i>Proxy</span>
+        <span class="sw"><i style="background:var(--g-background)"></i>ecoinvent background</span>
+        <span class="sw"><i style="background:var(--g-biosphere)"></i>Elementary flow</span>
+      </div>
+      <h2>Data gaps</h2>
+      <div class="row">
+        <span class="sw"><i style="background:var(--gap-open)"></i>Open</span>
+        <span class="sw"><i style="background:var(--gap-known)"></i>Source known</span>
+        <span class="sw"><i style="background:var(--gap-closed)"></i>Closed</span>
+        <span class="sw"><i style="background:var(--gap-absent)"></i>Confirmed absent</span>
+      </div>
+      <div class="note">Line weight is each input's share of its parent's carbon. Numbers are kg CO₂e, IPCC 2021 GWP100.</div>
+    </details>
+    <div class="hint">Click a box to open it · drag to pan · scroll to zoom</div>
+  </div>
+  <div class="canvas" id="view-flow" role="tabpanel" aria-labelledby="tab-flow" hidden>
+    <svg id="flow" role="img" aria-label="Energy flow into the data centre"></svg>
+    <div class="routes" id="routes"></div>
+    <details class="legend flowlegend" id="flowlegend">
+      <summary>Legend</summary>
+      <h2>What flows</h2>
+      <div class="row" id="carriers"></div>
+      <h2>Line style</h2>
+      <div class="row" id="styles"></div>
+      <div class="note">Box borders follow the same rule: dashed means the model does not include it. Click any box or line for its numbers.</div>
+    </details>
+  </div>
+  <aside class="panel" id="panel" aria-live="polite"></aside>
+</div>
+
+<script id="lca-data" type="application/json">__DATA__</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script>
+(() => {
+"use strict";
+const DATA = JSON.parse(document.getElementById("lca-data").textContent);
+const GAPS = DATA.gaps;
+const CARD_W = 184, CARD_H = 70, GAP_X = 18, GAP_Y = 62, PAGE = 12;
+
+// ------------------------------------------------------------- the model
+const byId = new Map();
+let total = 0;
+(function index(n, parent, depth) {
+  n.parent = parent; n.depth0 = depth; byId.set(n.id, n); total++;
+  (n.children || []).forEach(c => index(c, n, depth + 1));
+})(DATA.tree, null, 0);
+// Every activity, by its code, for the foreground index's pointers.
+const firstByCode = new Map();
+for (const n of byId.values()) if (n.kind === "foreground" && !firstByCode.has(n.database + "/" + n.code)) firstByCode.set(n.database + "/" + n.code, n);
+const gapNodeById = new Map();
+for (const n of byId.values()) if (n.kind === "gap") gapNodeById.set(n.gap_id, n);
+
+const open = new Set([DATA.tree.id]);
+const shownAll = new Set();          // parents whose full child list is revealed
+let showBackground = true;
+let selected = DATA.tree;
+
+function isBackground(n) { return n.kind === "ecoinvent" || n.kind === "biosphere" || (n.kind === "note" && n.exchange && !n.children); }
+function kidsOf(n) {
+  let k = n.children || [];
+  if (!showBackground) k = k.filter(c => !isBackground(c));
+  return k;
+}
+
+// Build the visible hierarchy: open nodes show children, paged after PAGE.
+function visible() {
+  function make(n) {
+    const out = { data: n };
+    if (open.has(n.id)) {
+      const kids = kidsOf(n);
+      let shown = kids;
+      if (kids.length > PAGE && !shownAll.has(n.id)) shown = kids.slice(0, PAGE);
+      out.children = shown.map(make);
+      if (shown.length < kids.length) out.children.push({ data: { id: n.id + ":more", kind: "more", name: `${kids.length - shown.length} more`, parentRef: n, hidden: kids.length - shown.length } });
+    }
+    return out;
+  }
+  const h = d3.hierarchy(make(DATA.tree));
+  h.each(d => { d.data = d.data.data; });      // unwrap: d.data is the map node itself
+  return h;
+}
+
+// ------------------------------------------------------------- formatting
+const fmt = (x) => {
+  if (x === null || x === undefined || Number.isNaN(x)) return "–";
+  const a = Math.abs(x);
+  if (a === 0) return "0";
+  if (a >= 1e6) return (x / 1e6).toFixed(2) + "M";
+  if (a >= 1e4) return Math.round(x).toLocaleString("en-GB");
+  if (a >= 100) return x.toFixed(0);
+  if (a >= 1) return x.toFixed(2);
+  if (a >= 0.001) return x.toFixed(4);
+  return x.toExponential(2);
+};
+const pct = (x) => (x * 100 >= 10 ? (x * 100).toFixed(0) : (x * 100).toFixed(1)) + "%";
+function share(n) {
+  const p = n.parent, c = n.exchange && n.exchange.contribution;
+  if (!p || c === undefined || c === null) return null;
+  const base = p.score_per_unit;
+  if (!base) return null;
+  return c / base;
+}
+const GRADE_COLOR = {
+  transcribed: "var(--g-transcribed)", derived: "var(--g-derived)", assumed: "var(--g-assumed)",
+  proxy: "var(--g-proxy)", secondary: "var(--g-derived)", sourced: "var(--g-transcribed)",
+};
+const STATUS_COLOR = { "closed": "var(--gap-closed)", "open-source-known": "var(--gap-known)", "open-no-source": "var(--gap-open)", "confirmed-absent": "var(--gap-absent)", "not-applicable": "var(--gap-absent)" };
+const STATUS_LABEL = { "closed": "closed", "open-source-known": "open — source known", "open-no-source": "open — no public source", "confirmed-absent": "confirmed absent", "not-applicable": "not applicable" };
+function stripe(n) {
+  if (n.kind === "ecoinvent" || n.kind === "pointer") return "var(--g-background)";
+  if (n.kind === "biosphere") return "var(--g-biosphere)";
+  if (n.kind === "gap") return STATUS_COLOR[n.status] || "var(--gap-open)";
+  if (n.kind === "todo") return "var(--gap-open)";
+  if (n.kind === "more") return "transparent";
+  if (n.kind === "jump") return "var(--accent)";
+  if (n.status === "not") return "var(--muted)";
+  if (n.kind === "fu" || n.kind === "stage") return "var(--ink)";
+  return GRADE_COLOR[n.grade] || "var(--ink)";
+}
+const KIND_LABEL = { root: "study", group: "group", term: "LP carbon term", step: "calculation step", jump: "link", fu: "functional unit", stage: "stage of the chain", part: "component", foreground: "foreground activity", ecoinvent: "ecoinvent dataset", biosphere: "elementary flow", note: "note", gap: "data gap", todo: "worklist item", pointer: "foreground activity", more: "" };
+function kindLine(n) {
+  if (n.kind === "foreground" && n.role) return "FOREGROUND · " + n.role.toUpperCase();
+  if (n.kind === "foreground") return "FOREGROUND · " + (n.module || "").split("/").pop();
+  if (n.kind === "jump") return "LINK · CLICK TO GO";
+  if (n.kind === "fu") return "FUNCTIONAL UNIT";
+  if (n.kind === "stage") return "STAGE";
+  if (n.kind === "part") return "COMPONENT · " + (n.grade || "").toUpperCase();
+  if (n.status === "not") return "NOT MODELLED";
+  if (n.kind === "ecoinvent" && n.role) return "ECOINVENT · CAPITAL GOOD";
+  if (n.kind === "ecoinvent") return "ECOINVENT" + (n.location ? " · " + n.location : "");
+  if (n.kind === "gap") return "GAP · " + (STATUS_LABEL[n.status] || "");
+  return (KIND_LABEL[n.kind] || n.kind).toUpperCase();
+}
+function valueLine(n) {
+  const ex = n.exchange;
+  if ((n.kind === "term" || n.kind === "step" || n.kind === "fu") && n.value !== undefined) return fmt(n.value) + " " + shortUnit(n.unit);
+  if (ex && ex.contribution !== undefined && ex.contribution !== null) {
+    const s = share(n);
+    return fmt(ex.contribution) + " kg" + (s !== null && Math.abs(s) >= 0.0005 ? " · " + pct(s) : "");
+  }
+  if (n.score_per_unit !== undefined && n.score_per_unit !== null) return fmt(n.score_per_unit) + " kg / " + (n.unit || "unit");
+  return "";
+}
+function shortUnit(u) {
+  if (!u) return "";
+  return u.replace(/kg CO₂e per /, "kg/").replace(/ per year.*/, "/yr").replace(/\(.*\)/, "").slice(0, 26);
+}
+function wrap(text, max, lines) {
+  const words = String(text).split(/\s+/); const out = []; let cur = "";
+  for (const w of words) {
+    if ((cur + " " + w).trim().length <= max) cur = (cur + " " + w).trim();
+    else { out.push(cur); cur = w; if (out.length === lines) break; }
+  }
+  if (out.length < lines && cur) out.push(cur);
+  const used = out.join(" ").length;
+  if (used < String(text).length && out.length) out[out.length - 1] = out[out.length - 1].replace(/.{0,2}$/, "") + "…";
+  return out.slice(0, lines);
+}
+// The card badge counts open gaps only; closed and settled ones still appear in the panel.
+const GAP_IS_OPEN = s => s === "open-no-source" || s === "open-source-known";
+function subtreeGaps(n) { return (n.gaps || []).filter(id => GAPS[id] && GAP_IS_OPEN(GAPS[id].status)).length; }
+function gapHeading(n) {
+  const open = subtreeGaps(n), all = (n.gaps || []).filter(id => GAPS[id]).length;
+  return open ? `${open} open, ${all - open} settled` : `${all} settled, none open`;
+}
+function countKids(n) { return kidsOf(n).length; }
+
+// ------------------------------------------------------------- drawing
+const svg = d3.select("#tree");
+const root = svg.append("g");
+const gLinks = root.append("g");
+const gNodes = root.append("g");
+const zoom = d3.zoom().scaleExtent([0.08, 2.5]).on("zoom", (e) => root.attr("transform", e.transform));
+svg.call(zoom).on("dblclick.zoom", null);
+const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+const T = reduce ? 0 : 280;
+
+let lastPos = new Map();
+function render(focus) {
+  const h = visible();
+  d3.tree().nodeSize([CARD_W + GAP_X, CARD_H + GAP_Y]).separation((a, b) => (a.parent === b.parent ? 1 : 1.12))(h);
+  const nodes = h.descendants(), links = h.links();
+
+  const link = gLinks.selectAll("path").data(links, d => d.target.data.id);
+  link.exit().remove();
+  link.enter().append("path").attr("class", "link")
+    .merge(link)
+    .attr("stroke-width", d => {
+      const s = share(d.target.data);
+      return s === null ? 1.2 : Math.max(1, Math.min(9, 1 + Math.sqrt(Math.abs(s)) * 9));
+    })
+    .attr("stroke-opacity", d => d.target.data.kind === "more" ? 0.5 : 0.9)
+    .transition().duration(T)
+    .attr("d", d => d3.linkVertical()({ source: [d.source.x, d.source.y + CARD_H / 2], target: [d.target.x, d.target.y - CARD_H / 2] }));
+
+  const card = gNodes.selectAll("g.card").data(nodes, d => d.data.id);
+  card.exit().remove();
+  const enter = card.enter().append("g")
+    .attr("tabindex", 0).attr("role", "button")
+    .attr("transform", d => { const p = d.parent && lastPos.get(d.parent.data.id); return `translate(${p ? p[0] : d.x},${p ? p[1] : d.y})`; })
+    .on("click", (e, d) => onClick(d.data))
+    .on("keydown", (e, d) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(d.data); } });
+  enter.append("rect").attr("class", "body");
+  enter.append("rect").attr("class", "stripe");
+  enter.append("text").attr("class", "kind");
+  enter.append("text").attr("class", "name");
+  enter.append("text").attr("class", "val");
+  enter.append("g").attr("class", "gapbadge");
+  enter.append("g").attr("class", "toggle");
+
+  const all = enter.merge(card);
+  all.attr("class", d => `card k-${d.data.kind}` + (d.data.status === "not" ? " s-not" : "") + (d.data === selected ? " selected" : ""))
+    .attr("aria-label", d => d.data.name);
+  all.transition().duration(T).attr("transform", d => `translate(${d.x},${d.y})`);
+  all.select("rect.body").attr("x", -CARD_W / 2).attr("y", -CARD_H / 2).attr("width", CARD_W).attr("height", CARD_H).attr("rx", 5);
+  all.select("rect.stripe").attr("x", -CARD_W / 2).attr("y", -CARD_H / 2).attr("width", 5).attr("height", CARD_H).attr("rx", 2)
+    .attr("fill", d => stripe(d.data));
+  all.select("text.kind").attr("x", -CARD_W / 2 + 12).attr("y", -CARD_H / 2 + 13).text(d => d.data.kind === "more" ? "" : kindLine(d.data).slice(0, 34));
+  all.select("text.name").each(function (d) {
+    const t = d3.select(this).attr("x", -CARD_W / 2 + 12).attr("y", -CARD_H / 2 + 29);
+    t.selectAll("tspan").remove();
+    const lines = d.data.kind === "more" ? [`Show ${d.data.hidden} more`] : wrap(d.data.name, 29, 2);
+    lines.forEach((ln, i) => t.append("tspan").attr("x", -CARD_W / 2 + 12).attr("dy", i ? 14 : 0).text(ln));
+  });
+  all.select("text.val").attr("x", -CARD_W / 2 + 12).attr("y", CARD_H / 2 - 8)
+    .classed("big", d => d.data.kind === "term")
+    .text(d => d.data.kind === "more" ? "" : valueLine(d.data));
+  all.select("g.gapbadge").each(function (d) {
+    const g = d3.select(this); g.selectAll("*").remove();
+    const k = subtreeGaps(d.data); if (!k) return;
+    const label = k + (k === 1 ? " gap" : " gaps");
+    const w = 12 + label.length * 6;
+    g.attr("transform", `translate(${CARD_W / 2 - w - 6},${-CARD_H / 2 + 5})`);
+    g.append("rect").attr("width", w).attr("height", 15).attr("rx", 7.5);
+    g.append("text").attr("x", w / 2).attr("y", 11).attr("text-anchor", "middle").text(label);
+  });
+  all.select("g.toggle").each(function (d) {
+    const g = d3.select(this); g.selectAll("*").remove();
+    const k = d.data.kind === "more" ? 0 : countKids(d.data); if (!k) return;
+    g.attr("transform", `translate(0,${CARD_H / 2})`);
+    g.append("circle").attr("r", 9);
+    g.append("text").text(open.has(d.data.id) ? "−" : "+");
+    if (!open.has(d.data.id)) g.append("text").attr("x", 22).attr("y", 1).attr("class", "count").style("text-anchor", "start").text(k);
+  });
+  lastPos = new Map(nodes.map(n => [n.data.id, [n.x, n.y]]));
+  if (focus) centerOn(focus);
+}
+
+function centerOn(n, scale) {
+  const p = lastPos.get(n.id); if (!p) return;
+  const box = svg.node().getBoundingClientRect();
+  const k = scale || Math.max(d3.zoomTransform(svg.node()).k, 0.85);
+  const t = d3.zoomIdentity.translate(box.width / 2 - p[0] * k, Math.min(box.height * 0.28, 140) - p[1] * k).scale(k);
+  svg.transition().duration(T * 1.4).call(zoom.transform, t);
+}
+function fit(animate = true) {
+  const b = gNodes.node().getBBox(); const box = svg.node().getBoundingClientRect();
+  if (!b.width || !box.width) return;      // a hidden pane has no size: a zero scale would turn later zooms to NaN
+  const k = Math.min(1.1, 0.92 * Math.min(box.width / (b.width + 40), box.height / (b.height + 40)));
+  const t = d3.zoomIdentity.translate(box.width / 2 - (b.x + b.width / 2) * k, box.height / 2 - (b.y + b.height / 2) * k).scale(k);
+  if (animate) svg.transition().duration(T * 1.4).call(zoom.transform, t); else svg.call(zoom.transform, t);
+}
+
+function onClick(n) {
+  if (n.kind === "more") { shownAll.add(n.parentRef.id); render(); return; }
+  if (n.kind === "jump") {
+    const target = all.find(x => (x.kind === "term" || x.kind === "fu" || x.kind === "stage") && x.name === n.target);
+    select(n); if (target) reveal(target);
+    return;
+  }
+  if (n.kind === "pointer") {
+    const target = firstByCode.get(n.database + "/" + n.code);
+    select(n); if (target) reveal(target);
+    return;
+  }
+  if (countKids(n)) { if (open.has(n.id) && selected === n) close(n); else open.add(n.id); }
+  select(n);
+  render(n);
+}
+function close(n) { open.delete(n.id); (n.children || []).forEach(c => close(c)); }
+function select(n) { selected = n; panel(n); gNodes.selectAll("g.card").classed("selected", d => d.data === n); }
+function reveal(n) {
+  let p = n.parent; const chain = [];
+  while (p) { chain.push(p); p = p.parent; }
+  chain.forEach(a => open.add(a.id));
+  // Make sure n is not hidden behind paging or the background filter.
+  if (n.parent) {
+    const kids = kidsOf(n.parent);
+    if (kids.indexOf(n) >= PAGE) shownAll.add(n.parent.id);
+    if (!showBackground && isBackground(n)) toggleBackground();
+  }
+  select(n); render(n);
+}
+
+// ------------------------------------------------------------- datasheet
+const esc = (s) => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+function inline(s) {
+  return esc(s)
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*([^*\s][^*]*)\*/g, "<em>$1</em>")
+    .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
+    .replace(/&lt;(https?:[^&\s]+)&gt;/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+}
+function md(text) {
+  const lines = String(text).split("\n"); let out = ""; let i = 0;
+  while (i < lines.length) {
+    const l = lines[i];
+    if (/^\|/.test(l)) {
+      const rows = []; while (i < lines.length && /^\|/.test(lines[i])) { rows.push(lines[i]); i++; }
+      const cells = r => r.trim().replace(/^\||\|$/g, "").split(" | ").map(c => c.trim());
+      const body = rows.filter(r => !/^\|[-\s|:]+\|?\s*$/.test(r));
+      out += '<div class="tw"><table>' + body.map((r, j) => "<tr>" + cells(r).map(c => (j ? "<td>" : "<th>") + inline(c) + (j ? "</td>" : "</th>")).join("") + "</tr>").join("") + "</table></div>";
+      continue;
+    }
+    if (/^#{1,4} /.test(l)) { out += "<h4>" + inline(l.replace(/^#+ /, "")) + "</h4>"; i++; continue; }
+    if (/^\s*[-*] /.test(l)) {
+      out += "<ul>"; while (i < lines.length && /^\s*[-*] /.test(lines[i])) { out += "<li>" + inline(lines[i].replace(/^\s*[-*] /, "")) + "</li>"; i++; }
+      out += "</ul>"; continue;
+    }
+    if (!l.trim()) { i++; continue; }
+    const para = []; while (i < lines.length && lines[i].trim() && !/^(\||#{1,4} |\s*[-*] )/.test(lines[i])) { para.push(lines[i]); i++; }
+    out += "<p>" + inline(para.join(" ")) + "</p>";
+  }
+  return out;
+}
+function chip(text, color) { return `<span class="chip" style="color:${color}">${esc(text)}</span>`; }
+function kv(rows) {
+  const r = rows.filter(([, v]) => v !== undefined && v !== null && v !== "");
+  return r.length ? `<dl class="kv">${r.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join("")}</dl>` : "";
+}
+function crumbs(n) {
+  const chain = []; let p = n.parent; while (p) { chain.unshift(p); p = p.parent; }
+  return `<nav class="crumbs" aria-label="Path">${chain.map(c => `<button data-go="${c.id}">${esc(c.name.length > 38 ? c.name.slice(0, 36) + "…" : c.name)}</button>`).join("<span>›</span>")}</nav>`;
+}
+function gapCard(g) {
+  const color = STATUS_COLOR[g.status] || "var(--gap-open)";
+  const text = (g.cells || []).filter(Boolean).join(" — ");
+  return `<div class="gapcard" style="border-left-color:${color}"><div class="gt">${esc(g.name)}</div>
+    <div class="chips">${chip(STATUS_LABEL[g.status] || g.section, color)}</div>
+    <div class="gb md">${md(text)}</div>
+    ${gapNodeById.get(g.id) ? `<button class="btn" data-go="${gapNodeById.get(g.id).id}">Show in register</button>` : ""}</div>`;
+}
+function panel(n) {
+  const el = document.getElementById("panel");
+  const ex = n.exchange || {};
+  const s = share(n);
+  const chips = [];
+  if (n.kind !== "more") chips.push(chip(KIND_LABEL[n.kind] || n.kind, "var(--muted)"));
+  if (n.grade && n.kind !== "ecoinvent" && n.kind !== "biosphere") chips.push(chip(n.grade, GRADE_COLOR[n.grade] || "var(--muted)"));
+  if (n.kind === "ecoinvent") chips.push(chip(n.background ? "ecoinvent background, one level in" : "ecoinvent 3.9.1 apos", "var(--g-background)"));
+  if (n.kind === "biosphere") chips.push(chip("elementary flow", "var(--g-biosphere)"));
+  if (n.role) chips.push(chip(n.role, "var(--accent)"));
+  if (n.status === "not") chips.push(chip("not modelled", "var(--gap-open)"));
+  if (n.inventory_name) chips.push(chip("inventory: " + n.inventory_name, "var(--muted)"));
+  if (n.key) chips.push(chip((n.constant ? "constant: " : "LP key: ") + n.key, "var(--accent)"));
+  if (n.stands_for) n.stands_for.forEach(s => chips.push(chip("stands for: " + s.name, "var(--muted)")));
+  if (n.kind === "gap") chips.push(chip(STATUS_LABEL[n.status] || "", STATUS_COLOR[n.status]));
+  let h = `<button class="btn close" id="closep">Close</button>${crumbs(n)}<h2>${esc(n.name)}</h2><div class="chips">${chips.join("")}</div>`;
+
+  const ident = kv([
+    ["LP term", n.symbol ? `<span class="mono">${esc(n.symbol)}</span>` : null],
+    ["Value", n.value !== undefined ? `<span class="mono">${esc(fmt(n.value))}</span> ${esc(n.unit || "")}` : null],
+    ["Module", n.module ? `<span class="mono">${esc(n.module)}</span>` : null],
+    ["Database", n.database ? `<span class="mono">${esc(n.database)}</span>` : null],
+    ["Code", n.code ? `<span class="mono">${esc(n.code)}</span>` : null],
+    ["Location", n.location ? esc(n.location) : null],
+    ["Product", n.product ? esc(n.product) : null],
+    ["Unit", n.unit && n.kind !== "term" ? esc(n.unit) : null],
+    ["Inventoried per", n.production_amount ? `<span class="mono">${esc(fmt(n.production_amount))}</span> ${esc(n.unit || "")} of output — every input below is shown per 1 ${esc(n.unit || "unit")}` : null],
+    ["Compartment", n.compartment ? esc(n.compartment) : null],
+    ["Search query", n.query ? `<span class="mono">${esc(n.query)}</span>` : null],
+  ]);
+  if (ident) h += `<section><h3>Identity</h3>${ident}</section>`;
+
+  const amounts = kv([
+    ["Amount", ex.amount !== undefined ? `<span class="mono">${esc(fmt(ex.amount))}</span> ${esc(ex.unit || "")} per unit of parent` : null],
+    ["As printed", ex.printed_amount !== undefined && ex.printed_amount !== null ? `<span class="mono">${esc(fmt(ex.printed_amount))}</span> ${esc(ex.unit || "")}` + (n.parent && n.parent.production_amount ? ` per ${esc(fmt(n.parent.production_amount))} ${esc(n.parent.unit || "")} batch, as the source tabulates it` : "") + (n.parent && n.parent.scale ? ` (scaled ×${esc(fmt(n.parent.scale))} at write)` : "") : null],
+    ["Contribution", ex.contribution !== undefined && ex.contribution !== null ? `<span class="mono">${esc(fmt(ex.contribution))}</span> kg CO₂e per unit of parent` + (s !== null ? ` · <strong>${esc(pct(s))}</strong> of it` : "") : null],
+    ["Carbon per unit", n.score_per_unit !== undefined && n.score_per_unit !== null ? `<span class="mono">${esc(fmt(n.score_per_unit))}</span> kg CO₂e per ${esc(n.unit || "unit")}` : null],
+    ["Characterisation", n.cf !== undefined ? `<span class="mono">${esc(fmt(n.cf))}</span> kg CO₂e per kg` : null],
+    ["Scale", n.scale ? `<span class="mono">×${esc(fmt(n.scale))}</span> ${esc(n.scale_note || "")}` : null],
+  ]);
+  if (amounts) h += `<section><h3>Amount and carbon</h3>${amounts}</section>`;
+
+  const prov = [];
+  if (n.source) prov.push(`<div class="prose md">${md(n.source)}</div>`);
+  if (ex.note) prov.push(`<div class="prose"><strong>Exchange note.</strong> ${inline(ex.note)}</div>`);
+  if (n.why) prov.push(`<div class="prose"><strong>Why this dataset.</strong> ${inline(n.why)}</div>`);
+  if (n.comment) prov.push(`<div class="prose"><strong>Activity comment.</strong> ${inline(n.comment)}</div>`);
+  if (n.note && n.kind !== "gap") prov.push(`<div class="prose md">${md(n.note)}</div>`);
+  if (prov.length) h += `<section><h3>Provenance</h3>${prov.join("")}</section>`;
+
+  if (n.kind === "gap") {
+    const g = GAPS[n.gap_id]; if (g) h += `<section><h3>Register entry</h3>${gapCard(g)}</section>`;
+  }
+  if (n.kind === "fu" && n.parts) {
+    h += `<section><h3>Charged in the LP as</h3><div class="bars">${n.parts.map(([p, v, term]) => {
+      const t = all.find(x => x.kind === "term" && x.name === term);
+      return `<div class="barrow">${t ? `<button data-go="${t.id}"><span class="bn">${esc(p)}</span></button>` : `<span class="bn">${esc(p)}</span>`}<span class="bv">${esc(fmt(v))}</span></div>`;
+    }).join("")}</div></section>`;
+  }
+  if (n.gaps && n.gaps.length) {
+    h += `<section><h3>Data gaps touching this (${gapHeading(n)})</h3>${n.gaps.map(id => GAPS[id]).filter(Boolean)
+      .sort((a, b) => GAP_IS_OPEN(b.status) - GAP_IS_OPEN(a.status)).map(gapCard).join("")}</section>`;
+  }
+  if (n.todo && n.todo.length) {
+    h += `<section><h3>On the worklist (${n.todo.length})</h3>${n.todo.map(t => `<div class="gapcard" style="border-left-color:var(--gap-known)"><div class="gt">${esc(t.name)}</div><div class="gb">${inline(t.body)}</div><div class="chips">${chip(t.section || "", "var(--muted)")}</div></div>`).join("")}</section>`;
+  }
+
+  // Children, by contribution
+  const kids = (n.children || []).filter(c => c.exchange && c.exchange.contribution !== undefined && c.exchange.contribution !== null);
+  if (kids.length && n.score_per_unit) {
+    const max = Math.max(...kids.map(c => Math.abs(c.exchange.contribution)));
+    h += `<section><h3>Inputs by contribution (${kids.length})</h3><div class="bars">${kids.slice(0, 40).map(c => {
+      const v = c.exchange.contribution; const w = max ? Math.abs(v) / max * 100 : 0;
+      return `<div class="barrow"><button data-go="${c.id}"><span class="bn">${esc(c.name)}</span><span class="bt"><i class="${v < 0 ? "neg" : ""}" style="width:${w}%"></i></span></button><span class="bv">${esc(pct(v / n.score_per_unit))}</span></div>`;
+    }).join("")}</div></section>`;
+  } else if ((n.children || []).length) {
+    h += `<section><h3>Contains (${n.children.length})</h3><div class="bars">${n.children.slice(0, 60).map(c => `<div class="barrow"><button data-go="${c.id}"><span class="bn">${esc(c.name)}</span></button><span class="bv">${esc(valueLine(c).split(" ")[0] || "")}</span></div>`).join("")}</div></section>`;
+  }
+
+  if (n.tests && n.tests.length) h += `<section><details><summary>Tests that pin this (${n.tests.length})</summary><div><ul class="md">${n.tests.map(t => `<li><code>${esc(t)}</code></li>`).join("")}</ul></div></details></section>`;
+  const srcs = Object.entries(n.sources_md || {});
+  if (srcs.length) h += `<section><h3>SOURCES.md / ASSUMPTIONS.md</h3>${srcs.map(([k, v]) => `<details><summary>${esc(k)}</summary><div class="md">${md(v)}</div></details>`).join("")}</section>`;
+  if (n.module_doc) h += `<section><details><summary>Module notes — ${esc((n.module || "").split("/").pop())}</summary><div><pre class="doc">${esc(n.module_doc)}</pre></div></details></section>`;
+  el.innerHTML = h;
+  el.scrollTop = 0;
+  el.querySelectorAll("[data-go]").forEach(b => b.addEventListener("click", () => { const t = byId.get(b.dataset.go); if (t) reveal(t); }));
+  const c = document.getElementById("closep"); if (c) c.addEventListener("click", () => { el.hidden = true; });
+  el.hidden = false;
+}
+
+// ------------------------------------------------------------- search
+const all = [...byId.values()];
+const q = document.getElementById("q"), res = document.getElementById("results");
+function pathOf(n) { const c = []; let p = n.parent; while (p && p.parent) { c.unshift(p.name); p = p.parent; } return c.slice(-3).join(" › "); }
+q.addEventListener("input", () => {
+  const s = q.value.trim().toLowerCase();
+  if (s.length < 2) { res.hidden = true; return; }
+  const hits = [];
+  for (const n of all) {
+    const hay = (n.name + " " + (n.code || "") + " " + (n.location || "") + " " + (n.product || "")).toLowerCase();
+    if (hay.includes(s)) { hits.push(n); if (hits.length >= 40) break; }
+  }
+  res.innerHTML = hits.length ? hits.map(n => `<button data-go="${n.id}"><div class="r-name">${esc(n.name)}</div><div class="r-path">${esc(KIND_LABEL[n.kind] || n.kind)} · ${esc(pathOf(n))}</div></button>`).join("") : `<div class="empty" style="padding:10px 12px">Nothing matches “${esc(q.value)}”.</div>`;
+  res.hidden = false;
+  res.querySelectorAll("[data-go]").forEach(b => b.addEventListener("click", () => { res.hidden = true; reveal(byId.get(b.dataset.go)); }));
+});
+document.addEventListener("click", (e) => { if (!e.target.closest(".search")) res.hidden = true; });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") res.hidden = true; });
+
+// ------------------------------------------------------------- controls
+document.getElementById("fit").addEventListener("click", () => { if (currentTab === "tree") fit(); });
+document.getElementById("expand").addEventListener("click", () => {
+  const n = selected || DATA.tree;
+  const frontier = []; (function walk(x) { if (open.has(x.id)) kidsOf(x).forEach(walk); else frontier.push(x); })(n);
+  frontier.forEach(x => { if (countKids(x)) open.add(x.id); });
+  render(n);
+});
+document.getElementById("collapse").addEventListener("click", () => {
+  open.clear(); shownAll.clear(); initialOpen(); select(DATA.tree); render(); setTimeout(fit, T + 20);
+});
+function toggleBackground() {
+  showBackground = !showBackground;
+  const b = document.getElementById("bg"); b.textContent = "Background: " + (showBackground ? "shown" : "hidden"); b.classList.toggle("on", !showBackground);
+  render();
+}
+document.getElementById("bg").addEventListener("click", toggleBackground);
+
+// ------------------------------------------------------------- header stats
+(function stats() {
+  const counts = {}; let open_ = 0, known = 0;
+  for (const n of all) counts[n.kind] = (counts[n.kind] || 0) + 1;
+  for (const g of Object.values(GAPS)) { if (g.status === "open-no-source") open_++; if (g.status === "open-source-known") known++; }
+  document.getElementById("stats").innerHTML =
+    `<span><b>${total.toLocaleString("en-GB")}</b> nodes</span>` +
+    `<span><b>${(counts.foreground || 0)}</b> foreground</span>` +
+    `<span><b>${DATA.meta.activities_scored}</b> datasets scored</span>` +
+    `<span class="open"><b>${open_ + known}</b> open gaps</span>`;
+  document.getElementById("sub").textContent = DATA.tree.note;
+})();
+
+// ============================================================= the energy-flow tab
+const EN = DATA.energy;
+const CARRIERS = { sun: "Sunlight", wind: "Wind", dc: "DC electricity", lv: "AC, low voltage", mv: "AC, 20–35 kV", hv: "AC, 110 kV and up", h2: "Hydrogen", gas: "Gas / heat" };
+const EDGE_STATUS = { modelled: "In the LP", inside: "Inside another figure", not: "Not modelled", option: "Option", off: "Switched off" };
+const NODE_STATUS = { modelled: "IN THE LP", inside: "INSIDE ANOTHER FIGURE", not: "NOT MODELLED", option: "OPTION" };
+const LANE_W = 236, ROW_H = 118, X0 = 110, Y0 = 70, FW = 204, FH = 84;
+let flowReady = false, flowSel = null, flowRoute = null;
+const fsvg = d3.select("#flow");
+const froot = fsvg.append("g");
+const fzoom = d3.zoom().scaleExtent([0.15, 2.5]).on("zoom", (e) => froot.attr("transform", e.transform));
+fsvg.call(fzoom).on("dblclick.zoom", null);
+const nodeById = EN ? new Map(EN.nodes.map(n => [n.id, n])) : new Map();
+function nx(n) { return X0 + n.lane * LANE_W + LANE_W / 2; }
+function ny(n) { return Y0 + n.row * ROW_H; }
+function busExtent() { const lanes = EN.lanes.length; return [X0 + 12, X0 + lanes * LANE_W - 12]; }
+
+function edgePath(e) {
+  const a = nodeById.get(e.from), b = nodeById.get(e.to);
+  const rev = EN.edges.some(o => o.from === e.to && o.to === e.from);
+  const off = rev ? (e.from < e.to ? -9 : 9) : 0;
+  let x1 = nx(a), y1 = ny(a), x2 = nx(b), y2 = ny(b);
+  const hA = a.kind === "bus" ? 22 : FH / 2, hB = b.kind === "bus" ? 22 : FH / 2;
+  if (a.kind === "bus") x1 = x2;
+  if (b.kind === "bus") x2 = x1;
+  x1 += off; x2 += off;
+  if (Math.abs(y1 - y2) < 1) {
+    const s = x2 > x1 ? 1 : -1;
+    x1 += s * FW / 2; x2 -= s * FW / 2;
+    const mx = (x1 + x2) / 2;
+    return [`M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`, mx, y1 - 6];
+  }
+  const down = y2 > y1;
+  y1 += down ? hA : -hA; y2 += down ? -hB : hB;
+  const my = (y1 + y2) / 2;
+  return [`M${x1},${y1} C${x1},${my} ${x2},${my} ${x2},${y2}`, (x1 + x2) / 2 + 6, my];
+}
+
+function drawFlow() {
+  if (!EN) { d3.select("#view-flow").html('<p class="empty" style="padding:24px">This map was built before the energy tab existed. Rebuild it with scripts/build_lca_map.py.</p>'); return; }
+  const defs = fsvg.append("defs");
+  Object.keys(CARRIERS).concat(["off"]).forEach(c => {
+    defs.append("marker").attr("id", "ar-" + c).attr("viewBox", "0 0 10 10").attr("refX", 9).attr("refY", 5)
+      .attr("markerWidth", 7).attr("markerHeight", 7).attr("orient", "auto-start-reverse")
+      .append("path").attr("d", "M0,0 L10,5 L0,10 z").style("fill", `var(--c-${c})`);
+  });
+  const lanes = froot.append("g");
+  EN.lanes.forEach((l, i) => {
+    lanes.append("rect").attr("class", "laneband").attr("x", X0 + i * LANE_W + 6).attr("y", Y0 - 52)
+      .attr("width", LANE_W - 12).attr("height", ROW_H * 4.55).attr("rx", 8);
+    lanes.append("text").attr("class", "lanehead").attr("x", X0 + i * LANE_W + LANE_W / 2).attr("y", Y0 - 58).text(l);
+  });
+  EN.rows.forEach((r, i) => { if (r) lanes.append("text").attr("class", "rowlabel").attr("x", 8).attr("y", Y0 + i * ROW_H + 4).text(r); });
+
+  const ge = froot.append("g");
+  const edges = ge.selectAll("g.fedge").data(EN.edges).enter().append("g")
+    .attr("class", e => `fedge st-${e.status}`)
+    .on("click", (ev, e) => { ev.stopPropagation(); edgePanel(e); });
+  edges.each(function (e) {
+    const [d, lx, ly] = edgePath(e);
+    const g = d3.select(this);
+    const col = e.status === "off" ? "off" : e.carrier;
+    g.append("path").attr("class", "hit").attr("d", d);
+    g.append("path").attr("class", "line").attr("d", d).style("stroke", `var(--c-${col})`).attr("marker-end", `url(#ar-${col})`);
+    if (e.label) g.append("text").attr("x", lx).attr("y", ly).text(e.label);
+  });
+
+  const gn = froot.append("g");
+  const nodes = gn.selectAll("g.fnode").data(EN.nodes).enter().append("g")
+    .attr("class", n => `fnode k-${n.kind} s-${n.status}`)
+    .attr("tabindex", 0).attr("role", "button").attr("aria-label", n => n.name)
+    .attr("transform", n => `translate(${n.kind === "bus" ? (busExtent()[0] + busExtent()[1]) / 2 : nx(n)},${ny(n)})`)
+    .on("click", (ev, n) => { ev.stopPropagation(); flowSelect(n); })
+    .on("keydown", (ev, n) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); flowSelect(n); } });
+  nodes.each(function (n) {
+    const g = d3.select(this);
+    if (n.kind === "bus") {
+      const [a, b] = busExtent(); const w = b - a;
+      g.append("rect").attr("class", "body").attr("x", -w / 2).attr("y", -22).attr("width", w).attr("height", 44).attr("rx", 6);
+      g.append("text").attr("class", "fname").attr("x", -w / 2 + 16).attr("y", -2).text(n.name);
+      g.append("text").attr("class", "frate").attr("x", -w / 2 + 16).attr("y", 13).text(n.rating);
+      return;
+    }
+    g.append("rect").attr("class", "body").attr("x", -FW / 2).attr("y", -FH / 2).attr("width", FW).attr("height", FH).attr("rx", 6);
+    const kindTxt = n.kind === "source" ? "SOURCE" : n.kind === "storage" ? "STORAGE · " + (NODE_STATUS[n.status] || "") : n.kind === "load" ? "LOAD" : (NODE_STATUS[n.status] || "");
+    g.append("text").attr("class", "fkind").attr("x", -FW / 2 + 10).attr("y", -FH / 2 + 13).text(kindTxt);
+    const t = g.append("text").attr("class", "fname").attr("x", -FW / 2 + 10).attr("y", -FH / 2 + 29);
+    wrap(n.name, 30, 2).forEach((ln, i) => t.append("tspan").attr("x", -FW / 2 + 10).attr("dy", i ? 14 : 0).text(ln));
+    const r = n.rating ? wrap(n.rating, 38, 1)[0] : "";
+    g.append("text").attr("class", "frate").attr("x", -FW / 2 + 10).attr("y", FH / 2 - 20).text(r);
+    const bottom = n.lp ? n.lp : (n.loss ? n.loss : "");
+    g.append("text").attr("class", n.lp ? "flp" : "frate").attr("x", -FW / 2 + 10).attr("y", FH / 2 - 7).text(wrap(bottom, 38, 1)[0] || "");
+  });
+  fsvg.on("click", () => { flowRoute = null; flowSel = null; highlight(null); routeChips(); flowOverview(); });
+
+  // Route chips and legend
+  routeChips();
+  const car = d3.select("#carriers");
+  Object.entries(CARRIERS).forEach(([k, v]) => car.append("span").attr("class", "ln").html(`<svg aria-hidden="true"><line x1="0" y1="4" x2="28" y2="4" style="stroke:var(--c-${k});stroke-width:3"/></svg>${esc(v)}`));
+  const sty = d3.select("#styles");
+  [["modelled", ""], ["inside", "2 4"], ["not", "7 5"], ["option", "10 4"], ["off", "1 5"]].forEach(([k, da]) =>
+    sty.append("span").attr("class", "ln").html(`<svg aria-hidden="true"><line x1="0" y1="4" x2="28" y2="4" style="stroke:var(--ink);stroke-width:2.5" stroke-dasharray="${da}"/></svg>${esc(EDGE_STATUS[k])}`));
+  flowReady = true;
+}
+
+function routeChips() {
+  const box = document.getElementById("routes");
+  box.innerHTML = `<span class="lbl">Show the route from</span>` + Object.entries(EN.routes).map(([k, r]) =>
+    `<button class="btn${flowRoute === k ? " on" : ""}" data-route="${k}">${esc(r.label)}</button>`).join("") +
+    (flowRoute ? `<button class="btn" data-route="">Clear</button>` : "");
+  box.querySelectorAll("[data-route]").forEach(b => b.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    flowRoute = b.dataset.route || null; flowSel = null;
+    routeChips();
+    if (flowRoute) { highlightRoute(flowRoute); routePanel(flowRoute); } else { highlight(null); flowOverview(); }
+  }));
+}
+
+function highlight(nodeSet, edgeSet) {
+  froot.selectAll("g.fnode").classed("dim", n => nodeSet ? !nodeSet.has(n.id) : false)
+    .classed("selected", n => flowSel && n.id === flowSel.id);
+  froot.selectAll("g.fedge").classed("dim", e => edgeSet ? !edgeSet.has(e) : false)
+    .classed("hl", e => edgeSet ? edgeSet.has(e) : false);
+}
+function highlightRoute(k) {
+  const ns = new Set(EN.nodes.filter(n => n.routes.includes(k)).map(n => n.id));
+  const es = new Set(EN.edges.filter(e => e.routes.includes(k)));
+  highlight(ns, es);
+}
+function connected(n) {
+  // Where n's energy comes from (upstream) and where it goes (downstream), stopping at
+  // the bus so one component does not light up every other route.
+  const ns = new Set([n.id]), es = new Set();
+  const busRow = nodeById.get("bus").row;
+  const fwd = (id) => {
+    for (const e of EN.edges) {
+      if (e.status === "off" || e.from !== id || es.has(e)) continue;
+      const b = nodeById.get(e.to);
+      if (id === "bus" && b.row <= busRow) continue;          // from the bus, only on to the facility
+      es.add(e); ns.add(b.id); fwd(b.id);
+    }
+  };
+  const back = (id) => {
+    for (const e of EN.edges) {
+      if (e.status === "off" || e.to !== id || es.has(e)) continue;
+      if (id === "bus" && n.row <= busRow) continue;          // above the bus: stop there
+      es.add(e); ns.add(e.from); back(e.from);
+    }
+  };
+  fwd(n.id); back(n.id);
+  return [ns, es];
+}
+function flowSelect(n) {
+  flowSel = n; flowRoute = null; routeChips();
+  const [ns, es] = connected(n);
+  highlight(ns, es);
+  nodePanel(n);
+}
+
+function termButton(name) {
+  if (!name) return "";
+  return `<button class="btn" data-term="${esc(name)}">Open its carbon in the LCA tree</button>`;
+}
+function wirePanel(el) {
+  el.querySelectorAll("[data-term]").forEach(b => b.addEventListener("click", () => {
+    const t = all.find(x => (x.kind === "term" || x.kind === "group") && x.name === b.dataset.term);
+    showTab("tree"); if (t) reveal(t);
+  }));
+  el.querySelectorAll("[data-node]").forEach(b => b.addEventListener("click", () => {
+    const t = nodeById.get(b.dataset.node); if (t) { flowSelect(t); }
+  }));
+  const c = document.getElementById("closep"); if (c) c.addEventListener("click", () => { el.hidden = true; });
+  el.hidden = false; el.scrollTop = 0;
+}
+function nodePanel(n) {
+  const el = document.getElementById("panel");
+  const stColor = { modelled: "var(--accent)", inside: "var(--g-background)", not: "var(--gap-open)", option: "var(--gap-known)" };
+  let h = `<button class="btn close" id="closep">Close</button><nav class="crumbs">Energy flow · ${esc(EN.lanes[Math.round(n.lane)] || "")}</nav><h2>${esc(n.name)}</h2>
+    <div class="chips">${chip(n.kind, "var(--muted)")}${chip(EDGE_STATUS[n.status] || n.status, stColor[n.status] || "var(--muted)")}</div>`;
+  h += `<section><h3>Rating</h3><div class="prose">${inline(n.rating || "—")}</div></section>`;
+  if (n.model) h += `<section><h3>In the model</h3><div class="prose">${inline(n.model)}</div></section>`;
+  if (n.loss) h += `<section><h3>Losses and efficiency</h3><div class="prose mono">${inline(n.loss)}</div></section>`;
+  if (n.lp) h += `<section><h3>In the LP</h3><div class="mono">${esc(n.lp)}</div></section>`;
+  if (n.loss) h += `<section><h3>Energy at this stage</h3><div class="prose">${inline(n.loss)}</div></section>`;
+  if (n.stands_for) h += `<section><h3>Stands for this inventory activity</h3>${n.stands_for.map(s => `<div class="prose"><span class="mono">${esc(s.database)} / ${esc(s.code)}</span> — ${esc(s.name)}. ${esc(s.why)}</div>`).join("")}</section>`;
+  const ins = EN.edges.filter(e => e.to === n.id), outs = EN.edges.filter(e => e.from === n.id);
+  const eRow = (e, other) => `<div class="barrow"><button data-node="${other.id}"><span class="bn">${esc(other.name)}</span></button><span class="bv">${esc(CARRIERS[e.carrier] ? e.label || CARRIERS[e.carrier] : e.label || "")}</span></div>`;
+  if (ins.length) h += `<section><h3>Energy in from</h3><div class="bars">${ins.map(e => eRow(e, nodeById.get(e.from))).join("")}</div></section>`;
+  if (outs.length) h += `<section><h3>Energy out to</h3><div class="bars">${outs.map(e => eRow(e, nodeById.get(e.to))).join("")}</div></section>`;
+  if (n.routes && n.routes.length) h += `<section><h3>Routes through here</h3>${n.routes.map(r => `<div class="prose"><strong>${esc(EN.routes[r].label)}.</strong> ${inline(EN.routes[r].chain)}</div>`).join("")}</section>`;
+  if (n.term) h += `<section><h3>Carbon</h3><div class="prose">Charged in the LP term <em>${esc(n.term)}</em>.</div>${termButton(n.term)}</section>`;
+  if (n.source) h += `<section><h3>Source</h3><div class="prose">${inline(n.source)}</div></section>`;
+  if (n.gaps && n.gaps.length) h += `<section><h3>Data gaps touching this (${gapHeading(n)})</h3>${n.gaps.map(id => GAPS[id]).filter(Boolean).sort((a, b) => GAP_IS_OPEN(b.status) - GAP_IS_OPEN(a.status)).map(gapCard).join("")}</section>`;
+  el.innerHTML = h;
+  el.querySelectorAll("[data-go]").forEach(b => b.addEventListener("click", () => { const t = byId.get(b.dataset.go); showTab("tree"); if (t) reveal(t); }));
+  wirePanel(el);
+}
+function edgePanel(e) {
+  const el = document.getElementById("panel");
+  const a = nodeById.get(e.from), b = nodeById.get(e.to);
+  highlight(new Set([a.id, b.id]), new Set([e]));
+  let h = `<button class="btn close" id="closep">Close</button><nav class="crumbs">Energy flow · connection</nav><h2>${esc(a.name)} → ${esc(b.name)}</h2>
+    <div class="chips">${chip(CARRIERS[e.carrier] || e.carrier, `var(--c-${e.carrier})`)}${chip(EDGE_STATUS[e.status] || e.status, "var(--muted)")}</div>`;
+  h += kv([["Carries", esc(e.label || CARRIERS[e.carrier])], ["Loss on this step", e.loss ? `<span class="mono">${esc(e.loss)}</span>` : "none applied here"]]);
+  h += `<section><div class="bars"><div class="barrow"><button data-node="${a.id}"><span class="bn">From: ${esc(a.name)}</span></button><span></span></div><div class="barrow"><button data-node="${b.id}"><span class="bn">To: ${esc(b.name)}</span></button><span></span></div></div></section>`;
+  el.innerHTML = h; wirePanel(el);
+}
+function routePanel(k) {
+  const el = document.getElementById("panel"); const r = EN.routes[k];
+  const steps = EN.nodes.filter(n => n.routes.includes(k) && n.kind !== "load").sort((a, b) => a.row - b.row || a.lane - b.lane);
+  let h = `<button class="btn close" id="closep">Close</button><nav class="crumbs">Energy flow · route</nav><h2>${esc(r.label)} to the data centre</h2>
+    <section><h3>Overall</h3><div class="prose">${inline(r.chain)}</div></section>
+    <section><h3>Every step, in order (${steps.length})</h3><div class="bars">${steps.map((n, i) => `<div class="barrow"><button data-node="${n.id}"><span class="bn">${i + 1}. ${esc(n.name)}</span></button><span class="bv">${esc(n.status === "not" ? "not modelled" : n.status === "inside" ? "inside" : "")}</span></div>`).join("")}</div></section>`;
+  el.innerHTML = h; wirePanel(el);
+}
+function flowOverview() {
+  const el = document.getElementById("panel");
+  let h = `<button class="btn close" id="closep">Close</button><h2>How energy reaches the data centre</h2>
+    <div class="prose">Six routes in, read top to bottom: the resource, each conversion step, the voltage it arrives at, the 20 kV site bus (the LP's single node), then the facility. Storage routes run both ways through the bus. Every rating and loss is read from the model's own constants, so this is what the optimiser does, not a generic plant.</div>
+    <section><h3>The routes</h3>${Object.entries(EN.routes).map(([k, r]) => `<div class="prose"><strong>${esc(r.label)}.</strong> ${inline(r.chain)}</div>`).join("")}</section>
+    <section><h3>Not in the model</h3><div class="bars">${EN.nodes.filter(n => n.status === "not").map(n => `<div class="barrow"><button data-node="${n.id}"><span class="bn">${esc(n.name)}</span></button><span></span></div>`).join("")}</div></section>`;
+  el.innerHTML = h; wirePanel(el);
+}
+function fitFlow(animate = true) {
+  const b = froot.node().getBBox(); const box = fsvg.node().getBoundingClientRect();
+  if (!b.width || !box.width) return;
+  const k = Math.min(1.1, 0.94 * Math.min(box.width / (b.width + 40), (box.height - 50) / (b.height + 40)));
+  const t = d3.zoomIdentity.translate(box.width / 2 - (b.x + b.width / 2) * k, 50 + (box.height - 50) / 2 - (b.y + b.height / 2) * k).scale(k);
+  // The first fit is applied at once: an animated one waits on animation frames,
+  // which a background tab never fires.
+  if (animate) fsvg.transition().duration(T * 1.4).call(fzoom.transform, t); else fsvg.call(fzoom.transform, t);
+}
+
+// ------------------------------------------------------------- tabs
+let currentTab = "tree";
+function showTab(which) {
+  currentTab = which;
+  document.getElementById("view-tree").hidden = which !== "tree";
+  document.getElementById("view-flow").hidden = which !== "flow";
+  document.getElementById("tab-tree").setAttribute("aria-selected", which === "tree");
+  document.getElementById("tab-flow").setAttribute("aria-selected", which === "flow");
+  document.querySelectorAll(".tools .tree-only").forEach(x => x.hidden = which !== "tree");
+  if (which === "flow") {
+    if (!flowReady) { drawFlow(); fitFlow(false); }
+    if (flowSel) nodePanel(flowSel); else if (flowRoute) routePanel(flowRoute); else flowOverview();
+  } else {
+    panel(selected);
+  }
+  try { localStorage.setItem("lcaMapTab", which); } catch (e) {}
+}
+document.getElementById("tab-tree").addEventListener("click", () => showTab("tree"));
+document.getElementById("tab-flow").addEventListener("click", () => showTab("flow"));
+document.getElementById("fit").addEventListener("click", () => { if (currentTab === "flow") fitFlow(); });
+if (location.hash === "#energy") setTimeout(() => showTab("flow"), 0);
+
+function initialOpen() {
+  open.add(DATA.tree.id);
+  const obj = DATA.tree.children.find(c => c.name.startsWith("The LCA"));
+  if (obj) open.add(obj.id);
+}
+initialOpen();
+if (window.matchMedia("(max-width: 760px)").matches) document.getElementById("legend").open = false;
+render();
+panel(DATA.tree);
+fit(false);
+window.addEventListener("resize", () => {});
+})();
+</script>

@@ -19,7 +19,14 @@ Three steps, each a transformer the study already inventories:
 * **solar** — IEA PVPS T12-33:2026's 2.5 MVA inverter-station unit, 4 per 10 MWp
   (1.0 MVA per MWp);
 * **grid intake** — Leng's 100 MVA main transformer, two per MW of connection
-  for N-1 (``grid_connection.TRANSFORMER_REDUNDANCY``), each carrying half.
+  for N-1 (``grid_connection.TRANSFORMER_REDUNDANCY``), each carrying half;
+* **battery** and **fuel cell** (added 15 Oct) — the containerised LV → 20 kV
+  unit each container carries: Jasper et al. 2026's 1,600 kW CSS, and one per
+  ``FC_KW_PER_CONTAINER`` of fuel cell, one MVA per MW of inverter rating.
+  Their loading is a solve outcome, so like the intake they take an ASSUMED
+  energy-weighted loading. The fuel cell's unit stays energised on standby
+  (black-start readiness), so its no-load loss is drawn every hour whether or
+  not it runs — the one place these losses are not negligible for the asset.
 
 Loss figures are the GB legal maxima, retained Commission Regulation (EU)
 No 548/2014 Annex I, Tier 2 (from 1 July 2021), read on legislation.gov.uk on
@@ -77,6 +84,19 @@ WIND_UNIT_KVA = 2_200          # Leng et al. 2026 Table S1, one per turbine
 WIND_MVA_PER_MW = 50 * 2.2 / 100.0
 SOLAR_UNIT_KVA = 2_500         # IEA PVPS T12-33:2026 Table 49
 SOLAR_MVA_PER_MWP = 0.4 * 2.5  # Table 50: 4 units per 10 MWp
+BATTERY_UNIT_KVA = 1_600       # Jasper et al. 2026 CSS: one unit per 1,600 kW container (PF 1, ASSUMED)
+FC_UNIT_KVA = 1_000            # one unit per fuel_cell.FC_KW_PER_CONTAINER container (PF 1, ASSUMED)
+
+# --- assumed: the containerised units' loading and standby state ---------------
+# Energy-weighted loading Σx²/Σx of a battery's or fuel cell's step-up: a solve
+# outcome, so ASSUMED like the intake's. A fuel cell runs at or near its rating
+# when it runs at all; a battery cycles at part load more often. Both swept.
+BATTERY_TX_X_EFF = 0.5
+FC_TX_X_EFF = 1.0
+# A standby fuel cell's transformer is kept energised for black-start
+# readiness (decision, 15 Oct 2026), so its no-load loss is drawn every hour
+# whether or not the unit runs. Swept to zero.
+FC_TX_ENERGISED = True
 
 
 def _medium(kva: float) -> tuple[float, float]:
@@ -137,6 +157,33 @@ def grid_intake() -> dict:
     load_frac = pk * GRID_INTAKE_X_EFF / (units * mva_each)
     return {"noload_mw_per_mw": po * units * mva_each,
             "load_loss_fraction": load_frac}
+
+
+def container_stepup(kind: str, x_eff: float | None = None,
+                     energised: bool | None = None) -> dict:
+    """Per MW of PCS or fuel-cell rating: the containerised LV → 20 kV unit.
+
+    One unit of one MVA per MW, so a unit carrying x MW per MW runs at loading
+    x of its rating. The load loss is linearised at an ASSUMED energy-weighted
+    loading (``BATTERY_TX_X_EFF``, ``FC_TX_X_EFF``) rather than a profile's,
+    like the grid intake, and returned as the final share of the power through
+    the unit, ``load_loss_fraction`` — for the battery, both ways. No-load is
+    drawn on installed MW whenever the unit is energised; the fuel cell's is
+    (``FC_TX_ENERGISED``) unless the caller says otherwise.
+    """
+    if kind == "battery":
+        kva, x, on = BATTERY_UNIT_KVA, BATTERY_TX_X_EFF, True
+    elif kind == "fuel_cell":
+        kva, x, on = FC_UNIT_KVA, FC_TX_X_EFF, FC_TX_ENERGISED
+    else:
+        raise ValueError(f"no container step-up for {kind!r}: 'battery' or 'fuel_cell'")
+    x = x if x_eff is None else float(x_eff)
+    on = on if energised is None else bool(energised)
+    if not 0.0 <= x <= 1.0:
+        raise ValueError(f"x_eff is a loading share in [0, 1], got {x!r}")
+    pk, po = _medium(kva)
+    return {"noload_mw_per_mw": po if on else 0.0, "load_loss_fraction": pk * x,
+            "unit_kVA": kva, "MVA_per_MW": 1.0, "x_eff": x, "energised": on}
 
 
 def describe() -> str:

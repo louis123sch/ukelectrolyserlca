@@ -1,6 +1,20 @@
 # Smith UPV rebuild - deferred issues
 
-Parked deliberately, not forgotten. None can move the plant total (908.2 t CO2e/MWp) by more than ~1 %.
+Parked deliberately, not forgotten. None can move the plant total (895.3 t CO2e/MWp, SOURCES.md) by
+more than ~1 %. The same dropped rows are commented at the foot of each activity in
+`optimiser_lca/upv.py`, where the inventory itself is written out.
+
+**Re-checked 21 Oct 2026 against the PDF and the 3.9.1 biosphere.** The stated reasons below are
+mostly wrong and are kept only as history: the "mangled-row-skipped" rows (A1, A4, A7, A8) print
+cleanly in Smith's PDF — they are natural-resource flows (sand, process and cooling water) — and most
+of the "unmatched" flow names exist in `ecoinvent-3.9.1-biosphere` under their current names
+(`NMVOC, non-methane volatile organic compounds`, `Particulate Matter, < 2.5 um`, `AOX, Adsorbable
+Organic Halogen`, `Copper ion`, `Iron ion`, `Zinc II`, `Sodium`, `Hydrochloric acid`, `Carbon
+monoxide, from soil or biomass stock`, `Sand, unspecified`, `Water, unspecified natural origin`,
+`Water, cooling, unspecified natural origin`). Every one of the 20 has **no** characterisation factor
+under IPCC 2021 GWP100, now verified (CF4 = 7,380 and CO2 = 1 confirmed in the same lookup), so
+"believed zero-GWP, not verified" is upgraded to verified. They remain deferred because they carry no
+GWP, not because they cannot be matched; restore them before any non-carbon category is reported.
 
 | table | issue | flow | detail | note | amount |
 |---|---|---|---|---|---|

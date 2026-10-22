@@ -54,7 +54,8 @@ DC_DRIVERS = (
     ("it",     "market for aluminium alloy"),
     ("it",     "market for polyurethane, rigid foam"),
     ("it",     "market for battery, Li-ion"),
-    ("energy", "market group for tap water"),
+    ("it",     "market for diesel, burned in building machine"),   # construction (Zhang S1)
+    ("energy", "market group for tap water"),   # also carries the 1.2e6 kg construction water, 0.04 % of the operating water
     ("energy", "market for sodium hypochlorite"),
     ("energy", "market for refrigerant"),
     ("backup", "market for diesel, burned in diesel-electric generating set"),
@@ -103,9 +104,10 @@ def decompose_data_centre(method):
     """Split the data centre into a fixed burden and its electricity demand.
 
     Returns (fixed_kgco2e_over_life, electricity_kwh_over_life, n_exchanges).
-    The foreground has exactly one electricity exchange — IT plus cooling and
-    auxiliaries, 1.60e9 kWh over the life — because its boundary is material
-    production and operation only.
+    The foreground has two electricity exchanges — IT plus cooling and
+    auxiliaries, 1.60e9 kWh over the life, and since 21 Oct 2026 Zhang's
+    7.8e4 kWh of construction electricity — both of which are stripped here
+    and put on the GB series.
     """
     dc = bd.get_activity((DC_FOREGROUND_DB, DC_CODE))
     fixed, kwh, n = H.run_non_electricity_lca(dc, method)

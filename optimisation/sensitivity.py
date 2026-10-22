@@ -217,6 +217,11 @@ CARBON_KNOBS = {
     "fc_stack_basis": ["gramc_2025"],
     "batt_cell_basis": ["voss_de", "jasper_fig4_311"],
     "wind_net_factor": [1.0],
+    # The container step-ups' ASSUMED loadings, and a standby fuel cell's unit
+    # de-energised (conversion_losses.py, 15 Oct).
+    "batt_tx_x_eff": [1.0],
+    "fc_tx_x_eff": [0.5],
+    "fc_tx_energised": [False],
 }
 
 

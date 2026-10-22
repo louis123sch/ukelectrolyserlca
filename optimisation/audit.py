@@ -428,6 +428,15 @@ def check_lifetime_agreement():
         charged = tx.kgco2e_per_mw_year(asset, life_years=gen_life)
         per_mw = tx.kgco2e_per_mw_year(asset, life_years=1.0)
         pairs.append((f"{asset} step-up transformer", cost_life, per_mw / charged))
+    # The battery's and fuel cell's container step-ups are amortised over the
+    # asset's own life, which is what each asset's cost annuity runs over too.
+    for asset, cost_life, carbon_life in (
+            ("battery", float(batt.ASSET_LIFE_YEARS), float(batt.ASSET_LIFE_YEARS)),
+            ("fuel_cell", float(hc.fuel_cell_costs().iloc[0].lifetime_years),
+             float(fc.decompose()["bop_calendar_lifetime_years"]))):
+        charged = tx.kgco2e_per_mw_year(asset, life_years=carbon_life)
+        per_mw = tx.kgco2e_per_mw_year(asset, life_years=1.0)
+        pairs.append((f"{asset} step-up transformer", cost_life, per_mw / charged))
     # The grid connection has no pair: its cost is an annual tariff, with no
     # capital and so no life. Its carbon is amortised over
     # grid_connection.py's own asset life.

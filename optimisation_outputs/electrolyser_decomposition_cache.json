@@ -1,7 +1,7 @@
 [
   {
     "technology": "AE operation",
-    "activity": "Hydrogen production, alkaline electrolysis Hermesmann",
+    "activity": "Hydrogen production, alkaline electrolysis (Gerloff 2021)",
     "location": "DE",
     "rated_MW": 1.0,
     "kwh_per_kg": 51.8,
@@ -10,12 +10,12 @@
     "lifetime_GWh": 159.87654320987653,
     "full_load_hours": 159876.54320987655,
     "implied_capacity_factor": 0.7300298776706692,
-    "capital_kgco2e_per_unit": 433952.7989809849,
-    "capital_kgco2e_per_MW": 433952.7989809849,
-    "capital_kgco2e_per_MW_year": 17358.111959239395,
-    "capital_kgco2e_per_kg_h2": 0.1406007068698391,
+    "capital_kgco2e_per_unit": 433727.25929094566,
+    "capital_kgco2e_per_MW": 433727.25929094566,
+    "capital_kgco2e_per_MW_year": 17349.090371637827,
+    "capital_kgco2e_per_kg_h2": 0.14052763201026638,
     "variable_kgco2e_per_kg": 0.04160477208253571,
-    "foreground_fixed_kgco2e_per_kg": 0.18220548385241297,
+    "foreground_fixed_kgco2e_per_kg": 0.18213240898999902,
     "_consumables": [
       [
         "market for water, deionised",
@@ -36,7 +36,7 @@
   },
   {
     "technology": "PEM operation",
-    "activity": "Hydrogen production, PEM electrolysis Hermesmann",
+    "activity": "Hydrogen production, PEM electrolysis (Gerloff 2021)",
     "location": "GB",
     "rated_MW": 1.0,
     "kwh_per_kg": 54.0,
@@ -45,12 +45,12 @@
     "lifetime_GWh": 160.23738872403558,
     "full_load_hours": 160237.38872403558,
     "implied_capacity_factor": 0.7316775740823542,
-    "capital_kgco2e_per_unit": 260870.9117910889,
-    "capital_kgco2e_per_MW": 260870.9117910889,
-    "capital_kgco2e_per_MW_year": 10434.836471643555,
-    "capital_kgco2e_per_kg_h2": 0.08791349727359696,
+    "capital_kgco2e_per_unit": 260870.91179108893,
+    "capital_kgco2e_per_MW": 260870.91179108893,
+    "capital_kgco2e_per_MW_year": 10434.836471643557,
+    "capital_kgco2e_per_kg_h2": 0.08791349727359697,
     "variable_kgco2e_per_kg": 0.10716288423034334,
-    "foreground_fixed_kgco2e_per_kg": 0.19507637922817447,
+    "foreground_fixed_kgco2e_per_kg": 0.19507637922817445,
     "_consumables": [
       [
         "market for water, deionised",
@@ -71,7 +71,7 @@
   },
   {
     "technology": "SOEC operation",
-    "activity": "Hydrogen production, SOEC electrolysis Hermesmann",
+    "activity": "Hydrogen production, SOEC electrolysis (Gerloff 2021)",
     "location": "GB",
     "rated_MW": 1.0,
     "kwh_per_kg": 42.3,
@@ -85,7 +85,7 @@
     "capital_kgco2e_per_MW_year": 14512.814375326307,
     "capital_kgco2e_per_kg_h2": 0.09596598505684521,
     "variable_kgco2e_per_kg": 1.631929012900328,
-    "foreground_fixed_kgco2e_per_kg": 1.72789502167567,
+    "foreground_fixed_kgco2e_per_kg": 1.7278950216756706,
     "_consumables": [
       [
         "market for water, deionised",

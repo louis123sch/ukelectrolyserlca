@@ -21,11 +21,13 @@ Functional unit: **the whole facility over its 25-year operating life**
 fixed burden plus 1.60e9 kWh of electricity, and ``dc_inputs`` reads an IT
 load out of that draw at the paper's PUE (``dc_config.DC_REFERENCE_PUE``).
 
-**Boundary is deliberately narrowed to Material Production + Operation** —
-Transportation, the separate Construction-phase energy/water, Disposal and
-Recycling (including the avoided-burden credits) are excluded by scope choice,
-not oversight. The full cradle-to-grave version (all 33 flows) is in git
-history.
+**Boundary: Material Production + Construction + Operation.** Transportation
+(delivery to site), Disposal and Recycling (including the avoided-burden
+credits) are outside the study's boundary (ASSUMPTIONS.md §6). The
+Construction-phase energy and water were also left out until 21 Oct 2026 as a
+"scope choice"; they are in the source and inside the boundary, so they are
+in. The full cradle-to-grave version (all 33 flows) is in git history and was
+diffed against this module on 21 Oct (docs/SOURCE_DIFF.md).
 
 **Validated** (full cradle-to-grave version, before the boundary was narrowed):
 every pick was checked against a live search of ecoinvent 3.9.1 apos, and the
@@ -101,6 +103,18 @@ processes = {
     "tap_water": Process(
         query="market group for tap water GLO", pick=0,
         identity=("market group for tap water", "GLO", "tap water")),
+    # Zhang's construction phase, in since 21 Oct 2026 (it is in the source and
+    # inside the boundary; only transport to site and end-of-life are out).
+    "diesel_construction": Process(
+        query="market for diesel burned in building machine GLO", pick=0,
+        identity=("market for diesel, burned in building machine", "GLO",
+                  "diesel, burned in building machine")),
+    "electricity_mv_gb": Process(
+        query="market for electricity medium voltage GB", pick=0,
+        identity=("market for electricity, medium voltage", "GB", "electricity, medium voltage"),
+        why="construction electricity. Like the operating electricity it is stripped by "
+            "baseline_grid.py and put on the half-hourly GB series; at 7.8e4 kWh against "
+            "1.6e9 it is 0.005 % of the facility's electricity"),
     "diesel_generator": Process(
         query="market for diesel burned in diesel-electric generating set 10MW GLO", pick=0,
         identity=("market for diesel, burned in diesel-electric generating set, 10MW", "GLO",
@@ -157,6 +171,10 @@ activities = [
             ("copper",             2.00e4, "kilogram",      "Copper, cabling and architectural elements"),
             ("aluminium_alloy",    1.50e4, "kilogram",      "Aluminium alloy"),
             ("insulation_pur",     2.50e4, "kilogram",      "Insulation, rigid PUR foam"),
+            # --- Construction (Zhang S1; in since 21 Oct 2026) ---
+            ("diesel_construction", 2.10e6, "megajoule",     "Diesel, burned in building machine — construction"),
+            ("electricity_mv_gb",   7.8e4,  "kilowatt hour", "Electricity MV — construction (2.80e5 MJ / 3.6)"),
+            ("tap_water",           1.20e6, "kilogram",      "Tap water — construction"),
             # --- Operation (25 years, PUE 1.4 baseline) ---
             ("electricity_mv_serc", 1.60e9, "kilowatt hour", "Electricity MV, US-SERC — IT + cooling/aux over 25y (5.76e9 MJ / 3.6)"),
             ("tap_water",            2.9e9, "kilogram",      "Tap water — cooling, WUE 1.8 L/kWh over 25y"),

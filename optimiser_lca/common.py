@@ -129,12 +129,18 @@ class Inventory:
 # =============================================================================
 def check(inv: Inventory) -> str:
     """Every exchange names a known process/flow/code and a known unit; no
-    duplicate codes; every process has an identity or a query to pin from."""
+    duplicate codes; no key in both the process and the flow table; every
+    process has an identity or a query to pin from."""
     problems = []
     codes = [a.code for a in inv.activities]
     dup = {c for c in codes if codes.count(c) > 1}
     if dup:
         problems.append(f"duplicate codes {sorted(dup)}")
+    # resolve() returns one {key: node} dict for both tables, so a key in both
+    # would silently link a technosphere row to a biosphere flow (or vice versa).
+    shared = set(inv.processes) & set(inv.flows)
+    if shared:
+        problems.append(f"keys in both processes and flows {sorted(shared)}")
     for k, p in inv.processes.items():
         if p.identity is None and p.query is None:
             problems.append(f"process {k!r} has neither identity nor query")

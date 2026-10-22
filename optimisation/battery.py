@@ -150,7 +150,7 @@ if EMBODIED_BASIS not in EMBODIED_BASES:
 #
 # Scored once and pinned so this module runs without Brightway;
 # check_against_ecoinvent() re-scores it and fails if it has moved.
-BESS_KGCO2E_PER_KWH_NAMEPLATE = 97.754
+BESS_KGCO2E_PER_KWH_NAMEPLATE = 101.107   # 21 Oct 2026: Jasper's concrete block and Voß's in-China legs restored
 
 # Share of nameplate cell capacity the battery is allowed to swing. ASSUMED.
 # Both sources report per kWh of cells; the LP's cap_batt_e is the energy
@@ -169,8 +169,10 @@ USABLE_FRACTION = 0.90
 #                    system, re-scored on ecoinvent 3.11 cut-off at EF 3.1
 #                    with transport: a cross-version comparison, not a
 #                    like-for-like inventory
-# Scored 14 Oct 2026 on ecoinvent 3.9.1 apos (optimiser_lca/bess.py).
-CELL_KGCO2E_PER_KWH = {"voss_cn": 79.485, "voss_de": 72.452, "jasper_fig4_311": 95.44}
+# Scored 21 Oct 2026 on ecoinvent 3.9.1 apos (optimiser_lca/bess.py), after
+# upstream transport was put back (Jasper's material legs; Voß's in-China leg
+# on every cell material) and Jasper's concrete block restored.
+CELL_KGCO2E_PER_KWH = {"voss_cn": 80.581, "voss_de": 73.547, "jasper_fig4_311": 95.44}
 CELL_BASIS = "voss_cn"
 
 # --- the legacy EV-pack basis -------------------------------------------------
@@ -191,8 +193,8 @@ PCS_KGCO2E_PER_UNIT = 15_930.86
 
 LCA_CAVEATS = {
     "jasper_voss_2026": ("Jasper 2026 liquid-cooled LFP container + Voß 2025 cell, made in "
-                         "China, on ecoinvent 3.9.1; excludes PCS (power term), transformer, "
-                         "foundation, transport and end-of-life"),
+                         "China, on ecoinvent 3.9.1; excludes the PCS (power term) and the container "
+                         "transformer (transformers.py, since 15 Oct), foundation, delivery to site and end-of-life"),
     "ecoinvent_ev_pack": ("ecoinvent LFP pack is an EV traction pack (Dai et al./GREET), "
                           "reused for stationary storage; no container/HVAC/racking"),
 }

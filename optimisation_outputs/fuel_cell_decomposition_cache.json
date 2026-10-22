@@ -10,22 +10,22 @@
   "bop_lifetime_is_assumed": true,
   "stack_kgco2e_per_MW": 97431.28734467817,
   "stack_kgco2e_per_MWh": 3.247709578155939,
-  "bop_kgco2e_per_MW": 44324.55668313031,
-  "bop_kgco2e_per_MW_year": 2216.227834156515,
+  "bop_kgco2e_per_MW": 50807.31422013757,
+  "bop_kgco2e_per_MW_year": 2540.3657110068784,
   "stack_kgco2e_per_MW_gramc_2025": 47597.40974153044,
-  "bop_container_kgco2e_per_MW": 3657.698520802372,
+  "bop_container_kgco2e_per_MW": 10140.455749895193,
   "bop_kw_per_container": 1000.0,
-  "maintenance_kgco2e_per_MWh": 0.0032037756522448986,
+  "maintenance_kgco2e_per_MWh": 0.003203775652244899,
   "_per_kwh": {
     "fuel": 1.0738510144402174,
     "stack": 0.003247709578155939,
-    "bop": 0.0005540569585391289,
-    "maint": 3.2037756522448987e-06
+    "bop": 0.0006350914277517196,
+    "maint": 3.203775652244899e-06
   },
-  "_foreground_total_per_kWh": 1.0776559847525646,
+  "_foreground_total_per_kWh": 1.0777370192217772,
   "_parts": [
     {
-      "name": "Hydrogen production, PEM electrolysis Hermesmann",
+      "name": "Hydrogen production, PEM electrolysis (Gerloff 2021)",
       "amount": 0.06316421115795791,
       "kind": "fuel",
       "kgco2e_per_kwh": 1.0738510144402174
@@ -40,13 +40,13 @@
       "name": "Fuel cell balance of plant, stationary, hydrogen-fed, per kW",
       "amount": 1.25e-05,
       "kind": "bop",
-      "kgco2e_per_kwh": 0.0005540569585391289
+      "kgco2e_per_kwh": 0.0006350914277517196
     },
     {
       "name": "Fuel cell service, stationary, hydrogen-fed, per kW",
       "amount": 0.000125,
       "kind": "maint",
-      "kgco2e_per_kwh": 3.2037756522448987e-06
+      "kgco2e_per_kwh": 3.203775652244899e-06
     }
   ],
   "stack_calendar_lifetime_years": 10.0,

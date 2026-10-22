@@ -1,14 +1,27 @@
 """
-Hydrogen production — Hermesmann et al., six routes.
+Hydrogen production — Hermesmann & Müller 2022 (fossil routes), Gerloff 2021
+(electrolysers), six routes.
 =============================================================================
 
 Source and scope
 ----------------
-Inventories recreated from the SimaPro exports of Hermesmann, M. et al.
-(SMR.XLSX, smr ccs.XLSX, ccs.XLSX, alkaline electrolyser.XLSX, alkaline
-operation.XLSX, uk pem construction.XLSX, ukpemoperation.XLSX,
-uksoecconstruction.XLSX, uksoecoperation.XLSX) plus methane pyrolysis MP-E from
-the paper's Table 3.
+Inventories recreated from the study's own SimaPro project (SMR.XLSX, smr
+ccs.XLSX, ccs.XLSX, alkaline electrolyser.XLSX, alkaline operation.XLSX, uk pem
+construction.XLSX, ukpemoperation.XLSX, uksoecconstruction.XLSX,
+uksoecoperation.XLSX), checked row by row against the papers on 21 Oct 2026:
+
+* SMR, SMR-CCS, CCS and MP-E: Hermesmann, M. & Müller, T.E. (2022), Prog.
+  Energy Combust. Sci. 90, 100996, Tables 2–3 and §3.2.3–3.2.4.
+* AE, PEM and SOEC units and operation: Gerloff, N. (2021), J. Energy Storage
+  43, 102759, SI Figures 1–5 (bills) and Tables 3–6 (manufacturing energy,
+  lifetime hydrogen, operating data). Earlier versions of this file called
+  these "Hermesmann's capital good"; Hermesmann has no AE or SOEC and his PEM
+  bill (Bareiß-based) is not the one used.
+
+Methane pyrolysis: Hermesmann credit the 3.00 kg of solid carbon per kg H2
+against carbon black (§3.2.4). This study takes **no credits anywhere** and
+allocates the whole burden to the hydrogen (user decision, 21 Oct 2026),
+consistent with ASSUMPTIONS.md §5–6.
 
 Functional units:
 
@@ -80,6 +93,8 @@ SMR_CCS_CO2_CLOSURE = (SMR_CCS_GAS_M3 * GAS_CO2_KG_PER_M3
 # The CCS step's diesel was linked as the *product* (market group for diesel),
 # so the fuel was bought and never burned. Taken as burned in a building
 # machine — well drilling and site plant — at ecoinvent's 42.8 MJ/kg.
+# Hermesmann print Verma's "15.4 kg diesel per kg CO2"; that would be 660 MJ
+# per kg of CO2 stored, so it is read as per TONNE (0.0154 kg/kg). DERIVED.
 CCS_DIESEL_KG_PER_KG_CO2 = 0.0154
 DIESEL_MJ_PER_KG = 42.8
 
@@ -364,6 +379,9 @@ processes = {
 flows = {
     "co2": Flow(query="Carbon dioxide fossil", pick=0,
                 identity=("Carbon dioxide, fossil", ("air",))),
+    "nitrogen_air": Flow(query="Nitrogen air", pick=0,
+                         identity=("Nitrogen", ("air",)),
+                         why="Hermesmann Table 2 'Nitrogen to air', the reformer's inert vent; zero GWP"),
     "oxygen_air": Flow(query="Oxygen", pick=0,
                        identity=("Oxygen", ("water",)),
                        why="as built, by first search hit: this is oxygen to WATER, not to air. "
@@ -405,6 +423,7 @@ activities = [
             ("co2",            SMR_CO2_CLOSURE, _kg,
              "carbon-balance closure on the linked gas's own carbon content (DERIVED)"),
             ("oxygen_air",     0.31, _kg, "Oxygen to air"),
+            ("nitrogen_air",  16.41, _kg, "Nitrogen to air (Table 2); zero GWP"),
             ("water_air",      2.93, _kg, "Water to air"),
             ("water_resource", 0.38, _m3, "Water, cooling, GB"),
         ],
@@ -431,6 +450,7 @@ activities = [
             ("co2",            SMR_CCS_CO2_CLOSURE, _kg,
              "carbon-balance closure: the extra gas's CO2, uncaptured (DERIVED)"),
             ("oxygen_air",     0.41, _kg, "Oxygen to air"),
+            ("nitrogen_air",  20.84, _kg, "Nitrogen to air (Table 2, SMR-CCS 90 %); zero GWP"),
             ("water_air",      1.33, _kg, "Water to air"),
             ("water_resource", 1.18, _m3, "Water, cooling, GB"),
         ],
@@ -454,7 +474,10 @@ activities = [
     Activity(
         code=R.MP_E, name="Hydrogen production, methane pyrolysis MP-E",
         reference_product="hydrogen", unit=_kg, location="DE",
-        comment="Methane pyrolysis MP-E from Table 3. Electric heating; no direct CO2.",
+        comment="Methane pyrolysis MP-E from Hermesmann Table 3. Electric heating; no direct CO2. "
+                "The 3.00 kg of solid carbon per kg H2 (Table 3 'Output flows: Carbon') is NOT "
+                "credited against carbon black as Hermesmann §3.2.4 do: this study takes no "
+                "credits, and the whole burden sits on the hydrogen (decided 21 Oct 2026).",
         technosphere=[
             ("gas_hp_gb",          5.72,    _m3,  "Natural gas, high pressure GB"),
             (FG(R.GB_GRID_HV_2025, database=R.GRID_DB), 10.29, _kwh, "Electricity, GB study grid"),
@@ -468,14 +491,17 @@ activities = [
         ],
     ),
     Activity(
-        code=R.AE_UNIT, name="Alkaline electrolyser, Hermesmann",
+        code=R.AE_UNIT, name="Alkaline electrolyser, 1 MW (Gerloff 2021)",
         reference_product="alkaline electrolyser", unit=_unit, location="GLO",
         comment="AE manufacturing from alkaline electrolyser.XLSX. Capital good: 1 unit.",
         technosphere=[
             ("polyethylene_hd_row",       464.6,    _kg,  "Water purifier / feed tank"),
             ("extrusion_pipes",           464.6,    _kg,  "Water purifier / feed tank"),
-            ("reinforcing_steel_row",    5214.4,    _kg,  "Reinforcing steel, aggregated BoP"),
-            ("sheet_rolling_steel",     10215.0,    _kg,  "Sheet rolling steel, aggregated BoP"),
+            # Gerloff SI Fig. 1: the export doubled the "(2 x)" gas-separator line
+            # (80 + 80 kg counted twice) and had the diaphragm's sheet rolling at
+            # 405 for 400. Corrected 21 Oct 2026: 5,214.4 - 80 and 10,215 - 85.
+            ("reinforcing_steel_row",    5134.4,    _kg,  "Reinforcing steel, aggregated BoP (Gerloff SI Fig. 1)"),
+            ("sheet_rolling_steel",     10130.0,    _kg,  "Sheet rolling steel, aggregated BoP (Gerloff SI Fig. 1)"),
             ("electronics_row",           100.0,    _kg,  "Control panel / electronics"),
             ("aluminium_wrought",         160.0,    _kg,  "Transformer + frequency converter"),
             ("copper_cathode",            616.7,    _kg,  "Transformer + compressor + tubing/cables"),
@@ -500,7 +526,7 @@ activities = [
         ],
     ),
     Activity(
-        code=R.AE_OP, name="Hydrogen production, alkaline electrolysis Hermesmann",
+        code=R.AE_OP, name="Hydrogen production, alkaline electrolysis (Gerloff 2021)",
         reference_product="hydrogen", unit=_kg, location="DE",
         comment="AE operation from alkaline operation.XLSX. AE capital good linked.",
         technosphere=[
@@ -513,7 +539,7 @@ activities = [
         ],
     ),
     Activity(
-        code=R.PEM_UNIT, name="PEM electrolyser, Hermesmann",
+        code=R.PEM_UNIT, name="PEM electrolyser, 1 MW (Gerloff 2021)",
         reference_product="PEM electrolyser", unit=_unit, location="GB",
         comment="PEM manufacturing from uk pem construction.XLSX. 1 unit (1 MW).",
         technosphere=[
@@ -548,7 +574,7 @@ activities = [
         ],
     ),
     Activity(
-        code=R.PEM_OP, name="Hydrogen production, PEM electrolysis Hermesmann",
+        code=R.PEM_OP, name="Hydrogen production, PEM electrolysis (Gerloff 2021)",
         reference_product="hydrogen", unit=_kg, location="GB",
         comment="PEM operation from ukpemoperation.XLSX. PEM capital good linked.",
         technosphere=[
@@ -561,7 +587,7 @@ activities = [
         ],
     ),
     Activity(
-        code=R.SOEC_UNIT, name="SOEC electrolyser, Hermesmann",
+        code=R.SOEC_UNIT, name="SOEC electrolyser, 1 MW (Gerloff 2021)",
         reference_product="SOEC electrolyser", unit=_unit, location="GB",
         comment="SOEC manufacturing from uksoecconstruction.XLSX.",
         technosphere=[
@@ -597,7 +623,7 @@ activities = [
         ],
     ),
     Activity(
-        code=R.SOEC_OP, name="Hydrogen production, SOEC electrolysis Hermesmann",
+        code=R.SOEC_OP, name="Hydrogen production, SOEC electrolysis (Gerloff 2021)",
         reference_product="hydrogen", unit=_kg, location="GB",
         comment="SOEC operation from uksoecoperation.XLSX. SOEC capital good linked. "
                 "Heat on a natural-gas boiler as in Mehmeti et al. 2018, the source of the 5.24 kWh.",
@@ -614,5 +640,5 @@ activities = [
 
 
 def inventory() -> Inventory:
-    return Inventory(name="hydrogen (Hermesmann)", database=R.HYDROGEN_DB,
+    return Inventory(name="hydrogen (Hermesmann & Müller 2022 fossil routes, Gerloff 2021 electrolysers)", database=R.HYDROGEN_DB,
                      processes=processes, flows=flows, activities=activities)

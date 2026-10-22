@@ -106,10 +106,14 @@ intake in ``grid_connection.py``, so it is a level shift rather than a bias. Tef
 MV plus HV switchgear at 0.61 t/MW against a plant transformer's 1.08 t/MW.
 Registered in DATA_GAPS.md.
 
-**No manufacturing energy.** Leng's own published figures are higher than this
-rebuild because they add factory electricity on the Chinese grid. Materials only
-is consistent with every other foreground in this study, and it makes this the
-lower of the two available numbers. Stated rather than glossed.
+**No manufacturing energy, because Leng publish none.** Their Table S1 is a
+materials bill; no factory electricity appears for either transformer (checked
+21 Oct 2026). Their published totals sit above this rebuild because they score
+on ecoinvent 3.11 with RoW steel proxies, not because a flow was dropped. The
+solar unit's IEA PVPS bill does carry process energy (~6 % of it), so wind
+errs low relative to solar by about that margin; stated rather than glossed.
+**Civils** are in since 21 Oct: Leng's box-transformer pads on the wind units
+and the IEA PVPS transformer station building on the solar units.
 
 **Solar is on the same footing as wind.** ``solar_pv`` reads its own foreground
 activity, ``solar_inverter_stepup_per_mwp``, built from IEA PVPS Task 12's
@@ -175,7 +179,8 @@ CACHE_PATH = OUT_DIR / "transformer_decomposition_cache.json"
 # The foreground activities optimiser_lca/stepup_transformers.py builds.
 # Everything about what a transformer is made of lives there; this module only
 # scores and amortises it.
-from optimiser_lca.registry import TX_WIND as WIND_CODE, TX_SOLAR as SOLAR_CODE, TRANSFORMER_DB  # noqa: E402
+from optimiser_lca.registry import (TX_WIND as WIND_CODE, TX_SOLAR as SOLAR_CODE,  # noqa: E402
+                                    TX_LV_CONTAINER as CONTAINER_CODE, TRANSFORMER_DB)
 
 # --- solar: the legacy plant-rated unit, kept only to reproduce old runs ------
 # What this was, before IEA PVPS T12-33:2026 supplied a real solar bill: one
@@ -202,7 +207,9 @@ ASSUMED = ("stepup_transformers.TX_SITE_COLLECTION_KV",
            "stepup_transformers.TX_MATERIAL_PROCESSES['iron']",
            "stepup_transformers.TX_MATERIAL_PROCESSES['silica']")
 
-TECHNOLOGIES = ("onshore_wind", "offshore_wind", "solar_pv")
+# The generators, per MW (MWp) of capacity; and the two containerised assets,
+# per MW of inverter rating (cap_batt_p, cap_fc), which share one unit.
+TECHNOLOGIES = ("onshore_wind", "offshore_wind", "solar_pv", "battery", "fuel_cell")
 
 _MEMO: dict | None = None
 
@@ -249,8 +256,9 @@ def decompose(refresh: bool = False) -> dict:
             # written by the old plant-rated module is rejected here rather
             # than silently serving a superseded number. The solar half moved
             # to its own foreground afterwards, so the tag moved with it and a
-            # cache from between the two rewrites is rejected too.
-            if cached.get("basis") == "leng_wind_iea_pvps_2026_solar":
+            # cache from between the two rewrites is rejected too. The tag moved
+            # again on 15 Oct when the container step-up joined.
+            if cached.get("basis") == "leng_wind_iea_pvps_2026_solar_jasper_2026_container_civils_repl_2026-10-21":
                 _MEMO = cached
                 return _MEMO
         except Exception:
@@ -287,6 +295,37 @@ def decompose(refresh: bool = False) -> dict:
             "inventory lives in optimiser_lca/stepup_transformers.py, not here.") from None
     solar_per_mwp = H.run_lca_score(act_s, method)
 
+    # battery and fuel cell — Jasper's container unit on the IEA composition
+    try:
+        act_c = bd.get_activity((TRANSFORMER_DB, CONTAINER_CODE))
+    except Exception:
+        raise RuntimeError(
+            f"{TRANSFORMER_DB!r}/{CONTAINER_CODE!r} is not in this Brightway project. "
+            "Run `python -m optimiser_lca.build stepup_transformers` first — the "
+            "inventory lives in optimiser_lca/stepup_transformers.py, not here.") from None
+    container_per_mw = H.run_lca_score(act_c, method)
+
+    # civils carried on the wind and solar step-up activities since 21 Oct 2026
+    # (Leng Table S3 box-transformer pads; IEA PVPS Z-PV-238 station building),
+    # scored apart so the transformer-only figures stay comparable per kg.
+    def _score_rows(rows):
+        total = 0.0
+        for key, amt, _unit, _note in rows:
+            name, loc = tx.processes[key].identity[:2]
+            total += H.run_lca_score(H.resolve_exact(name, loc), method, amount=amt)
+        return total
+    wind_civils = _score_rows(tx._wind_pad_exchanges)
+    solar_civils = H.run_lca_score(
+        H.resolve_exact("market for building, hall, steel construction", "GLO"), method,
+        amount=10.0 * tx.UPV_TX_UNITS_PER_MWP)
+
+    # solar — Smith A15's transformer replacements, 30 years per MWp, its own
+    # activity (since 21 Oct 2026) charged per year whatever the unit's life.
+    from optimiser_lca import registry as _R
+    act_r = bd.get_activity((TRANSFORMER_DB, _R.TX_SOLAR_REPL30))
+    solar_repl_30y = H.run_lca_score(act_r, method)
+    solar_repl_per_year = solar_repl_30y / tx.UPV_TX_REPLACEMENT_REFERENCE_YEARS
+
     # solar — the legacy plant-rated unit, kept for reproducibility only
     legacy_per_kg = H.run_lca_score(
         H.resolve_exact(LEGACY_ACTIVITY, "GLO", unit="kilogram"), method)
@@ -296,7 +335,7 @@ def decompose(refresh: bool = False) -> dict:
                            + tx.UPV_TX_FIBREBOARD_KG)
 
     out = {
-        "basis": "leng_wind_iea_pvps_2026_solar",
+        "basis": "leng_wind_iea_pvps_2026_solar_jasper_2026_container_civils_repl_2026-10-21",
         "solar_basis": SOLAR_BASIS,
         "asset_life_years": life,
         "site_collection_kV": float(tx.TX_SITE_COLLECTION_KV),
@@ -314,6 +353,8 @@ def decompose(refresh: bool = False) -> dict:
             "kg_per_MW": wind_kg_per_mw(),
             "kgco2e_per_MW": wind_per_mw,
             "kgco2e_per_MW_year": wind_per_mw / life,
+            "kgco2e_per_MW_transformer": wind_per_mw - wind_civils,
+            "civils_kgco2e_per_MW": wind_civils,
         },
         "solar": {
             "database": TRANSFORMER_DB,
@@ -329,7 +370,13 @@ def decompose(refresh: bool = False) -> dict:
             "kg_per_unit": solar_mass_per_unit,
             "kg_per_MWp": solar_mass_per_unit * tx.UPV_TX_UNITS_PER_MWP,
             "kgco2e_per_MWp": solar_per_mwp,
-            "kgco2e_per_MWp_year": solar_per_mwp / life,
+            # the unit (and its building) over the asset life, plus replacements per year
+            "kgco2e_per_MWp_year": solar_per_mwp / life + solar_repl_per_year,
+            "kgco2e_per_MWp_transformer": solar_per_mwp - solar_civils,
+            "civils_kgco2e_per_MWp": solar_civils,
+            "replacement_kgco2e_per_MWp_30y": solar_repl_30y,
+            "replacement_reference_years": float(tx.UPV_TX_REPLACEMENT_REFERENCE_YEARS),
+            "replacement_fraction": float(tx.UPV_TX_REPLACEMENT_FRACTION_30Y),
         },
         "solar_legacy": {
             "activity": LEGACY_ACTIVITY,
@@ -339,12 +386,26 @@ def decompose(refresh: bool = False) -> dict:
             "MVA_per_MWp": SOLAR_MVA_PER_MWP,
             "kgco2e_per_MWp_year": legacy_per_mva * SOLAR_MVA_PER_MWP / life,
         },
-        # Per unit of each capacity variable, which is what the LP charges.
+        "container": {
+            "database": TRANSFORMER_DB,
+            "code": CONTAINER_CODE,
+            "source": tx.CSS_TX_SOURCE + "; composition IEA PVPS T12-33:2026 Table 49",
+            "container_kW": float(tx.CSS_TX_KW),
+            "kg_per_container": float(tx.CSS_TX_KG),
+            "kg_per_MW": float(tx.CSS_TX_KG_PER_MW),
+            "kgco2e_per_MW": container_per_mw,
+            "kgco2e_per_MW_year": container_per_mw / life,
+        },
+        # Per unit of each capacity variable, which is what the LP charges. The
+        # battery and fuel cell share the container unit; build_tech re-amortises
+        # each over the asset's own life (life_years=).
         "per_MW_year": {
             "onshore_wind": wind_per_mw / life,
             "offshore_wind": wind_per_mw / life,
-            "solar_pv": (solar_per_mwp / life if SOLAR_BASIS == "iea_pvps_2026"
+            "solar_pv": (solar_per_mwp / life + solar_repl_per_year if SOLAR_BASIS == "iea_pvps_2026"
                          else legacy_per_mva * SOLAR_MVA_PER_MWP / life),
+            "battery": container_per_mw / life,
+            "fuel_cell": container_per_mw / life,
         },
     }
     OUT_DIR.mkdir(exist_ok=True)
@@ -361,6 +422,11 @@ def kgco2e_per_mw_year(technology: str, refresh: bool = False,
     turbine step-ups Leng measured. ``solar_pv`` is per MWp (DC) and carries
     IEA PVPS T12-33:2026's 2.5 MVA inverter-station units (``SOLAR_BASIS``);
     the legacy plant-rated unit is kept only to reproduce old runs.
+
+    ``battery`` and ``fuel_cell`` are per MW of inverter rating (``cap_batt_p``,
+    ``cap_fc``) and carry Jasper 2026's container unit on the IEA composition;
+    ``build_tech`` amortises them over the asset's own life (the battery's
+    15 y, the fuel cell's BoP calendar life), the study's safe direction.
 
     ``life_years`` re-amortises over the life of the generator the unit
     serves. A step-up has no cost line of its own (DESNZ/Arup capex reaches
@@ -381,7 +447,13 @@ def kgco2e_per_mw_year(technology: str, refresh: bool = False,
         return per_year
     if not life_years > 0:
         raise ValueError(f"life_years must be positive, got {life_years!r}")
-    return per_year * float(d["asset_life_years"]) / float(life_years)
+    # Only the unit (and its civils) is re-amortised; solar's replacements are
+    # already a per-year rate (Smith A15's 30-year fraction) and stay as they are.
+    repl = 0.0
+    if technology == "solar_pv" and SOLAR_BASIS == "iea_pvps_2026":
+        s = d["solar"]
+        repl = s["replacement_kgco2e_per_MWp_30y"] / s["replacement_reference_years"]
+    return (per_year - repl) * float(d["asset_life_years"]) / float(life_years) + repl
 
 
 def check(d: dict | None = None) -> str:
@@ -427,10 +499,10 @@ def check(d: dict | None = None) -> str:
         if abs(bill - s["kg_per_unit"]) > 1e-6:
             problems.append(f"solar kg/unit has drifted from its bill "
                             f"({bill:,.2f} vs {s['kg_per_unit']:,.2f})")
-        if abs(bill - tx.UPV_TX_STATED_TOTAL_KG) > 1.0:
+        if abs(bill - tx.UPV_TX_STATED_TOTAL_KG) > tx.UPV_TX_TOTAL_TOLERANCE * tx.UPV_TX_STATED_TOTAL_KG:
             problems.append(
                 f"solar bill sums to {bill:,.1f} kg against IEA PVPS's stated "
-                f"{tx.UPV_TX_STATED_TOTAL_KG:,.0f} kg per unit")
+                f"~{tx.UPV_TX_STATED_TOTAL_KG:,.0f} kg per unit")
         # The unit has to be wound for the voltage the site collects at, or it
         # is the wrong transformer for this chain.
         if abs(s["primary_kV"] - d["site_collection_kV"]) > 1e-9:
@@ -444,6 +516,23 @@ def check(d: dict | None = None) -> str:
                - s["units_per_plant"] / s["reference_plant_MWp"]) > 1e-9:
             problems.append("solar's unit count no longer matches the "
                             "reference plant it is read off")
+    c = d.get("container")
+    if not c or c["database"] != TRANSFORMER_DB:
+        problems.append("the battery / fuel-cell step-up is not reading the foreground inventory")
+    else:
+        if abs(c["kg_per_MW"] - tx.CSS_TX_KG_PER_MW) > 1e-6:
+            problems.append("the container step-up's kg/MW has drifted from Jasper's bill")
+        # It is the IEA unit's composition spread over Jasper's mass, so per kg
+        # it must score exactly as the solar UNIT does (the solar activity also
+        # carries its station building, scored apart as civils).
+        if s and s["database"] == TRANSFORMER_DB:
+            per_kg_c = c["kgco2e_per_MW"] / c["kg_per_MW"]
+            per_kg_s = s["kgco2e_per_MWp_transformer"] / s["kg_per_MWp"]
+            if abs(per_kg_c / per_kg_s - 1.0) > 1e-5:          # solver noise is ~1e-7
+                problems.append("the container step-up is no longer the IEA unit's composition per kg")
+        for k in ("battery", "fuel_cell"):
+            if abs(d["per_MW_year"][k] - c["kgco2e_per_MW_year"]) > 1e-9:
+                problems.append(f"{k}'s step-up coefficient is not the container unit's")
     if d["solar_legacy"]["activity"] != LEGACY_ACTIVITY:
         problems.append("solar's legacy basis has moved without a source")
 

@@ -209,6 +209,21 @@ class Tech:
     loss_solar_load_at_full: float = 0.0
     loss_grid_noload: float = 0.0
     loss_grid_load: float = 0.0
+    # The containerised LV → 20 kV step-ups of the battery (per MW of PCS,
+    # cap_batt_p) and the fuel cell (per MW of cap_fc): Jasper 2026's unit on
+    # the IEA PVPS composition, amortised over the asset's own life (15 y
+    # battery; the fuel cell's BoP calendar life). Carbon only, like the
+    # generation step-ups. Defaulted so a Tech written before them constructs.
+    gwp_tx_batt_per_mw: float = 0.0
+    gwp_tx_fc_per_mw: float = 0.0
+    # Their losses (conversion_losses.container_stepup): no-load on installed
+    # MW every step — the fuel cell's unit is kept energised on standby — and
+    # load loss as a share of the power through them, already at the ASSUMED
+    # energy-weighted loading. The battery's applies both ways.
+    loss_batt_noload: float = 0.0
+    loss_batt_load: float = 0.0
+    loss_fc_noload: float = 0.0
+    loss_fc_load: float = 0.0
     labels: dict = field(default_factory=dict)
 
 
@@ -238,14 +253,17 @@ class Series:
 
 
 def loss_factors(series: Series, tech: Tech) -> dict:
-    """Load-loss shares of delivered power for this window: wind, solar, grid.
+    """Load-loss shares of delivered power for this window: wind, solar, grid,
+    battery and fuel cell.
 
     A step-up's load loss is quadratic in its loading x. Linearised as
     ``loss_at_full · x_eff · p`` with ``x_eff = Σcf² / Σcf``, the energy-weighted
     loading of the availability profile, it is exact in energy terms when the
     unit carries that profile (curtailment lowers the true loading, so this
     errs slightly high). From the window's own capacity factors, so it follows
-    the site and the resampling.
+    the site and the resampling. The grid intake, the battery and the fuel
+    cell have no profile — their loading is a solve outcome — so theirs arrive
+    already at an ASSUMED loading (conversion_losses.py).
     """
     def x_eff(cf):
         cf = np.asarray(cf, dtype=float)
@@ -253,7 +271,9 @@ def loss_factors(series: Series, tech: Tech) -> dict:
         return float((cf * cf).sum() / tot) if tot > 0 else 0.0
     return {"wind": tech.loss_wind_load_at_full * x_eff(series.cf_wind),
             "solar": tech.loss_solar_load_at_full * x_eff(series.cf_solar),
-            "grid": tech.loss_grid_load}
+            "grid": tech.loss_grid_load,
+            "battery": tech.loss_batt_load,
+            "fc": tech.loss_fc_load}
 
 
 def build_model(series: Series, assets: Assets, tech: Tech, *,
@@ -354,15 +374,21 @@ def build_model(series: Series, assets: Assets, tech: Tech, *,
 
     # --- (1) energy balance, one node -----------------------------------
     # Imports arrive through the site's intake transformer, which keeps a
-    # share of them; every installed transformer draws its no-load loss at the
-    # node, whether or not anything flows. conversion_losses.py.
+    # share of them; the battery's discharge and the fuel cell's output arrive
+    # through their own container step-ups, and the battery's charge is drawn
+    # through the same unit, grossed up; every installed transformer draws its
+    # no-load loss at the node, whether or not anything flows (the fuel cell's
+    # stays energised on standby). conversion_losses.py.
     m.add_constraints(
-        V["p_wind"] + V["p_offshore"] + V["p_solar"] + V["dis"] + V["p_fc"]
+        V["p_wind"] + V["p_offshore"] + V["p_solar"]
+        + (1.0 - lf["battery"]) * V["dis"] + (1.0 - lf["fc"]) * V["p_fc"]
         + (1.0 - lf["grid"]) * V["imp"] + V["unserved"]
-        - V["ch"] - V["p_ely"] - V["exp"]
+        - V["ch"] / (1.0 - lf["battery"]) - V["p_ely"] - V["exp"]
         - tech.loss_wind_noload * (V["cap_wind"] + V["cap_offshore"])
         - tech.loss_solar_noload * V["cap_solar"]
-        - tech.loss_grid_noload * V["cap_grid"] == demand, name="balance")
+        - tech.loss_grid_noload * V["cap_grid"]
+        - tech.loss_batt_noload * V["cap_batt_p"]
+        - tech.loss_fc_noload * V["cap_fc"] == demand, name="balance")
 
     # --- (2) VRE availability; curtailment is implicit ------------------
     # p_* is power delivered to the node, after the generator's step-up.
@@ -497,11 +523,12 @@ def objective_terms(q, series: Series, tech: Tech, *, price, ci) -> dict:
         "wind": tech.gwp_wind * q["cap_wind"],
         "offshore wind": tech.gwp_offshore * q["cap_offshore"],
         "solar": tech.gwp_solar * q["cap_solar"],
-        "battery": tech.gwp_batt_p * q["cap_batt_p"] + tech.gwp_batt_e * q["cap_batt_e"],
+        "battery cells and container": tech.gwp_batt_e * q["cap_batt_e"],
+        "battery power conversion": tech.gwp_batt_p * q["cap_batt_p"],
         "electrolyser": tech.gwp_ely * q["cap_ely"],
         "H2 tank": tech.gwp_tank * q["cap_tank"],
-        "fuel cell": (tech.gwp_fc_bop_per_mw * q["fc_bop_units"]
-                      + tech.gwp_fc_stack_per_mw * q["fc_stack_units"]),
+        "fuel cell stack replacements": tech.gwp_fc_stack_per_mw * q["fc_stack_units"],
+        "fuel cell BoP replacements": tech.gwp_fc_bop_per_mw * q["fc_bop_units"],
         # The connection is a built asset like any other. Without this term a
         # carbon-only solve cannot see cap_grid at all, and — once a
         # transmission-connected site in a floored TNUoS zone pays nothing per
@@ -511,12 +538,16 @@ def objective_terms(q, series: Series, tech: Tech, *, price, ci) -> dict:
         # Step-up transformers, on capacity rather than output: a transformer is
         # sized to the peak MVA it must pass and does not care how many hours a
         # year that happens. Solar is charged per MWp against an AC-rated asset,
-        # which is why its coefficient already carries the DC:AC ratio. Its own
-        # line rather than folded into wind and solar: it is a different asset,
-        # on a different life.
-        "generation step-up transformers": (
-            tech.gwp_tx_wind_per_mw * (q["cap_wind"] + q["cap_offshore"])
-            + tech.gwp_tx_solar_per_mwp * q["cap_solar"]),
+        # which is why its coefficient already carries the DC:AC ratio. Their
+        # own lines rather than folded into wind and solar, so the provenance
+        # (Leng's bill of materials, IEA PVPS's unit) and the audit's life check
+        # stay visible; CHAINS puts each back with its technology for reporting.
+        "wind step-up transformers": tech.gwp_tx_wind_per_mw * (q["cap_wind"] + q["cap_offshore"]),
+        "solar step-up transformers": tech.gwp_tx_solar_per_mwp * q["cap_solar"],
+        # The battery's and fuel cell's own LV → 20 kV units, on the inverter
+        # rating each container carries (Jasper 2026's unit, transformers.py).
+        "battery step-up transformers": tech.gwp_tx_batt_per_mw * q["cap_batt_p"],
+        "fuel cell step-up transformers": tech.gwp_tx_fc_per_mw * q["cap_fc"],
     }
     gwp_operational = {
         "grid import": scale * (ci * q["imp"] * dt).sum(),
@@ -556,6 +587,49 @@ def objective_terms(q, series: Series, tech: Tech, *, price, ci) -> dict:
     }
     return {"gwp_embodied": gwp_embodied, "gwp_operational": gwp_operational,
             "cost_capital": cost_capital, "cost_operational": cost_operational}
+
+
+# Which objective terms belong to which technology's chain — how a traditional
+# LCA would group them on the way to that technology's functional unit. The LP
+# keeps them as separate terms because they scale with different things (a
+# step-up with capacity, consumables with output); this is the view that puts
+# the electrical infrastructure and the consumables back with their technology
+# for reporting. Every term key must appear in exactly one chain, or
+# ``chains()`` raises — so a new term cannot fall outside the view unnoticed.
+CHAINS = {
+    "wind": {"wind", "offshore wind", "wind step-up transformers"},
+    "solar": {"solar", "solar step-up transformers"},
+    "grid": {"grid import", "grid energy + network", "grid connection", "connection fixed",
+             "export credit"},
+    "battery": {"battery", "battery cells and container", "battery power conversion",
+                "battery step-up transformers"},
+    "electrolyser": {"electrolyser", "electrolyser consumables"},
+    "hydrogen tank": {"H2 tank", "H2 leaked from tank"},
+    "fuel cell": {"fuel cell", "fuel cell stack replacements", "fuel cell BoP replacements",
+                  "fuel cell maintenance", "fuel cell step-up transformers"},
+    "unserved load": {"unserved (VoLL)"},
+}
+CHAIN_PREFIXES = {"bought hydrogen": "bought H2"}       # colour-named keys
+
+
+def chains(terms: dict, side: str) -> dict:
+    """``{chain: {term: value}}`` for one side, "gwp" or "cost", of labelled terms.
+
+    ``terms`` is what ``objective_terms``/``score`` return. Group names are
+    folded away: a chain holds its capital and its operational lines together,
+    which is the point.
+    """
+    groups = [k for k in terms if k.startswith(side)]
+    out = {c: {} for c in list(CHAINS) + list(CHAIN_PREFIXES)}
+    for g in groups:
+        for k, v in terms[g].items():
+            chain = next((c for c, keys in CHAINS.items() if k in keys), None)
+            if chain is None:
+                chain = next((c for c, pre in CHAIN_PREFIXES.items() if k.startswith(pre)), None)
+            if chain is None:
+                raise KeyError(f"objective term {k!r} belongs to no chain; add it to dc_model.CHAINS")
+            out[chain][k] = v
+    return {c: d for c, d in out.items() if d}
 
 
 def objective_constants(series: Series, tech: Tech, *, grid: bool) -> tuple[float, float]:
@@ -705,14 +779,18 @@ def contributions(V, obj, series, tech, assets) -> dict:
     terms = score(solution_quantities(V), series, tech)
     terms["cost_operational"]["connection fixed"] = obj["cost_const"]
     mwh = float(series.demand_mw.sum() * dt) * scale
+    facility = {"data centre, IT capacity": tech.dc_fixed_gwp_per_year,
+                "data centre, cooling consumables": tech.dc_other_gwp_per_mwh * mwh}
     return {
         "gwp_embodied": terms["gwp_embodied"],
         "gwp_operational": terms["gwp_operational"],
-        "gwp_facility": {"data centre, IT capacity": tech.dc_fixed_gwp_per_year,
-                         "data centre, cooling consumables":
-                             tech.dc_other_gwp_per_mwh * mwh},
+        "gwp_facility": facility,
         "cost_capital": terms["cost_capital"],
         "cost_operational": terms["cost_operational"],
+        # The same numbers grouped by technology, each with its own
+        # infrastructure and consumables — the traditional LCA view.
+        "gwp_chains": {**chains(terms, "gwp"), "facility": facility},
+        "cost_chains": chains(terms, "cost"),
         "demand_MWh_per_year": mwh,
         "totals": totals(obj),
     }

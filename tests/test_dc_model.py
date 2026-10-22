@@ -438,8 +438,8 @@ def test_transformer_term_is_per_year_whatever_the_window(tech):
         V, obj = _solve(s, t2, assets, objective="gwp")
         cap_w = float(V["cap_wind"].solution) + float(V["cap_offshore"].solution)
         cap_s = float(V["cap_solar"].solution)
-        row = M.contributions(V, obj, s, t2, assets)["gwp_embodied"][
-            "generation step-up transformers"]
+        e = M.contributions(V, obj, s, t2, assets)["gwp_embodied"]
+        row = e["wind step-up transformers"] + e["solar step-up transformers"]
         expected = COEF_W * cap_w + COEF_S * cap_s
 
         # It is the annual charge on what was built...
@@ -480,8 +480,8 @@ def test_step_up_transformers_are_charged_on_capacity(series, tech):
     built = float(V["cap_wind"].solution)
     assert built > 1e-6, "min-GWP built no wind, so the test proves nothing"
 
-    row = M.contributions(V, obj, series, t2, assets)["gwp_embodied"][
-        "generation step-up transformers"]
+    e = M.contributions(V, obj, series, t2, assets)["gwp_embodied"]
+    row = e["wind step-up transformers"] + e["solar step-up transformers"]
     expected = (230.2 * (built + float(V["cap_offshore"].solution))
                 + 184.2 * float(V["cap_solar"].solution))
     assert abs(row - expected) < 1e-6
@@ -516,7 +516,9 @@ def test_wind_and_solar_are_both_on_real_transformer_bills():
     assert d["wind"]["code"] == tx.WIND_CODE
     assert s["code"] == tx.SOLAR_CODE
     assert s["database"] == R.TRANSFORMER_DB
-    assert solar == pytest.approx(s["kgco2e_per_MWp"] / d["asset_life_years"])
+    # The unit over its life, plus Smith A15's replacements per year (since 21 Oct 2026).
+    assert solar == pytest.approx(s["kgco2e_per_MWp"] / d["asset_life_years"]
+                                  + s["replacement_kgco2e_per_MWp_30y"] / s["replacement_reference_years"])
 
     # ...and specifically NOT the invented unit, which is what used to be here.
     legacy = (d["solar_legacy"]["kgco2e_per_MVA"] * tx.SOLAR_MVA_PER_MWP
@@ -536,9 +538,11 @@ def test_wind_and_solar_are_both_on_real_transformer_bills():
 
     # The transcribed bill must still rebuild IEA PVPS's own stated unit mass.
     # This is the guard on the hardboard unit correction: the workbook cell
-    # reads 36.96 m3, which is ~47 t and 1000x too large.
+    # reads "36.96 m3" for a 36.96 kg row, so the bill sums to 5,670.0 against
+    # the report's "approximately 5,680" (within 0.5 %, 21 Oct 2026).
     bill = sum(s["materials_kg_per_unit"].values()) + inv.UPV_TX_FIBREBOARD_KG
-    assert bill == pytest.approx(inv.UPV_TX_STATED_TOTAL_KG, abs=1.0)
+    assert bill == pytest.approx(5_670.0, abs=0.01)
+    assert abs(bill - inv.UPV_TX_STATED_TOTAL_KG) <= inv.UPV_TX_TOTAL_TOLERANCE * inv.UPV_TX_STATED_TOTAL_KG
 
     # Two independent sources for step-ups of comparable rating should land in
     # the same place. Solar carries factory energy that wind does not, so it is
@@ -712,12 +716,15 @@ def _lossy(tech):
     from dataclasses import replace
     from optimisation import conversion_losses as cl
     w, s, g = cl.stepup("onshore_wind"), cl.stepup("solar_pv"), cl.grid_intake()
+    b, f = cl.container_stepup("battery"), cl.container_stepup("fuel_cell")
     return replace(tech, loss_wind_noload=w["noload_mw_per_mw"],
                    loss_wind_load_at_full=w["load_loss_per_mw_at_full_loading"],
                    loss_solar_noload=s["noload_mw_per_mw"],
                    loss_solar_load_at_full=s["load_loss_per_mw_at_full_loading"],
                    loss_grid_noload=g["noload_mw_per_mw"],
-                   loss_grid_load=g["load_loss_fraction"])
+                   loss_grid_load=g["load_loss_fraction"],
+                   loss_batt_noload=b["noload_mw_per_mw"], loss_batt_load=b["load_loss_fraction"],
+                   loss_fc_noload=f["noload_mw_per_mw"], loss_fc_load=f["load_loss_fraction"])
 
 
 def test_losses_close_the_balance_and_bind_availability(series, tech):
@@ -727,10 +734,12 @@ def test_losses_close_the_balance_and_bind_availability(series, tech):
     c = lambda k: float(V[k].solution)
     lf = M.loss_factors(series, t)
     assert 0 < lf["wind"] < 0.01 and 0 < lf["solar"] < 0.01 and 0 < lf["grid"] < 0.01
+    assert 0 < lf["battery"] < 0.01 and 0 < lf["fc"] < 0.01
     noload = (t.loss_wind_noload * (c("cap_wind") + c("cap_offshore"))
-              + t.loss_solar_noload * c("cap_solar") + t.loss_grid_noload * c("cap_grid"))
-    residual = (g("p_wind") + g("p_solar") + g("dis") + g("p_fc")
-                + (1 - lf["grid"]) * g("imp") + g("unserved") - g("ch") - g("p_ely")
+              + t.loss_solar_noload * c("cap_solar") + t.loss_grid_noload * c("cap_grid")
+              + t.loss_batt_noload * c("cap_batt_p") + t.loss_fc_noload * c("cap_fc"))
+    residual = (g("p_wind") + g("p_solar") + (1 - lf["battery"]) * g("dis") + (1 - lf["fc"]) * g("p_fc")
+                + (1 - lf["grid"]) * g("imp") + g("unserved") - g("ch") / (1 - lf["battery"]) - g("p_ely")
                 - noload - series.demand_mw)
     assert np.abs(residual).max() < 1e-6
     assert (g("p_wind") <= (1 - lf["wind"]) * series.cf_wind * c("cap_wind") + 1e-6).all()
@@ -749,6 +758,42 @@ def test_myopic_dispatch_balances_with_losses(series, tech):
     from optimisation import myopic
     t = _lossy(tech)
     caps = {"cap_wind": 10.0, "cap_solar": 5.0, "cap_batt_p": 2.0, "cap_batt_e": 8.0,
-            "cap_grid": 8.0}
+            "cap_ely": 1.0, "cap_tank": 60.0, "cap_fc": 1.0, "cap_grid": 8.0}
     df = myopic.dispatch(series, t, caps)    # raises if the balance breaks
     assert df.unserved.sum() < 1e-9
+    assert df.dis.sum() > 0 and df.p_fc.sum() > 0, "nothing passed through the container step-ups"
+
+
+def test_container_step_ups_are_charged_on_inverter_capacity(series, tech):
+    """The battery's and fuel cell's LV → 20 kV units: per MW of cap_batt_p and
+    cap_fc, annual, not scaled by the window, and inside their chains."""
+    import dataclasses
+    t = dataclasses.replace(tech, gwp_tx_batt_per_mw=800.0, gwp_tx_fc_per_mw=600.0)
+    q = {k: 0.0 for k in ("cap_wind", "cap_offshore", "cap_solar", "cap_batt_e", "cap_ely",
+                          "cap_tank", "fc_stack_units", "fc_bop_units", "cap_grid")}
+    q.update(cap_batt_p=3.0, cap_fc=2.5)
+    for k in ("imp", "h2_buy", "h2_buy_2", "p_ely", "p_fc", "unserved", "tank", "exp"):
+        q[k] = np.zeros(series.n)
+    e = M.score(q, series, t)["gwp_embodied"]
+    assert e["battery step-up transformers"] == pytest.approx(800.0 * 3.0)
+    assert e["fuel cell step-up transformers"] == pytest.approx(600.0 * 2.5)
+    assert M.score(q, series, tech)["gwp_embodied"]["battery step-up transformers"] == 0.0
+    ch = M.chains(M.score(q, series, t), "gwp")
+    assert "battery step-up transformers" in ch["battery"]
+    assert "fuel cell step-up transformers" in ch["fuel cell"]
+
+
+
+def test_chains_cover_every_term_and_sum_to_the_totals(series, tech):
+    # The by-technology view regroups the flat terms; nothing may be left
+    # outside it, and nothing may be counted twice.
+    V, obj = _solve(series, tech, ALL, objective="cost")
+    c = M.contributions(V, obj, series, tech, ALL)
+    flat = sum(sum(c[g].values()) for g in ("gwp_embodied", "gwp_operational", "gwp_facility"))
+    assert sum(sum(d.values()) for d in c["gwp_chains"].values()) == pytest.approx(flat, rel=1e-12)
+    flat_c = sum(sum(c[g].values()) for g in ("cost_capital", "cost_operational"))
+    assert sum(sum(d.values()) for d in c["cost_chains"].values()) == pytest.approx(flat_c, rel=1e-12)
+    # the wind chain holds the turbine and its step-up, nothing else
+    assert set(c["gwp_chains"]["wind"]) == {"wind", "offshore wind", "wind step-up transformers"}
+    with pytest.raises(KeyError):
+        M.chains({"gwp_embodied": {"a new term": 1.0}}, "gwp")

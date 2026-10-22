@@ -489,8 +489,36 @@ def test_transformer_is_absent_from_the_cost_objective():
     import dataclasses
     from optimisation import dc_model as M
     names = {f.name for f in dataclasses.fields(M.Tech)}
-    assert {"gwp_tx_wind_per_mw", "gwp_tx_solar_per_mwp"} <= names
+    assert {"gwp_tx_wind_per_mw", "gwp_tx_solar_per_mwp",
+            "gwp_tx_batt_per_mw", "gwp_tx_fc_per_mw"} <= names
     assert not {n for n in names if n.startswith("cost_tx")}
+
+
+def test_container_step_up_is_jaspers_mass_on_the_iea_composition():
+    """The battery's and fuel cell's LV → 20 kV unit: Jasper 2026's 5,500 kg per
+    1,600 kW container, spread over the IEA PVPS 20/0.4 kV unit's composition,
+    so per kg it scores exactly as the solar unit does. Closed as negligible on
+    4 Sep, modelled on 15 Oct."""
+    from optimiser_lca import stepup_transformers as inv, registry as R
+    from optimisation import transformers as tx
+    _cached(tx)
+    d = tx.decompose()
+    c = d["container"]
+    assert inv.CSS_TX_KG_PER_MW == pytest.approx(5_500.0 / 1.6)
+    assert c["kg_per_MW"] == pytest.approx(inv.CSS_TX_KG_PER_MW)
+    assert (c["database"], c["code"]) == (R.TRANSFORMER_DB, R.TX_LV_CONTAINER)
+    per_kg = c["kgco2e_per_MW"] / c["kg_per_MW"]
+    # Against the solar UNIT only: the solar activity also carries its station
+    # building (civils, since 21 Oct 2026), which decompose() scores apart.
+    assert per_kg == pytest.approx(d["solar"]["kgco2e_per_MWp_transformer"] / d["solar"]["kg_per_MWp"], rel=1e-5)
+    assert 2.0 < per_kg < 6.0, f"{per_kg:.2f} kg CO2e/kg is not a transformer"
+    # both assets read the same unit; build_tech re-amortises over each asset's life
+    assert d["per_MW_year"]["battery"] == d["per_MW_year"]["fuel_cell"]
+    assert d["per_MW_year"]["battery"] == pytest.approx(c["kgco2e_per_MW"] / d["asset_life_years"])
+    over_15y = tx.kgco2e_per_mw_year("battery", life_years=15.0)
+    assert over_15y == pytest.approx(c["kgco2e_per_MW"] / 15.0)
+    # a real but minor share of the battery's own power term (2,124 kg/MW/yr, 14 Oct)
+    assert 0.1 < over_15y / 2_124.0 < 1.0
 
 
 # =============================================================================
@@ -499,6 +527,46 @@ def test_transformer_is_absent_from_the_cost_objective():
 # The default solar basis used to be a 3 kWp ROOFTOP system, and nothing in this
 # suite noticed when it was swapped for a utility-scale one. These tests exist
 # so the next change to it cannot pass silently.
+
+def test_solar_inventory_is_written_out_in_the_module():
+    """Smith's tables are rows in optimiser_lca/upv.py, not a data file.
+
+    The chain links, the batch sizes, the four GWP-carrying biosphere rows and
+    the sign of the waste rows are the things a re-transcription gets wrong.
+    """
+    from optimiser_lca import registry, upv
+    from optimiser_lca.common import FG
+    assert not hasattr(upv, "BILL") and not hasattr(upv, "UPV_PV_BILL")
+    by_code = {a.code: a for a in upv.activities}
+    T = registry.UPV_TABLES
+    assert set(T.values()) <= set(by_code)
+
+    def link(code, target):
+        return next(amt for k, amt, *_ in by_code[code].technosphere
+                    if isinstance(k, FG) and k.code == target)
+
+    assert link(T["A8"], T["A7"]) == pytest.approx(0.9)      # m2 of cell per m2 of module
+    assert link(T["A7"], T["A5"]) == pytest.approx(1.02)
+    assert link(T["A7"], T["A6"]) == pytest.approx(2.88e-4)
+    assert link(T["A5"], T["A4"]) == pytest.approx(0.595)
+    assert link(T["A4"], T["A3"]) == pytest.approx(1.03)
+    assert link(T["A3"], T["A2"]) == pytest.approx(1.26)
+    assert link(T["A2"], T["A1"]) == pytest.approx(0.0027)   # 2.7 kg as printed, in tonnes
+    assert by_code[T["A1"]].production_amount == 92_500
+    assert by_code[T["A6"]].production_amount == 18
+    bio = {(a.code, k): amt for a in upv.activities for k, amt, *_ in a.biosphere}
+    assert bio[(T["A2"], "co2_fossil")] == pytest.approx(3.58)
+    assert bio[(T["A7"], "cf4")] == pytest.approx(2.48e-4)
+    assert bio[(T["A7"], "c2f6")] == pytest.approx(1.19e-4)
+    treatment = {k for k, p in upv.processes.items()
+                 if p.identity[0].startswith(("treatment of", "market for waste", "market for slag",
+                                              "market for municipal solid waste",
+                                              "market for wastewater"))}
+    assert len(treatment) == 12    # 10 of Smith's, plus Z-PV-239's two packaging-waste rows (21 Oct 2026)
+    signs = [amt for a in upv.activities for k, amt, *_ in a.technosphere
+             if isinstance(k, str) and k in treatment]
+    assert signs and all(amt < 0 for amt in signs)
+
 
 def test_solar_default_basis_is_the_utility_scale_foreground():
     """`cap_solar` is a utility-scale MWp and must be priced as one."""
@@ -634,9 +702,10 @@ _NO_NETWORK = {"capacity_GBP_per_MW_year": 0.0, "fixed_GBP_per_year": 0.0}
 def test_fuel_cell_container_is_scored_separately():
     _cached(fuel_cell)
     d = fuel_cell.decompose()
-    # 3.7 of the BoP's 44 t/MW, at one 20 ft container per MW.
+    # 10.1 of the BoP's 51 t/MW, at one 20 ft container per MW: 3.7 t of
+    # container and, since 21 Oct 2026, Jasper's 43.9 t concrete block (~6.5 t).
     assert d["bop_kw_per_container"] == 1000.0
-    assert 0.05 < d["bop_container_kgco2e_per_MW"] / d["bop_kgco2e_per_MW"] < 0.15
+    assert 0.10 < d["bop_container_kgco2e_per_MW"] / d["bop_kgco2e_per_MW"] < 0.30
 
 
 def test_sweep_overrides_reach_the_tech():

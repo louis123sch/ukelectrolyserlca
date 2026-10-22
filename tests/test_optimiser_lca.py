@@ -136,7 +136,12 @@ def test_tank_as_built_is_313_kg_steel_per_kg_h2():
 def test_transformer_bills_reconcile_to_their_sources():
     from optimiser_lca import stepup_transformers as tx
     assert sum(tx.TX_LENG_BOX_KG.values()) == pytest.approx(282_343.0)
-    assert sum(tx.UPV_TX_MATERIALS_KG.values()) + tx.UPV_TX_FIBREBOARD_KG == pytest.approx(5_680.0, abs=1.0)
+    # The workbook's "36.96 m3" pressboard cell is 36.96 kg (its own comment says
+    # so), and the bill then sums to 5,670.0 against the report's "approximately
+    # 5,680" (21 Oct 2026). Pinned exactly, and held within 0.5 % of the report.
+    bill = sum(tx.UPV_TX_MATERIALS_KG.values()) + tx.UPV_TX_FIBREBOARD_KG
+    assert bill == pytest.approx(5_670.0, abs=0.01)
+    assert abs(bill - tx.UPV_TX_STATED_TOTAL_KG) <= tx.UPV_TX_TOTAL_TOLERANCE * tx.UPV_TX_STATED_TOTAL_KG
     assert tx.UPV_TX_UNITS_PER_MWP == pytest.approx(0.4)
 
 
@@ -151,6 +156,29 @@ def test_grid_intake_transformer_is_lengs_main_unit():
     assert set(tx.TX_LENG_MAIN_KG) == set(tx.TX_LENG_BOX_KG)   # same materials, same mapping
     assert gc.TRANSFORMER_CODE == registry.TX_GRID
     assert registry.TX_GRID in registry.CODES_BY_DATABASE[registry.TRANSFORMER_DB]
+
+
+def test_container_step_up_is_jaspers_unit_on_the_iea_composition():
+    """The battery's and fuel cell's LV → 20 kV unit reads its mass and rating from
+    the battery inventory's own Jasper bill, and every row is an IEA Table 49 row
+    scaled by the mass ratio — one activity, per MW of inverter rating."""
+    from optimiser_lca import stepup_transformers as tx, bess
+    assert tx.CSS_TX_KG == bess.CSS_EXCLUDED["transformer, for grid connection"][0] == 5_500.0
+    assert tx.CSS_TX_KW == bess.CSS_KW == 1_600.0
+    assert tx.CSS_TX_KG_PER_MW == pytest.approx(3_437.5)
+    act = next(a for a in tx.activities if a.code == registry.TX_LV_CONTAINER)
+    assert act.unit == "megawatt"
+    solar = next(a for a in tx.activities if a.code == registry.TX_SOLAR)
+    # The solar activity also carries its station building (Z-PV-238, since
+    # 21 Oct 2026), which is civils of the plant, not of the unit: compare the
+    # transformer rows only, which are the "upv_" keys.
+    solar_unit_rows = [r for r in solar.technosphere if str(r[0]).startswith("upv_")]
+    assert len(act.technosphere) == len(solar_unit_rows)
+    ratio = tx.CSS_TX_UNITS_PER_MW / tx.UPV_TX_UNITS_PER_MWP
+    for (k, amt, *_), (ks, amt_s, *_) in zip(act.technosphere, solar_unit_rows):
+        assert k == ks
+        assert amt == pytest.approx(amt_s * ratio)
+    assert registry.TX_LV_CONTAINER in registry.CODES_BY_DATABASE[registry.TRANSFORMER_DB]
 
 
 def test_fuel_cell_stack_amounts_are_as_printed_and_scaled_once():

@@ -14,7 +14,7 @@
     "leakage_frac_per_hour": 0.0,
     "leakage_is_assumed": true,
     "is_as_built": true,
-    "note": "Gandiglio et al. 2022, Table 3 - as-built 21.6 m3 stainless vessel at Ginostra",
+    "note": "Gandiglio et al. 2022, Table 5 - as-built 21.6 m3 stainless vessel at Ginostra",
     "brightway_kgco2e_per_kg_capacity": 1805.8976284913756
   },
   {
