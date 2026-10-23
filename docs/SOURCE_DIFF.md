@@ -43,8 +43,8 @@ test. The threshold test itself is now `optimiser_lca/exclusions.py` +
 plan's recommended direction, each reversible in one line: **D2** (venue per MW,
 buildings covered by Zhang's, machinery pro-rated), **Q7** (switchgear and factory
 energy carried as estimates on the connection), the Gerloff code rename, and
-the two dropped electricity credits (ASSUMPTIONS §5). Still open: **D3**
-iridium (parked), Hunziker 2020 not held.
+the two dropped electricity credits (ASSUMPTIONS §5). **D3** iridium and the
+Hunziker 2020 check were closed by the user on 23 Oct 2026 (DATA_GAPS.md).
 
 ## Clean
 
@@ -139,8 +139,8 @@ All foregrounds rebuilt, caches refreshed, 184 tests passing.
 | S6 transformer replacement | Smith A15's 30.2 % over 30 y as its own activity (`TX_SOLAR_REPL30`), charged per year by `transformers.py` whatever life the unit is amortised over | solar step-ups 343 → 448 kg/MWp/yr (+104 replacements) |
 | S1 container transformer | **kept on the IEA recipe as a stated substitution** on technological representativeness: Jasper's recipe is Hunziker 2020's 630 kVA unit with an on-load tap changer, scaled by mass; the IEA unit is a current 2.5 MVA 20/0.4 kV distribution transformer. Jasper's recipe is the sensitivity case (user, 22 Oct) | none; sensitivity +72 % on the unit, battery about +2 %, fuel cell about +4 % |
 
-Not done: #11 (La₂O₃/SrCO₃, no amount held), S3 (iridium, parked by the
-user), D2 (Leng's booster station, below).
+Later (22–23 Oct): #11 built as ASSUMED rows, D2 taken, S3 iridium closed by
+the user as a stated proxy.
 The wind step-ups have no replacement rate because Leng publish none: an
 unsourced flow for the cut-off register. `option_summary.csv`, the sensitivity CSVs
 and the LCA map are stale until the reference cases are re-run.

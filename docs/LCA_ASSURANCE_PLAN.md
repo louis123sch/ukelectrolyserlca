@@ -18,8 +18,10 @@
 > (ASSUMPTIONS §8; `scripts/cutoff_rule3.py`). The booster station's
 > construction machinery, first left out as not separable, is carried as
 > Leng's own figure pro-rated to the switchyard, because it is sourced and
-> inside the boundary. Open: D3 iridium (parked), Hunziker 2020 not held, a
-> switchgear EPD (TODO.md).
+> inside the boundary. The last five open items (iridium proxy, Hunziker 2020,
+> the LSM layer, electrolyser stacks, switchgear) were closed by the user on
+> 23 Oct as stated limitations (DATA_GAPS.md, *Closed since the register was
+> opened*). Nothing in this plan is open.
 
 Four jobs, asked for together on 22 Oct: test the cut-off rule, check every
 LCA against its source documents so nothing is left out, bring the LCA map
@@ -354,11 +356,11 @@ inventories are not transcriptions at all.
       buildings treated as covered by Zhang's facility building (a stated
       substitution). Lands in `stepup_transformers.py` as civils on the
       intake, scored apart.
-- [ ] **#11** SOEC La₂O₃/SrCO₃: estimate from a stack composition source,
+- [x] **#11** SOEC La₂O₃/SrCO₃: estimate from a stack composition source,
       graded ASSUMED, on the register (1.1) until Gerloff's sheet is found.
-- [ ] **S3** iridium: stays parked by the user; the platinum proxy stated in
+- [x] **S3** iridium (closed 23 Oct as a stated proxy): stays parked by the user; the platinum proxy stated in
       `hydrogen.py` and `SOURCES.md`.
-- [ ] **Hunziker et al. 2020**: get the paper; confirm the on-load tap changer
+- [x] **Hunziker et al. 2020** (closed 23 Oct; the decision rests on Jasper's own text): get the paper; confirm the on-load tap changer
       behind Jasper's electronics row, which is what S1's representativeness
       argument rests on.
 

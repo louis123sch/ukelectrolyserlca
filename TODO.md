@@ -146,17 +146,6 @@ Either the source is named and public, or no new sourcing is needed at all.
 - [ ] **Export is refused until it is modelled** (`dc_model.build_model`
       raises since 12 Oct). To build it: credit at an export price, not demand
       rates; give it a carbon credit; add it to `contributions()`. Audit §3.5.
-- [ ] **Get Hunziker et al. (2020)** to confirm the on-load tap changer behind
-      Jasper's container-transformer electronics row (the S1 substitution's
-      representativeness argument rests on it). `SOURCES.md`, SOURCE_DIFF S1.
-- [ ] **Gerloff's LSM layer amounts** (SOURCE_DIFF #11): the ASSUMED La2O3 /
-      SrCO3 rows in `hydrogen.py` stand until Gerloff's
-      `data_generation_material` sheet or Hafele 2016's stack masses are held.
-- [ ] **Electrolyser stacks as their own activity**, so a duty-driven count can
-      be charged as `fuel_cell.py` does; the SI's Stack/BoP labels make it
-      possible (`DATA_GAPS.md`, *Electrolyser stack/BoP split*).
-- [ ] **A switchgear EPD and a bay count** would retire the two estimates carried
-      on the grid connection and the container units (`optimiser_lca/exclusions.py`).
 
 ## Balance of plant not counted
 
@@ -180,7 +169,10 @@ together under ~1.6 % of total carbon at the knee point and under 0.2 % at
 minimum cost. The battery and fuel-cell step-up transformers were closed with
 them and are **modelled since 15 Oct** — carbon per MW of `cap_batt_p` and
 `cap_fc`, losses in the LP (`transformers.py`, `conversion_losses.py`) — so
-the bound now covers only what is left. Recorded in `DATA_GAPS.md`.
+the bound now covers only what is left. Recorded in `DATA_GAPS.md`. Since 22 Oct
+2026 switchgear is on the cut-off register: carried as an estimate where it fails
+1 % (battery, fuel cell, grid connection), left out where it passes (wind, solar);
+the estimates were accepted as final on 23 Oct.
 
 ## Parked
 
