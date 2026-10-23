@@ -161,9 +161,12 @@ def decompose(use_cache: bool = True, refresh: bool = False):
     ei, _bio, _fg, _m = H.setup_brightway()
     method = _gwp_method(bd)
 
-    # Frame and pad, scored once per unit and applied per design (14 Oct 2026).
+    # Frame and pad (14 Oct 2026) and the shell's forming (22 Oct 2026), scored
+    # once per unit and applied per design. The forming is sheet rolling of
+    # chromium steel on the shell mass, as the inventory carries it; the 200 bar
+    # low-alloy design takes the same per-kg factor as a stand-in (ASSUMED).
     unit = {k: H.run_lca_score(H.resolve_exact(*h2_tank.processes[k].identity), method)
-            for k in ("steel_low_alloyed_hr", "concrete_normal", "reinforcing_steel")}
+            for k in ("steel_low_alloyed_hr", "concrete_normal", "reinforcing_steel", "sheet_rolling_cr_steel")}
 
     rows = []
     for name, design in TANK_DESIGNS.items():
@@ -176,7 +179,8 @@ def decompose(use_cache: bool = True, refresh: bool = False):
         foundations = (f["frame_kg"] * unit["steel_low_alloyed_hr"]
                        + f["concrete_m3"] * unit["concrete_normal"]
                        + f["rebar_kg"] * unit["reinforcing_steel"])
-        per_kg_cap = per_kg_steel * intensity + foundations
+        forming = intensity * unit["sheet_rolling_cr_steel"]
+        per_kg_cap = per_kg_steel * intensity + forming + foundations
 
         # Filled in by the caller, which is the only place that knows which
         # electrolyser is feeding this tank. Left at the tank's own pressure
@@ -191,6 +195,7 @@ def decompose(use_cache: bool = True, refresh: bool = False):
             "capacity_kg_h2": capacity_kg(design),
             "kgco2e_per_kg_steel": per_kg_steel,
             "foundations_kgco2e_per_kg_capacity": foundations,
+            "forming_kgco2e_per_kg_capacity": forming,
             "kgco2e_per_kg_capacity": per_kg_cap,
             "lifetime_years": float(cfg.TANK_LIFETIME_YEARS),
             "kgco2e_per_kg_capacity_year": per_kg_cap / float(cfg.TANK_LIFETIME_YEARS),

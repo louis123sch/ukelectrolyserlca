@@ -50,10 +50,13 @@ Sourcing them to GB/European supply chains is a known, unmodelled refinement.
 The R134a top-up is also emitted as HFC-134a: Zhang derive it as leakage
 replacement (see SOURCES.md).
 
-*Scope*: the activity is **Material Production + Operation only**.
-Transportation, construction energy and water, disposal and recycling are
-excluded by scope choice, as the foreground's own comment records — so the
-facility carries no decommissioning or demolition burden. See §6.
+*Scope*: the activity is **Material Production + Construction + Operation**
+(construction energy and water in since 21 Oct 2026: they are in the source
+and inside the boundary). Transportation (delivery to site), disposal and
+recycling are outside the boundary — so the facility carries no
+decommissioning or demolition burden. See §6. Zhang's own figures put the
+facility at 7.53 MW with 5.38 MW of IT; the 7,306 / 5,219 kW read out of the
+1.60e9 kWh they print sit 3 % under those, a rounding of the source's.
 
 ## 3. Hydrogen the study *makes* is co-located with its use; hydrogen it *buys* is compressed but not hauled
 
@@ -220,12 +223,14 @@ against both.
 
 **No credits anywhere; co-products carry no burden away.** Decided 21 Oct
 2026. The study takes no avoided-burden credits: not for recycling (§6), and
-not for co-products. The one case in the inventories is methane pyrolysis,
-where Hermesmann & Müller credit the 3 kg of solid carbon per kg H₂ against
-carbon black; here the whole burden sits on the hydrogen. Electrolysis oxygen
-is likewise an unallocated co-product. This keeps the study attributional
-throughout, at the cost of making turquoise hydrogen look worse than its
-source reports.
+not for co-products. Two cases in the inventories: methane pyrolysis, where
+Hermesmann & Müller credit the 3 kg of solid carbon per kg H₂ against carbon
+black, and SMR / SMR-CCS, where they credit the excess electricity (1.10 and
+0.05 kWh per kg) as an avoided burden — the second was carried "as the source
+does" until 22 Oct 2026 and is now dropped too (+1.4 % on grey). Here the whole
+burden sits on the hydrogen. Electrolysis oxygen is likewise an unallocated
+co-product. This keeps the study attributional throughout, at the cost of
+making turquoise hydrogen look worse than its source reports.
 
 ## 6. No end-of-life, anywhere
 
@@ -244,9 +249,9 @@ Every foreground already meets this without modification:
 
 | Foreground | Position |
 |---|---|
-| Data centre | Material production + operation only; disposal and recycling excluded by scope choice |
-| H2 storage tank | Steel mass only; end-of-life listed among its stated omissions |
-| Grid connection | Transformer materials only (Leng 2026's 100 MVA, 110 kV main transformer, per MVA, × 2 for N-1), plus a line term reported but not charged per MW; no switchgear, protection, civils, manufacturing energy, losses or end-of-life |
+| Data centre | Material production, construction and operation; transportation (delivery to site), disposal and recycling outside the boundary |
+| H2 storage tank | Shell, its forming, frame and pad; valves and compressor hardware on the cut-off register; end-of-life out |
+| Grid connection | Transformer materials (Leng 2026's 100 MVA, 110 kV main transformer, per MVA, × 2 for N-1) and the switchyard's civils per MW of connection (Leng's outdoor venue, D2), plus a line term reported but not charged per MW; switchgear, protection and manufacturing energy carried as cut-off estimates (§8); losses in the LP; no end-of-life |
 | Generation step-up transformers | Transformer capital (wind materials-only; solar with IEA PVPS process energy); no switchgear, protection or civils. Losses are charged as energy in the LP (`conversion_losses.py`), not as a coefficient |
 | Battery and fuel-cell step-ups (15 Oct) | Jasper 2026's container transformer mass on the IEA PVPS composition (with its process energy), a stated substitution for Jasper's own Hunziker-derived recipe on representativeness (SOURCES.md, 22 Oct), per MW of inverter rating, over the asset's own life; no switchgear, protection or civils. Losses in the LP at ASSUMED loadings (0.5 battery, 1.0 fuel cell), the fuel cell's unit energised on standby |
 | Grid battery | Jasper/Voß cradle-to-gate manufacture including the cell factory's energy and upstream transport; Jasper's EOL sheet not taken, his delivery-to-site rows left out (Voß's legs to a German factory not taken, and subtracted where folded into a factor), no foundation |
@@ -287,3 +292,94 @@ back for a like-for-like comparison against a conventional facility.
 The UPS battery is **not** treated this way and stays in. Ride-through over
 seconds is a different function from bulk storage, so it is not a double count.
 
+<!-- cutoff:begin -->
+## 8. Cut-off rule
+
+A flow that is in a held source and inside the boundary is always in; the
+boundary excludes only end-of-life, delivery to site and the standby generator
+(§6–7). The cut-off test below applies to flows no held source itemises: each
+may stay out only if its upper estimate is under 1% of its technology's
+carbon (rule 1), all of a technology's together under 5% (rule 2), and
+adding them all back must not change the best design (rule 3, the `cutoff`
+sensitivity knob). Criteria after PAS 2050 and Vestas V162 §3.3, applied per
+technology; rule 3 is this study's addition under ISO 14044's sensitivity
+requirement for comparative assertions. Not ecoinvent's "cut-off" system model.
+Battery power-side flows are tested at a 1 h floor; energy-side flows at their
+ceiling. A flow that fails is included (status below). Register:
+`optimiser_lca/exclusions.py`; this section is generated by
+`python optimisation/cutoff.py --write`.
+
+### Rule 1 — per flow
+
+| Technology | Flow | Kind | Status | Central | Upper | Unit | Share at upper | Verdict |
+|---|---|---|---|---|---|---|---|---|
+| battery | cell processing materials (NMP make-up, argon, nitrogen, compressed air) | cutoff | excluded | 9.47 | 47.4 | kg CO2e per usable MWh per year | 0.63% | pass |
+| battery | site installation (crane and commissioning diesel) | cutoff | excluded | 7.77 | 15.5 | kg CO2e per usable MWh per year | 0.21% | pass |
+| battery | container switchgear (MV, one per container) | cutoff | included_estimate | 102 | 186 | kg CO2e per MW per year | 1.73% | included (estimate) |
+| fuel cell | container switchgear (MV, one per container) | cutoff | included_estimate | 76.2 | 139 | kg CO2e per MW per year, calendar replacements | 1.06% | included (estimate) |
+| fuel cell | balance-of-plant assembly energy | cutoff | excluded | 50.8 | 127 | kg CO2e per MW per year, calendar replacements | 0.97% | pass |
+| hydrogen tank | forming of the vessel steel (rolling, welding) | cutoff | included_inventory | 8.02 | 33.9 | kg CO2e per kg of capacity per year | — | in the inventory |
+| hydrogen tank | valves, pipework and fittings | cutoff | included_estimate | 0.639 | 1.28 | kg CO2e per kg of capacity per year | 1.58% | included (estimate) |
+| hydrogen tank | compressor hardware | cutoff | excluded | 0.01 | 0.03 | kg CO2e per kg of capacity per year | 0.04% | pass |
+| wind | step-up switchgear (turbine MV switchgear) | cutoff | excluded | 43.6 | 79.6 | kg CO2e per MW per year (turbine + step-ups) | 0.32% | pass |
+| wind | step-up transformer replacement rate | cutoff | excluded | 0 | 98.2 | kg CO2e per MW per year (turbine + step-ups) | 0.40% | pass |
+| wind | step-up transformer factory energy | cutoff | excluded | 17.3 | 34.2 | kg CO2e per MW per year (turbine + step-ups) | 0.14% | pass |
+| solar | step-up switchgear (inverter-station MV switchgear) | cutoff | excluded | 40.1 | 73.4 | kg CO2e per MWp per year (plant + step-ups) | 0.30% | pass |
+| grid connection | switchgear, protection and the bay | cutoff | included_estimate | 38.1 | 69.7 | kg CO2e per MW of connection per year | 24.29% | included (estimate) |
+| grid connection | intake transformer factory energy | cutoff | included_estimate | 7.67 | 15.1 | kg CO2e per MW of connection per year | 5.27% | included (estimate) |
+| grid connection | substation civils — Leng's outdoor venue (switchyard formation, concrete, rebar) | sourced | included_inventory | 539 | 539 | kg CO2e per MW of connection per year | — | sourced — built as inventory rows |
+| grid connection | booster-station construction machinery (Leng S3), the switchyard's share | sourced | included_estimate | 4.85 | 14.1 | kg CO2e per MW of connection per year | 4.92% | sourced — carried as the source's own figure |
+| electrolyser | SOEC electrolyte layer — lanthanum oxide and strontium carbonate | cutoff | included_inventory | 75 | 150 | kg CO2e per MW per year | — | in the inventory |
+| facility | internal MV/LV electrical distribution (transformers, switchgear) | cutoff | excluded | 4.6e+04 | 9.3e+04 | kg CO2e per year | 0.59% | pass |
+
+### Rule 2 — per technology
+
+| Technology | Denominator | Unit | Cut-off entries | Still excluded | Sum of upper shares | Verdict |
+|---|---|---|---|---|---|---|
+| wind | 2.47e+04 | kg CO2e/MW/yr | 3 | 3 | 0.86% | pass |
+| solar | 2.41e+04 | kg CO2e/MWp/yr | 1 | 1 | 0.30% | pass |
+| battery | 3.27e+03 | kg CO2e/MW/yr (p) and per usable MWh/yr (e) | 3 | 2 | 0.84% | pass |
+| electrolyser | 1.77e+04 | kg CO2e/MW/yr | 1 | 0 | 0.00% | n/a |
+| hydrogen tank | 80.8 | kg CO2e per kg capacity/yr | 3 | 1 | 0.04% | pass |
+| fuel cell | 1.31e+04 | kg CO2e/MW/yr, calendar replacements | 2 | 1 | 0.97% | pass |
+| grid connection | 287 | kg CO2e/MW/yr | 2 | 0 | 0.00% | n/a |
+| grid electricity | — | kg CO2e/kWh (series mean; no entries) | 0 | 0 | 0.00% | n/a |
+| bought hydrogen | 1.12 | kg CO2e/kg | 0 | 0 | 0.00% | n/a |
+| facility | 1.59e+07 | kg CO2e/yr | 1 | 1 | 0.59% | pass |
+
+### Boundary items — reported, not tested
+
+| Technology | What | Why |
+|---|---|---|
+| all | end-of-life of every asset | ASSUMPTIONS.md §6 — cradle-to-gate throughout; APOS carries some EoL in the background |
+| electrolyser | delivery to site — Gerloff's second 250 km lorry leg | ASSUMPTIONS.md §6; Gerloff 2021 §2.1 — the first leg, to assembly, is in |
+| solar | delivery to site — Z-PV-239's 100 km light-commercial leg 'to construction place' | ASSUMPTIONS.md §6; IEA PVPS workbook remark O29 — out since 22 Oct 2026; was in from 21 Oct |
+| battery | delivery to site — Jasper's China-to-Germany lorry, sea and rail legs for finished parts | ASSUMPTIONS.md §6; Jasper et al. 2026 SI transport rows — upstream legs to the module and rack factories are in |
+| solar | delivery to site — Smith A14 rail, lorry and sea rows | ASSUMPTIONS.md §6; Smith 2024 Table A14 — the sea leg alone is 201 t·km/m² for the import chain (~1.5 % of the plant) |
+| facility | delivery to site — Zhang's Transportation phase | ASSUMPTIONS.md §6; Zhang et al. 2025 Table S1 |
+| wind | delivery to site — Leng Table S2 to-site legs (both transformers) | ASSUMPTIONS.md §6; Leng et al. 2026 Table S2 |
+| bought hydrogen | road haulage from the seller to the site | ASSUMPTIONS.md §3; TODO.md (parked) — trailer compression is charged; the journey depends on where the seller is |
+| facility | standby diesel generator — Zhang's 8.6e6 MJ | ASSUMPTIONS.md §7 — scored and reported by data_centre.py / dc_inputs; out of every objective because backup is a decision variable |
+
+### Rule 3 — the design-change test
+
+The two reference cases re-solved at both anchors with every still-excluded flow added at its
+upper estimate (`dc_inputs.build_tech(cutoff="upper")`, sensitivity knob `cutoff`), against the
+central model. Q4's test: the same technologies are built and no built capacity moves by more than
+5 %. Solved 23 Oct 2026; `optimisation_outputs/sensitivity_cutoff_*.csv`.
+
+| Case | Anchor | Technologies built | Same with upper? | Largest capacity move | GWP t/yr, central → upper | Verdict |
+|---|---|---|---|---|---|---|
+| london_grid | min_cost | batt_e, batt_p, grid, solar, wind | yes | grid -0.0% | 108,904 → 109,096 | pass |
+| london_grid | min_gwp | batt_e, batt_p, fc, grid, solar, wind | yes | grid +3.0% | 52,926 → 53,193 | pass |
+| islanded_h2 | min_cost | batt_e, batt_p, ely, fc, solar, tank, wind | yes | batt_e +0.0% | 71,895 → 72,285 | pass |
+| islanded_h2 | min_gwp | batt_e, batt_p, ely, fc, solar, tank, wind | yes | batt_e -1.1% | 63,828 → 64,148 | pass |
+
+**Rule 3 passes**: at both anchors of both cases the upper-estimate run builds the same technologies and moves no capacity by more than 5 %.
+
+The London case was solved with the grid connection at 282.0 kg CO2e per MW per year; the switchyard's
+share of Leng's construction machinery (+4.85, carried since 22 Oct 2026) was added while it ran. At the
+145 MW connection the minimum-cost design builds that is 0.7 t CO2e a year, under a millionth of the
+system, so it cannot move a design. The islanded case has no grid connection.
+
+<!-- cutoff:end -->

@@ -241,9 +241,9 @@ def energy_section(gap_ids=lambda *k: []):
     n("ely_psu", "Electrolyser power supply: transformer and rectifier", 5, 4, "component", route=R,
       status="inside", rating="AC → DC for the stack",
       model="Taken as inside the inventory's kWh per kg (54 for PEM), i.e. that figure is read as a "
-            "system-level consumption with the rectifier included. Not verified against Hermesmann's "
+            "system-level consumption with the rectifier included. Not verified against Gerloff's "
             "own definition; if their 54 kWh/kg is stack-only, the system draw is ~2–4 % higher.",
-      source="Hermesmann & Müller 2022; electrolysers.decompose_all")
+      source="Gerloff 2021 SI Table 6; electrolysers.decompose_all")
     n("ely", "Electrolyser stack — PEM (AE, SOEC selectable)", 5, 3, "component", route=R,
       rating=f"PEM {pem['kwh_per_kg']:g} kWh/kg at {ely.DELIVERY_PRESSURE_BAR['PEM operation']:g} bar · "
              f"AE {ae['kwh_per_kg']:g} · SOEC {soec['kwh_per_kg']:g} kWh/kg + 5.24 kWh/kg heat",
@@ -251,7 +251,7 @@ def energy_section(gap_ids=lambda *k: []):
             "part load (no unit commitment).",
       loss=f"{1000 / pem['kwh_per_kg']:.2f} kg H₂ per MWh (PEM) = {pc(33.33 / pem['kwh_per_kg'], 0)} LHV",
       lp="cap_ely (MW), p_ely[t]", term="Electrolyser capital (PEM default; AE, SOEC selectable)",
-      source="Hermesmann & Müller 2022; electrolysers.DELIVERY_PRESSURE_BAR",
+      source="Gerloff 2021; electrolysers.DELIVERY_PRESSURE_BAR",
       gaps=("electrolyser", "alkaline", "soec"))
     n("gas", "Natural gas supply", 4, 0, "source", route=("hydrogen",), status="option",
       rating="GB gas network, high pressure (SOEC only)",
@@ -310,7 +310,7 @@ def energy_section(gap_ids=lambda *k: []):
       rating="grey SMR · blue SMR + CCS · turquoise pyrolysis · green PEM (one or two colours)",
       model="h2_buy[t] in kg, unbounded (no delivery limit), priced and scored per kg at the gate.",
       lp="h2_buy[t], h2_buy_2[t]", term=T_BOUGHT,
-      source="Hermesmann & Müller 2022; h2_prices.py", gaps=("bought", "green h"))
+      source="Hermesmann & Müller 2022 (fossil, 30 bar at the plant), Gerloff 2021 (green); h2_prices.py", gaps=("bought", "green h"))
     n("trailer_comp", "Compression onto a tube trailer", 7, 1, "component", route=R,
       rating=f"to {hp.BOUGHT_H2_TRAILER_PRESSURE_BAR:g} bar: {hp.bought_h2_compression_kwh_per_kg('grey'):.2f} "
              f"kWh/kg (fossil), {hp.bought_h2_compression_kwh_per_kg('green'):.2f} (green)",

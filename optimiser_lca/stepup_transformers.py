@@ -99,10 +99,21 @@ materials bill, S2 is transport and S3 is civils; no factory energy appears
 for either transformer (checked against the SI and main text, 21 Oct 2026).
 Their own 342 t CO₂e for this unit against ~275 t here is a scoring
 difference — ecoinvent 3.11 with RoW steel proxies against 3.9.1 apos GLO
-markets — not a dropped flow. The civils Leng attribute to the transformers
-(Table S3) are a different matter: the box-transformer foundations are
-carried on the wind step-ups since 21 Oct; the booster-station buildings and
-outdoor venue are the grid intake's and await a decision (SOURCE_DIFF.md D2).
+markets — not a dropped flow. The civils and installation Leng attribute to
+the transformers (Table S3) are in: the box-transformer foundations (21 Oct)
+and the electrical installation (section steel, terminal blocks, welding rod,
+lead seals; 22 Oct) on the wind step-ups, per MW of the farm; the booster
+station's **outdoor venue** — the 110 kV switchyard's site formation,
+foundation beams, formwork, concrete, water and rebar, Leng's own 34.4 % of
+the station — as its own activity per MW of connection (decision D2,
+22 Oct 2026: the station serves 100 MW through one transformer, so its yard
+scales with the connection, not the MVA). The station's three *buildings*
+(control, auxiliary, production: 64.7 %) are treated as covered by Zhang's
+facility building, which already houses the data centre's electrical rooms —
+a stated substitution, not an omission. The station-wide construction
+machinery (0.9 %) is listed once for all four projects, so its share is
+pro-rated to the switchyard from Leng's own figure and carried on the
+connection's coefficient (``exclusions.py``).
 
 Battery and fuel cell — Jasper et al. 2026's mass on the IEA composition
 -------------------------------------------------------------------------
@@ -168,9 +179,9 @@ TX_MEDIUM_VOLTAGE_BAND_KV = (1.0, 24.0)  # TRANSCRIBED - ecoinvent GB MV market 
 TX_SITE_COLLECTION_KV = 20.0
 
 # --- wind: Leng Table S1, box transformers, the whole population on one farm ---
-TX_LENG_FARM_MW    = 100.0
-TX_LENG_N_TURBINES = 50
-TX_LENG_UNIT_MVA   = 2.2       # from the model number S11-2200/35
+TX_LENG_FARM_MW    = 100.0     # TRANSCRIBED - Gaoyou, fifty 2 MW turbines
+TX_LENG_N_TURBINES = 50        # TRANSCRIBED
+TX_LENG_UNIT_MVA   = 2.2       # TRANSCRIBED - from the model number S11-2200/35 (the main text's 3,500 kVA is a slip)
 TX_LENG_BOX_KG = {             # TRANSCRIBED, kg for all fifty units
     "steel":  163_500.0,
     "iron":    53_300.0,
@@ -181,8 +192,8 @@ TX_LENG_BOX_KG = {             # TRANSCRIBED, kg for all fifty units
 TX_KG_PER_MW = {m: kg / TX_LENG_FARM_MW for m, kg in TX_LENG_BOX_KG.items()}
 
 # --- grid intake: Leng Table S1, the farm's main transformer XZ11-100000/110 ----
-TX_LENG_MAIN_MVA = 100.0       # from the model number XZ11-100000/110 (kVA / kV)
-TX_LENG_MAIN_KV  = 110.0       # from the same model number - the HV winding
+TX_LENG_MAIN_MVA = 100.0       # TRANSCRIBED - from the model number XZ11-100000/110 (kVA / kV)
+TX_LENG_MAIN_KV  = 110.0       # TRANSCRIBED - from the same model number, the HV winding
 TX_LENG_MAIN_KG = {            # TRANSCRIBED, kg for the one unit (t x 1000)
     "steel":  30_200.0,
     "iron":   20_800.0,
@@ -198,10 +209,11 @@ TX_GRID_KG_PER_MVA = {m: kg / TX_LENG_MAIN_MVA for m, kg in TX_LENG_MAIN_KG.item
 # their forming step. Used for both Leng bills, box and main.
 TX_MATERIAL_PROCESSES = {
     "steel":  ["steel_low_alloyed", "sheet_rolling_steel"],
-    # ASSUMED: Leng lists Steel and Iron separately and does not say what the
-    # second is. Read as core steel - a transformer contains no cast iron, and
-    # Teffera's equivalent inventory is steel and copper only. Scoring it as
-    # cast iron instead moves the answer ~4%.
+    # ASSUMED: Leng list Steel and Iron separately; their own Table S5 files the
+    # iron as cast iron. Read here as core steel - a transformer contains no cast
+    # iron, and Teffera's equivalent inventory is steel, copper and aluminium - a
+    # stated departure from the source's treatment. Scoring it as cast iron
+    # instead moves the answer ~4%.
     "iron":   ["steel_low_alloyed", "sheet_rolling_steel"],
     "copper": ["copper_cathode", "wire_drawing_copper"],
     "oil":    ["lubricating_oil"],
@@ -239,15 +251,15 @@ UPV_TX_FIBREBOARD_M3   = UPV_TX_FIBREBOARD_KG / UPV_TX_FIBREBOARD_DENSITY_KG_M3 
 UPV_TX_STATED_TOTAL_KG = 5_680.0   # TRANSCRIBED - the report's "approximately 5680"; the bill sums to 5,670.0
 UPV_TX_TOTAL_TOLERANCE = 0.005     # check(): within 0.5 % of the rounded figure
 # Forming and process energy, per unit. Rolling and metal-working rows are
-# FORMING of mass already counted, held apart so they are never summed into it.
+# FORMING of mass already counted, held apart so they are never summed into it. TRANSCRIBED.
 UPV_TX_FORMING_KG = {
     "hot_rolling":         2_153.0,   # = core mass, hot rolled
     "sheet_rolling_steel": 4_306.0,   # = core mass rolled twice (hot then cold)
     "sheet_rolling_alu":     618.0,   # = the aluminium winding
     "alu_metalworking":      618.0,
 }
-UPV_TX_ELECTRICITY_KWH = 2_368.3
-UPV_TX_HEAT_MJ         = 9_903.8
+UPV_TX_ELECTRICITY_KWH = 2_368.3   # TRANSCRIBED - Table 49 (the printed '2.37E+0' is a slip; the workbook has 2,368.3)
+UPV_TX_HEAT_MJ         = 9_903.8   # TRANSCRIBED - Table 49
 # Smith 2024 Table A15 replaces 1.30E-05 transformers per m2 over 30 years
 # against 4.30E-05 installed (A14): 30.2 % of the fleet. The same ratio
 # upv.UPV_PV_OM_REPLACEMENT_FRACTION applies to the inverters in the same row;
@@ -255,7 +267,7 @@ UPV_TX_HEAT_MJ         = 9_903.8
 # Carried as its own 30-year activity, like upv's O&M, so transformers.py can
 # charge it per year whatever life the unit itself is amortised over.
 UPV_TX_REPLACEMENT_FRACTION_30Y = 1.30e-5 / 4.30e-5
-UPV_TX_REPLACEMENT_REFERENCE_YEARS = 30.0
+UPV_TX_REPLACEMENT_REFERENCE_YEARS = 30.0   # TRANSCRIBED - Smith A15's horizon
 
 # --- battery and fuel cell: the containerised LV step-up, Jasper's mass on the IEA unit ---
 CSS_TX_SOURCE    = "Jasper et al. 2026, CSS (liquid cooled) bill, 'transformer, for grid connection'"
@@ -264,9 +276,32 @@ CSS_TX_KW        = 1_600.0     # TRANSCRIBED - the container's PCS rating, bess.
 CSS_TX_KG_PER_MW = CSS_TX_KG / CSS_TX_KW * 1000.0
 # The composition is per kg of the IEA unit, so every Table 49 row is scaled by
 # the mass ratio: how many of that unit one MW of container step-up weighs. On
-# the transcribed bill's own mass (5,679.94 kg), not the report's rounded
-# 5,680, so per kg the two activities score identically.
-CSS_TX_UNITS_PER_MW = CSS_TX_KG_PER_MW / (sum(UPV_TX_MATERIALS_KG.values()) + UPV_TX_FIBREBOARD_KG)
+# the transcribed bill's own sum (5,670.0 kg), not the report's rounded 5,680,
+# so per kg the two activities score identically.
+UPV_TX_BILL_KG = sum(UPV_TX_MATERIALS_KG.values()) + UPV_TX_FIBREBOARD_KG
+CSS_TX_UNITS_PER_MW = CSS_TX_KG_PER_MW / UPV_TX_BILL_KG
+
+TX_SCOPE = {
+    "wind_step_up": "INCLUDED - Leng Table S1's fifty box transformers per 100 MW, their pads (S3) and "
+                    "electrical installation (S3); no factory energy, because Leng publish none.",
+    "solar_step_up": "INCLUDED - IEA PVPS Table 49's unit, its forming and factory energy, Z-PV-238's "
+                     "station building, and Smith A15's 30-year replacements.",
+    "grid_intake": "INCLUDED - Leng's main transformer per MVA (materials only) and the switchyard's civils "
+                   "per MW of connection (S3 outdoor venue, D2).",
+    "container_step_up": "SUBSTITUTED - Jasper's 5,500 kg on the IEA unit's composition; Jasper's own "
+                         "Hunziker-derived recipe is the sensitivity (representativeness, 22 Oct 2026).",
+    "buildings": "SUBSTITUTED - the booster station's control, auxiliary and production buildings (Leng S3, "
+                 "64.7 % of the station) are covered by Zhang's facility building, not charged twice.",
+    "machinery": "INCLUDED - the booster station's construction machinery (0.9 % of the station) is listed "
+                 "station-wide, so Leng's own figure for it is pro-rated to the venue (34.4 %) and carried on the "
+                 "connection's coefficient (exclusions.py).",
+    "switchgear": "EXCLUDED - switchgear and protection at every transformer: no source itemises them; on "
+                  "the cut-off register (exclusions.py).",
+    "losses": "Charged as energy in the LP (conversion_losses.py), not here.",
+    "end_of_life": "EXCLUDED, as everywhere else in this study.",
+    "delivery": "EXCLUDED - Leng Table S2's legs to site and IEA's to the construction place: delivery to "
+                "site, outside the boundary.",
+}
 
 
 def check() -> str:
@@ -400,19 +435,45 @@ processes = {
                                        unit="megajoule", query="market for diesel burned in building machine GLO"),
     "building_hall":           Process(identity=("market for building, hall, steel construction", "GLO"),
                                        unit="square meter", query="market for building hall steel construction GLO"),
+    # --- Leng Table S3 electrical installation and the booster station's outdoor venue (22 Oct 2026) ---
+    "lead":                    Process(identity=("market for lead", "GLO"), unit=_kg, query="market for lead GLO",
+                                       why="Leng's 'lead seal' row"),
+    "wire_drawing_steel":      Process(identity=("market for wire drawing, steel", "GLO"), unit=_kg,
+                                       query="market for wire drawing steel GLO", why="the venue's iron wire, drawn"),
+    "tap_water_row":           Process(identity=("market for tap water", "RoW"), unit=_kg,
+                                       query="market for tap water RoW", why="the venue's construction water"),
+    "sawnwood_board":          Process(identity=("market for sawnwood, board, softwood, raw, dried (u=20%)",
+                                                 "Europe without Switzerland"), unit="cubic meter",
+                                       query="market for sawnwood board softwood raw dried",
+                                       why="Leng's 'board material' for the formwork; softwood board is the nearest dataset"),
 }
 
 # Leng Table S3, "Transformer substation foundation project" under wind-turbine
 # engineering: the pads the fifty box transformers stand on (main text §2.3,
 # "installed on ... concrete foundations"). Per 100 MW farm, TRANSCRIBED. The
-# machinery column gives machine-teams x a rating with no printed unit; read as
-# kWh per team for the welder and litres of diesel per team for the truck
-# (ASSUMED), 35.95 MJ per litre.
+# machinery column gives machine-teams x a rating: Eq. (S2) states the truck's
+# rating in litres of diesel per team (TRANSCRIBED); the welder's is read as kWh
+# per team (ASSUMED). 35.95 MJ per litre.
 TX_LENG_PAD_PER_FARM = {
     "excavation_m3": 728.0, "concrete_c15_m3": 56.0, "concrete_c30_m3": 280.0,
     "rebar_kg": 19_600.0, "welding_kwh": 2.5 * 60.27, "truck_diesel_l": 202.5 * 32.19,
 }
-DIESEL_MJ_PER_L = 0.84 * 42.8
+DIESEL_MJ_PER_L = 0.84 * 42.8        # conversion: 0.84 kg/l x 42.8 MJ/kg
+# Leng Table S3 "electrical installation" under wind-turbine engineering, per
+# 100 MW farm, TRANSCRIBED. Left behind by the 21 Oct restore; in since 22 Oct 2026.
+TX_LENG_INSTALLATION_PER_FARM = {
+    "section_steel_kg": 261.0, "terminal_block_kg": 375.0, "welding_rod_kg": 18.0, "lead_seal_kg": 114.15,
+}
+# Leng Table S3 "outdoor venue project": the 110 kV booster station's switchyard,
+# per 100 MW farm, TRANSCRIBED (its own nine-row block; 34.4 % of the station's
+# carbon in Leng's Fig. 9c). Taken per MW of connection (decision D2).
+TX_LENG_VENUE_PER_FARM = {
+    "site_formation_m3": 23_650.0, "foundation_beam_m3": 30.0, "steel_formwork_kg": 13_659.0,
+    "board_m3": 19.1, "iron_nails_kg": 257.5, "iron_wire_kg": 301.0, "concrete_m3": 896.1,
+    "water_m3": 1_218.0, "rebar_kg": 12_000.0,
+}
+VENUE_BEAM_REBAR_FRACTION = 0.03     # ASSUMED - midpoint of Leng's "1-6 % reinforcement" for foundation beams
+STEEL_KG_PER_M3 = 7_850.0            # physical constant
 _pad = {k: v / TX_LENG_FARM_MW for k, v in TX_LENG_PAD_PER_FARM.items()}   # per MW of wind
 _wind_pad_exchanges = [
     ("excavation",              _pad["excavation_m3"],  "cubic meter", "Leng S3 pad: earthwork backfill"),
@@ -421,7 +482,34 @@ _wind_pad_exchanges = [
     ("reinforcing_steel_glo",   _pad["rebar_kg"],       _kg,           "Leng S3 pad: reinforcement"),
     ("upv_electricity",         _pad["welding_kwh"],    "kilowatt hour", "Leng S3 pad: AC welding (unit ASSUMED kWh)"),
     ("diesel_building_machine", _pad["truck_diesel_l"] * DIESEL_MJ_PER_L, "megajoule",
-                                "Leng S3 pad: heavy truck 5 t (unit ASSUMED litres)"),
+                                "Leng S3 pad: heavy truck 5 t (litres per machine-team, Eq. S2)"),
+]
+_inst = {k: v / TX_LENG_FARM_MW for k, v in TX_LENG_INSTALLATION_PER_FARM.items()}   # per MW of wind
+_wind_installation_exchanges = [
+    ("steel_low_alloyed",   _inst["section_steel_kg"],  _kg, "Leng S3 electrical installation: section steel"),
+    ("sheet_rolling_steel", _inst["section_steel_kg"],  _kg, "Leng S3 electrical installation: section steel, formed"),
+    ("copper_cathode",      _inst["terminal_block_kg"], _kg,
+     "Leng S3 electrical installation: terminal blocks (ASSUMED copper; Leng's dataset is not stated)"),
+    ("steel_low_alloyed",   _inst["welding_rod_kg"],    _kg, "Leng S3 electrical installation: welding rod"),
+    ("lead",                _inst["lead_seal_kg"],      _kg, "Leng S3 electrical installation: lead seals"),
+]
+_venue = {k: v / TX_LENG_FARM_MW for k, v in TX_LENG_VENUE_PER_FARM.items()}   # per MW of connection
+_venue_exchanges = [
+    ("excavation",            _venue["site_formation_m3"], "cubic meter",
+     "Leng S3 venue: site formation, loose-rock excavation"),
+    ("concrete_normal",       _venue["foundation_beam_m3"] * (1 - VENUE_BEAM_REBAR_FRACTION), "cubic meter",
+     "Leng S3 venue: foundation beams, the concrete (97 % by volume, ASSUMED split)"),
+    ("reinforcing_steel_glo", _venue["foundation_beam_m3"] * VENUE_BEAM_REBAR_FRACTION * STEEL_KG_PER_M3, _kg,
+     "Leng S3 venue: foundation beams, the rebar (3 % by volume, ASSUMED split)"),
+    ("steel_low_alloyed",     _venue["steel_formwork_kg"], _kg, "Leng S3 venue: steel formwork (temporary works, as Leng count them)"),
+    ("sheet_rolling_steel",   _venue["steel_formwork_kg"], _kg, "Leng S3 venue: steel formwork, formed"),
+    ("sawnwood_board",        _venue["board_m3"],          "cubic meter", "Leng S3 venue: board material"),
+    ("steel_low_alloyed",     _venue["iron_nails_kg"],     _kg, "Leng S3 venue: iron nails"),
+    ("steel_low_alloyed",     _venue["iron_wire_kg"],      _kg, "Leng S3 venue: iron wire"),
+    ("wire_drawing_steel",    _venue["iron_wire_kg"],      _kg, "Leng S3 venue: iron wire, drawn"),
+    ("concrete_normal",       _venue["concrete_m3"],       "cubic meter", "Leng S3 venue: concrete"),
+    ("tap_water_row",         _venue["water_m3"] * 1000.0, _kg, "Leng S3 venue: water (1 m3 = 1,000 kg)"),
+    ("reinforcing_steel_glo", _venue["rebar_kg"],          _kg, "Leng S3 venue: reinforcement steel"),
 ]
 flows = {}
 
@@ -483,7 +571,7 @@ def _container_row(key, amount_per_unit, unit, note):
     return ("upv_" + key, amount_per_unit * CSS_TX_UNITS_PER_MW, unit,
             f"{note} - {CSS_TX_SOURCE}: {CSS_TX_KG:,.0f} kg per {CSS_TX_KW:,.0f} kW = "
             f"{CSS_TX_KG_PER_MW:,.1f} kg/MW, as {CSS_TX_UNITS_PER_MW:.4f} of the IEA PVPS Table 49 "
-            f"unit's composition ({amount_per_unit:,.3f} per {UPV_TX_STATED_TOTAL_KG:,.0f} kg unit)")
+            f"unit's composition ({amount_per_unit:,.3f} per {UPV_TX_BILL_KG:,.0f} kg unit)")
 
 
 _container_exchanges = (
@@ -521,8 +609,9 @@ activities = [
             "which lands within the same band by a different route. "
             "Functional unit is 1 MW of wind CONNECTED - amortise over "
             "TX_ASSET_LIFE_YEARS (dc_config). "
-            "INCLUDES (since 21 Oct 2026) the box-transformer foundations from Leng "
-            "Table S3, per MW of the same farm. "
+            "INCLUDES Leng Table S3's box-transformer foundations (since 21 Oct 2026) and "
+            "electrical installation - section steel, terminal blocks, welding rod, lead seals "
+            "(since 22 Oct 2026), per MW of the same farm. "
             "EXCLUDES: the grid-export transformer (this study is behind the meter, "
             "there is nothing to export into, and the grid intake is charged by "
             "grid_connection.py); any step between the collection network and the "
@@ -530,7 +619,7 @@ activities = [
             "protection; losses; end-of-life. Leng publish no factory energy for "
             "the unit, so none is charged."
         ),
-        technosphere=_wind_exchanges + _wind_pad_exchanges,
+        technosphere=_wind_exchanges + _wind_pad_exchanges + _wind_installation_exchanges,
     ),
     Activity(
         code=R.TX_SOLAR,
@@ -616,14 +705,33 @@ activities = [
             "the common case for a ~100 MW data centre; for a 275/400 kV "
             "transmission-connected site it errs LOW, supergrid transformers being "
             "heavier per MVA. Used for every site as the default. "
-            "EXCLUDES: switchgear, protection, the bay and civils (Leng's booster-"
-            "station civils are in their Table S3 and await a decision, "
-            "SOURCE_DIFF.md D2); the line to the site (grid_connection.py reports it "
-            "separately); losses; end-of-life. Leng publish no factory energy for "
+            "EXCLUDES: switchgear and protection (cut-off register); the line to the site "
+            "(grid_connection.py reports it separately); losses; end-of-life. The switchyard's "
+            "civils are their own activity, grid_intake_substation_civils_per_mw (Leng Table S3's "
+            "outdoor venue, decision D2, 22 Oct 2026). Leng publish no factory energy for "
             "this unit; their 342 t CO2e against ~275 t here is a scoring difference "
             "(ecoinvent 3.11 v 3.9.1), not a dropped flow."
         ),
         technosphere=_grid_exchanges,
+    ),
+    Activity(
+        code=R.TX_GRID_CIVILS,
+        name="Grid-intake substation civils (switchyard), per MW of connection",
+        reference_product="grid-intake substation civils",
+        unit="megawatt", location="GLO",
+        comment=(
+            "The civils of the intake substation's switchyard, per MW of connection: Leng et al. "
+            "(2026) Table S3 'outdoor venue project' of the Gaoyou farm's 110 kV booster station - "
+            "site formation, foundation beams, steel formwork, board, nails and wire, concrete, "
+            "water and reinforcement, every row at the printed amount, divided by the 100 MW the "
+            "station serves (decision D2, 22 Oct 2026: one yard serves both intake transformers, so "
+            "it scales with the connection, not the MVA installed). Leng's own score for the venue is "
+            "2,157 t CO2e per 100 MW (34.4 % of the station). The station's buildings are covered by "
+            "Zhang's facility building (stated substitution); its construction machinery is not "
+            "separable and is on the cut-off register. grid_connection.py charges this per MW of "
+            "cap_grid over ASSET_LIFE_YEARS. EXCLUDES switchgear, protection, delivery to site, end-of-life."
+        ),
+        technosphere=_venue_exchanges,
     ),
     Activity(
         code=R.TX_LV_CONTAINER,

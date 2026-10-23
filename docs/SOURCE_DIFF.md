@@ -13,6 +13,39 @@ under `agent_bess`, `agent_upv`, `agent_fc`, `agent_h2dc`, `agent_tx`.
 Nothing in the repo was changed by the check. This note records what it
 found; `CUTOFF_RULE_PLAN.md` carries the work.
 
+## Second read — 22 Oct 2026, with ledgers kept
+
+Every source was read again, row by row, by an independent reader per document
+family, and this time the row ledgers were kept: `docs/source_ledgers/*.md`
+(one per source, every printed row with its disposition — IN, IN-DIFFERS,
+BOUNDARY, SUBSTITUTED, NOT-APPLICABLE or MISSING). The module → source
+direction is `docs/SOURCE_LEDGER.md`, regenerated from the modules by
+`scripts/source_ledger.py` (822 rows, 0 without a stated origin). The 21 Oct
+restores were re-checked at their printed amounts. What the second read found
+that the first did not, and what was done the same day:
+
+| Source | Ledger | Rows | Result | Changed on 22 Oct |
+|---|---|---|---|---|
+| Gerloff 2021 (AE/PEM/SOEC) | `gerloff_2021.md` | 64 + 60 + 173 bill rows, 20 table rows | every valued row IN; **the stack's rows are ×3 in the source** (§2.1.3, SI p. 1) and were ×1 in the module while the stack energy was ×3; the 250 km assembly lorry leg MISSING; water 8.99 vs the SI's 8.9; AE polyethylene HD for LD; La₂O₃/SrCO₃ with no amount | three stacks per unit (AE +89 %, PEM +69 %, SOEC +33 % on the unit); the lorry leg; 8.9 l; LD polyethylene; ASSUMED La₂O₃/SrCO₃ rows; the iridium substitution stated; codes renamed from "hermesmann" to "gerloff" |
+| Hermesmann & Müller 2022 (SMR, SMR-CCS, CCS, MP-E) | `hermesmann_2022.md` | 49 | 46 IN; **captured CO₂ 8.01 is the export's slip, the paper's is 8.90**; the SMR-CCS closure row's premise contradicts the paper (post-combustion capture from the flue gas); the excess-electricity credit (1.10 / 0.05 kWh) is a by-product credit the study's §5 forbids; the FU is at 30 bar | captured 8.90; the gap split 90 % to capture / 10 % to air (blue ≈ −28 %); both electricity credits dropped (+1.4 % grey); outlet pressures 30 bar for grey/blue/turquoise (sourced, were ASSUMED 20) |
+| Voß 2025 (LFP cell) | `voss_2025.md` | 86 IN, 1 IN-DIFFERS | **the natural-graphite factor 5.19 is pre-transport** (the main text's 5.7 includes the legs); the module subtracted two legs that were not there and lost the China leg | the two negative legs removed, the China leg added (cell +0.16 %) |
+| Jasper 2026 (container) | `jasper_2026.md` | 125 + 76 | **0 MISSING**; S1 confirmed (Hunziker 630 kVA with OLTC; the 5,500 kg is a Larson Electronics unit); the PCS is a substitution, not an exclusion | scope dict says SUBSTITUTED for the PCS; the transformer's origin noted |
+| Smith 2024 (utility PV) | `smith_2024.md` | 232 + 7, 290/290 values vs the PDF | **0 MISSING**; the 19 "deferred" rows all print cleanly and are zero-GWP; the 9.764 kg/m² comparator was wrong (9.618) | the 19 rows restored under their 3.9.1 names; 9.618; `UPV-DEFERRED-ISSUES.md` closed |
+| IEA PVPS T12-33:2026 | `iea_pvps_2026.md` | 23 + 29 + 12 | two of the ten 21 Oct restores are outside the boundary: the LCV leg is "100 km to construction place" (delivery to site) and the PE/PP row is end-of-life disposal; S7 settled at 36.96 kg / 5,670 kg | both rows out again; the 5,670 bill stated once |
+| Leng 2026 (transformers, civils) | `leng_2026.md` | 10 + 4 + 68 | every transcribed number is the printed one; **the four electrical-installation rows (768 kg per 100 MW) were left behind by the 21 Oct restore**; the booster station's venue is separable for materials, not for machinery; D2's production-building share is 7.2 %, not 8.1 % | the installation rows on the wind step-ups; **D2 taken**: the outdoor venue as `grid_intake_substation_civils_per_mw`, per MW of connection; the buildings covered by Zhang's; the station-wide machinery pro-rated to the switchyard from Leng's own figure |
+| Usai 2021, Babatunde 2024 (fuel cell) | `fuel_cell_usai_babatunde.md` | 26 + 22 | clean (26, not 25, rows; the 1.8786 factor verified on 22/22 rows); no assembly energy in Usai | docs: 26/26, 37.6, page refs |
+| Zhang 2025 (facility) | `zhang_2025.md` | 33 flows | clean; one unstated dataset deviation (copper cathode for the paper's scrap-copper dataset); three stale boundary sentences | the deviation stated as a substitution; the sentences fixed |
+| Gandiglio 2022, Mehmeti 2018, Vestas, Teffera 2021 | `gandiglio_mehmeti_vestas_teffera.md` | — | Table 5 confirmed; no tank cost in the paper (TODO closes that way); Mehmeti's figures confirmed; Vestas §3.3 quoted (the 1 % per flow is an adaptation); Teffera's Table 5 is on the realised-generation basis (the plan's 0.61 t/MW is 1.56× conservative), transformer = steel + copper + aluminium | notes in `stepup_transformers.py` and SOURCES.md |
+
+Under the cut-off principle the restores above were made without a threshold
+test. The threshold test itself is now `optimiser_lca/exclusions.py` +
+`optimisation/cutoff.py` (ASSUMPTIONS.md §8). Decisions taken on 22 Oct in the
+plan's recommended direction, each reversible in one line: **D2** (venue per MW,
+buildings covered by Zhang's, machinery pro-rated), **Q7** (switchgear and factory
+energy carried as estimates on the connection), the Gerloff code rename, and
+the two dropped electricity credits (ASSUMPTIONS §5). Still open: **D3**
+iridium (parked), Hunziker 2020 not held.
+
 ## Clean
 
 | Inventory | Source | Result |

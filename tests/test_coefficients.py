@@ -401,11 +401,13 @@ def test_green_outlet_pressure_tracks_the_electrolyser_module():
             == ely.DELIVERY_PRESSURE_BAR["PEM operation"])
 
 
-def test_assumed_outlet_pressures_are_declared():
-    from optimisation import h2_prices as hp
-    assert hp.BOUGHT_H2_PRODUCTION_PRESSURE_ASSUMED == set(
-        hp.BOUGHT_H2_PRODUCTION_PRESSURE_BAR), (
-        "every hardcoded outlet pressure is unsourced and must say so")
+def test_outlet_pressures_are_hermesmanns_30_bar():
+    """Hermesmann & Müller 2022 define their functional unit as 1 kg H2 at 30 bar at the
+    production site (§3.1), for every route; nothing is ASSUMED here since 22 Oct 2026."""
+    from optimisation import h2_prices as hp, electrolysers as ely
+    assert hp.BOUGHT_H2_PRODUCTION_PRESSURE_ASSUMED == set()
+    assert set(hp.BOUGHT_H2_PRODUCTION_PRESSURE_BAR.values()) == {30.0}
+    assert hp.bought_h2_production_pressure_bar("blue") == ely.DELIVERY_PRESSURE_BAR["PEM operation"]
 
 
 def test_compression_moves_blue_far_more_than_green():
@@ -562,7 +564,9 @@ def test_solar_inventory_is_written_out_in_the_module():
                  if p.identity[0].startswith(("treatment of", "market for waste", "market for slag",
                                               "market for municipal solid waste",
                                               "market for wastewater"))}
-    assert len(treatment) == 12    # 10 of Smith's, plus Z-PV-239's two packaging-waste rows (21 Oct 2026)
+    # 10 of Smith's, plus Z-PV-239's packaging cardboard; its PE/PP row is end-of-life
+    # disposal and is out again since 22 Oct 2026 (docs/source_ledgers/iea_pvps_2026.md)
+    assert len(treatment) == 11
     signs = [amt for a in upv.activities for k, amt, *_ in a.technosphere
              if isinstance(k, str) and k in treatment]
     assert signs and all(amt < 0 for amt in signs)
@@ -757,11 +761,16 @@ def test_gas_routes_close_their_carbon_balance():
     from optimiser_lca import hydrogen as h
     # ecoinvent's own GB high-pressure gas: ~2.0 kg CO2 per m3 burned
     assert h.GAS_CO2_KG_PER_M3 == pytest.approx(1.9956, rel=1e-4)
-    smr_out = 9.0 + h.SMR_CO2_CLOSURE
-    ccs_out = 0.99 + h.SMR_CCS_CO2_CLOSURE + h.CO2_CAPTURED_PER_KG_H2
+    smr_out = h.SMR_CO2_EMITTED + h.SMR_CO2_CLOSURE
+    # SMR-CCS: the printed emitted and captured amounts plus the gap, split by the
+    # 90 % post-combustion capture (22 Oct 2026; Hermesmann §4.1.1)
+    ccs_out = (h.SMR_CCS_CO2_EMITTED + h.CO2_CAPTURED_PER_KG_H2
+               + h.SMR_CCS_CLOSURE_EMITTED + h.SMR_CCS_CLOSURE_CAPTURED)
     assert smr_out == pytest.approx(4.85 * h.GAS_CO2_KG_PER_M3, rel=1e-12)
     assert ccs_out == pytest.approx(5.33 * h.GAS_CO2_KG_PER_M3, rel=1e-12)
-    assert 0 < h.SMR_CO2_CLOSURE < h.SMR_CCS_CO2_CLOSURE
+    assert 0 < h.SMR_CO2_CLOSURE < h.SMR_CCS_CO2_GAP
+    assert h.CO2_CAPTURED_PER_KG_H2 == 8.90
+    assert h.SMR_CCS_CLOSURE_CAPTURED == pytest.approx(0.9 * h.SMR_CCS_CO2_GAP)
 
 
 def test_gb_grid_shares_match_the_series():

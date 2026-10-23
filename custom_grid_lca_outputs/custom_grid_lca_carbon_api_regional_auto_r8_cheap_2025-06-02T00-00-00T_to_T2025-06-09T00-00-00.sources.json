@@ -481,14 +481,14 @@
       "location": "GB",
       "product": "electricity, low voltage",
       "database": "solar foreground",
-      "kgco2e_per_kwh": 0.03091227749988343
+      "kgco2e_per_kwh": 0.03100858673305565
     },
     "STORAGE": {
       "name": "electricity production, hydro, pumped storage",
       "location": "GB",
       "product": "electricity, high voltage",
       "database": "ecoinvent-3.9.1-apos",
-      "kgco2e_per_kwh": 0.050529098537260585
+      "kgco2e_per_kwh": 0.05052909853726058
     }
   }
 }

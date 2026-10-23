@@ -1,5 +1,26 @@
 # LCA assurance plan — 22 Oct 2026
 
+> **Status, end of 22 Oct 2026.** Built the same day, in this order: the map
+> checker's fingerprint and pytest (3.1), the style test and sheet (4.1–4.2),
+> the register, `cutoff.py`, the rule-3 knob and the audit hook (1.1–1.4),
+> ten source ledgers and three style read-throughs by independent readers
+> (2.4, 4.3; kept in `docs/source_ledgers/` and `docs/STYLE_SWEEP.md`), the
+> corrections they demanded (three stacks per Gerloff unit, the 250 km leg,
+> the SMR-CCS capture and closure, the dropped electricity credits, Voß's
+> graphite legs, Leng's installation rows and switchyard civils, two solar rows
+> back out, nineteen zero-GWP rows back in, the tank's forming), the rule-1
+> failures carried as estimates or built as rows (1.5), every database rebuilt
+> and every coefficient re-scored, the grid series re-scored, ASSUMPTIONS §8
+> generated, the map rebuilt with the register under every functional unit
+> (3.2–3.3). Rule 3 was solved on 23 Oct (both reference cases, both anchors,
+> every still-excluded flow at its upper estimate) and **passes**: the same
+> technologies are built and no capacity moves by more than 3 %
+> (ASSUMPTIONS §8; `scripts/cutoff_rule3.py`). The booster station's
+> construction machinery, first left out as not separable, is carried as
+> Leng's own figure pro-rated to the switchyard, because it is sourced and
+> inside the boundary. Open: D3 iridium (parked), Hunziker 2020 not held, a
+> switchgear EPD (TODO.md).
+
 Four jobs, asked for together on 22 Oct: test the cut-off rule, check every
 LCA against its source documents so nothing is left out, bring the LCA map
 back to the model and prove it, and sweep every inventory for the approved

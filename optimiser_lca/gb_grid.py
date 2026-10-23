@@ -4,17 +4,11 @@ GB grid electricity, 2025 annual mean, delivered at high voltage.
 
 Source and scope
 ----------------
-One kWh of the grid this study scores everywhere else (``optimiser_lca.grid``),
-as a foreground activity, so that an inventory which takes GB grid power can
-link to it instead of ecoinvent's own GB market.
-
-Why it exists: the fossil hydrogen routes (Hermesmann's SMR, SMR-CCS and
-methane pyrolysis) linked their electricity to ecoinvent 3.9.1's ``market for
-electricity, high voltage`` [GB] — a 2018 mix, with gas on the conventional
-plant this study rejected for its own grid on 13 Oct (558 against 387 g/kWh),
-and the low-voltage market behind it at 311 g/kWh. Turquoise takes 10.29 kWh
-per kg, so that dataset was 60 % of its burden. Relinked here, every grid kWh
-in the study is on one basis.
+**Functional unit: 1 kWh of electricity delivered at high voltage**, on the
+grid this study scores everywhere else (``optimiser_lca.grid``), as a
+foreground activity, so that an inventory which takes GB grid power (the
+hydrogen routes) links to it instead of ecoinvent's 2018 GB market. Every grid
+kWh in the study is then on one basis.
 
 Composition: the 2025 time-mean of NESO's GB-wide generation mix (Carbon
 Intensity API region 18, built by ``grid_build.build_grid(18, ...)``),
@@ -55,7 +49,7 @@ MIX_2025 = {
     # half-hour of 2025's GB series
 }
 # Imports by exporting country, as a share of all GB supply: mean over the
-# year of IMPORTS_perc x imp_<CC>. They sum to the 12.48 % import share.
+# year of IMPORTS_perc x imp_<CC>. They sum to the 12.48 % import share. TRANSCRIBED.
 IMPORTS_2025 = {"FR": 0.065531, "BE": 0.010611, "NL": 0.007941,
                 "NO": 0.027286, "DK": 0.012305, "IE": 0.001151}
 
@@ -66,14 +60,14 @@ HV_MARKET_NETWORK = {
     "hvdc_land":   1.41928136392641e-10,     # km
     "hvdc_subsea": 2.69652501674501e-10,     # km
 }
-HV_MARKET_N2O_KG = 5e-06
-HV_MARKET_OZONE_KG = 4.15772755242894e-06
+HV_MARKET_N2O_KG = 5e-06                    # TRANSCRIBED - corona discharge, the same market
+HV_MARKET_OZONE_KG = 4.15772755242894e-06   # TRANSCRIBED
 
 # What the activity scores, IPCC 2021 GWP100 with long-term emissions. Pinned
 # so h2_prices can charge fossil sellers' compression on it without Brightway;
 # optimiser_lca.validate re-scores the activity and fails if it has moved. It
 # equals the series' own mean delivered intensity, as it should.
-GB_GRID_2025_HV_GCO2E_PER_KWH = 141.87395819488424
+GB_GRID_2025_HV_GCO2E_PER_KWH = 141.88016958029795   # DERIVED - the series mean, re-scored 22 Oct 2026 (validate re-scores the activity)
 
 GROSS_UP = G.DELIVERY["high"]["gross_up"]
 # The market's exchanges are per kWh it delivers; a kWh delivered here has
@@ -156,8 +150,16 @@ activities = [
 ]
 
 
+def check() -> str:
+    """The shares are a whole: the API's percentages sum to 0.99974 of supply."""
+    total = sum(MIX_2025.values()) + sum(IMPORTS_2025.values())
+    if not 0.999 < total < 1.001:
+        raise AssertionError(f"gb_grid shares sum to {total:.5f}, not ~1")
+    return f"OK - gb_grid: shares sum to {total:.5f}; pinned {GB_GRID_2025_HV_GCO2E_PER_KWH:.2f} g CO2e/kWh"
+
+
 def check_against_series(root=None, tol=1e-5) -> str:
-    """Re-derive MIX_2025 and IMPORTS_2025 from the series; fail if they moved."""
+    """Re-derive MIX_2025 and IMPORTS_2025 from the series, and hold the pinned score to its mean."""
     from pathlib import Path
     import pandas as pd
     root = Path(root) if root else Path(__file__).resolve().parent.parent
@@ -174,10 +176,13 @@ def check_against_series(root=None, tol=1e-5) -> str:
         got = (df["IMPORTS_perc"] * df[f"imp_{c}"]).mean() / 100.0
         if abs(got - want) > tol:
             problems.append(f"imports {c}: series {got:.6f}, constant {want:.6f}")
+    mean = df["custom_electricity_score"].mean() * 1000
+    if abs(mean / GB_GRID_2025_HV_GCO2E_PER_KWH - 1) > 1e-6:
+        problems.append(f"pinned score {GB_GRID_2025_HV_GCO2E_PER_KWH:.4f} vs series mean {mean:.4f} g/kWh")
     if problems:
         raise AssertionError("gb_grid shares are stale:\n  " + "\n  ".join(problems))
     return (f"OK — shares match {len(df):,} half-hours; series mean "
-            f"{df['custom_electricity_score'].mean() * 1000:.2f} g CO2e/kWh delivered")
+            f"{mean:.2f} g CO2e/kWh delivered equals the pinned score")
 
 
 def inventory() -> Inventory:

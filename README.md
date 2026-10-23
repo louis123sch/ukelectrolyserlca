@@ -50,7 +50,9 @@ conda activate brightway
 streamlit run Home.py
 ```
 
-On a new machine, run `python -m optimiser_lca.build` once to write the
+Every inventory is a module in `optimiser_lca/`, written in one shape
+(`docs/LCA_STYLE.md`; `tests/test_lca_style.py` holds it). On a new machine,
+run `python -m optimiser_lca.build` once to write the
 foreground databases (data centre facility, fuel cell, electrolysers, H2
 storage, SMR/SMR-CCS/pyrolysis for bought hydrogen, UPV, transformers), then
 `python optimisation/coefficients.py`. The first grid build will do the

@@ -53,7 +53,7 @@ PAPER_TABLE3 = {   # mid-point characterisation, 1 kW FC — paper p. 361
     "Terrestrial ecotoxicity":                 (129.522,   "kg 1,4-DCB"),
     "Water consumption":                       (0.47144,   "m3"),
 }
-PAPER_TABLE4 = {   # end-point characterisation — paper p. 362
+PAPER_TABLE4 = {   # end-point characterisation — paper p. 366
     "Fine particulate matter formation":        (0.000485875, "DALY"),
     "Fossil resource scarcity":                 (4.72288595,  "USD2013"),
     "Freshwater ecotoxicity":                   (2.43e-8,     "species/yr"),
@@ -77,7 +77,7 @@ PAPER_TABLE4 = {   # end-point characterisation — paper p. 362
     "Water consumption, Human health":          (4.94e-7,     "DALY"),
     "Water consumption, Terrestrial ecosystem": (4.98e-9,     "species/yr"),
 }
-PAPER_TABLE5 = {   # damage assessment — paper p. 362
+PAPER_TABLE5 = {   # damage assessment — paper p. 366
     "Human health": (0.000866, "DALY"),
     "Ecosystems":   (1.04e-6,  "species/yr"),
     "Resources":    (6.16844,  "USD2013"),
@@ -260,7 +260,7 @@ def fc_operation_sanity():
           f"against their own {usai_loops:.2f} kg CO2e/kW (ecoinvent 3.6) - "
           f"{parts['process loops (Usai 2021)'] / usai_loops:.2f}x; the printed table rounds to "
           "two decimals.")
-    for label, v in (("Miotti 2017, 80 kW car", 29.0), ("Usai 2021, 80 kW car, no tank", 37.3),
+    for label, v in (("Miotti 2017, 80 kW car", 29.0), ("Usai 2021, 80 kW car, no tank", 37.6),
                      ("Gentilucci 2024, 200 kW truck", "30.5-51.4"),
                      ("Ballard FCmove-HD, 70 kW module", 73.0),
                      ("Stropnik 2018 via Bionaz 2022, 3 kW UPS", 405.5)):

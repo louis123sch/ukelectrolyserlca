@@ -9,7 +9,10 @@ activity's exchanges against its inventory module (amount, scale, which
 input), every activity's score against the sum of its children's
 contributions, the wind calculation steps' arithmetic, the grid term against
 its series, the energy map's voltage continuity and its numbers against the
-modules they cite. Prints every mismatch; exits 1 if any.
+modules they cite, the fingerprint of what the map was built from against
+what is live (scripts/map_fingerprint.py), and the page against the JSON.
+Prints every mismatch; exits 1 if any. tests/test_lca_map.py runs the
+no-Brightway sections under pytest.
 
 Needs Brightway only for the score re-check (skip with --no-brightway).
 """
@@ -17,8 +20,15 @@ from __future__ import annotations
 
 import json
 import math
+import re
 import sys
 from pathlib import Path
+
+# A Windows console defaults to cp1252 and cannot print the arrows and
+# subscripts the map's names carry; without this the first FAIL line crashed
+# the run before anything was reported (22 Oct 2026).
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -57,6 +67,9 @@ def find_all(root, pred):
 
 
 def main(use_bw=True):
+    global checked
+    problems.clear()
+    checked = 0
     d = json.loads(MAP.read_text(encoding="utf-8"))
     tree, gaps, energy = d["tree"], d["gaps"], d.get("energy")
 
@@ -375,6 +388,61 @@ def main(use_bw=True):
         for a in inv.activities:
             if (db, a.code) in shown: ok()
             else: bad(f"{db} / {a.code} ({a.name[:50]}) is in the inventory but nowhere in the LCA tree")
+
+    # ------------------------------------------------------------ 8b. the cut-off register
+    print("8b. Every register entry is a box under its technology, at cutoff.check's share")
+    from optimiser_lca import exclusions as X
+    from optimisation import cutoff
+    cut = {(r.technology, r.flow): r for r in cutoff.check(tech).itertuples()}
+    reg_nodes = {(n["register"]["technology"], n["register"]["flow"]): n
+                 for n in find_all(tree, lambda n: n.get("register"))}
+    for e in X.REGISTER:
+        n = reg_nodes.get((e.technology, e.flow))
+        if n is None:
+            bad(f"register entry {e.technology!r} / {e.flow[:50]!r} has no box in the map"); continue
+        ok()
+        if e.kind == "boundary":
+            continue
+        r = cut.get((e.technology, e.flow))
+        want = None if r is None or r.share_upper != r.share_upper else r.share_upper
+        if (n["register"].get("share_upper") is None) == (want is None) and \
+                (want is None or close(n["register"]["share_upper"], want, rel=1e-9)): ok()
+        else: bad(f"register box {e.flow[:40]!r}: share {n['register'].get('share_upper')} vs live {want}")
+        if n["register"].get("status") == e.status: ok()
+        else: bad(f"register box {e.flow[:40]!r}: status {n['register'].get('status')} vs live {e.status}")
+    for key in reg_nodes:
+        if not any((e.technology, e.flow) == key for e in X.REGISTER):
+            bad(f"map register box {key} is not in the register")
+    print(f"     {len(X.REGISTER)} register entries, {len(reg_nodes)} boxes")
+
+    # ------------------------------------------------------------ 8c. one box per process
+    print("8c. No box holds exactly one box that is the same thing")
+    SAME = {"ecoinvent", "foreground", "part", "stage"}
+    for n in find_all(tree, lambda n: n["kind"] in ("part", "stage", "fu", "foreground")):
+        kids = [c for c in n.get("children", []) if c["kind"] in SAME]
+        if len(kids) == 1 and len(n.get("children", [])) == 1 and kids[0].get("name") == n.get("name"):
+            bad(f"{n['kind']} {n['name'][:50]!r} holds one box that is the same thing")
+        else:
+            ok()
+
+    # ------------------------------------------------------------ 9. fingerprint
+    print("9. The map was built from the inventories, coefficients, grid basis and register that are live now")
+    from map_fingerprint import compare, COMPARED
+    diffs = compare((d.get("meta") or {}).get("fingerprint"))
+    for m in diffs:
+        bad(f"fingerprint {m} — rebuild the map")
+    ok(len(COMPARED) - len(diffs))
+
+    # ------------------------------------------------------------ 10. the page
+    print("10. lca_map.html carries lca_map.json")
+    html_path = MAP.with_suffix(".html")
+    if not html_path.exists():
+        bad("lca_map.html is missing — run build_lca_map.py --html-only")
+    else:
+        m = re.search(r'<script id="lca-data" type="application/json">(.*?)</script>',
+                      html_path.read_text(encoding="utf-8"), re.S)
+        if m and m.group(1).replace("<\\/", "</") == MAP.read_text(encoding="utf-8"): ok()
+        else: bad("lca_map.html does not carry lca_map.json — run build_lca_map.py --html-only")
 
     print(f"\n{checked} checks passed, {len(problems)} problems")
     return 0 if not problems else 1

@@ -1,5 +1,18 @@
 # Cut-off rule plan — 20 Oct 2026
 
+> **Built 22 Oct 2026** (`docs/LCA_ASSURANCE_PLAN.md` Part 1): the register is
+> `optimiser_lca/exclusions.py`, the test `optimisation/cutoff.py` (ASSUMPTIONS.md
+> §8, generated), the rule-3 knob `dc_inputs.build_tech(cutoff="upper")` /
+> `sensitivity.CARBON_KNOBS["cutoff"]`, the audit hook `audit.check_cutoff_rule`,
+> and `tests/test_cutoff.py` holds it. What failed rule 1 on day one — the
+> tank's forming (built as a row), its valves, the battery's and fuel cell's
+> container switchgear, the grid connection's switchgear and factory energy
+> (carried as estimates) — is included; what passed stays out and is shown
+> with its share under each technology in the LCA map. Step 2's restore list
+> was re-read against every source the same day (`docs/SOURCE_DIFF.md`, second
+> read), which found more: three stacks per Gerloff unit, Leng's electrical
+> installation, and the booster-station venue (D2 taken).
+
 > **Numbers refreshed 21 Oct 2026** after the source diff's restores were
 > built (`docs/SOURCE_DIFF.md`, *Implemented*): battery energy term 7,241 →
 > **7,489** kg CO₂e per usable MWh per year; fuel-cell BoP 44,325 → **50,807**
@@ -138,7 +151,7 @@ Today exclusions are written as free text inside each module
 `stepup_transformers`, `h2_tank`, `fuel_cell`, `data_centre`) plus rows in
 DATA_GAPS.md. Nothing measures them.
 
-- [ ] New `optimiser_lca/exclusions.py`, Python only like every other
+- [x] New `optimiser_lca/exclusions.py`, Python only like every other
       inventory. One entry per excluded flow:
       - `technology`: a `CHAINS` key or `"facility"`;
       - `flow`: what is left out;
@@ -147,9 +160,9 @@ DATA_GAPS.md. Nothing measures them.
       - `method`: `transcribed` (a published figure), `mass_x_factor` (with
         mass, factor and both sources), or `assumed`;
       - `source` and `note`.
-- [ ] A test that every `EXCLUDED` value in the modules' scope dicts has a
+- [x] A test that every `EXCLUDED` value in the modules' scope dicts has a
       register entry, so a new exclusion can't be added without one.
-- [ ] Leave the scope dicts in place. They describe each inventory; the register
+- [x] Leave the scope dicts in place. They describe each inventory; the register
       measures it.
 
 ## 2. Estimate every exclusion (M)
@@ -243,44 +256,44 @@ What the sorting shows:
 
 ## 3. Check rules 1 and 2 automatically (S)
 
-- [ ] `optimisation/cutoff.py`: `check(tech, series)` returns one row per
+- [x] `optimisation/cutoff.py`: `check(tech, series)` returns one row per
       exclusion (technology, flow, share at upper, pass/fail) and one row per
       technology (summed share, pass/fail against 5 %).
-- [ ] Wire it into `audit.py`, so every audit run reports it.
-- [ ] A fast test that fails if any `cutoff` entry breaks rule 1 or 2. It will
+- [x] Wire it into `audit.py`, so every audit run reports it.
+- [x] A fast test that fails if any `cutoff` entry breaks rule 1 or 2. It will
       fail on day one (battery foundations, solar transport). That's intended:
       it stays red until each failure is resolved (step 5).
-- [ ] Print the table into a new ASSUMPTIONS.md section, *8. Cut-off rule*,
+- [x] Print the table into a new ASSUMPTIONS.md section, *8. Cut-off rule*,
       generated, as VALIDATION.md is.
 
 ## 4. Check rule 3 in the optimiser (S)
 
-- [ ] `build_tech(..., cutoff="upper")` adds each `cutoff` entry's upper
+- [x] `build_tech(..., cutoff="upper")` adds each `cutoff` entry's upper
       estimate onto its technology's coefficient. Default `None` leaves today's
       model unchanged.
-- [ ] A `sensitivity.py` knob, `"cutoff": ["upper"]`, run on the two reference
+- [x] A `sensitivity.py` knob, `"cutoff": ["upper"]`, run on the two reference
       cases (`london_grid`, `islanded_h2`) at both anchors (min cost, min GWP).
       One bundled run per case adds about four solves in all.
-- [ ] Compare against the central run with the test defined in Q4. Record the
-      result in ASSUMPTIONS §8.
+- [x] Compare against the central run with the test defined in Q4. Record the
+      result in ASSUMPTIONS §8. (23 Oct 2026: passes in both cases at both anchors.)
 
 ## 5. Resolve failures (M, depends on what fails)
 
 A flow that fails rule 1, or a technology that fails rule 2, is **included**.
 It's not argued away.
 
-- [ ] Include it as the register's central estimate, added to the coefficient
+- [x] Include it as the register's central estimate, added to the coefficient
       (step 4's mechanism with `cutoff="central"` for that entry only), and mark
       it `included` in the register with its method.
-- [ ] Where a proper inventory row is cheap (battery foundations are 43.9 t of
+- [x] Where a proper inventory row is cheap (battery foundations are 43.9 t of
       concrete), build it in the module instead and delete the register entry.
 - [ ] If rule 3 fails, the exclusions that drive it are included the same way.
-- [ ] Log each one in DATA_GAPS.md, and in SOURCES.md where a number moved.
+- [x] Log each one in DATA_GAPS.md, and in SOURCES.md where a number moved.
 
 ## 6. Close out (XS)
 
-- [ ] Delete the `TODO.md` cut-off item.
-- [ ] Re-run the reference cases if anything was included. Regenerate the LCA
+- [x] Delete the `TODO.md` cut-off item.
+- [x] Re-run the reference cases if anything was included. Regenerate the LCA
       map so each technology's tree shows its exclusions and their shares.
 - [ ] One paragraph for the paper's methods: the rule, its sources, the
       boundary choices, and the rule-3 result.

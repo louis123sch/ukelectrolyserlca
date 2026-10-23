@@ -23,9 +23,9 @@
       "silica": 11.43
     },
     "kg_per_MW": 2823.43,
-    "kgco2e_per_MW": 11501.378966580554,
-    "kgco2e_per_MW_year": 328.61082761658724,
-    "kgco2e_per_MW_transformer": 9755.281222476153,
+    "kgco2e_per_MW": 11538.428240290914,
+    "kgco2e_per_MW_year": 329.6693782940261,
+    "kgco2e_per_MW_transformer": 9792.330496186512,
     "civils_kgco2e_per_MW": 1746.0977441044015
   },
   "solar": {
@@ -53,11 +53,11 @@
     },
     "kg_per_unit": 5670.002,
     "kg_per_MWp": 2268.0008000000003,
-    "kgco2e_per_MWp": 12012.029059701626,
-    "kgco2e_per_MWp_year": 447.5709695552522,
-    "kgco2e_per_MWp_transformer": 10356.72892453976,
+    "kgco2e_per_MWp": 12012.029059701625,
+    "kgco2e_per_MWp_year": 447.57096955525213,
+    "kgco2e_per_MWp_transformer": 10356.728924539759,
     "civils_kgco2e_per_MWp": 1655.3001351618655,
-    "replacement_kgco2e_per_MWp_30y": 3131.104178341886,
+    "replacement_kgco2e_per_MWp_30y": 3131.1041783418864,
     "replacement_reference_years": 30.0,
     "replacement_fraction": 0.3023255813953488
   },
@@ -76,14 +76,14 @@
     "container_kW": 1600.0,
     "kg_per_container": 5500.0,
     "kg_per_MW": 3437.5,
-    "kgco2e_per_MW": 15697.197651576273,
-    "kgco2e_per_MW_year": 448.4913614736078
+    "kgco2e_per_MW": 15697.197651576276,
+    "kgco2e_per_MW_year": 448.49136147360787
   },
   "per_MW_year": {
-    "onshore_wind": 328.61082761658724,
-    "offshore_wind": 328.61082761658724,
-    "solar_pv": 447.5709695552522,
-    "battery": 448.4913614736078,
-    "fuel_cell": 448.4913614736078
+    "onshore_wind": 329.6693782940261,
+    "offshore_wind": 329.6693782940261,
+    "solar_pv": 447.57096955525213,
+    "battery": 448.49136147360787,
+    "fuel_cell": 448.49136147360787
   }
 }

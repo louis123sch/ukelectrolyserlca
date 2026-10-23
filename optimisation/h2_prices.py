@@ -68,7 +68,7 @@ BUILD_YEAR = 2025
 # NESO's grid starts at 0.06. The study's own hurdle rates are 5.0-6.2 %, so
 # 0.06 is the closest consistent choice; 0.08/0.10 read as merchant-risk.
 DISCOUNT = {"low": 0.06, "central": 0.06, "high": 0.08}
-GREEN_TECH = "PEM"          # matches pem_op_hermesmann_1kg_h2
+GREEN_TECH = "PEM"          # matches registry.PEM_OP
 GREEN_SCENARIO = "Central"
 
 # Green LCOH is dominated by utilisation and power price, so the three cases
@@ -102,14 +102,18 @@ GAS_KWH_HHV_PER_M3 = 39.5 / 3.6
 from optimiser_lca import registry as _R  # noqa: E402
 from optimiser_lca import hydrogen as _H  # noqa: E402
 INVENTORY = {
-    # Direct CO2 includes the carbon-balance closure on the linked gas
-    # (optimiser_lca.hydrogen, 14 Oct 2026): 9.0 + 0.679 and 0.99 + 1.637.
+    # elec_kwh_per_kg is what the ACTIVITY carries (check_against_inventory holds
+    # it). Hermesmann's SMR plants export excess electricity, 1.10 and 0.05 kWh per
+    # kg; the LCA takes no credit for it since 22 Oct 2026 (ASSUMPTIONS §5), so the
+    # activities carry none, but the plant still sells it, so the PRICE stack keeps
+    # the revenue as elec_sold_kwh_per_kg. Direct CO2 includes the carbon-balance
+    # closure on the linked gas (optimiser_lca.hydrogen).
     "grey":      {"code": _R.SMR,
-                  "gas_m3_per_kg": 4.85, "elec_kwh_per_kg": -1.1,
-                  "direct_co2_kg_per_kg": 9.0 + _H.SMR_CO2_CLOSURE},
+                  "gas_m3_per_kg": 4.85, "elec_kwh_per_kg": 0.0, "elec_sold_kwh_per_kg": 1.1,
+                  "direct_co2_kg_per_kg": _H.SMR_CO2_EMITTED + _H.SMR_CO2_CLOSURE},
     "blue":      {"code": _R.SMR_CCS,
-                  "gas_m3_per_kg": 5.33, "elec_kwh_per_kg": -0.05,
-                  "direct_co2_kg_per_kg": 0.99 + _H.SMR_CCS_CO2_CLOSURE},
+                  "gas_m3_per_kg": 5.33, "elec_kwh_per_kg": 0.0, "elec_sold_kwh_per_kg": 0.05,
+                  "direct_co2_kg_per_kg": _H.SMR_CCS_CO2_EMITTED + _H.SMR_CCS_CLOSURE_EMITTED},
     "turquoise": {"code": _R.MP_E,
                   "gas_m3_per_kg": 5.72, "elec_kwh_per_kg": 10.29,
                   "direct_co2_kg_per_kg": 0.0},
@@ -124,7 +128,7 @@ INVENTORY = {
 # plant, cradle to gate, and the only free term is the carbon intensity of the
 # electricity the seller runs on.
 #
-# Scoring ``pem_op_hermesmann_1kg_h2`` whole gets this wrong, because the
+# Scoring ``registry.PEM_OP`` whole gets this wrong, because the
 # activity's 54 kWh/kg is linked to ecoinvent's GB *grid* market. That charged
 # bought green 17.001 kg CO2e/kg — dirtier than grey SMR, and dirtier than the
 # LP plugging its own electrolyser into the grid, the 1 % gap being nothing but
@@ -343,26 +347,20 @@ BOUGHT_H2_TRAILER_PRESSURE_BAR = 200.0
 #            ``electrolysers.DELIVERY_PRESSURE_BAR["PEM operation"]`` — 30 bar,
 #            TRANSCRIBED there — rather than restated, so the seller's plant and
 #            the buyer's own PEM cannot drift apart.
-# blue/grey  20 bar. ASSUMED. Steam reformers run at 15-30 bar and the PSA that
-#            purifies the product operates just below its feed pressure, so
-#            product hydrogen leaves at roughly reformer pressure. The
-#            Hermesmann inventories are SimaPro exports of mass and energy flows
-#            and state no pressure. 20 bar is the low end of that range, which
-#            charges more compression rather than less — the honest direction
-#            for a term being added to close an omission.
-# turquoise  20 bar. ASSUMED, and the weakest of the four: molten-media methane
-#            pyrolysis is generally near-atmospheric, and at 1 bar this term
-#            would be 2.3x larger. It is held at parity with the other
-#            thermochemical routes rather than given a large invented penalty,
-#            because the turquoise row is already a constructed blend. If
-#            turquoise is ever load-bearing in a result, price this properly
-#            first. Registered in ``DATA_GAPS.md``.
+# grey/blue/turquoise  30 bar. TRANSCRIBED: Hermesmann & Müller 2022 define their
+#            functional unit as "1 kg H2 at 30 bar ... at the production site" (§3.1,
+#            p. 10) for every route, SMR, SMR-CCS and MP-E alike. Until 22 Oct 2026
+#            these were ASSUMED at 20 bar on the belief that the inventories stated no
+#            pressure; the source re-read found that they do. The same 30 bar as the
+#            study's own PEM, so every bought colour compresses from one pressure.
+#            Turquoise's real outlet pressure (molten-media pyrolysis can be near
+#            atmospheric) is a separate question the source does not open.
 BOUGHT_H2_PRODUCTION_PRESSURE_BAR = {
-    "grey": 20.0,
-    "blue": 20.0,
-    "turquoise": 20.0,
+    "grey": 30.0,
+    "blue": 30.0,
+    "turquoise": 30.0,
 }
-BOUGHT_H2_PRODUCTION_PRESSURE_ASSUMED = {"grey", "blue", "turquoise"}
+BOUGHT_H2_PRODUCTION_PRESSURE_ASSUMED: set = set()
 
 
 def bought_h2_production_pressure_bar(colour: str) -> float:
@@ -668,11 +666,13 @@ def _fossil_price(colour, case):
 
     # low/central/high label the price of *hydrogen*, so each driver is paired
     # with whichever direction pushes the H2 price that way. Electricity is a
-    # cost for pyrolysis (10.29 kWh/kg) but a by-product credit for SMR
-    # (-1.1 kWh/kg), so its pairing flips with the sign of the coefficient -
-    # a dear power market makes pyrolysis H2 dearer and SMR H2 cheaper.
-    elec_case = case if inv["elec_kwh_per_kg"] >= 0 else INVERSE_CASE[case]
-    power = inv["elec_kwh_per_kg"] / 1000.0 * PRODUCER_ELEC_GBP_PER_MWH[elec_case]
+    # cost for pyrolysis (10.29 kWh/kg) but a by-product sold by SMR (1.1 kWh/kg
+    # exported; a revenue, not an LCA credit), so its pairing flips with the
+    # sign of the net - a dear power market makes pyrolysis H2 dearer and SMR
+    # H2 cheaper.
+    net_kwh = inv["elec_kwh_per_kg"] - inv.get("elec_sold_kwh_per_kg", 0.0)
+    elec_case = case if net_kwh >= 0 else INVERSE_CASE[case]
+    power = net_kwh / 1000.0 * PRODUCER_ELEC_GBP_PER_MWH[elec_case]
 
     if colour == "grey":
         nonfuel = BLUE_NONFUEL_GBP_PER_KG * GREY_NONFUEL_FRACTION_OF_BLUE
@@ -793,7 +793,7 @@ def recommended_table():
 
     rows = [
         {"colour": "grey", "variant": "SMR unabated",
-         "activity_code": "smr_hermesmann_1kg_h2",
+         "activity_code": _R.SMR,
          "low": round(grey_px["low"], 2),
          "central": round(grey_px["central"], 2),
          "high": round(grey_px["high"], 2),
@@ -801,7 +801,7 @@ def recommended_table():
          "corroboration": f"derived from own inventory + FES gas: "
                           f"{grey_derived:.2f} ({100*(grey_derived/eho_gbp_per_kg('SMR')-1):+.0f} %)"},
         {"colour": "blue", "variant": "SMR + CCS",
-         "activity_code": "smr_ccs_hermesmann_1kg_h2",
+         "activity_code": _R.SMR_CCS,
          "low": round(blue_px["low"], 2),
          "central": round(blue_px["central"], 2),
          "high": round(blue_px["high"], 2),
@@ -809,7 +809,7 @@ def recommended_table():
          "corroboration": f"NESO ATR+CCS {blue_neso['central']:.2f} "
                           f"(cheaper route, used as low case)"},
         {"colour": "turquoise", "variant": "methane pyrolysis",
-         "activity_code": "mp_e_1kg_h2",
+         "activity_code": _R.MP_E,
          "low": round(turq["low"], 2), "central": round(turq["central"], 2),
          "high": round(turq["high"], 2),
          "central_source": f"CONSTRUCTED — {w['gas_share']:.0%} grey + "
@@ -818,7 +818,7 @@ def recommended_table():
                           f"{_fossil_price('turquoise','central')['total']:.2f}; "
                           f"IEA GHR 2026 pre-commercial, publishes no cost"},
         {"colour": "green", "variant": "behind the meter, on-site renewables",
-         "activity_code": "pem_op_hermesmann_1kg_h2",
+         "activity_code": _R.PEM_OP,
          "low": round(green_px["low"], 2),
          "central": round(green_px["central"], 2),
          "high": round(green_px["high"], 2),
@@ -826,7 +826,7 @@ def recommended_table():
          "corroboration": f"NESO PEM cube {green_neso['low']:.2f}-{green_neso['central']:.2f} "
                           f"at CF 0.7-0.5"},
         {"colour": "green", "variant": "grid-connected electrolyser",
-         "activity_code": "pem_op_hermesmann_1kg_h2",
+         "activity_code": _R.PEM_OP,
          "low": round(green_neso["central"], 2),
          "central": round(eho_gbp_per_kg("Grid electrolysis"), 2),
          "high": round(green_neso["high"], 2),

@@ -80,9 +80,10 @@ Either the source is named and public, or no new sourcing is needed at all.
 - [ ] **Battery fixed opex from BEIS 2022** *Benefits of Long Duration
       Electricity Storage*. Public PDF, and what FES itself routes to. Replaces
       the 2 %-of-capex proxy — the one battery input with no source.
-- [ ] **Check Gandiglio et al. 2022 for a tank cost.** It already supplies the
-      vessel inventory, so it is the only source that would match the asset
-      actually modelled. Twenty minutes; might close H2 tank capex outright.
+- [ ] **Check Marocco et al. 2020 (Energy Convers. Manag. 211:112768) for a tank
+      cost.** Gandiglio 2022 has none (read 22 Oct 2026: LCA only, and it points
+      to Marocco for the economics of the same Ginostra system), so Marocco is the
+      one source that would match the vessel actually modelled. Not held.
 - [ ] **Report the two big assumed scalars as bands, not points.**
       `green_h2_grid_share` and `transmission_connected` both already have
       override hooks on `build_tech()`. No sourcing — just run the sweep and
@@ -145,28 +146,17 @@ Either the source is named and public, or no new sourcing is needed at all.
 - [ ] **Export is refused until it is modelled** (`dc_model.build_model`
       raises since 12 Oct). To build it: credit at an export price, not demand
       rates; give it a carbon credit; add it to `contributions()`. Audit §3.5.
-- [ ] **State a cut-off rule and test every exclusion against it** (14 Oct;
-      rule agreed 20 Oct). Per technology: each excluded flow under 1 % of its
-      technology's carbon, all of them under 5 %, and adding them back must not
-      change the best design. Sequenced in `docs/CUTOFF_RULE_PLAN.md`. Keep it
-      separate from ecoinvent's cut-off *system model*, which is a different
-      thing. Source diff done 21 Oct: `docs/SOURCE_DIFF.md`; its restores are
-      built (184 tests pass). Still open there: D2 (Leng's booster-station
-      civils for the grid intake), #11 (SOEC La₂O₃/SrCO₃ amount); wind
-      step-up replacement rate and wind/battery transformer factory energy
-      (unsourced) go on the cut-off register. S1 settled 22 Oct as a stated
-      substitution; get Hunziker et al. (2020) to confirm the on-load tap
-      changer behind Jasper's electronics row. Re-run the reference cases: `option_summary.csv`, the
-      sensitivity CSVs and the LCA map are stale.
-- [ ] **LCA assurance: cut-off register, source re-read, map rebuild, structure
-      sweep** (22 Oct). Every inventory checked against `docs/LCA_STYLE.md`
-      (Python only, one shape, locator-first notes; a style test to hold it).
-      The map is the 15 Oct snapshot: `scripts/check_lca_map.py --no-brightway`
-      finds 29 problems (9 coefficients moved, 19 activities with changed rows,
-      the solar transformer replacements have no box) and crashes on a cp1252
-      console without `PYTHONUTF8=1`. No staleness test holds it. The 21 Oct
-      source diff kept no row ledgers and did not cover wind, grid, bought H2
-      or the transcribed scalars. Sequenced in `docs/LCA_ASSURANCE_PLAN.md`.
+- [ ] **Get Hunziker et al. (2020)** to confirm the on-load tap changer behind
+      Jasper's container-transformer electronics row (the S1 substitution's
+      representativeness argument rests on it). `SOURCES.md`, SOURCE_DIFF S1.
+- [ ] **Gerloff's LSM layer amounts** (SOURCE_DIFF #11): the ASSUMED La2O3 /
+      SrCO3 rows in `hydrogen.py` stand until Gerloff's
+      `data_generation_material` sheet or Hafele 2016's stack masses are held.
+- [ ] **Electrolyser stacks as their own activity**, so a duty-driven count can
+      be charged as `fuel_cell.py` does; the SI's Stack/BoP labels make it
+      possible (`DATA_GAPS.md`, *Electrolyser stack/BoP split*).
+- [ ] **A switchgear EPD and a bay count** would retire the two estimates carried
+      on the grid connection and the container units (`optimiser_lca/exclusions.py`).
 
 ## Balance of plant not counted
 
@@ -206,10 +196,10 @@ No public source found. Revisit if the item becomes load-bearing in a result.
       charged; the journey is not. Distance depends entirely on where the seller
       is, which is the same unanswerable question as `sites.connection_limit_mw`.
       One-directional, and still favours buying.
-- [ ] **Turquoise outlet pressure.** Assumed 20 bar, at parity with the other
-      thermochemical routes. Molten-media pyrolysis is generally
-      near-atmospheric, which would make its compression term 2.3× larger.
-      Price this properly before turquoise carries any conclusion.
+- [ ] **Turquoise outlet pressure.** 30 bar since 22 Oct 2026: Hermesmann's own
+      functional unit for MP-E, as for every route (§3.1). A real molten-media
+      plant may run near-atmospheric, which would make its compression term
+      ~2.5× larger; check before turquoise carries any conclusion.
 - [ ] **Transmission connection capital cost.** A grid connection in a floored
       TNUoS zone currently costs £0/MW/year — right as a tariff, wrong as a
       cost, and it flatters exactly the Scottish sites the locational headline

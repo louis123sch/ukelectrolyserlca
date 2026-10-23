@@ -247,7 +247,7 @@ added to the LP.
 |---|---|---|---|
 | Trailer pressure | **200 bar** | transcribed | Conventional Type I steel tube trailer, and the same pressure as this study's own second `TANK_DESIGNS` entry, so the two hydrogen pressures in the study are one number. Composite trailers run 350–500 bar: +29 % and +48 % on the energy |
 | Green outlet pressure | 30 bar | transcribed | Read from `electrolysers.DELIVERY_PRESSURE_BAR["PEM operation"]` rather than restated, so the seller's plant and the buyer's own PEM cannot drift apart |
-| Grey / blue / turquoise outlet | 20 bar | **assumed** | Steam reformers run at 15–30 bar and the PSA purifying the product works just below its feed pressure. The Hermesmann inventories are SimaPro exports of mass and energy flows and state no pressure. 20 bar is the low end, which charges *more* compression — the honest direction for a term closing an omission |
+| Grey / blue / turquoise outlet | **30 bar** | transcribed | Hermesmann & Müller 2022 §3.1: the functional unit is "1 kg H₂ at 30 bar … at the production site", for every route. Until 22 Oct 2026 this row was ASSUMED at 20 bar on the belief that the inventories stated no pressure; the source re-read found that the paper does. The same 30 bar as the study's own PEM, so every bought colour compresses from one pressure |
 | Specific work | `h2_storage.compression_kwh_per_kg` | derived | Isothermal minimum scaled to a real multistage machine; the same function the buyer's own compression uses, so the two sides are one thermodynamics |
 | Compressor electricity price | £40 / 80 / 120 per MWh | assumed | `PRODUCER_ELEC_GBP_PER_MWH`, already used for grey and turquoise |
 
@@ -367,7 +367,7 @@ blend (65:35 against 75:25).
 | Check | Rebuilt | Voß |
 |---|---|---|
 | Synthetic graphite, Acheson powder route (Table S5) | 24.51 kg/kg, +0.51 of Voß's transport = 25.02 | 25.1 |
-| Natural graphite (Engels 2022) | 4.675 kg/kg, +0.515 transport = 5.19 (built: 4.869, keeping only the in-China leg) | 5.19 |
+| Natural graphite (Engels 2022) | 5.19 kg/kg before transport (Voß §3.1.1.2), + the 1,000 km China leg = ~5.38 built; Voß's in-cell figure with all three legs is 5.7 (main text Fig. 6, §4.2.2). Until 22 Oct 2026 the module read 5.19 as including the legs and subtracted two, landing at 4.87 | 5.7 |
 | Cell, German factory, 75:25 | 72.50 kg/kWh | 71.2 |
 
 The German cell lands 1.8 % high *despite* leaving out the transport and
@@ -697,9 +697,10 @@ study's own 35-year life:
 328.6 is **1.71 %** of onshore wind's 19,244 kg CO₂e/MW/year (the transformers
 alone, 278.7, are 1.45 %).
 
-*"Iron" is the one judgement.* Leng lists Steel and Iron separately and does not
-say what the second is. Read here as core steel, since a transformer contains no
-cast iron and Teffera's equivalent inventory is steel and copper only. Scoring
+*"Iron" is the one judgement.* Leng list Steel and Iron separately; their own
+Table S5 files the iron as cast iron. Read here as core steel, since a
+transformer contains no cast iron and Teffera's equivalent inventory is steel,
+copper and aluminium — a stated departure from the source's treatment. Scoring
 it as cast iron instead moves the answer **4 %**.
 
 ### Why it is per MW, and why that scales exactly
@@ -802,8 +803,8 @@ The workbook is shipped at
 | steel, low-alloyed | 1,734.5 | tank, frame, fittings |
 | kraft paper | 34.1 | ASSUMED proxy: ecoinvent has no *unbleached* kraft |
 | epoxy, copper, chromium steel, rubber, paint | 33.4 | |
-| hardboard pressboard | 46.9 | **unit correction, below** |
-| **total** | **5,680** | = the report's own stated figure |
+| hardboard pressboard | 36.96 | **unit correction, below** |
+| **total** | **5,670.0** | the bill's own sum; the report says "approximately 5,680" (0.2 % high) |
 
 **Two things make this better than the wind side, not merely equal to it.**
 
@@ -825,12 +826,15 @@ composition limits cannot be met from scrap).
 
 **A unit error in the source workbook, corrected.** The hardboard cell reads
 **36.96 m³**. At ~1,270 kg/m³ that is ~47 **tonnes** — eight times the whole
-transformer, and it would have dominated the score. The report's own stated
-total proves the intent: 5,633.04 kg of transcribed materials + 0.03696 m³
-(46.9 kg) = 5,679.9 kg against a stated ~5,680 kg. The cell is dm³ mislabelled
-as m³. `dc_config.upv_tx_check()` and `transformers.check()` both guard
-the reconciliation, so restoring the literal value fails loudly rather than
-silently inside the LCA.
+transformer, and it would have dominated the score. The cell is kg mislabelled
+as m³: its own comment reads "Al × 0.115 × 0.52 = 36.96 kg", the printed Table 49
+gives the row in kg, and the end-of-life sheet's paper row is 71.07 kg = 34.11
+kraft + 36.96 pressboard. The bill then sums to **5,670.0 kg**; the report's
+"approximately 5,680" is 0.2 % high (its paint row, "Total × 0.0024 = 13.61 kg",
+reproduces only from 5,670). Until 21 Oct 2026 the row was back-solved to
+46.9 kg to hit 5,680 exactly, which reconciled on the wrong lever.
+`stepup_transformers.check()` holds the bill within 0.5 % of the report's
+figure.
 
 **Two sources, two technologies, one answer.** Solar's **296.0** against wind's
 **278.7** kg CO₂e per unit of capacity per year, for step-ups of comparable
@@ -967,9 +971,18 @@ number.
 | SOEC heat, electric-boiler scenario | 5.24 kWh ÷ 0.99 = **5.29 kWh/kg H₂** of site electricity, replacing the gas row | assumed | `soec_heat="electric_boiler"` on a `Scenario` (matrix rows 22–25, and a toggle on the optimiser page). `electrolysers.with_heat_source` drops the gas row's 1.417 kg/kg, leaving 0.215 kg/kg of water, and adds the boiler's kWh to `kwh_per_kg`, so the heat costs and emits whatever the LP's electricity does in that hour. Efficiency 99 % from the Danish Energy Agency's *Technology Data*, "Electric boilers", not yet checked against the sheet. `cap_ely` then covers the boiler's draw too, so stack carbon and cost per MW are scaled to the stack's share (≈ 0.90 at a 28 bar tank). **The boiler's own capital is not charged**, in carbon or cost. Resistance heating reaches the ~750 °C inlet, which a gas boiler does not, and it is what commercial SOEC systems use |
 | Plant lifetime | 25 y | transcribed | NESO Green Hydrogen Data Portal, same figure as `electrolyser_costs_clean.csv` |
 
-*No stack/BoP split is possible* — Gerloff's capital good is one monolithic
-activity, so the whole of it is charged on calendar life. Registered in
-`DATA_GAPS.md`.
+*Three stacks per unit.* Gerloff's unit carries three stacks' materials over its
+20-year life (§2.1.2–2.1.3; SI p. 1 "stack values are multiplied by 3"), as SI
+Table 3's stack manufacturing energy always was. The module carried one stack's
+materials until 22 Oct 2026 (the source re-read, `docs/source_ledgers/
+gerloff_2021.md`); the stack rows are now ×3, with the SI's Stack/BoP labels on
+every row, so a duty-driven stack count *could* be built the way `fuel_cell.py`
+does — not done; the unit is amortised on calendar life (`electrolysers.py`).
+Also in since 22 Oct: Gerloff's 250 km lorry leg to assembly on the unit's mass,
+the SI's 8.9 l of water per kg (the exports' 8.99 was not the SI's), low-density
+polyethylene for the AE feed tank (the export had high-density), and ASSUMED
+La₂O₃/SrCO₃ for the SOEC's LSM layer (Gerloff name both without an amount).
+Registered in `DATA_GAPS.md`.
 
 ### PEM fuel cell — `fuel_cell.py`
 
@@ -1048,7 +1061,7 @@ Hydrogen is excluded from every coefficient — the LP supplies it explicitly.
 
 | Input | Value | Grade | Source |
 |---|---|---|---|
-| Gandiglio 28 bar vessel | 312.8 kg steel per kg H₂ → **1,595 kg CO₂e per kg** capacity | transcribed | Gandiglio et al. 2022, Table 3 — the as-built 21.6 m³ stainless vessel at Ginostra |
+| Gandiglio 28 bar vessel | 312.8 kg steel per kg H₂ → **1,595 kg CO₂e per kg** capacity (shell only; forming, frame and pad added — see `h2_tank.py`) | transcribed | Gandiglio et al. 2022, Table 5 (p. 32828) — the 21.6 m³ stainless vessel at Ginostra |
 | Type I 200 bar cylinder | 100 kg steel per kg H₂ → **250 kg CO₂e per kg** capacity | assumed | ~1 wt% gravimetric capacity, a typical industrial stationary bottle. No Brightway activity exists for it |
 | Vessel lifetime | 25 y, never replaced within it | transcribed | The paper's own plant life |
 | Standing loss | **0 /h** | **assumed** | No boil-off exists for compressed gas at ambient temperature — that is a liquid-H₂ phenomenon. Real losses are fitting leakage, a maintenance question. Thought load-bearing; **swept 14 Oct and found not to be** at 0–0.1 %/day: < 0.1 % on cost and carbon, no change in which store dominates (`DATA_GAPS.md`). **The sweep range is ASSUMED**, because no source here gives an order for fitting leakage on a welded steel vessel at 28 bar: 0.1 %/day (≈ 3.6 % a year of the stock held) is set equal to the bottom of the battery's 0.1–0.5 %/day band, so at the top of both bands the two stores leak alike per day — the most hydrogen-adverse comparison still plausible for a gas with no boil-off; 0.01 %/day, an order lower, stands for a well-maintained vessel; zero is the default. Replace it from a fugitive-emissions source (candidate: Frazer-Nash for BEIS, 2022). The leaked H₂'s own GWP (~11) is not charged by the LP |
@@ -1234,6 +1247,35 @@ Sphera) — platinum, 38.2 of the 47.6, carries ~70.6 t CO₂e/kg in apos.
 **Tank frame and foundations** (`optimiser_lca/h2_tank.py`). First
 principles on Gandiglio et al. (2022)'s 21.6 m³ vessel; every parameter ASSUMED
 and named in the module.
+
+## Changes of 22 Oct 2026 — the source re-read and the cut-off rule
+
+Every inventory was read again against its source, row by row, with the
+ledgers kept (`docs/source_ledgers/`, summarised at the top of
+`docs/SOURCE_DIFF.md`), and the cut-off rule was built and applied
+(`optimiser_lca/exclusions.py`, `optimisation/cutoff.py`, ASSUMPTIONS §8).
+What moved, London reference `Tech`, IPCC 2021 GWP100 on ecoinvent 3.9.1 apos:
+
+| Coefficient | 21 Oct | 22 Oct | Change | Why |
+|---|---|---|---|---|
+| Electrolyser capital, PEM (`gwp_ely`, per MW per year) | 10,430 | 17,670 | +69 % | Gerloff's unit carries three stacks over its 20 years (§2.1.3); the module carried one stack's materials while its stack energy was already ×3. Also the 250 km lorry leg to assembly, 8.9 l of water (not the export's 8.99) |
+| Electrolyser capital per MW, AE / PEM / SOEC | 433.7 / 260.9 / 362.8 t | 824.4 / 441.8 / 484.9 t | +90 / +69 / +34 % | as above; SOEC also carries ASSUMED La₂O₃ and SrCO₃ for its LSM layer, AE low-density polyethylene |
+| Grid connection (`gwp_grid_per_mw`) | 137.7 | 286.9 | +108 % | the switchyard's civils per MW of connection (Leng Table S3 outdoor venue, decision D2: 98.6); the switchyard's share of Leng's construction machinery, his own figure pro-rated (4.9); and the switchgear, protection, bay and factory-energy estimates carried because they fail the 1 % test (45.8) |
+| Hydrogen tank (`gwp_tank`, per kg of capacity per year) | 72.24 | 80.82 | +12 % | the shell's forming, sheet rolling of the chromium steel (ADDED, 7.9 per kg-year), and the valves-and-pipework estimate (0.64) |
+| Battery step-up (`gwp_tx_batt_per_mw`) | 1,046 | 1,148 | +10 % | container switchgear carried as an estimate (fails 1 % below a 2.0 h battery) |
+| Fuel-cell step-up (`gwp_tx_fc_per_mw`) | 784.9 | 861.1 | +10 % | container switchgear carried as an estimate (1.06 % of a calendar-life fuel cell) |
+| Battery energy (`gwp_batt_e`) | 7,489 | 7,499 | +0.1 % | Voß's natural graphite: 5.19 is the figure before transport, so the two subtracted legs come out and the China leg goes in (101.107 → 101.237 kg per kWh nameplate) |
+| Solar plant (`gwp_solar`) | 23,900 | 23,630 | −1.1 % | two of the 21 Oct Z-PV-239 rows were outside the boundary: the light-commercial leg is "100 km to construction place" and the PE/PP row is end-of-life disposal. Nineteen zero-GWP Smith rows restored |
+| Wind step-up (`gwp_tx_wind_per_mw`) | 328.6 | 329.7 | +0.3 % | Leng Table S3's electrical installation (section steel, terminal blocks, welding rod, lead seals), left behind by the 21 Oct restore |
+| Bought blue hydrogen (activity, per kg) | 5.154 | 3.711 | −28 % | captured CO₂ is the paper's 8.90 kg, not the export's 8.01; the carbon-closure gap split 90 % to capture, 10 % to air, as post-combustion capture from the flue gas does (Hermesmann §4.1.1); the 0.05 kWh electricity credit dropped |
+| Bought grey hydrogen (activity, per kg) | 11.307 | 11.463 | +1.4 % | the 1.10 kWh excess-electricity credit dropped (no credits, ASSUMPTIONS §5); the plant still sells it, so the price keeps the revenue |
+| Bought colours' outlet pressure | 20 bar ASSUMED | 30 bar TRANSCRIBED | | Hermesmann's functional unit is "1 kg H₂ at 30 bar at the production site" (§3.1); lowers trailer compression |
+| GB grid, HV delivered (`gb_grid` pin) | 141.874 | 141.880 g/kWh | | grid series re-scored on the rebuilt solar inventory |
+
+Unchanged within 0.1 %: wind, the battery power term, the fuel-cell stack and
+balance of plant, the facility. The register's still-excluded flows all pass
+rules 1 and 2 (ASSUMPTIONS §8). Activity codes `*_hermesmann_*` for Gerloff's
+electrolysers were renamed `*_gerloff_*`; the fossil routes keep theirs.
 
 ## Scope decisions
 

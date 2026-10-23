@@ -38,8 +38,16 @@ cutoff + TRACI 2.1). Electricity dominates, so the narrower boundary should
 land in the same ballpark; ``validate.data_centre_vs_paper()`` reports the
 current ratio.
 
-**Three deliberate substitutions**, because ecoinvent 3.9.1 has no exact
-equivalent of what the paper's ecoinvent 3.7 cutoff model used:
+**Four deliberate substitutions**, because ecoinvent 3.9.1 has no exact
+equivalent of what the paper's ecoinvent 3.7 cutoff model used, or because the
+study's grid replaces the paper's:
+
+- ``copper`` → the copper cathode market; Zhang's own dataset (mmc2) is
+  ``market for metal part of electronics scrap, in copper, anode``, a scrap
+  stream, which does not describe cabling. Order 1e5 kg CO2e over 25 years.
+- construction electricity → the GB medium-voltage market, where the paper's
+  operating electricity is on US-SERC; ``baseline_grid.py`` strips both out and
+  puts the facility on the study's half-hourly GB series.
 
 - ``battery`` → a specific chemistry (NMC111) standing in for the old
   undifferentiated "Li-ion, rechargeable, prismatic" market, which 3.9.1 has
@@ -67,9 +75,36 @@ from optimiser_lca import registry as R
 from optimiser_lca.common import Activity, Flow, Inventory, Process
 
 # =============================================================================
-# Parameters — all in dc_config (DC_OPERATION_YEARS, DC_REFERENCE_PUE); the
-# inventory is a straight transcription with no derived amounts.
+# Parameters — all in dc_config (DC_OPERATION_YEARS, DC_REFERENCE_PUE). The
+# inventory is Zhang's printed amounts; three energy rows are his MJ figures as
+# kWh, converted as he converts them (the notes say which).
 # =============================================================================
+DC_SCOPE = {
+    "material_production": "INCLUDED - Table S1 Material Production, the six rows at the printed amounts.",
+    "construction": "INCLUDED since 21 Oct 2026 - Table S1 Construction (diesel, electricity, water).",
+    "operation": "INCLUDED - Table S1 Operation; the electricity is stripped out by baseline_grid.py and "
+                 "put on the study's half-hourly GB series.",
+    "transport": "EXCLUDED - Table S1 Transportation, delivery of the materials to site (the site is unknown).",
+    "end_of_life": "EXCLUDED - Table S1 Disposal and Recycling, with their avoided-burden credits.",
+    "genset": "The standby generator's diesel (8.6e6 MJ) is IN this activity and scored, and left out of "
+              "every objective by the optimiser (ASSUMPTIONS §7): backup is a decision variable.",
+    "refrigerant_leak": "ADDED - the 450 kg top-up Zhang buy is emitted as HFC-134a to air.",
+}
+
+
+def check() -> str:
+    """Zhang's own arithmetic reproduces: the top-up, the MJ -> kWh conversions."""
+    top_up = 2_000.0 * 0.009 * 25.0
+    problems = []
+    if abs(top_up - 450.0) > 1e-9:
+        problems.append(f"the R134a top-up 2,000 kg x 0.9 %/yr x 25 y = {top_up}, not 450")
+    if abs(5.76e9 / 3.6 - 1.60e9) > 1e-3:
+        problems.append("5.76e9 MJ / 3.6 is not 1.60e9 kWh")
+    if abs(2.80e5 / 3.6 / 7.8e4 - 1) > 0.005:
+        problems.append("2.80e5 MJ / 3.6 is not ~7.8e4 kWh")
+    if problems:
+        raise AssertionError("data_centre: " + "; ".join(problems))
+    return "OK - data centre: Zhang's top-up and energy conversions reproduce"
 
 # =============================================================================
 # Processes
@@ -87,7 +122,9 @@ processes = {
         identity=("market for steel, low-alloyed, hot rolled", "GLO", "steel, low-alloyed, hot rolled")),
     "copper": Process(
         query="market for copper cathode GLO", pick=0,
-        identity=("market for copper, cathode", "GLO", "copper, cathode")),
+        identity=("market for copper, cathode", "GLO", "copper, cathode"),
+        why="SUBSTITUTED - Zhang's own dataset (mmc2) is a copper scrap stream, 'metal part of "
+            "electronics scrap, in copper, anode'; the cathode market is the material for cabling"),
     "aluminium_alloy": Process(
         query="market for aluminium alloy metal matrix composite GLO", pick=0,
         identity=("market for aluminium alloy, metal matrix composite", "GLO",
@@ -102,7 +139,8 @@ processes = {
             "facility on the half-hourly GB series instead"),
     "tap_water": Process(
         query="market group for tap water GLO", pick=0,
-        identity=("market group for tap water", "GLO", "tap water")),
+        identity=("market group for tap water", "GLO", "tap water"),
+        why="the GLO market group; Zhang's is 'market for tap water' RoW. Immaterial (~1 t over 25 y)"),
     # Zhang's construction phase, in since 21 Oct 2026 (it is in the source and
     # inside the boundary; only transport to site and end-of-life are out).
     "diesel_construction": Process(
@@ -159,10 +197,11 @@ activities = [
         unit="unit", location="US-SERC",
         comment="25-year hyperscale data centre (10,000 m^2 white space), Virginia US, SERC "
                 "grid, PUE 1.4 baseline. Zhang et al. 2025, Cleaner Energy Systems 12, 100223, "
-                "Table 1 / supplementary Table S1. Boundary narrowed to Material Production + "
-                "Operation only (Transportation, Construction energy/water, Disposal and "
-                "Recycling excluded by scope choice). Functional unit is the whole facility "
-                "over its 25-year operating life, not a per-kWh or per-m^2 unit.",
+                "Table 1 / supplementary Table S1: Material Production, Construction and Operation "
+                "at the printed amounts, plus the refrigerant top-up emitted as a leak (ADDED). "
+                "Transportation (delivery to site), Disposal and Recycling (end-of-life, with their "
+                "credits) are outside the boundary. Functional unit is the whole facility over its "
+                "25-year operating life, not a per-kWh or per-m^2 unit.",
         technosphere=[
             # --- Material production ---
             ("concrete",          4000,   "cubic meter",   "Concrete, 30-32MPa, building shell and foundation"),
@@ -173,11 +212,11 @@ activities = [
             ("insulation_pur",     2.50e4, "kilogram",      "Insulation, rigid PUR foam"),
             # --- Construction (Zhang S1; in since 21 Oct 2026) ---
             ("diesel_construction", 2.10e6, "megajoule",     "Diesel, burned in building machine — construction"),
-            ("electricity_mv_gb",   7.8e4,  "kilowatt hour", "Electricity MV — construction (2.80e5 MJ / 3.6)"),
+            ("electricity_mv_gb",   7.8e4,  "kilowatt hour", "Electricity MV — construction (Zhang's 78,000 kWh, 2.80e5 MJ)"),
             ("tap_water",           1.20e6, "kilogram",      "Tap water — construction"),
             # --- Operation (25 years, PUE 1.4 baseline) ---
-            ("electricity_mv_serc", 1.60e9, "kilowatt hour", "Electricity MV, US-SERC — IT + cooling/aux over 25y (5.76e9 MJ / 3.6)"),
-            ("tap_water",            2.9e9, "kilogram",      "Tap water — cooling, WUE 1.8 L/kWh over 25y"),
+            ("electricity_mv_serc", 5.76e9 / 3.6, "kilowatt hour", "Electricity MV, US-SERC — IT + cooling over 25y (5.76e9 MJ as kWh)"),
+            ("tap_water",            2.9e9, "kilogram",      "Tap water — cooling, WUE 1.8 L/kWh over 25y (Zhang's rounded 2.9e9)"),
             ("diesel_generator",    8.60e6, "megajoule",     "Diesel, burned in diesel-electric generating set 10MW — backup gen"),
             ("servers",              1.0e5, "unit",          "Computer/laptop (ecoinvent proxy for IT servers, incl. refresh cycles)"),
             ("battery",              2.0e4, "kilogram",      "Battery, Li-ion, rechargeable, prismatic — UPS"),
@@ -186,7 +225,8 @@ activities = [
         ],
         biosphere=[
             ("hfc134a_air", 450, "kilogram",
-             "R134a leaked: the 450 kg top-up replaces leakage at 0.9 %/yr (Zhang Table S1)"),
+             "ADDED — R134a leaked: the 450 kg top-up replaces leakage at 0.9 %/yr (Zhang Table S1: "
+             "2,000 kg x 0.009 x 25 y)"),
         ],
     ),
 ]

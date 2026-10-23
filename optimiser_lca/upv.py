@@ -24,6 +24,11 @@ never transcribed; that makes the answer 3.9.1 apos by construction, the way
 every other foreground here is. His process names are ecoinvent-native and
 resolve directly, 93 % with no decision at all.
 
+**Functional unit: 1 MWp DC of fixed-tilt plant** (``upv_fixed_tilt_plant_per_mwp``,
+capital only), with 30 years of O&M as its own activity and the GB fleet's kWh
+as a third; Smith's tables are activities per m² of module or per unit, as
+printed, and the plant draws on them.
+
 **The chain** — eleven nested unit processes, each consuming the one above:
 A1 silica sand (per 9.25e4 t) → A2 metallurgical silicon (+3.58 kg direct
 fossil CO₂) → A3 polysilicon (72 kWh HV, China grid) → A4 Czochralski ingot →
@@ -36,10 +41,10 @@ below as one ``Activity``, row for row, with the amount as printed and the
 flow named as Smith names it — so the inventory reads here, not in a PDF or a
 data file. The transcription it was checked against is
 ``optimisation/data/smith-nrel-2024-life-cycle-inventory.md`` (all 23 tables,
-including the end-of-life ones this study excludes). Rows knowingly dropped —
-cells the PDF mangled, and ecoinvent v2 flow names with no 3.9.1 match — are
-commented at the foot of the activity they belong to and listed with their
-amounts in ``optimisation/data/UPV-DEFERRED-ISSUES.md``. Tables A14
+including the end-of-life ones this study excludes). Nineteen zero-GWP
+biosphere rows whose ecoinvent v2 names differ from 3.9.1's were left out
+until 22 Oct 2026 and are now in under their 3.9.1 names (the flows table says
+which; a sourced in-boundary row is in whatever its size). Tables A14
 (installation) and A15 (O&M) are not activities of their own: the parts kept
 enter the plant and O&M activities as the parameters below.
 
@@ -111,14 +116,15 @@ UPV_PV_M2_PER_MWP = 1e6 / UPV_PV_W_PER_M2                   # 4,914
 # Inverter loading ratio: Smith STATES 1.34 (Table 3); his A14 implies 1.75.
 # The stated design value is taken. ASSUMED where they disagree.
 UPV_PV_ILR = 1.34
-UPV_PV_INVERTER_MVA = 2.7
+UPV_PV_INVERTER_MVA = 2.7           # TRANSCRIBED - A10's reference flow and §3.2 (Table 3 gives the ILR)
 UPV_PV_INVERTERS_PER_MWP = 1.0 / (UPV_PV_INVERTER_MVA * UPV_PV_ILR)
 
 UPV_PV_SCOPE = {
-    "mounting": "fixed tilt (IEA PVPS T12-33:2026 Z-PV-239, 20 deg pile-driven steel table) "
-                "SUBSTITUTED for Smith's single-axis tracker (A9). Near mass-neutral: 9.730 vs "
-                "9.764 kg/m2, so the swap removes the motor, Li-ion cell and control "
-                "electronics rather than buying a lighter structure.",
+    "mounting": "SUBSTITUTED - fixed tilt (IEA PVPS T12-33:2026 Z-PV-239, 20 deg pile-driven steel "
+                "table) for Smith's single-axis tracker (A9). The table is HEAVIER: 9.730 vs 9.618 kg/m2 "
+                "of structure (A9's steel, aluminium and chromium steel; 9.764 with its motor, Li-ion "
+                "cell and packaging), so the swap removes the tracker's motor, cell and electronics "
+                "rather than buying a lighter structure.",
     "end_of_life": "EXCLUDED (Smith A16-A23), as everywhere else in this study.",
     "construction_transport": "EXCLUDED (Smith A14 rail/lorry/sea rows). The sea leg alone is "
                               "201 t*km/m2 for the import chain, so this UNDERSTATES by ~1.5 %.",
@@ -164,21 +170,24 @@ UPV_GRID_FLEET_YEARS = 30.0
 # Keys are process keys in the table below.
 UPV_MOUNT_SOURCE = ("IEA PVPS Task 12, Report T12-33:2026, Table 44 / workbook "
                     "sheet X-Montage-utility, dataset Z-PV-239")
+# TRANSCRIBED - workbook X-Montage-utility column L, per m2 of module.
 UPV_MOUNT_KG_PER_M2 = {
     "steel_low_alloyed":  9.23544043035082,
     "aluminium_wrought":  0.284936216327312,
     "chromium_steel":     0.204341455164734,
     "polypropylene":      0.00533838344407142,
 }
+# TRANSCRIBED - the same column: forming of the masses above (the three steel and
+# aluminium figures equal UPV_MOUNT_KG_PER_M2's; check() holds them equal).
 UPV_MOUNT_FORMING_PER_M2 = {
     "section_bar_rolling_steel": 9.23544043035082,   # kg
     "sheet_rolling_aluminium":   0.284936216327312,  # kg
     "wire_drawing_steel":        0.204341455164734,  # kg
     "zinc_coat_pieces":          0.514041839135378,  # m2
 }
-UPV_MOUNT_PACKAGING_KG_PER_M2 = {"corrugated_board_box_rer": 0.09259259259259259}
+UPV_MOUNT_PACKAGING_KG_PER_M2 = {"corrugated_board_box_rer": 0.09259259259259259}   # TRANSCRIBED
 # The workbook's own "total weight, structure" cell, which the four material
-# rows must reproduce. Packaging is NOT in that total.
+# rows must reproduce. Packaging is NOT in that total. TRANSCRIBED.
 UPV_MOUNT_STATED_TOTAL_KG_PER_M2 = 9.730056485286937
 
 
@@ -348,8 +357,6 @@ processes = {
                             "transport, freight train"),
     "waste_paperboard_incineration_row": _p("treatment of waste paperboard, municipal incineration", "RoW",
                                             "waste paperboard"),
-    "waste_pe_pp_row": _p("market for waste polyethylene/polypropylene product", "RoW",
-                          "waste polyethylene/polypropylene product"),
     "water_softened_row": _p("market for water, completely softened", "RoW",
                              "water, completely softened"),
     "water_deionised": _p("water production, deionised", "RoW", "water, deionised"),
@@ -400,7 +407,8 @@ processes = {
     "capacitor_film": _p("market for capacitor, film type, for through-hole mounting", "GLO",
                          "capacitor, film type, for through-hole mounting"),
     "concrete_slab": _p("market for concrete slab", "RoW", "concrete slab",
-                        why="Smith prints 'concrete slab - RoW'. Scores ~1,025 kg CO2e/m3, which looks high - 2.7 % of the inverter (UPV-DEFERRED-ISSUES.md)"),
+                        why="Smith prints 'concrete slab - RoW'. Scores ~1,025 kg CO2e/m3, which looks "
+                            "high - 2.7 % of the inverter (UPV-DEFERRED-ISSUES.md)"),
     "inductor": _p("market for inductor, ring core choke type", "GLO",
                    "inductor, ring core choke type"),
     "integrated_circuit": _p("market for integrated circuit, logic type", "GLO",
@@ -490,6 +498,28 @@ flows = {
     "cf4": _f("Methane, tetrafluoro-, R-14", ("air", "non-urban air or from high stacks"),
                why="GWP100 7,380; cell etch gas"),
     "silver": _f("Silver", ("natural resource", "in ground")),
+    # Smith's rows under ecoinvent v2 names, in since 22 Oct 2026 under their 3.9.1
+    # names (all zero GWP100). Compartments are 3.9.1's unspecified sub-compartment.
+    "sand_quartz_resource": _f("Sand, unspecified", ("natural resource", "in ground"),
+                               why="Smith A1 'sand, quartz' (natural resource); 3.9.1 has no quartz sand "
+                                   "resource flow, the unspecified sand stands in. Zero GWP"),
+    "water_natural": _f("Water, unspecified natural origin", ("natural resource", "in water"),
+                        why="Smith A1 'Water, process (and cooling), unspecified natural origin'; one 3.9.1 "
+                            "flow for both. Zero GWP"),
+    "water_cooling_natural": _f("Water, cooling, unspecified natural origin", ("natural resource", "in water"),
+                                why="Smith A4, A7, A8; the 3.9.1 flow of the same name"),
+    "co_soil_biomass": _f("Carbon monoxide, from soil or biomass stock", ("air",),
+                          why="Smith A2 'carbon monoxide, land transformation'. Zero GWP"),
+    "nmvoc": _f("NMVOC, non-methane volatile organic compounds", ("air",),
+                why="Smith A2, A7, A8 'NMVOC, ..., unspecified origin'. Zero GWP"),
+    "aox_water": _f("AOX, Adsorbable Organic Halogen", ("water",),
+                    why="Smith A3, A5 'AOX, adsorbable organic halogen as Cl'. Zero GWP"),
+    "copper_ion_water": _f("Copper ion", ("water",), why="Smith A3, A5 'copper, ion'. Zero GWP"),
+    "iron_ion_water": _f("Iron ion", ("water",), why="Smith A3 'iron, ion'. Zero GWP"),
+    "sodium_ion_water": _f("Sodium I", ("water",), why="Smith A3 'sodium, ion'. Zero GWP"),
+    "zinc_ion_water": _f("Zinc II", ("water",), why="Smith A3 'zinc, ion'. Zero GWP"),
+    "hcl_air": _f("Hydrochloric acid", ("air",), why="Smith A7 'hydrogen chloride'. Zero GWP"),
+    "pm25_air": _f("Particulate Matter, < 2.5 um", ("air",), why="Smith A7 'particulates, <2.5 um'. Zero GWP"),
 }
 
 check()
@@ -499,28 +529,15 @@ check()
 # =============================================================================
 _T = R.UPV_TABLES
 _COMMENT = (
-    f"{UPV_PV_SOURCE}. Smith publishes on ecoinvent CUT-OFF; his "
-    "inventory is rescored here on ecoinvent 3.9.1 apos, and his "
-    "results are never transcribed - a cut-off figure cannot be "
-    "relabelled as APOS because the two differ exactly where recycled "
-    "content matters. Fixed tilt: Smith's single-axis tracker (A9) is "
-    "replaced by IEA PVPS T12-33:2026 Z-PV-239, a 20 deg pile-driven "
-    "steel table, which is HEAVIER (9.730 vs 9.618 kg/m2 of structure) "
-    "- the module frame is unaffected, being 1.51 kg/m2 of AlMg3 in the "
-    "module itself. EXCLUDES end-of-life; construction transport (the "
-    "sea leg alone is 201 t*km/m2 for this import chain, so this "
-    "understates by ~1.5 %); and the step-up transformer, which "
-    "stepup_transformers charges from IEA PVPS at 20/0.4 kV. Supply chain "
-    "is the SE Asia import case - China national grid for the silicon "
-    "chain, Thailand for cell and module. Verified: 290/290 "
-    "scientific-notation values transcribed, 251 rows association-"
-    "checked (249 clean), and the module reproduces Smith's own stated "
-    "EPEAT result of >630 kg CO2e/kWdc."
+    f"{UPV_PV_SOURCE}. Smith publishes on ecoinvent cut-off; his inventory is "
+    "rescored here on 3.9.1 apos and his results are never transcribed. Boundary "
+    "and substitutions: UPV_PV_SCOPE (end-of-life and delivery to site out; the "
+    "tracker and the transformer substituted). SE Asia import supply chain."
 )
 
 
 def _smith(tab: str) -> str:
-    return f"Smith Table {tab}, rows as printed. " + _COMMENT
+    return f"Smith 2024 Table {tab}, every row at the printed amount. " + _COMMENT
 
 
 # A unit process is written per ONE of its reference product, so Smith's batch
@@ -546,10 +563,11 @@ smith_activities = [
             ("light_commercial_vehicle",         1490, _tkm,     "transport, freight, light commercial vehicle"),
             ("lorry",                          10_100, _tkm,     "transport, freight, lorry, unspecified"),
         ],
-        # not carried - mangled rows in the source PDF (UPV-DEFERRED-ISSUES.md):
-        #   sand, quartz 100_000 t
-        #   Water, process and cooling, unspecified natural origin 133_000 m3
-        #   Water, process, unspecified natural origin 971_000 m3
+        biosphere=[
+            ("sand_quartz_resource", 100_000 * 1000, _kg, "sand, quartz (printed 1.00E+05 t) - in since 22 Oct 2026"),
+            ("water_natural",        133_000, _m3, "Water, process and cooling, unspecified natural origin - in since 22 Oct"),
+            ("water_natural",        971_000, _m3, "Water, process, unspecified natural origin - in since 22 Oct 2026"),
+        ],
     ),
     Activity(
         code=_T["A2"], name="UPV, silicon, metallurgical grade", reference_product="silicon, metallurgical grade",
@@ -595,10 +613,9 @@ smith_activities = [
             ("sodium_soil",    7.75e-7, _kg,      "sodium"),
             ("so2",             0.0122, _kg,      "sulfur dioxide"),
             ("tin_resource",   7.85e-9, _kg,      "tin"),
+            ("co_soil_biomass",  0.00062, _kg,      "carbon monoxide, land transformation - v2 name; in since 22 Oct 2026"),
+            ("nmvoc",            9.6e-5,  _kg,      "NMVOC, unspecified origin - v2 name; in since 22 Oct 2026"),
         ],
-        # not carried - ecoinvent v2 flow names with no 3.9.1 match, believed zero GWP:
-        #   carbon monoxide, land transformation 0.00062 kg
-        #   NMVOC, non-methane volatile organic compounds, unspecified origin 9.6e-5 kg
     ),
     Activity(
         code=_T["A3"], name="UPV, silicon, solar grade", reference_product="silicon, solar grade",
@@ -626,13 +643,12 @@ smith_activities = [
             ("nitrogen",   0.000208, _kg,      "nitrogen"),
             ("phosphate",    2.8e-6, _kg,      "phosphate"),
             ("toc",         0.00091, _kg,      "TOC, total organic carbon"),
+            ("aox_water",        1.26e-5, _kg,      "AOX, adsorbable organic halogen as Cl - v2 name; in since 22 Oct 2026"),
+            ("copper_ion_water", 1.02e-7, _kg,      "copper, ion - v2 name; in since 22 Oct 2026"),
+            ("iron_ion_water",   5.61e-6, _kg,      "iron, ion - v2 name; in since 22 Oct 2026"),
+            ("sodium_ion_water", 0.0338,  _kg,      "sodium, ion - v2 name; in since 22 Oct 2026"),
+            ("zinc_ion_water",   1.96e-6, _kg,      "zinc, ion - v2 name; in since 22 Oct 2026"),
         ],
-        # not carried - ecoinvent v2 flow names with no 3.9.1 match, believed zero GWP:
-        #   AOX, adsorbable organic halogen as Cl 1.26e-5 kg
-        #   copper, ion 1.02e-7 kg
-        #   iron, ion 5.61e-6 kg
-        #   sodium, ion 0.0338 kg
-        #   zinc, ion 1.96e-6 kg
     ),
     Activity(
         code=_T["A4"], name="UPV, silicon, single crystal, Czochralski", reference_product="silicon, single crystal, Czochralski",
@@ -667,9 +683,8 @@ smith_activities = [
             ("toc",           0.0405, _kg,      "TOC, total organic carbon"),
             ("water",            0.3, _m3,      "water"),
             ("water",            2.2, _m3,      "water"),
+            ("water_cooling_natural", 2.33, _m3,    "Water, cooling, unspecified natural origin - v2 name; in since 22 Oct 2026"),
         ],
-        # not carried - mangled rows in the source PDF (UPV-DEFERRED-ISSUES.md):
-        #   Water, cooling, unspecified natural origin 2.33 m3
     ),
     Activity(
         code=_T["A5"], name="UPV, single-Si wafer, photovoltaic", reference_product="single-Si wafer, photovoltaic",
@@ -702,10 +717,9 @@ smith_activities = [
             ("toc",         0.0111, _kg,      "TOC, total organic carbon"),
             ("water",      0.00975, _m3,      "water"),
             ("water",       0.0553, _m3,      "water"),
+            ("aox_water",        0.000501, _kg,     "AOX, adsorbable organic halogen as Cl - v2 name; in since 22 Oct 2026"),
+            ("copper_ion_water", 6.05e-5,  _kg,     "copper, ion - v2 name; in since 22 Oct 2026"),
         ],
-        # not carried - ecoinvent v2 flow names with no 3.9.1 match, believed zero GWP:
-        #   AOX, adsorbable organic halogen as Cl 0.000501 kg
-        #   copper, ion 6.05e-5 kg
     ),
     Activity(
         code=_T["A6"], name="UPV, trimethylaluminum, purified", reference_product="trimethylaluminum, purified",
@@ -771,13 +785,11 @@ smith_activities = [
             ("silver",          6.6e-6, _kg,      "silver"),
             ("water",           0.0168, _m3,      "water"),
             ("water",            0.277, _m3,      "water"),
+            ("water_cooling_natural", 0.231, _m3,   "Water, cooling, unspecified natural origin - v2 name; in since 22 Oct 2026"),
+            ("hcl_air",          0.000266, _kg,     "hydrogen chloride - v2 name; in since 22 Oct 2026"),
+            ("nmvoc",            0.194,    _kg,     "NMVOC, unspecified origin - v2 name; in since 22 Oct 2026"),
+            ("pm25_air",         0.00266,  _kg,     "particulates, <2.5 um - v2 name; in since 22 Oct 2026"),
         ],
-        # not carried - mangled rows in the source PDF (UPV-DEFERRED-ISSUES.md):
-        #   Water, cooling, unspecified natural origin 0.231 m3
-        # not carried - ecoinvent v2 flow names with no 3.9.1 match, believed zero GWP:
-        #   hydrogen chloride 0.000266 kg
-        #   NMVOC, non-methane volatile organic compounds, unspecified origin 0.194 kg
-        #   particulates, <2.5 μm 0.00266 kg
     ),
     Activity(
         code=_T["A8"], name="UPV, photovoltaic panel, PERC", reference_product="photovoltaic panel, PERC",
@@ -820,11 +832,9 @@ smith_activities = [
             ("co2_fossil", 0.0218, _kg,      "carbon dioxide, fossil"),
             ("heat_waste",   13.4, _MJ,      "heat, waste"),
             ("water",      0.0279, _kg,      "water"),
+            ("water_cooling_natural", 0.0716, _m3,  "Water, cooling, unspecified natural origin - v2 name; in since 22 Oct 2026"),
+            ("nmvoc",            0.00806,  _kg,     "NMVOC, unspecified origin - v2 name; in since 22 Oct 2026"),
         ],
-        # not carried - mangled rows in the source PDF (UPV-DEFERRED-ISSUES.md):
-        #   Water, cooling, unspecified natural origin 0.0716 m3
-        # not carried - ecoinvent v2 flow names with no 3.9.1 match, believed zero GWP:
-        #   NMVOC, non-methane volatile organic compounds, unspecified origin 0.00806 kg
     ),
     Activity(
         code=_T["A10"], name="UPV, inverter, 2.7 MWac", reference_product="inverter, 2.7 MWac",
@@ -884,7 +894,12 @@ plant_activities = [
     Activity(
         code=R.UPV_MOUNT, name="UPV, fixed-tilt mounting structure, 20 deg",
         reference_product="fixed-tilt mounting structure, 20 deg",
-        unit=_m2, location="GB", comment=_COMMENT,
+        unit=_m2, location="GB",
+        comment=f"{UPV_MOUNT_SOURCE}: the pile-driven 20 deg steel table, per m2 of module - materials, "
+                "their forming and galvanising, packaging and its disposal, the upstream lorry and rail "
+                "legs, and the land the table occupies, every row at the workbook's amount. SUBSTITUTED "
+                "for Smith's A9 tracker (UPV_PV_SCOPE). Not carried: the 100 km light-commercial leg 'to "
+                "construction place' (delivery to site) and the spacers' end-of-life disposal.",
         technosphere=[
             ("steel_low_alloyed",          UPV_MOUNT_KG_PER_M2["steel_low_alloyed"],      _kg, f"table and piles {_IEA}"),
             ("aluminium_wrought",          UPV_MOUNT_KG_PER_M2["aluminium_wrought"],      _kg, f"clamps {_IEA}"),
@@ -900,15 +915,17 @@ plant_activities = [
              f"forming of the chromium steel already counted {_IEA}"),
             ("zinc_coat_pieces",           UPV_MOUNT_FORMING_PER_M2["zinc_coat_pieces"],          _m2,
              f"galvanising of the steel already counted {_IEA}"),
-            # The rest of Z-PV-239, carried since 21 Oct 2026: ecoinvent's standard
-            # material-to-factory legs (200 / 600 / 100 km on the 9.73 kg), the
-            # packaging that leaves as waste, and the land the table occupies. The
-            # dataset is cradle-to-gate, so none of this is delivery to site.
-            ("lorry",                      1.946,  _tkm, f"materials to the factory, lorry {_IEA}"),
-            ("freight_train_rer",          5.838,  _tkm, f"materials to the factory, rail {_IEA}"),
-            ("light_commercial_vehicle",   0.973,  _tkm, f"materials to the factory, light commercial vehicle {_IEA}"),
+            # The rest of Z-PV-239, in since 21 Oct 2026: the workbook's material-to-
+            # factory legs (200 km lorry, 600 km rail on the 9.73 kg), the packaging
+            # that leaves as waste, and the land the table occupies.
+            ("lorry",                      1.946,  _tkm, f"materials to the factory, lorry, 200 km {_IEA}"),
+            ("freight_train_rer",          5.838,  _tkm, f"materials to the factory, rail, 600 km {_IEA}"),
             ("waste_paperboard_incineration_row", -0.0926, _kg, f"packaging cardboard to incineration {_IEA}"),
-            ("waste_pe_pp_row",                   -0.00534, _kg, f"PE/PP spacer waste {_IEA}"),
+            # Not carried (22 Oct 2026), both outside the boundary - Z-PV-239 rows:
+            #   transport, freight, light commercial vehicle 0.973 t·km/m2 - the workbook's own
+            #     remark is "100 km to construction place": delivery to site (was in from 21 Oct)
+            #   disposal, PE/PP products 0.00534 kg/m2 - "disposal of plastic parts at end of
+            #     life", not packaging: end-of-life (was in from 21 Oct)
         ],
         biosphere=[
             ("transformation_from_pasture", 2.25, _m2, f"land transformation from pasture {_IEA}"),
@@ -922,7 +939,13 @@ plant_activities = [
     Activity(
         code=R.UPV_CAPITAL, name="UPV, utility-scale PV plant, fixed tilt, per MWp",
         reference_product="utility-scale PV plant, fixed tilt, per MWp",
-        unit="megawatt", location="GB", comment=_COMMENT,
+        unit="megawatt", location="GB",
+        comment="Smith 2024 Table A14 (installation), one MWp DC of the plant: the module chain (A8), "
+                "the IEA mounting in place of A9, electrical BoS (A12), fence (A13), inverters at the "
+                "stated ILR, installation diesel and land occupation. Not carried from A14: the delivery "
+                "legs (rail 2.2 + 2.0, lorry 3.3e-3 + 0.51 + 0.55, sea 201 t*km per m2 - delivery to site, "
+                "outside the boundary); the tracker and the transformer counts (substituted: the IEA "
+                "mounting; stepup_transformers). " + _COMMENT,
         technosphere=[
             (FG(R.UPV_MODULE),     _M2, _m2, f"PV modules, {_M2:,.0f} m2 at {UPV_PV_W_PER_M2:.1f} W/m2"),
             (FG(R.UPV_MOUNT),      _M2, _m2, "fixed-tilt mounting, 20 deg (IEA PVPS T12-33:2026)"),
@@ -945,7 +968,12 @@ plant_activities = [
     Activity(
         code=R.UPV_OM30, name="UPV, 30 years of operation and maintenance, per MWp",
         reference_product="30 years of operation and maintenance, per MWp",
-        unit="megawatt", location="GB", comment=_COMMENT,
+        unit="megawatt", location="GB",
+        comment="Smith 2024 Table A15, thirty years of O&M per MWp: vegetation-management petrol, panel "
+                "replacement at 0.05 %/yr, inverter replacement at 30.2 % of the installed count. Not "
+                "carried from A15: the tracker motor (0.017 kg electric motor per m2; the tracker is "
+                "substituted) and the transformer replacements, which stepup_transformers carries as "
+                "its own 30-year activity. " + _COMMENT,
         technosphere=[
             ("petrol_low_sulfur",  _M2 * UPV_PV_OM_PETROL_KG_PER_M2, _kg, "vegetation management - Smith A15"),
             (FG(R.UPV_MODULE),     _M2 * UPV_PV_OM_PANEL_M2_PER_M2, _m2,

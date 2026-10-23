@@ -8,45 +8,45 @@
   "bop_duty_lifetime_hours": 80000.0,
   "bop_calendar_lifetime_years": 20.0,
   "bop_lifetime_is_assumed": true,
-  "stack_kgco2e_per_MW": 97431.28734467817,
-  "stack_kgco2e_per_MWh": 3.247709578155939,
-  "bop_kgco2e_per_MW": 50807.31422013757,
-  "bop_kgco2e_per_MW_year": 2540.3657110068784,
+  "stack_kgco2e_per_MW": 97431.28734467816,
+  "stack_kgco2e_per_MWh": 3.2477095781559386,
+  "bop_kgco2e_per_MW": 50807.314220137574,
+  "bop_kgco2e_per_MW_year": 2540.365711006879,
   "stack_kgco2e_per_MW_gramc_2025": 47597.40974153044,
   "bop_container_kgco2e_per_MW": 10140.455749895193,
   "bop_kw_per_container": 1000.0,
-  "maintenance_kgco2e_per_MWh": 0.003203775652244899,
+  "maintenance_kgco2e_per_MWh": 0.0032037756522448986,
   "_per_kwh": {
-    "fuel": 1.0738510144402174,
-    "stack": 0.003247709578155939,
-    "bop": 0.0006350914277517196,
-    "maint": 3.203775652244899e-06
+    "fuel": 1.0777003035954038,
+    "stack": 0.0032477095781559386,
+    "bop": 0.0006350914277517197,
+    "maint": 3.2037756522448987e-06
   },
-  "_foreground_total_per_kWh": 1.0777370192217772,
+  "_foreground_total_per_kWh": 1.0815863083769637,
   "_parts": [
     {
       "name": "Hydrogen production, PEM electrolysis (Gerloff 2021)",
       "amount": 0.06316421115795791,
       "kind": "fuel",
-      "kgco2e_per_kwh": 1.0738510144402174
+      "kgco2e_per_kwh": 1.0777003035954038
     },
     {
       "name": "Fuel cell stack production, PEM, 1 kW (Babatunde et al. 2024)",
       "amount": 3.3333333333333335e-05,
       "kind": "stack",
-      "kgco2e_per_kwh": 0.003247709578155939
+      "kgco2e_per_kwh": 0.0032477095781559386
     },
     {
       "name": "Fuel cell balance of plant, stationary, hydrogen-fed, per kW",
       "amount": 1.25e-05,
       "kind": "bop",
-      "kgco2e_per_kwh": 0.0006350914277517196
+      "kgco2e_per_kwh": 0.0006350914277517197
     },
     {
       "name": "Fuel cell service, stationary, hydrogen-fed, per kW",
       "amount": 0.000125,
       "kind": "maint",
-      "kgco2e_per_kwh": 3.203775652244899e-06
+      "kgco2e_per_kwh": 3.2037756522448987e-06
     }
   ],
   "stack_calendar_lifetime_years": 10.0,

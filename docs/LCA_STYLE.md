@@ -24,12 +24,12 @@ The rules in **bold** are the ones a test can hold (`tests/test_lca_style.py`,
 | The notebook `2.tech_lca_foreground.ipynb` | reads and shows; builds nothing | `Activity(`, `Database(`, `.write(` |
 
 **A module in `optimiser_lca/` constructs its inventory from Python literals
-and arithmetic on them. It does not open a file to get an amount.** The two
-file reads that exist are checks, not inputs: `gb_grid.check_against_series()`
-re-derives `MIX_2025` from the series CSV it was transcribed from, and
-`grid.py` writes the basis record (`.sources.json`) beside a series it builds.
-Any new file read in the package needs a line in the allowlist in
-`tests/test_lca_style.py` and a reason.
+and arithmetic on them. It does not open a file to get an amount.** The one
+file read that exists is a check, not an input: `gb_grid.check_against_series()`
+re-derives `MIX_2025` from the series CSV it was transcribed from (`grid.py`
+uses `json` only to canonicalise the basis it hashes into `sources_id()`).
+Any new file read or data-module import in the package needs a line in
+`ALLOWED_IO` in `tests/test_lca_style.py` and a reason.
 
 ## 2. The module, top to bottom
 
@@ -81,8 +81,11 @@ configuration constant is valid (`h2_tank.TANK_DESIGN in TANK_DESIGNS`).
 ```
 
 - **Keys are `snake_case` and mean something** (`steel_chromium_188`, not
-  `p7`). **No key appears in both `processes` and `flows`** (`common.check()`
-  refuses it; `resolve()` merges the tables).
+  `p7`). A key that mirrors an external identifier keeps that identifier's
+  case: the grid fuels are the Carbon Intensity API's own names (`GAS`,
+  `IMPORTS_FR`), which the series id hashes. **No key appears in both
+  `processes` and `flows`** (`common.check()` refuses it; `resolve()` merges
+  the tables).
 - **Every `Process` carries `identity` and `query`.** The identity is
   `(name, location)` or `(name, location, reference product)`, the exact
   ecoinvent strings; the query is the search that found it and `pick` its
@@ -125,12 +128,17 @@ Activity(
   `(key, amount, unit, note)` — four fields, always. The amount is the
   printed figure or a named constant; a conversion the source did not print
   is written as arithmetic in the row (`2.80e5 / 3.6`) or as a parameter.
-- **The `note` starts with where the row is in the source** — `"Jasper SI
-  liquid r17"`, `"Smith A12"`, `"Z-PV-276 Table 49"`, `"Usai Table 1"`,
-  `"Zhang S1 construction"`, `"Leng S1"`, `"Gerloff SI Fig. 1"` — **or with
-  `ADDED`, `ASSUMED` or `DERIVED`** for a row that is not a source row, then
-  says what the row is. The note is what the LCA map shows beside the number
-  and what the source ledger (`LCA_ASSURANCE_PLAN.md` Part 2) parses.
+- **The activity's `comment` names its source table** (`"Zhang et al. 2025
+  … Table 1 / supplementary Table S1"`, `"Usai et al. 2021 SI Table 1"`), so
+  every row of it is located by its activity. **Every row carries a non-empty
+  `note`** saying what the row is, as the source prints it. A row that is
+  *not* from the activity's table says so at the start of its note: another
+  locator (`"Z-PV-238 Table 50 — station building"` on the solar step-ups,
+  `"Jasper SI liquid r17"` on the shared container) or `ADDED`, `ASSUMED`,
+  `DERIVED`. The note is what the LCA map shows beside the number and what
+  the source ledger (`LCA_ASSURANCE_PLAN.md` Part 2) parses; a row with no
+  locator of its own belongs to its activity's table, and the ledger holds
+  the module to that.
 - **`scale` only with `scale_note`**, and the rows stay as printed; the
   correction is applied once at write time and `to_bw_dict` records "as
   printed" on every exchange. `production_amount` for a table published per
@@ -160,8 +168,9 @@ Activity(
 - No commented-out code, no `TODO` in a module (TODO.md is the worklist), no
   duplicated constant (`CSS_TX_KG` is read from one place and *held* equal to
   another by `check()`, not written twice).
-- Prose lines wrap at ~100 characters. Aligned row tables may run longer; a
-  row that needs more than ~140 characters has too much in its note.
+- Prose lines wrap at ~100 characters. Aligned row tables may run longer;
+  **no line passes 140 characters** — a row that needs more has too much in
+  its note.
 - Names say what the thing is. A code that names the wrong author
   (`ae_hermesmann_1unit` is Gerloff's bill) is a defect to list, even if
   renaming it waits for a rebuild.

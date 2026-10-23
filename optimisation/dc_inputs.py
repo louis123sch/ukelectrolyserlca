@@ -266,8 +266,18 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
                batt_cell_basis: str | None = None,
                batt_tx_x_eff: float | None = None,
                fc_tx_x_eff: float | None = None,
-               fc_tx_energised: bool | None = None) -> dc_model.Tech:
+               fc_tx_energised: bool | None = None,
+               cutoff: str | None = None) -> dc_model.Tech:
     """Resolve every coefficient the LP needs. Touches Brightway only via caches.
+
+    ``cutoff`` is the cut-off register's seam (``optimiser_lca/exclusions.py``,
+    CUTOFF_RULE_PLAN.md). ``None`` (the default model) adds each
+    ``included_estimate`` entry's central estimate onto its technology's
+    coefficient — the unsourced flows that failed the 1 % test and are carried
+    as estimates until a source replaces them. ``"upper"`` also adds every
+    still-excluded entry at its upper estimate (rule 3's design-change run);
+    ``"none"`` adds nothing, reproducing the model as it stood before 22 Oct
+    2026. What was added, per coefficient, is written into ``labels``.
 
     ``batt_tx_x_eff`` and ``fc_tx_x_eff`` are the ASSUMED energy-weighted
     loadings of the battery's and fuel cell's container step-ups, and
@@ -588,9 +598,56 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
                     loss_fc_load=lfc["load_loss_fraction"],
                     labels={**tech.labels, "batt_tx_x_eff": lb["x_eff"],
                             "fc_tx_x_eff": lfc["x_eff"], "fc_tx_energised": lfc["energised"]})
-    return with_storage_losses(
+    tech = with_storage_losses(
         tech, batt_standing_loss_per_hour=batt_standing_loss_per_hour,
         tank_leakage_per_hour=tank_leakage_per_hour)
+    return with_cutoff(tech, cutoff)
+
+
+# Which coefficient each technology's cut-off estimates land on: the per-year
+# term the LP charges per unit of the asset, as CUTOFF_RULE_PLAN.md's
+# denominator table has it. Battery flows split by side.
+CUTOFF_FIELD = {
+    ("wind", None): "gwp_tx_wind_per_mw", ("solar", None): "gwp_tx_solar_per_mwp",
+    ("battery", "power"): "gwp_tx_batt_per_mw", ("battery", "energy"): "gwp_batt_e",
+    ("electrolyser", None): "gwp_ely", ("hydrogen tank", None): "gwp_tank",
+    ("fuel cell", None): "gwp_tx_fc_per_mw", ("grid connection", None): "gwp_grid_per_mw",
+    ("facility", None): "dc_fixed_gwp_per_year",
+}
+CUTOFF_MODES = (None, "central", "upper", "none")
+
+
+def with_cutoff(tech: dc_model.Tech, mode: str | None = None) -> dc_model.Tech:
+    """``tech`` with the cut-off register's estimates added onto its coefficients.
+
+    None or "central": every ``included_estimate`` entry at its central estimate.
+    "upper": those, plus every still-excluded ``cutoff`` entry at its upper
+    estimate (rule 3). "none": nothing added. The additions are recorded in
+    ``labels["cutoff"]`` and ``labels["cutoff_added"]`` (kg per coefficient).
+    """
+    from dataclasses import replace
+    from optimiser_lca import exclusions as X
+    if mode not in CUTOFF_MODES:
+        raise ValueError(f"cutoff must be one of {CUTOFF_MODES}, got {mode!r}")
+    added: dict[str, float] = {}
+    if mode != "none":
+        for e in X.REGISTER:
+            if e.kind == "boundary":
+                continue
+            if e.status == "included_estimate":            # a failed cut-off, or a sourced figure carried whole
+                est = e.estimate("central")
+            elif e.kind == "cutoff" and e.status == "excluded" and mode == "upper":
+                est = e.estimate("upper")
+            else:
+                continue
+            if est is None:
+                continue
+            field = CUTOFF_FIELD[(e.technology, e.side)]
+            added[field] = added.get(field, 0.0) + float(est)
+    new = {f: getattr(tech, f) + v for f, v in added.items()}
+    return replace(tech, **new,
+                   labels={**(tech.labels or {}), "cutoff": mode or "central",
+                           "cutoff_added": {k: round(v, 6) for k, v in added.items()}})
 
 
 # Ceiling on a storage standing loss, per hour. A loss term is a small leak on

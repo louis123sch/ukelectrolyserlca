@@ -652,6 +652,9 @@ function panel(n) {
   if (n.key) chips.push(chip((n.constant ? "constant: " : "LP key: ") + n.key, "var(--accent)"));
   if (n.stands_for) n.stands_for.forEach(s => chips.push(chip("stands for: " + s.name, "var(--muted)")));
   if (n.kind === "gap") chips.push(chip(STATUS_LABEL[n.status] || "", STATUS_COLOR[n.status]));
+  if (n.register) chips.push(chip({boundary: "boundary item", sourced: "sourced, " + n.register.status.replace("_", " "),
+                                   cutoff: "cut-off: " + n.register.status.replace("_", " ")}[n.register.kind] || n.register.kind,
+                                  n.register.kind === "boundary" ? "var(--muted)" : (n.register.status === "excluded" ? "var(--gap-known)" : "var(--accent)")));
   let h = `<button class="btn close" id="closep">Close</button>${crumbs(n)}<h2>${esc(n.name)}</h2><div class="chips">${chips.join("")}</div>`;
 
   const ident = kv([
@@ -689,6 +692,20 @@ function panel(n) {
 
   if (n.kind === "gap") {
     const g = GAPS[n.gap_id]; if (g) h += `<section><h3>Register entry</h3>${gapCard(g)}</section>`;
+  }
+  if (n.register) {
+    const r = n.register;
+    const rows = kv([
+      ["Technology", esc(r.technology)],
+      ["Kind", esc(r.kind) + (r.side ? ` (${esc(r.side)} side)` : "")],
+      ["Status", esc(r.status.replace("_", " "))],
+      ["Method", r.method ? esc(r.method) : null],
+      ["Central estimate", r.central !== null && r.central !== undefined ? `<span class="mono">${esc(fmt(r.central))}</span>` : null],
+      ["Upper estimate", r.upper !== null && r.upper !== undefined ? `<span class="mono">${esc(fmt(r.upper))}</span>` : null],
+      ["Share at upper", r.share_upper !== null && r.share_upper !== undefined ? `<strong>${esc(pct(r.share_upper))}</strong> of the technology's carbon` : null],
+      ["Verdict", r.verdict ? esc(r.verdict) : null],
+    ]);
+    if (rows) h += `<section><h3>Cut-off register (optimiser_lca/exclusions.py)</h3>${rows}</section>`;
   }
   if (n.kind === "fu" && n.parts) {
     h += `<section><h3>Charged in the LP as</h3><div class="bars">${n.parts.map(([p, v, term]) => {

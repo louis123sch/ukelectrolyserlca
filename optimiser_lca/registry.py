@@ -14,7 +14,7 @@ from __future__ import annotations
 
 # --- databases ----------------------------------------------------------------
 # One database per source, so rebuilding one never touches another.
-HYDROGEN_DB     = "hydrogen foreground"          # Hermesmann hydrogen routes
+HYDROGEN_DB     = "hydrogen foreground"          # Hermesmann fossil routes, Gerloff electrolysers
 DATA_CENTRE_DB  = "data centre foreground"       # Zhang et al. 2025 facility
 FUEL_CELL_DB    = "fuel cell foreground"         # Babatunde 2024 stack, Usai 2021 BoP, operation
 H2_STORAGE_DB   = "hydrogen storage foreground"  # Gandiglio et al. 2022 vessel
@@ -30,17 +30,18 @@ GRID_DB         = "grid foreground"              # the study's own GB grid, one 
 DATABASES = [SOLAR_DB, GRID_DB, HYDROGEN_DB, DATA_CENTRE_DB, BESS_DB, FUEL_CELL_DB,
              H2_STORAGE_DB, TRANSFORMER_DB]
 
-# --- hydrogen (Hermesmann) -----------------------------------------------------
+# --- hydrogen: Hermesmann & Müller 2022 (fossil routes), Gerloff 2021 (electrolysers) ---
 SMR        = "smr_hermesmann_1kg_h2"
 SMR_CCS    = "smr_ccs_hermesmann_1kg_h2"
 CCS        = "ccs_hermesmann_1kg_co2"           # waste treatment of 1 kg captured CO2
 MP_E       = "mp_e_1kg_h2"
-AE_UNIT    = "ae_hermesmann_1unit"              # capital good, 1 MW
-AE_OP      = "ae_op_hermesmann_1kg_h2"
-PEM_UNIT   = "pem_con_hermesmann_1unit"
-PEM_OP     = "pem_op_hermesmann_1kg_h2"
-SOEC_UNIT  = "soec_con_hermesmann_1unit"
-SOEC_OP    = "soec_op_hermesmann_1kg_h2"
+# Gerloff's bills; the codes said "hermesmann" until 22 Oct 2026 (a misattribution).
+AE_UNIT    = "ae_gerloff_1unit"                 # capital good, 1 MW over 20 years, three stacks
+AE_OP      = "ae_op_gerloff_1kg_h2"
+PEM_UNIT   = "pem_gerloff_1unit"
+PEM_OP     = "pem_op_gerloff_1kg_h2"
+SOEC_UNIT  = "soec_gerloff_1unit"
+SOEC_OP    = "soec_op_gerloff_1kg_h2"
 
 # Hydrogen-producing activities by the label the optimiser uses.
 H2_CODES = {
@@ -79,6 +80,7 @@ TX_SOLAR = "solar_inverter_stepup_per_mwp"      # per MWp of PV connected
 TX_GRID  = "grid_intake_transformer_per_mva"    # per MVA of grid-intake capacity
 TX_LV_CONTAINER = "containerised_lv_stepup_per_mw"   # per MW of inverter rating: battery PCS, fuel cell
 TX_SOLAR_REPL30 = "solar_inverter_stepup_replacements_30y_per_mwp"   # Smith A15's 30 % over 30 y
+TX_GRID_CIVILS = "grid_intake_substation_civils_per_mw"   # per MW of connection: Leng S3's outdoor venue (D2)
 
 # --- utility-scale PV ------------------------------------------------------------
 UPV_TABLES = {                                   # Smith Appendix A table -> code
@@ -128,5 +130,5 @@ CODES_BY_DATABASE = {
                                                  BESS_DC_BLOCK_KWH],
     FUEL_CELL_DB:   [FC_STACK, FC_STACK_GRAMC, FC_BOP, FC_SERVICE, FC_OP],
     H2_STORAGE_DB:  [H2_TANK],
-    TRANSFORMER_DB: [TX_WIND, TX_SOLAR, TX_GRID, TX_LV_CONTAINER, TX_SOLAR_REPL30],
+    TRANSFORMER_DB: [TX_WIND, TX_SOLAR, TX_GRID, TX_LV_CONTAINER, TX_SOLAR_REPL30, TX_GRID_CIVILS],
 }

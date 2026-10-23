@@ -222,6 +222,10 @@ CARBON_KNOBS = {
     "batt_tx_x_eff": [1.0],
     "fc_tx_x_eff": [0.5],
     "fc_tx_energised": [False],
+    # The cut-off rule's rule 3 (CUTOFF_RULE_PLAN.md, dc_inputs.with_cutoff): every
+    # still-excluded flow added at its upper estimate, and the pre-22-Oct model
+    # with no estimates at all.
+    "cutoff": ["upper", "none"],
 }
 
 
@@ -237,10 +241,19 @@ def carbon(cases=("islanded_h2", "london_grid"), knobs=None):
     return pd.concat(out, ignore_index=True)
 
 
+def cutoff(cases=("islanded_h2", "london_grid")):
+    """The cut-off rule's rule 3: central and every still-excluded flow at its upper estimate, at both
+    anchors (sensitivity_cutoff_<case>.csv). Judge it with scripts/cutoff_rule3.py."""
+    return pd.concat([run(c, [{}, {"cutoff": "upper"}], name=f"cutoff_{c}") for c in cases],
+                     ignore_index=True)
+
+
 if __name__ == "__main__":
     what = sys.argv[1] if len(sys.argv) > 1 else "carbon"
+    cases = sys.argv[2:] or ("islanded_h2", "london_grid")
     if what == "carbon":
-        cases = sys.argv[2:] or ("islanded_h2", "london_grid")
         carbon(cases)
+    elif what == "cutoff":
+        cutoff(cases)
     else:
-        raise SystemExit(f"unknown sweep {what!r}; try: carbon")
+        raise SystemExit(f"unknown sweep {what!r}; try: carbon, cutoff")

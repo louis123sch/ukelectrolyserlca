@@ -26,10 +26,15 @@ What is counted
 ---------------
 The **materials** of the transformers that step the network down onto the
 site — cradle-to-gate, the same boundary as the wind step-ups — charged per MW
-of ``cap_grid``. The line that reaches the site is scored and reported but
-not charged per MW (see ``decompose``). Switchgear, protection, the bay, civils,
-the transformer's manufacturing energy, its losses and its end-of-life are
-**not** counted, so this is a floor rather than an estimate.
+of ``cap_grid``, and, since 22 Oct 2026, the **switchyard's civils** per MW of
+connection (``registry.TX_GRID_CIVILS``: Leng et al. 2026 Table S3's outdoor
+venue, decision D2 in SOURCE_DIFF.md). The line that reaches the site is scored
+and reported but not charged per MW (see ``decompose``). Switchgear and
+protection have no source and sit on the cut-off register, where they fail the
+1 % test against this small denominator and are carried as estimates on the
+coefficient (``optimiser_lca/exclusions.py``, ``dc_inputs.build_tech``); the
+transformer's manufacturing energy likewise. Losses are the LP's; end-of-life
+is out everywhere.
 
 The inventory is not here
 -------------------------
@@ -85,7 +90,7 @@ sys.path.insert(0, str(ROOT))
 
 # The foreground activity optimiser_lca/stepup_transformers.py builds, per MVA.
 # What the transformer is made of lives there; this module only scores it.
-from optimiser_lca.registry import TRANSFORMER_DB, TX_GRID as TRANSFORMER_CODE  # noqa: E402
+from optimiser_lca.registry import TRANSFORMER_DB, TX_GRID as TRANSFORMER_CODE, TX_GRID_CIVILS as CIVILS_CODE  # noqa: E402
 
 LINE_ACTIVITY = "market for transmission network, electricity, high voltage"
 
@@ -129,6 +134,7 @@ def decompose(refresh: bool = False) -> dict:
             "Run `python -m optimiser_lca.build stepup_transformers` first — the "
             "inventory lives in optimiser_lca/stepup_transformers.py, not here.") from None
     per_mva = H.run_lca_score(act, method)
+    civils_per_mw = H.run_lca_score(bd.get_activity((TRANSFORMER_DB, CIVILS_CODE)), method)
     per_km = H.run_lca_score(H.resolve_exact(LINE_ACTIVITY, "GLO", unit="kilometer"), method)
 
     mva_per_mw = TRANSFORMER_REDUNDANCY / POWER_FACTOR
@@ -150,6 +156,9 @@ def decompose(refresh: bool = False) -> dict:
         "transformer_MVA_per_MW": mva_per_mw,
         "transformer_kg_per_MW": kg_per_mva * mva_per_mw,
         "transformer_kgco2e_per_MW": tx_per_mw,
+        # Leng Table S3's outdoor venue per MW of connection (D2, 22 Oct 2026)
+        "civils_code": CIVILS_CODE,
+        "civils_kgco2e_per_MW": civils_per_mw,
         "kgco2e_per_km_line": per_km,
         "line_kgco2e_total": line_total,
         "line_km": LINE_KM,
@@ -159,7 +168,9 @@ def decompose(refresh: bool = False) -> dict:
         # per MW would make a bigger connection look worse than it is for a
         # reason that has nothing to do with its size. It is reported here so it
         # can be added to the fixed term if a run wants it.
-        "kgco2e_per_MW_year": tx_per_mw / ASSET_LIFE_YEARS,
+        "kgco2e_per_MW_year": (tx_per_mw + civils_per_mw) / ASSET_LIFE_YEARS,
+        "transformer_kgco2e_per_MW_year": tx_per_mw / ASSET_LIFE_YEARS,
+        "civils_kgco2e_per_MW_year": civils_per_mw / ASSET_LIFE_YEARS,
         "line_kgco2e_per_year": line_total / ASSET_LIFE_YEARS,
     }
     return _CACHE
@@ -183,8 +194,10 @@ if __name__ == "__main__":
     print(f"  x {d['transformer_MVA_per_MW']:g} MVA/MW  "
           f"({TRANSFORMER_REDUNDANCY:g} for N-1 / power factor {POWER_FACTOR:g})")
     print(f"  = {d['transformer_kgco2e_per_MW']:>12,.0f} kgCO2e/MW installed")
+    print(f"  + switchyard civils  {d['civils_kgco2e_per_MW']:>12,.0f} kgCO2e/MW (Leng S3 venue, D2)")
     print(f"  over {d['asset_life_years']:g} years"
-          f"  -> {d['kgco2e_per_MW_year']:>10,.1f} kgCO2e/MW/year")
+          f"  -> {d['kgco2e_per_MW_year']:>10,.1f} kgCO2e/MW/year "
+          f"({d['transformer_kgco2e_per_MW_year']:,.1f} transformer + {d['civils_kgco2e_per_MW_year']:,.1f} civils)")
     print()
     print(f"  line, {d['line_km']:g} km      {d['line_kgco2e_total']:>12,.0f} kgCO2e"
           f"  -> {d['line_kgco2e_per_year']:,.0f} kgCO2e/year, not charged per MW")
@@ -195,5 +208,5 @@ if __name__ == "__main__":
     print(f"  A {d['transformer_kV']:g} kV unit fits a 132 kV EHV/DNO connection; for a "
           "275/400 kV site it errs LOW.")
     print(f"  ASSUMED: {', '.join(ASSUMED)}.")
-    print("  Switchgear, protection, civils, the bay, manufacturing energy, losses")
-    print("  and end-of-life are not counted, so this is a floor.")
+    print("  Switchgear, protection and manufacturing energy are estimates on the register;")
+    print("  losses are the LP's; end-of-life is out.")

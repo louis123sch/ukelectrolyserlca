@@ -29,7 +29,7 @@ stated in its scope but nothing operational is inventoried.
 
 1. ``FC_KW_SCALE = 0.5`` — Table S1's reference product is a 2 kW stack but
    the paper reports everything per 1 kW. Halving is what the paper itself
-   did: every value in its Tables S2–S4 is exactly 2× the corresponding
+   did: every value in its Tables S2–S4 is about 2× the corresponding
    value in its headline Tables 3–5.
 2. ``FC_S1_SCALE = 1.878606235`` — Table S1 as printed does **not** reproduce
    the paper's own results. Every amount is smaller than the live ecoinvent
@@ -124,7 +124,7 @@ catalyst, no platinum top-up, no installer driving. Stack replacement is not
 maintenance: it is the stack line, on the optimiser's max(calendar, duty)
 rule.
 
-**Benchmarks**, whole systems cradle-to-gate per kW: Usai 37.3 (no tank),
+**Benchmarks**, whole systems cradle-to-gate per kW: Usai 37.6 (no tank),
 Miotti 29, Gentilucci 30.5-51.4 (200 kW HD), Ballard 73 (70 kW module, its own
 note), Stropnik/Bionaz 405 (3 kW UPS). The vehicle figures carry no inverter
 or enclosure; this one does, and its stack (Babatunde's 2 kW graphite-plate
@@ -154,19 +154,19 @@ from optimiser_lca.common import FG, Activity, Flow, Inventory, Process
 # Parameters
 # =============================================================================
 # --- stack: the two scale factors (see the docstring for the evidence) --------
-FC_KW_SCALE = 0.5           # Table S1's reference product is a 2 kW stack; the paper's FU is 1 kW
-FC_S1_SCALE = 1.878606235   # Table S1's printed amounts are uniformly this factor smaller than
+FC_KW_SCALE = 0.5           # TRANSCRIBED - Table S1's reference product is a 2 kW stack; the paper's FU is 1 kW
+FC_S1_SCALE = 1.878606235   # DERIVED - Table S1's printed amounts are uniformly this factor smaller than
                             # the ecoinvent dataset it documents; set to 1.0 to build it verbatim
 FC_SCALE    = FC_KW_SCALE * FC_S1_SCALE
 
 # --- operation ------------------------------------------------------------------
-FC_RATED_POWER_KW     = 1.0        # matches the paper's 1 kW stack
-FC_H2_LHV_KWH_PER_KG  = 33.33      # hydrogen lower heating value, 120 MJ/kg
-FC_ETA_NET_BOL        = 0.50       # net AC electrical efficiency at beginning of life, LHV basis
-FC_DEGRADATION_DERATE = 0.95       # mean-over-life efficiency as a fraction of BOL; 1.0 = no degradation
+FC_RATED_POWER_KW     = 1.0        # TRANSCRIBED - the paper's 1 kW stack
+FC_H2_LHV_KWH_PER_KG  = 33.33      # physical constant - hydrogen lower heating value, 120 MJ/kg
+FC_ETA_NET_BOL        = 0.50       # ASSUMED - net AC electrical efficiency at beginning of life, LHV basis
+FC_DEGRADATION_DERATE = 0.95       # ASSUMED - mean-over-life efficiency as a fraction of BOL; 1.0 = none
 # Duty lives. Calendar lives are the optimiser's (optimisation/fuel_cell.py).
-FC_STACK_LIFETIME_H   = 30_000     # Nedstack stack refurbishment 24-30k h; Bionaz 2022 40k
-FC_SYSTEM_LIFETIME_H  = 80_000     # DOE 100 kW-3 MW stationary class; ecoinvent's own system life
+FC_STACK_LIFETIME_H   = 30_000     # ASSUMED - Nedstack stack refurbishment 24-30k h; Bionaz 2022 40k
+FC_SYSTEM_LIFETIME_H  = 80_000     # TRANSCRIBED - ecoinvent's system-dataset comment; DOE's 100 kW-3 MW class
 FC_SERVICE_INTERVAL_H = 8_000      # ASSUMED; Battelle 2016 gives one year for backup units
 # Which hydrogen the fuel cell burns: (database, code). Any per-kg-H2 activity
 # works — swap in AE_OP / SOEC_OP / SMR for a different supply chain.
@@ -178,7 +178,7 @@ USAI_SYSTEM_KW = 80.0               # TRANSCRIBED - the system the table describ
 USAI_COOLANT_PUMPS_PER_SYSTEM = 3   # "40W pump pc 3"
 USAI_WIRING_M_PER_SYSTEM = 16.0     # "Cables m 16" - Miotti's 16 m per system
 # Stationary additions.
-FC_INVERTER_KW = 500.0              # ecoinvent's 500 kW inverter, as battery.PCS_ACTIVITY
+FC_INVERTER_KW = 500.0              # ASSUMED - ecoinvent's 500 kW inverter, as battery.PCS_ACTIVITY
 FC_KW_PER_CONTAINER = 1_000.0       # ASSUMED - one 20 ft container per MW; sweep 500-2,000
 
 # --- derived --------------------------------------------------------------------
@@ -217,7 +217,8 @@ processes = {
         identity=("market for activated carbon, granular", "GLO", "activated carbon, granular")),
     "aluminium_wrought": Process(
         query="market for aluminium wrought alloy GLO", pick=1,
-        identity=("market for aluminium, wrought alloy", "GLO", "aluminium, wrought alloy")),
+        identity=("market for aluminium, wrought alloy", "GLO", "aluminium, wrought alloy"),
+        why="hit 0 is the ingot-to-market transfer; the market is the dataset"),
     "building_hall": Process(
         query="market for building hall steel construction GLO", pick=0,
         identity=("market for building, hall, steel construction", "GLO", "building, hall, steel construction")),
@@ -231,7 +232,8 @@ processes = {
             "over 8 regional markets - the GLO market group is the single-row equivalent"),
     "glass_fibre": Process(
         query="market for glass fibre GLO", pick=1,
-        identity=("market for glass fibre", "GLO", "glass fibre")),
+        identity=("market for glass fibre", "GLO", "glass fibre"),
+        why="hit 0 is glass-fibre reinforced plastic; Usai name glass fibre"),
     "graphite": Process(
         query="market for graphite GLO", pick=0,
         identity=("market for graphite", "GLO", "graphite")),
@@ -255,7 +257,8 @@ processes = {
                   "steel, chromium steel 18/8, hot rolled")),
     "tetrafluoroethylene": Process(
         query="market for tetrafluoroethylene GLO", pick=1,
-        identity=("market for tetrafluoroethylene", "GLO", "tetrafluoroethylene")),
+        identity=("market for tetrafluoroethylene", "GLO", "tetrafluoroethylene"),
+        why="hit 0 is PTFE film on glass; the polymer itself"),
     "water_deionised": Process(
         query="market for water deionised RoW", pick=0,
         identity=("market for water, deionised", "RoW", "water, deionised")),

@@ -2,15 +2,16 @@
 Electrolysers — embodied carbon per MW installed.
 =============================================================================
 
-The Hermesmann foreground supplies electrolysis as a **per-kg-H2** activity
-with the capital good already amortised over a lifetime output that Hermesmann
+The Gerloff 2021 foreground (``optimiser_lca/hydrogen.py``; called Hermesmann's
+here until 22 Oct 2026) supplies electrolysis as a **per-kg-H2** activity
+with the capital good already amortised over a lifetime output that Gerloff
 chose. That is the right shape for an attributional study of a fixed plant. It
 is the wrong shape for an optimiser, for exactly the reasons set out in
 ``renewables.py``:
 
 1. **Capacity is a decision variable.** The optimiser sizes MW; the burden of
    building those MW must not depend on how much hydrogen they happen to make.
-2. **Hermesmann's implied utilisation is not this study's.** All three
+2. **Gerloff's implied utilisation is not this study's.** All three
    technologies amortise their capital over **160 GWh of lifetime electricity
    throughput at 1 MW** — 160,000 full-load hours. Spread over a 25-year plant
    life that is a **73 % capacity factor**. An optimiser that builds an
@@ -24,7 +25,7 @@ MW installed**. What remains — water, heat, electrolyte — stays per kg, beca
 those genuinely do scale with output.
 
 Nothing is invented. ``check_reconstruction()`` asserts that capital-per-MW
-re-amortised at Hermesmann's own throughput, plus the per-kg remainder,
+re-amortised at Gerloff's own throughput, plus the per-kg remainder,
 reproduces ``lca_helpers.run_non_electricity_lca()`` exactly.
 
 The 1 MW rating
@@ -39,18 +40,20 @@ basis. ``check_rating()`` enforces the agreement, so if the foreground is ever
 rebuilt on a different basis this module fails loudly instead of scaling
 everything by a silent factor.
 
-Known limitation — no stack/BoP split
--------------------------------------
-Hermesmann's capital good is a single monolithic activity (25-29 exchanges) with
-no boundary between the replaceable stack and the balance of plant. Stack
-replacement therefore **cannot** be charged separately here, and the whole
-capital is amortised on calendar life. For an electrolyser run hard this
-understates lifetime burden, since real stacks are replaced every 60-90 kh.
-``fuel_cell.py`` *can* make the split, and does. Registered in ``DATA_GAPS.md``.
+Stacks
+------
+Gerloff's unit carries **three stacks** over its 20-year life (§2.1.3; the
+module carries the stack's rows x3 since 22 Oct 2026, as the SI's stack
+manufacturing energy always was). The capital good is still one activity per
+unit, amortised here on calendar life: a duty-driven stack count, as
+``fuel_cell.py`` does for the fuel cell, would need the stack rows split out
+as their own activity — possible from the SI's Stack/BoP labels, not done.
+For an electrolyser run harder than Gerloff's 160,000 full-load hours this
+understates the stack burden. Registered in ``DATA_GAPS.md``.
 
 Sources
 -------
-inventories       Hermesmann, M. et al., alkaline / PEM / SOEC electrolysis.
+inventories       Gerloff, N. (2021), J. Energy Storage 43, 102759: alkaline / PEM / SOEC.
                   Built into ``hydrogen foreground`` by
                   ``optimiser_lca/hydrogen.py`` (python -m optimiser_lca.build).
 embodied carbon   ecoinvent 3.9.1 apos, IPCC 2021 GWP100.

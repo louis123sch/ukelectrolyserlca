@@ -117,7 +117,7 @@ def build(cost_case: str = "central") -> pd.DataFrame:
     rows.append(_row("battery_energy", "MWh", be["energy_kgco2e_per_kWh"] * 1000.0,
                      calendar=batt.ASSET_LIFE_YEARS, source=e_src, grade="derived",
                      note=(f"per usable MWh: nameplate / USABLE_FRACTION {batt.USABLE_FRACTION:g}; "
-                           "cells made in China; excludes PCS, transformer, foundation"
+                           "cells made in China; PCS and transformer charged on the power term"
                            if batt.EMBODIED_BASIS == "jasper_voss_2026"
                            else "LFP EV pack; no container/racking/HVAC")))
 
@@ -130,7 +130,7 @@ def build(cost_case: str = "central") -> pd.DataFrame:
             variable=r["variable_kgco2e_per_kg"], variable_unit="kg H2",
             source=e_src, grade="derived",
             note=f"{r['kwh_per_kg']:.1f} kWh/kg; capital was amortised at "
-                 f"{r['implied_capacity_factor']:.0%} CF in the foreground; no stack/BoP split"))
+                 f"{r['implied_capacity_factor']:.0%} CF in the foreground; three stacks per unit life"))
 
     # --- fuel cell ------------------------------------------------------
     d = fc.decompose()
@@ -157,7 +157,7 @@ def build(cost_case: str = "central") -> pd.DataFrame:
         rows.append(_row(
             "h2_tank_" + r["design"], "kg H2", r["kgco2e_per_kg_capacity"],
             calendar=r["lifetime_years"],
-            source="Gandiglio et al. 2022 Table 3" if r["is_as_built"]
+            source="Gandiglio et al. 2022 Table 5" if r["is_as_built"]
                    else "derived from a ~1 wt% Type I cylinder",
             grade="transcribed" if r["is_as_built"] else "assumed",
             note=f"{r['compression_kwh_per_kg']:.1f} kWh/kg charging compression; "

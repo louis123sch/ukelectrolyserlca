@@ -365,9 +365,10 @@ load-bearing in a result.
 - **Wind transformer factory energy.** Reconcile Leng's published totals (342 t on
   the intake unit) against the materials-only rebuild (~275 t), and add the factory
   electricity on the same footing as solar's (~6 %).
-- **Electrolyser stack/BoP split.** No public split exists for Hermesmann's
-  monolithic capital good. Bound it instead: stack share 30–50 % of capital, life
-  60–90 kh, using the replacement rule `fuel_cell.py` already uses.
+- **Electrolyser stack/BoP split.** Gerloff's SI labels every row Stack or
+  BoP and carries three stacks per 20-year unit; `hydrogen.py` carries the
+  three since 22 Oct 2026. A duty-driven count as `fuel_cell.py` does would
+  need the stack rows as their own activity — possible from the SI, not done.
 
 ### 3.10 SOEC heat availability — close on the carbon side
 
@@ -391,7 +392,7 @@ study's safe direction), and treat a standby fuel cell's transformer as
 - **Inventory.** `transformer foreground/containerised_lv_stepup_per_mw`: Jasper
   2026's "transformer, for grid connection", 5,500 kg per 1,600 kW container,
   spread over the IEA PVPS 20/0.4 kV unit's composition and process energy
-  (Jasper publish no split). 3,437.5 kg/MW, 15,674 kg CO₂e/MW, 4.56 kg/kg —
+  (a stated substitution for Jasper's own Hunziker-derived recipe). 3,437.5 kg/MW, 15,674 kg CO₂e/MW, 4.56 kg/kg —
   identical per kg to solar's unit, which `transformers.check` asserts.
   `stepup_transformers.check` holds the mass and rating to `bess.CSS_EXCLUDED`.
 - **LP.** Two terms, `battery step-up transformers` on `cap_batt_p` and

@@ -1,5 +1,5 @@
 """
-The shape every inventory is written in, and the four verbs that act on it.
+The shape every inventory is written in, and the verbs that act on it.
 =============================================================================
 
 An inventory module declares three tables and the verbs here do the rest:
@@ -27,12 +27,16 @@ no longer among the search hits for its query.
 
 Verbs:
 
+    check(inv)       the static checks, no Brightway: units, keys, codes,
+                     every declared process and flow used by a row
     show(inv)        print each process's search neighbourhood with the chosen
                      row marked, then one table per activity
     pin(inv)         fill any missing identity from its search pick
     resolve(inv)     {key: Brightway activity} for processes and flows
     to_bw_dict(inv)  the dict ``bw2data.Database.write`` takes
     write(inv)       delete and rewrite the inventory's database
+
+The style every module follows is docs/LCA_STYLE.md.
 """
 from __future__ import annotations
 
@@ -130,8 +134,16 @@ class Inventory:
 def check(inv: Inventory) -> str:
     """Every exchange names a known process/flow/code and a known unit; no
     duplicate codes; no key in both the process and the flow table; every
-    process has an identity or a query to pin from."""
+    process has an identity or a query to pin from; every declared process and
+    flow is used by at least one row (a dead entry hides a dropped row)."""
     problems = []
+    used = set()
+    for a in inv.activities:
+        used |= {key for key, *_ in a.technosphere if not isinstance(key, FG)}
+        used |= {key for key, *_ in a.biosphere}
+    unused = (set(inv.processes) | set(inv.flows)) - used
+    if unused:
+        problems.append(f"declared but used by no row: {sorted(unused)}")
     codes = [a.code for a in inv.activities]
     dup = {c for c in codes if codes.count(c) > 1}
     if dup:

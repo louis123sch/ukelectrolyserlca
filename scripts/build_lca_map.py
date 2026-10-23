@@ -54,6 +54,7 @@ def node(name, kind, **kw):
 # lp_terms.py so the energy tab links to the same names. Each box carries the
 # dc_model.objective_terms key it stands for; check_lca_map.py asserts the two
 # sets match and every coefficient equals build_tech's.
+from map_fingerprint import fingerprint  # noqa: E402
 from lp_terms import (T_WIND, T_SOLAR, T_TX_WIND, T_TX_SOLAR, T_GRID_CONN, T_BATT_E, T_BATT_P, T_ELY,  # noqa: E402
                       T_TANK, T_FC_STACK, T_FC_BOP, T_IMPORT, T_ELY_CONS, T_FC_MAINT, T_LEAK, T_VOLL,
                       T_DC_IT, T_DC_ENERGY, T_BOUGHT, T_TX_BATT, T_TX_FC)
@@ -357,6 +358,7 @@ def build():
                               h2_prices as hp, h2_storage as h2s, profiles, renewables as ren,
                               transformers as tx)
     from optimiser_lca import gb_grid, grid as G, registry as R, stepup_transformers as stx, upv
+    from optimiser_lca import exclusions as X          # the cut-off register (method box, register groups)
     from optimiser_lca import fuel_cell as fcl, h2_tank
     from optimisation import h2_storage as h2s
 
@@ -459,6 +461,18 @@ def build():
         node("Functional unit of the LP: one year of a data centre's demand served", "note",
              grade="assumed", note="Each capacity's embodied carbon is annualised over its life; "
              "flows are scaled from the window to a year (dc_model.Series.annual_scale)."),
+        node("Cut-off rule: a sourced in-boundary flow is always in; an unsourced flow stays out only under "
+             f"{X.CUTOFF_FLOW_SHARE:.0%} of its technology's carbon, all together under {X.CUTOFF_TECHNOLOGY_SHARE:.0%}, "
+             "and without changing the best design", "note", grade="assumed",
+             note="CUTOFF_RULE_PLAN.md; the register is optimiser_lca/exclusions.py and each technology's entries sit "
+                  "under its functional unit. Not ecoinvent's 'cut-off' system model, an unrelated use of the word.",
+             sources_md={k: v for k, v in assumptions.items() if "cut-off" in k.lower()}),
+        node("How every inventory is written: one Python module per LCA, in one shape (docs/LCA_STYLE.md)", "note",
+             grade="transcribed",
+             note="Processes and flows pinned to exact ecoinvent identities with the search that found them, one "
+                  "activity per source table with rows as printed, graded parameters, a scope dict and a check(); "
+                  "nothing read from a data file. Held by tests/test_lca_style.py; every row's origin is in "
+                  "docs/SOURCE_LEDGER.md and every source's rows in docs/source_ledgers/."),
         node("Assumptions register (ASSUMPTIONS.md)", "group",
              children=[node(k, "note", sources_md={k: v}) for k, v in assumptions.items()]),
     ])
@@ -469,6 +483,66 @@ def build():
     # unit-process LCA would chain it. The LP's terms are an organising layer
     # on top (next section): every stage says which term charges it.
     import copy as _copy
+    from optimiser_lca import exclusions as X
+    from optimisation import cutoff
+    cut_df = cutoff.check(tech)
+    cut_rows = {(r.technology, r.flow): r for r in cut_df.itertuples()}
+
+    def register_group(technology, heading="Left out, and how big — the cut-off register"):
+        """One box per register entry for this technology: what is left out or carried as an
+        estimate, its upper estimate, its share of the technology's carbon and the verdict
+        (optimiser_lca/exclusions.py, optimisation/cutoff.py). Boundary items last."""
+        kids = []
+        for e in X.REGISTER:
+            if e.technology != technology:
+                continue
+            r = cut_rows.get((e.technology, e.flow))
+            reg = {"technology": e.technology, "flow": e.flow, "kind": e.kind, "status": e.status,
+                   "method": e.method, "side": e.side,
+                   "central": e.estimate("central"), "upper": e.estimate("upper"),
+                   "share_upper": (None if r is None else (None if r.share_upper != r.share_upper else r.share_upper)),
+                   "verdict": (None if r is None else r.rule_1)}
+            if e.kind == "boundary":
+                kids.append(node(e.flow, "note", grade="assumed", status="not", register=reg,
+                                 source=e.source, note="Outside the boundary; reported, never tested. " + (e.note or "")))
+                continue
+            verdict = reg["verdict"] or ""
+            share = "" if reg["share_upper"] is None else f"{reg['share_upper']:.2%} of the technology's carbon at the upper estimate; "
+            carried = {"included_estimate": "carried as an estimate on the coefficient (it failed the 1 % test)",
+                       "included_inventory": "built as inventory rows in the module",
+                       "excluded": "left out"}[e.status]
+            kids.append(node(e.flow, "part",
+                             grade={"transcribed": "transcribed", "mass_x_factor": "derived", "assumed": "assumed"}.get(e.method, "assumed"),
+                             register=reg, source=e.source,
+                             note=f"{share}{verdict}. {carried.capitalize()}. {e.basis}",
+                             exchange={"contribution": (e.estimate("central") if e.status == "included_estimate" else None),
+                                       "unit": X.TECHNOLOGIES[e.technology][1] if e.side is None else
+                                       ("kg CO₂e per usable MWh per year" if e.side == "energy" else "kg CO₂e per MW per year"),
+                                       "amount": reg["share_upper"], "note": "share of the technology's carbon at the upper estimate"}))
+        if not kids:
+            return None
+        return node(heading, "group", register_technology=technology,
+                    note=f"Every flow the study knows a real build has that no held source itemises, tested against "
+                         f"{X.CUTOFF_FLOW_SHARE:.0%} of this technology's carbon per flow and {X.CUTOFF_TECHNOLOGY_SHARE:.0%} "
+                         "together (CUTOFF_RULE_PLAN.md). A flow that fails is carried as an estimate; its kg are inside the "
+                         "step-up or intake box above (dc_inputs.with_cutoff). Boundary items — end-of-life, delivery to site, "
+                         "the genset — are reported, never tested.",
+                    children=kids)
+
+    added = (tech.labels or {}).get("cutoff_added", {})
+
+    def estimate_part(field, factor, unit, technology, lp):
+        """The register's central estimates dc_inputs.with_cutoff added onto ``field``, as one box."""
+        kg = added.get(field, 0.0)
+        if not kg:
+            return None
+        flows = [e.flow for e in X.REGISTER if e.technology == technology and e.status == "included_estimate"]
+        return part("Cut-off estimates carried on this coefficient: " + "; ".join(flows) + " (ASSUMED, register)",
+                    kg * factor, unit, grade="assumed", lp=lp,
+                    source="optimiser_lca/exclusions.py, central estimates; they failed the 1 % test and stay "
+                           "until a source replaces them",
+                    note=f"{kg:,.4g} on {field} per year, here re-expressed per functional unit.")
+
     emb = ren.apply_case(ren.decompose_all(), "central").set_index("technology")
     wind, sol = emb.loc["onshore_wind"], emb.loc["solar_pv"]
     lw, ls, lgrid = cl.stepup("onshore_wind"), cl.stepup("solar_pv"), cl.grid_intake()
@@ -674,6 +748,7 @@ def build():
         ])
 
     # ---- solar ------------------------------------------------------------------
+    txd = tx.decompose()          # the unit / civils / replacements split
     plant = F.activity_node(R.SOLAR_DB, R.UPV_CAPITAL)
     om = F.activity_node(R.SOLAR_DB, R.UPV_OM30)
     life_s, lf_s = sol.study_lifetime_years, sol.study_load_factor
@@ -722,12 +797,23 @@ def build():
             tx_node(R.TX_SOLAR, R.TRANSFORMER_DB,
                     f"Step-up transformer, 0.4 → {stx.UPV_TX_PRIMARY_KV:g} kV, at the inverter station "
                     f"({stx.UPV_TX_UNIT_MVA:g} MVA, {stx.UPV_TX_UNITS_PER_PLANT} per {stx.UPV_TX_REFERENCE_MWP:g} MWp)",
-                    1.0 / life_s, "MWp of step-ups per MWp per year", tech.gwp_tx_solar_per_mwp,
-                    f"one MWp of inverter-station step-ups over the plant's {life_s:.0f}-year life. A transformer, "
-                    "not an inverter: it stands beside the inverter and steps its 0.4 kV output up to 20 kV",
-                    f"gwp_tx_solar_per_mwp × cap_solar — LP term '{T_TX_SOLAR}'",
+                    1.0 / life_s, "MWp of step-ups per MWp per year", txd["solar"]["kgco2e_per_MWp"] / life_s,
+                    f"one MWp of inverter-station step-ups (the unit and its station building) over the plant's "
+                    f"{life_s:.0f}-year life. A transformer, not an inverter: it stands beside the inverter and "
+                    "steps its 0.4 kV output up to 20 kV",
+                    f"gwp_tx_solar_per_mwp × cap_solar — LP term '{T_TX_SOLAR}' (the unit's share)",
                     f"no-load {pc(ls['noload_mw_per_mw'], 3)} of capacity; load "
                     f"{pc(ls['load_loss_per_mw_at_full_loading'])} of output at full loading (energy, not carbon)"),
+            tx_node(R.TX_SOLAR_REPL30, R.TRANSFORMER_DB,
+                    f"Step-up transformer replacements, {stx.UPV_TX_REPLACEMENT_FRACTION_30Y:.1%} of the fleet "
+                    f"over {stx.UPV_TX_REPLACEMENT_REFERENCE_YEARS:g} years (Smith A15)",
+                    1.0 / stx.UPV_TX_REPLACEMENT_REFERENCE_YEARS, "30-year replacement sets per MWp per year",
+                    txd["solar"]["replacement_kgco2e_per_MWp_30y"] / stx.UPV_TX_REPLACEMENT_REFERENCE_YEARS,
+                    "Smith's A15 fraction (1.30e-5 replaced per 4.30e-5 installed per m² over 30 years) applied "
+                    "to this study's unit and count; charged per year whatever life the unit itself is amortised "
+                    "over (transformers.kgco2e_per_mw_year). In since 21 Oct 2026",
+                    f"gwp_tx_solar_per_mwp × cap_solar — LP term '{T_TX_SOLAR}' (the replacements' share)",
+                    None),
             inv_cap, inv_rep, array_stage,
         ])
     print(f"  solar chain residual vs LP: {(array_val + inv_val) / tech.gwp_solar - 1:+.2e}")
@@ -793,6 +879,10 @@ def build():
                            for v, d in G.DELIVERY.items() if v != "high"]),
     ]
     intake_per_kwh = tech.gwp_grid_per_mw / 8760.0
+    gcd = gc.decompose()
+    intake_tx_per_kwh = gcd["transformer_kgco2e_per_MW_year"] / 8760.0
+    intake_civils_per_kwh = gcd["civils_kgco2e_per_MW_year"] / 8760.0
+    intake_est_per_kwh = intake_per_kwh - intake_tx_per_kwh - intake_civils_per_kwh
     grid_fu = fu(
         "Grid imports — 1 kWh delivered at the 20 kV bus (the site's region, each half-hour; shown: London 2025 mean)",
         deliv_mean + intake_per_kwh, ug,
@@ -818,12 +908,29 @@ def build():
                     f"Intake transformers, 110/132 → {stx.TX_SITE_COLLECTION_KV:g} kV, N-1 "
                     f"({gc.TRANSFORMER_REDUNDANCY / gc.POWER_FACTOR:g} MVA per MW of connection)",
                     gc.TRANSFORMER_REDUNDANCY / gc.POWER_FACTOR / gc.ASSET_LIFE_YEARS / 8760.0,
-                    "MVA per kWh at 100 % utilisation", intake_per_kwh,
+                    "MVA per kWh at 100 % utilisation", intake_tx_per_kwh,
                     f"{gc.TRANSFORMER_REDUNDANCY:g} MVA per MW (N-1) over {gc.ASSET_LIFE_YEARS:g} years, "
                     "spread over 8,760 h; charged per MVA on Leng's 100 MVA, 110 kV unit",
-                    "gwp_grid_per_mw × cap_grid — LP term 'Grid connection'",
+                    "gwp_grid_per_mw × cap_grid — LP term 'Grid connection' (the transformers' share)",
                     f"no-load {pc(lgrid['noload_mw_per_mw'], 3)} of the connection; load "
                     f"{pc(lgrid['load_loss_fraction'], 3)} of imports (energy, not carbon)"),
+            tx_node(R.TX_GRID_CIVILS, R.TRANSFORMER_DB,
+                    "Intake substation civils — the switchyard (Leng Table S3 outdoor venue, per MW of connection)",
+                    1.0 / gc.ASSET_LIFE_YEARS / 8760.0, "MW-years of switchyard per kWh at 100 % utilisation",
+                    intake_civils_per_kwh,
+                    f"Leng's 110 kV booster station's outdoor venue per MW of the 100 MW it serves, over "
+                    f"{gc.ASSET_LIFE_YEARS:g} years (decision D2, 22 Oct 2026); the station's buildings are covered "
+                    "by Zhang's facility building",
+                    "gwp_grid_per_mw × cap_grid — LP term 'Grid connection' (the civils' share)", None),
+            part("Estimates carried on the connection: switchgear, protection and the bay, and the intake "
+                 "transformers' factory energy (cut-off, ASSUMED); the switchyard's share of Leng's construction "
+                 "machinery (sourced)", intake_est_per_kwh, ug, grade="assumed",
+                 lp="inside gwp_grid_per_mw × cap_grid (dc_inputs.with_cutoff adds the register's central estimates)",
+                 source="optimiser_lca/exclusions.py: Teffera 2021 Table 5 masses at 2.5 kg CO₂e/kg; the IEA PVPS "
+                        "unit's process energy per kg on Leng's mass",
+                 note="The first two failed the 1 % test against the connection's small denominator (SOURCE_DIFF Q7) "
+                      "and are carried at their central estimates until a switchgear EPD and a factory figure are held; "
+                      "the machinery is Leng's own figure, pro-rated to the switchyard."),
             *delivery_items, gen_stage,
             node("Grid basis id: " + G.sources_id(), "note", note="Every series records it; a series "
                  "scored on another basis is ignored (profiles.grid_file_is_current)."),
@@ -863,10 +970,13 @@ def build():
     # of PCS over the battery's life, shown per MWh delivered like the power term.
     lb = cl.container_stepup("battery")
     tx_b_per_mwh = tech.gwp_tx_batt_per_mw / 4 * life_b / thr
+    tx_b_unit_per_mwh = (tech.gwp_tx_batt_per_mw - added.get("gwp_tx_batt_per_mw", 0.0)) / 4 * life_b / thr
+    batt_est = estimate_part("gwp_tx_batt_per_mw", life_b / 4 / thr, ub, "battery",
+                             f"inside gwp_tx_batt_per_mw × cap_batt_p — LP term '{T_TX_BATT}'")
     batt_tx = tx_node(R.TX_LV_CONTAINER, R.TRANSFORMER_DB,
                       f"Step-up transformer, 0.4 → {stx.TX_SITE_COLLECTION_KV:g} kV, one per container "
                       f"({cl.BATTERY_UNIT_KVA / 1000:g} MVA per {cl.BATTERY_UNIT_KVA / 1000:g} MW of PCS)",
-                      0.25 / thr, "MW of step-up per MWh delivered (4-hour battery)", tx_b_per_mwh,
+                      0.25 / thr, "MW of step-up per MWh delivered (4-hour battery)", tx_b_unit_per_mwh,
                       f"one MW of container step-up per MW of PCS, over the battery's {life_b} years and "
                       f"{thr:,.0f} MWh delivered per MWh installed",
                       f"gwp_tx_batt_per_mw × cap_batt_p — LP term '{T_TX_BATT}'",
@@ -888,7 +998,7 @@ def build():
         gap_keys=("battery",), todo_keys=("battery",), test_keys=("batt", "bess"),
         source_titles=("Battery storage", "grid battery's energy term"),
         children=[
-            batt_tx, pcs_node, dc_block,
+            batt_tx, *([batt_est] if batt_est else []), pcs_node, dc_block,
             node("Cell sensitivity bases (battery.CELL_KGCO2E_PER_KWH)", "group", children=[
                 fgn(R.BESS_CELL_DE, R.BESS_DB, status="option",
                     note="Alternative cell basis, built but not the default (bess.CELL_FACTORY is CN): Voß's cell "
@@ -926,11 +1036,12 @@ def build():
                   f"when {short} is selected (per MW over {ely.PLANT_LIFETIME_YEARS:g} y; the LP sets the utilisation)",
             "loss": f"{row['kwh_per_kg']:g} kWh per kg of electricity (system; rectifier taken as inside — not verified "
                     f"at source)" + (f"; plus 5.24 kWh/kg of heat" if short == "SOEC" else ""),
-            "note": "Hermesmann's capital good is one monolithic activity: no stack/BoP split, so stack replacement "
-                    "cannot be charged separately (open gap).",
+            "note": "Gerloff's 1 MW unit over 20 years, with three stacks' materials (§2.1.3) and SI Table 3's "
+                    "manufacturing energy; one activity, amortised on calendar life (a duty-driven stack count is an "
+                    "open gap).",
         })
         ely_fus.append(fu(
-            f"Electrolyser, {short} — 1 kg H₂ at {pressure:g} bar{pressure_note}, electricity excluded, at Hermesmann's "
+            f"Electrolyser, {short} — 1 kg H₂ at {pressure:g} bar{pressure_note}, electricity excluded, at Gerloff's "
             f"{cf_:.0%} utilisation" + (" (gas-boiler heat included)" if short == "SOEC" else ""),
             row["foreground_fixed_kgco2e_per_kg"], uh,
             lp=f"gwp_ely × cap_ely + ely_variable_gwp_per_kg × kg made, with ely_tech='{label}' — the LP splits "
@@ -941,7 +1052,8 @@ def build():
                       (f"{short} consumables per kg", t_e.ely_variable_gwp_per_kg,
                        "Electrolyser consumables (water, heat)")],
             module="optimisation/electrolysers.py",
-            source=f"Hermesmann & Müller 2022, {label} and its capital good (SimaPro exports), on ecoinvent 3.9.1"
+            source=f"Gerloff 2021 (J. Energy Storage 43, 102759), {label} and its capital good, SI Figs 1-5 and "
+                   "Tables 3-6, on ecoinvent 3.9.1"
                    + ("; heat on a gas boiler, Mehmeti et al. 2018" if short == "SOEC" else ""),
             note=f"The inventory's own functional unit ({op_code}) with its electricity taken out: the LP supplies "
                  f"that at the dispatch's own carbon.{heat}",
@@ -987,11 +1099,15 @@ def build():
     # per kWh at the BoP's own running hours like the BoP itself.
     lfc = cl.container_stepup("fuel_cell")
     tx_fc_per_kwh = tech.gwp_tx_fc_per_mw * tech.fc_bop_calendar_years / d_fc["bop_duty_lifetime_hours"]
+    tx_fc_unit_per_kwh = ((tech.gwp_tx_fc_per_mw - added.get("gwp_tx_fc_per_mw", 0.0)) * tech.fc_bop_calendar_years
+                          / d_fc["bop_duty_lifetime_hours"])
+    fc_est = estimate_part("gwp_tx_fc_per_mw", tech.fc_bop_calendar_years / d_fc["bop_duty_lifetime_hours"], uf,
+                           "fuel cell", f"inside gwp_tx_fc_per_mw × cap_fc — LP term '{T_TX_FC}'")
     fc_tx = tx_node(R.TX_LV_CONTAINER, R.TRANSFORMER_DB,
                     f"Step-up transformer, 0.4 → {stx.TX_SITE_COLLECTION_KV:g} kV, one per container "
                     f"({cl.FC_UNIT_KVA / 1000:g} MVA per {fcl.FC_KW_PER_CONTAINER / 1000:g} MW)",
                     1.0 / (d_fc["bop_duty_lifetime_hours"] * 1000.0), "MW of step-up per kWh AC over the BoP's life",
-                    tx_fc_per_kwh,
+                    tx_fc_unit_per_kwh,
                     f"one MW of container step-up per MW of fuel cell, over the BoP's "
                     f"{tech.fc_bop_calendar_years:g}-year calendar life and {d_fc['bop_duty_lifetime_hours']:,.0f} "
                     "running hours",
@@ -1039,7 +1155,7 @@ def build():
         source_titles=("PEM fuel cell",),
         stands_for=stands(R.FUEL_CELL_DB, R.FC_OP, "the inventory's own functional unit, with its hydrogen taken out"),
         children=[
-            fc_tx, inv_node, fc_dc_stage,
+            fc_tx, *([fc_est] if fc_est else []), inv_node, fc_dc_stage,
             node(f"Fuel excluded: {d_fc['h2_kg_per_MWh']:.1f} kg H₂ per MWh", "note", status="option",
                  note="h2_fc[t] drains the tank; its carbon was charged when it was made or bought."),
             node(f"Lives: stack {tech.fc_stack_calendar_years:g} y / {tech.fc_stack_duty_hours:,.0f} h; "
@@ -1051,15 +1167,18 @@ def build():
     life_t = float(cfg.TANK_LIFETIME_YEARS)
     ut = "kg CO₂e per kg of capacity per year"
     tank_items = [rescaled(c, 1.0 / life_t, ut, note=f"the vessel over {life_t:.0f} years") for c in tank_node["children"]]
+    tank_est = estimate_part("gwp_tank", 1.0, ut, "hydrogen tank", "inside gwp_tank × cap_tank — LP term 'H2 tank'")
+    tank_items += [tank_est] if tank_est else []
     tank_fu = fu(
         "Hydrogen tank — 1 kg of H₂ storage capacity for one year", tech.gwp_tank, ut,
         lp="gwp_tank × cap_tank", lp_terms=[("Hydrogen tank (Gandiglio 28 bar vessel)", tech.gwp_tank,
                                               "Hydrogen tank (Gandiglio 28 bar vessel)")],
         module="optimisation/h2_storage.py", grade="transcribed",
-        source=f"Gandiglio et al. 2022 Table 3 (15,652 kg stainless, 21.6 m³, 28 bar); frame and pad from first "
-               f"principles (ASSUMED); {life_t:.0f} y",
+        source=f"Gandiglio et al. 2022 Table 5 (15,652 kg stainless, 21.6 m³, 28 bar); its forming (ADDED); frame "
+               f"and pad from first principles (ASSUMED); {life_t:.0f} y",
         gap_keys=("tank",), todo_keys=("tank",), test_keys=("tank", "storage"), source_titles=("Hydrogen storage",),
-        stands_for=stands(R.H2_STORAGE_DB, R.H2_TANK, "per kg of capacity: the vessel, frame and pad below, over the tank's life"),
+        stands_for=stands(R.H2_STORAGE_DB, R.H2_TANK, "per kg of capacity: the vessel, its forming, frame and pad below, "
+                                                    "over the tank's life"),
         children=tank_items + [
             node(f"Leakage: {h2s.LEAKAGE_FRAC_PER_HOUR:g} per hour by default (swept); leaked H₂ charged at GWP100 "
                  f"{M.H2_GWP100}", "note", grade="assumed", gaps=gap_ids("leakage"),
@@ -1086,7 +1205,7 @@ def build():
             op_g = F.activity_node(R.HYDROGEN_DB, R.PEM_OP)
             kids = [part("Seller's PEM plant and consumables, electricity excluded",
                          row["foreground_fixed_kgco2e_per_kg"], uh, grade="derived",
-                         source="Hermesmann & Müller 2022 PEM operation with its electricity taken out (the next box)",
+                         source="Gerloff 2021 PEM operation with its electricity taken out (the next box)",
                          children=[reid(_copy.deepcopy(c)) for c in op_g["children"]
                                    if "electricity" not in c["name"].lower()]),
                     part(f"{row['kwh_per_kg']:g} kWh of renewable electricity at {I_g:.2f} g/kWh "
@@ -1101,8 +1220,9 @@ def build():
         h2_fus.append(fu(f"Bought {c} hydrogen — 1 kg delivered to the tank", t.bought_h2_gwp_per_kg, uh,
                          lp=f"bought_h2_gwp_per_kg × h2_buy[t] — LP term '{name}'",
                          lp_terms=[(name, t.bought_h2_gwp_per_kg, name)], module="optimisation/h2_prices.py",
-                         source="Hermesmann & Müller 2022 routes on ecoinvent 3.9.1; fossil routes on the study's GB "
-                                "grid (gb_grid.py), gas carbon balance closed",
+                         source="Hermesmann & Müller 2022 fossil routes, Gerloff 2021 PEM for green, on ecoinvent "
+                                "3.9.1; fossil routes on the study's GB grid (gb_grid.py), gas carbon balance closed, "
+                                "no by-product credits",
                          gap_keys=("bought", "h2 price", "turquoise", "co2 transport", "green h"),
                          children=kids))
     h2_group = node("Bought hydrogen — 1 kg delivered to the tank, by colour", "group", children=h2_fus)
@@ -1129,12 +1249,20 @@ def build():
                  source="Zhang et al. 2025, the energy-driven items of Table 1/S1 (dc_inputs.data_centre_coefficients)"),
             fg(R.DATA_CENTRE, R.DATA_CENTRE_DB)])
 
+    for key, target in (("wind", wind_fu), ("solar", solar_fu), ("grid connection", grid_fu), ("battery", batt_fu),
+                        ("electrolyser", ely_group), ("hydrogen tank", tank_fu), ("fuel cell", fc_fu),
+                        ("bought hydrogen", h2_group), ("facility", facility_fu)):
+        g = register_group(key)
+        if g is not None:
+            target["children"].append(g)
+    shared = register_group("all", "Boundary items shared by every technology")
     lca = node("The LCA — functional units by technology, delivered at the 20 kV site bus", "group",
                note="Each technology is one functional unit, nested stage by stage down the power chain: the "
                     "step-up or intake that delivers at the bus, the conversion behind it, the resource. "
-                    "Every stage says which LP term charges it.",
+                    "Every stage says which LP term charges it. Under each, 'Left out, and how big' is the "
+                    "cut-off register for that technology (CUTOFF_RULE_PLAN.md).",
                children=[wind_fu, solar_fu, grid_fu, batt_fu, ely_group, tank_fu, fc_fu, h2_group,
-                         facility_fu])
+                         facility_fu] + ([shared] if shared else []))
 
     # ---------------------------------------------------------------- how the LP organises it
     def lp_term(name, symbol, value, unit, targets, *, module, grade, source=None, note=None,
@@ -1304,7 +1432,8 @@ def build():
     out = {"tree": root, "gaps": {g["id"]: g for g in gaps},
            "meta": {"activities_scored": len(S.cache), "seconds": round(time.time() - t0),
                     "generated": time.strftime("%Y-%m-%d %H:%M"),
-                    "grid_sources_id": G.sources_id(), "gb_grid_gco2e": gb_grid.GB_GRID_2025_HV_GCO2E_PER_KWH}}
+                    "grid_sources_id": G.sources_id(), "gb_grid_gco2e": gb_grid.GB_GRID_2025_HV_GCO2E_PER_KWH,
+                    "fingerprint": fingerprint()}}
     return out
 
 

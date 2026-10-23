@@ -619,6 +619,30 @@ def check_geography(site, start, end, size_mw_it=300.0, pue=1.2):
 
 
 # =============================================================================
+def check_cutoff_rule(tech):
+    """Rules 1 and 2 of the cut-off rule on the register, against this Tech's coefficients."""
+    from optimisation import cutoff
+    df = cutoff.check(tech)
+    tt = cutoff.technology_table(df, tech)
+    print("\n" + "-" * 100)
+    print("CUT-OFF RULE — every unsourced flow against its technology's carbon (optimiser_lca/exclusions.py)")
+    with pd.option_context("display.width", 200, "display.max_colwidth", 44):
+        print(df[["technology", "flow", "status", "upper", "share_upper", "rule_1"]]
+              .to_string(index=False, float_format=lambda v: f"{v:,.4g}"))
+        print(tt[["technology", "still_excluded", "sum_share_upper", "rule_2"]]
+              .to_string(index=False, float_format=lambda v: f"{v:,.4g}"))
+    fails = cutoff.failures(tech)
+    for f in fails:
+        report("cutoff", "error", f)
+    if not fails:
+        report("cutoff", "ok", "no still-excluded flow breaks rule 1 or rule 2; "
+               f"{int((df.status == 'included_estimate').sum())} failed flows carried as estimates")
+    floor = cutoff.power_side_floor(tech)
+    if floor > 0:
+        report("cutoff", "warn", f"a battery shorter than {floor:.2f} h would put an excluded power-side flow over 1 %")
+    return df
+
+
 def run(site=None, start="2025-01-01", end="2025-02-01",
         size_mw_it=300.0, pue=1.2):
     from optimisation import dc_inputs as I
@@ -656,6 +680,7 @@ def run(site=None, start="2025-01-01", end="2025-02-01",
     check_scale_response("57.48,-4.22", start, end)
     check_applicability(site, start, end, size_mw_it, pue)
     check_geography(site, start, end, size_mw_it, pue)
+    check_cutoff_rule(tech)
 
     errs = [f for f in FINDINGS if f.severity == "error"]
     warns = [f for f in FINDINGS if f.severity == "warn"]
