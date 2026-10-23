@@ -464,8 +464,10 @@ def build():
         node("Cut-off rule: a sourced in-boundary flow is always in; an unsourced flow stays out only under "
              f"{X.CUTOFF_FLOW_SHARE:.0%} of its technology's carbon, all together under {X.CUTOFF_TECHNOLOGY_SHARE:.0%}, "
              "and without changing the best design", "note", grade="assumed",
-             note="CUTOFF_RULE_PLAN.md; the register is optimiser_lca/exclusions.py and each technology's entries sit "
-                  "under its functional unit. Not ecoinvent's 'cut-off' system model, an unrelated use of the word.",
+             note="CUTOFF_RULE_PLAN.md; the register of what is left out, with each flow's share and verdict, is "
+                  "optimiser_lca/exclusions.py and ASSUMPTIONS §8 (below). Left-out flows are not drawn in the tree "
+                  "(user, 23 Oct 2026); flows that failed and are carried as estimates are, as boxes under the "
+                  "coefficient they sit on. Not ecoinvent's 'cut-off' system model, an unrelated use of the word.",
              sources_md={k: v for k, v in assumptions.items() if "cut-off" in k.lower()}),
         node("How every inventory is written: one Python module per LCA, in one shape (docs/LCA_STYLE.md)", "note",
              grade="transcribed",
@@ -1249,20 +1251,14 @@ def build():
                  source="Zhang et al. 2025, the energy-driven items of Table 1/S1 (dc_inputs.data_centre_coefficients)"),
             fg(R.DATA_CENTRE, R.DATA_CENTRE_DB)])
 
-    for key, target in (("wind", wind_fu), ("solar", solar_fu), ("grid connection", grid_fu), ("battery", batt_fu),
-                        ("electrolyser", ely_group), ("hydrogen tank", tank_fu), ("fuel cell", fc_fu),
-                        ("bought hydrogen", h2_group), ("facility", facility_fu)):
-        g = register_group(key)
-        if g is not None:
-            target["children"].append(g)
-    shared = register_group("all", "Boundary items shared by every technology")
+    # The cut-off register is not drawn (user, 23 Oct 2026): it lives in ASSUMPTIONS §8, which the
+    # method box carries. register_group() is kept for a view that wants it.
     lca = node("The LCA — functional units by technology, delivered at the 20 kV site bus", "group",
                note="Each technology is one functional unit, nested stage by stage down the power chain: the "
                     "step-up or intake that delivers at the bus, the conversion behind it, the resource. "
-                    "Every stage says which LP term charges it. Under each, 'Left out, and how big' is the "
-                    "cut-off register for that technology (CUTOFF_RULE_PLAN.md).",
+                    "Every stage says which LP term charges it.",
                children=[wind_fu, solar_fu, grid_fu, batt_fu, ely_group, tank_fu, fc_fu, h2_group,
-                         facility_fu] + ([shared] if shared else []))
+                         facility_fu])
 
     # ---------------------------------------------------------------- how the LP organises it
     def lp_term(name, symbol, value, unit, targets, *, module, grade, source=None, note=None,

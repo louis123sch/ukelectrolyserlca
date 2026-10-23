@@ -390,30 +390,13 @@ def main(use_bw=True):
             else: bad(f"{db} / {a.code} ({a.name[:50]}) is in the inventory but nowhere in the LCA tree")
 
     # ------------------------------------------------------------ 8b. the cut-off register
-    print("8b. Every register entry is a box under its technology, at cutoff.check's share")
-    from optimiser_lca import exclusions as X
-    from optimisation import cutoff
-    cut = {(r.technology, r.flow): r for r in cutoff.check(tech).itertuples()}
-    reg_nodes = {(n["register"]["technology"], n["register"]["flow"]): n
-                 for n in find_all(tree, lambda n: n.get("register"))}
-    for e in X.REGISTER:
-        n = reg_nodes.get((e.technology, e.flow))
-        if n is None:
-            bad(f"register entry {e.technology!r} / {e.flow[:50]!r} has no box in the map"); continue
-        ok()
-        if e.kind == "boundary":
-            continue
-        r = cut.get((e.technology, e.flow))
-        want = None if r is None or r.share_upper != r.share_upper else r.share_upper
-        if (n["register"].get("share_upper") is None) == (want is None) and \
-                (want is None or close(n["register"]["share_upper"], want, rel=1e-9)): ok()
-        else: bad(f"register box {e.flow[:40]!r}: share {n['register'].get('share_upper')} vs live {want}")
-        if n["register"].get("status") == e.status: ok()
-        else: bad(f"register box {e.flow[:40]!r}: status {n['register'].get('status')} vs live {e.status}")
-    for key in reg_nodes:
-        if not any((e.technology, e.flow) == key for e in X.REGISTER):
-            bad(f"map register box {key} is not in the register")
-    print(f"     {len(X.REGISTER)} register entries, {len(reg_nodes)} boxes")
+    print("8b. Every estimate carried on a coefficient is a box; the left-out register is not drawn")
+    added = (tech.labels or {}).get("cutoff_added", {})
+    est_boxes = find_all(tree, lambda n: n["kind"] == "part" and "estimates carried" in n["name"].lower())
+    if len(est_boxes) >= len([k for k, v in added.items() if v]): ok()
+    else: bad(f"{len(added)} coefficients carry cut-off estimates but the map shows {len(est_boxes)} estimate boxes")
+    if not find_all(tree, lambda n: n.get("register")): ok()
+    else: bad("the map draws cut-off register boxes; they were taken out (user, 23 Oct 2026)")
 
     # ------------------------------------------------------------ 8c. one box per process
     print("8c. No box holds exactly one box that is the same thing")
