@@ -36,7 +36,7 @@ sys.path.insert(0, str(ROOT))
 OUT_DIR = ROOT / "optimisation_outputs"
 # v2: split by driver and net of the standby generator, so a v1 file is not
 # merely stale but the wrong shape.
-DC_CACHE = OUT_DIR / "dc_facility_decomposition_v2_cache.json"
+DC_CACHE = OUT_DIR / "dc_facility_decomposition_v3_cache.json"   # v3: IT normalised on 5.38 MW
 
 from optimisation import dc_model, sites
 
@@ -75,8 +75,11 @@ def data_centre_coefficients(refresh: bool = False) -> dict:
     years = float(cfg.DC_OPERATION_YEARS)
     pue_ref = float(cfg.DC_REFERENCE_PUE)
 
+    from optimiser_lca import data_centre as zhang
     facility_mw = kwh / years / dc_model.HOURS_PER_YEAR / 1000.0
-    reference_it_mw = facility_mw / pue_ref
+    # The IT-driven rows were sized on Zhang's 5.38 MW of IT, not on the 5.219 MW read back
+    # from the rounded 1.60e9 kWh (ASSUMPTIONS §2; user, 26 Oct 2026).
+    reference_it_mw = zhang.ZHANG_IT_MW
     out = {
         "electricity_kwh_over_life": kwh,
         "operation_years": years,
@@ -511,7 +514,13 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
         gwp_solar=gen_gwp("solar_pv"),
         gwp_batt_p=be["power_kgco2e_per_kW"] * 1000.0 / batt.ASSET_LIFE_YEARS,
         gwp_batt_e=be["energy_kgco2e_per_kWh"] * 1000.0 / batt.ASSET_LIFE_YEARS,
-        gwp_ely=ely_row["capital_kgco2e_per_MW"] / ely.PLANT_LIFETIME_YEARS * stack_share,
+        # The balance of plant once over the plant's life; the stacks by replacement
+        # (gwp_ely_stack_per_mw x ely_stack_units, dc_model). At the calendar floor the
+        # two add back to the whole unit over 25 years, as charged before 26 Oct 2026.
+        gwp_ely=ely_row["plant_kgco2e_per_MW"] / ely.PLANT_LIFETIME_YEARS * stack_share,
+        gwp_ely_stack_per_mw=ely_row["stack_kgco2e_per_MW"] * stack_share,
+        ely_stack_calendar_years=ely.STACK_CALENDAR_YEARS,
+        ely_stack_duty_hours=ely.STACK_DUTY_HOURS,
         gwp_tank=tank_row["kgco2e_per_kg_capacity_year"],
         gwp_fc_bop_per_mw=gwp_fc_bop,
         gwp_fc_stack_per_mw=fc.stack_kgco2e_per_mw(d, fc_stack_basis),

@@ -75,10 +75,17 @@ from optimiser_lca import registry as R
 from optimiser_lca.common import Activity, Flow, Inventory, Process
 
 # =============================================================================
-# Parameters — all in dc_config (DC_OPERATION_YEARS, DC_REFERENCE_PUE). The
+# Parameters — DC_OPERATION_YEARS and DC_REFERENCE_PUE are in dc_config. The
 # inventory is Zhang's printed amounts; three energy rows are his MJ figures as
 # kWh, converted as he converts them (the notes say which).
 # =============================================================================
+# TRANSCRIBED - Zhang S1, Operation row 1 (cell D26): "10 000 m2 white space: 5.38 MW IT",
+# the IT load every IT-driven row (servers, UPS, building, construction diesel) is sized on.
+# The printed 1.60e9 kWh is 7.53 MW x 8,760 h x 25 y rounded down (the product is 1.649e9),
+# so the IT load read back from it (5.219 MW) is 3 % under the one the inventory was built
+# for. The IT-driven burden is normalised by this figure (user, 26 Oct 2026).
+ZHANG_IT_MW = 5.38                  # TRANSCRIBED - S1 D26, see above
+ZHANG_FACILITY_MW = 7.53            # TRANSCRIBED - same cell, "Facility load PUE 1.4 : 7.53 MW"
 DC_SCOPE = {
     "material_production": "INCLUDED - Table S1 Material Production, the six rows at the printed amounts.",
     "construction": "INCLUDED since 21 Oct 2026 - Table S1 Construction (diesel, electricity, water).",
@@ -98,6 +105,8 @@ def check() -> str:
     problems = []
     if abs(top_up - 450.0) > 1e-9:
         problems.append(f"the R134a top-up 2,000 kg x 0.9 %/yr x 25 y = {top_up}, not 450")
+    if abs(ZHANG_IT_MW * 1.4 - ZHANG_FACILITY_MW) > 0.01:
+        problems.append(f"5.38 MW IT x PUE 1.4 is not Zhang's 7.53 MW facility")
     if abs(5.76e9 / 3.6 - 1.60e9) > 1e-3:
         problems.append("5.76e9 MJ / 3.6 is not 1.60e9 kWh")
     if abs(2.80e5 / 3.6 / 7.8e4 - 1) > 0.005:

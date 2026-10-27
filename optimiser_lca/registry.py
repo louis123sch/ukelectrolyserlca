@@ -36,12 +36,21 @@ SMR_CCS    = "smr_ccs_hermesmann_1kg_h2"
 CCS        = "ccs_hermesmann_1kg_co2"           # waste treatment of 1 kg captured CO2
 MP_E       = "mp_e_1kg_h2"
 # Gerloff's bills; the codes said "hermesmann" until 22 Oct 2026 (a misattribution).
-AE_UNIT    = "ae_gerloff_1unit"                 # capital good, 1 MW over 20 years, three stacks
+AE_UNIT    = "ae_gerloff_1unit"                 # capital good, 1 MW over 20 years: plant + three stacks
+AE_PLANT   = "ae_gerloff_plant_1unit"           # the balance of plant, once per unit (since 26 Oct 2026)
+AE_STACK   = "ae_gerloff_stack_1unit"           # one stack, 1 MW; the unit holds three
 AE_OP      = "ae_op_gerloff_1kg_h2"
 PEM_UNIT   = "pem_gerloff_1unit"
+PEM_PLANT  = "pem_gerloff_plant_1unit"
+PEM_STACK  = "pem_gerloff_stack_1unit"
 PEM_OP     = "pem_op_gerloff_1kg_h2"
 SOEC_UNIT  = "soec_gerloff_1unit"
+SOEC_PLANT = "soec_gerloff_plant_1unit"
+SOEC_STACK = "soec_gerloff_stack_1unit"
 SOEC_OP    = "soec_op_gerloff_1kg_h2"
+# Plant and one stack per electrolyser, by the label the optimiser uses (electrolysers.py).
+ELY_PARTS = {"AE operation": (AE_PLANT, AE_STACK), "PEM operation": (PEM_PLANT, PEM_STACK),
+             "SOEC operation": (SOEC_PLANT, SOEC_STACK)}
 
 # Hydrogen-producing activities by the label the optimiser uses.
 H2_CODES = {
@@ -103,7 +112,7 @@ BESS_CELL_CN = "bess_lfp_cell_1kwh_cn"           # Voß cell per kWh, factory in
 BESS_CELL_DE = "bess_lfp_cell_1kwh_de"           # Voß cell per kWh, Voß's own German factory
 BESS_PARTS = {                                    # the sub-assemblies, by role
     "sgr": "bess_synthetic_graphite_1kg", "ngr": "bess_natural_graphite_1kg",
-    "fepo4": "bess_iron_phosphate_0p91kg", "lfp": "bess_lfp_cam_1kg",
+    "fepo4": "bess_iron_phosphate_1kg", "lfp": "bess_lfp_cam_1kg",
     "sbr": "bess_sbr_1kg", "pvdf": "bess_pvdf_1kg", "separator": "bess_separator_1kg",
     "housing": "bess_cell_housing_1kg", "cell": "bess_lfp_cell_materials_1unit",
     "module": "bess_module_47kwh_liquid", "rack_housing": "bess_rack_housing_1kg",
@@ -123,8 +132,8 @@ CODES_BY_DATABASE = {
     SOLAR_DB:       list(UPV_TABLES.values()) + [UPV_MOUNT, UPV_CAPITAL, UPV_OM30,
                                                  UPV_GRID_KWH],
     GRID_DB:        [GB_GRID_HV_2025],
-    HYDROGEN_DB:    [SMR, SMR_CCS, CCS, MP_E, AE_UNIT, AE_OP, PEM_UNIT, PEM_OP,
-                     SOEC_UNIT, SOEC_OP],
+    HYDROGEN_DB:    [SMR, SMR_CCS, CCS, MP_E, AE_UNIT, AE_PLANT, AE_STACK, AE_OP,
+                     PEM_UNIT, PEM_PLANT, PEM_STACK, PEM_OP, SOEC_UNIT, SOEC_PLANT, SOEC_STACK, SOEC_OP],
     DATA_CENTRE_DB: [DATA_CENTRE],
     BESS_DB:        list(BESS_PARTS.values()) + [BESS_CELL_CN, BESS_CELL_DE,
                                                  BESS_DC_BLOCK_KWH],

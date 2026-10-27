@@ -20,7 +20,8 @@ T_TX_FC = "Fuel-cell step-up transformers (0.4 → 20 kV, one per container)"
 T_GRID_CONN = "Grid connection (intake transformers, N-1)"
 T_BATT_E = "Battery cells, racks and container (energy capacity)"
 T_BATT_P = "Battery power conversion system (power capacity)"
-T_ELY = "Electrolyser capital (PEM default; AE, SOEC selectable)"
+T_ELY = "Electrolyser balance of plant (PEM default; AE, SOEC selectable)"
+T_ELY_STACK = "Electrolyser stack replacements (max(calendar, duty))"
 T_TANK = "Hydrogen tank (Gandiglio 28 bar vessel)"
 T_FC_STACK = "Fuel cell stack replacements (max(calendar, duty))"
 T_FC_BOP = "Fuel cell balance-of-plant replacements (max(calendar, duty))"
@@ -41,7 +42,7 @@ KEY_TO_NAME = {
     "battery step-up transformers": T_TX_BATT, "fuel cell step-up transformers": T_TX_FC,
     "grid connection": T_GRID_CONN,
     "battery cells and container": T_BATT_E, "battery power conversion": T_BATT_P,
-    "electrolyser": T_ELY, "H2 tank": T_TANK,
+    "electrolyser": T_ELY, "electrolyser stack replacements": T_ELY_STACK, "H2 tank": T_TANK,
     "fuel cell stack replacements": T_FC_STACK, "fuel cell BoP replacements": T_FC_BOP,
     "grid import": T_IMPORT, "electrolyser consumables": T_ELY_CONS,
     "fuel cell maintenance": T_FC_MAINT, "H2 leaked from tank": T_LEAK, "unserved (VoLL)": T_VOLL,

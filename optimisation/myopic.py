@@ -184,11 +184,15 @@ def evaluate(df: pd.DataFrame, series: M.Series, tech: M.Tech, caps: dict,
     fc_mwh = float((df.p_fc * dt).sum()) * scale if "p_fc" in df else 0.0
     bop_units = max(cap_fc / tech.fc_bop_calendar_years, fc_mwh / tech.fc_bop_duty_hours)
     stack_units = max(cap_fc / tech.fc_stack_calendar_years, fc_mwh / tech.fc_stack_duty_hours)
+    cap_ely = caps.get("cap_ely", 0.0)
+    ely_mwh = float((df.p_ely * dt).sum()) * scale if "p_ely" in df else 0.0
+    ely_stack_units = max(cap_ely / tech.ely_stack_calendar_years, ely_mwh / tech.ely_stack_duty_hours)
 
     q = {k: float(caps.get(k, 0.0)) for k in CAPACITIES}
     q.update({k: (df[k].to_numpy(dtype=float) if k in df else np.zeros(series.n))
               for k in FLOWS})
     q["fc_bop_units"], q["fc_stack_units"] = bop_units, stack_units
+    q["ely_stack_units"] = ely_stack_units
     terms = M.score(q, series, tech)
     if grid is None:
         grid = caps.get("cap_grid", 0.0) > 0

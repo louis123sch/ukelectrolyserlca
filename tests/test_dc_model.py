@@ -797,3 +797,51 @@ def test_chains_cover_every_term_and_sum_to_the_totals(series, tech):
     assert set(c["gwp_chains"]["wind"]) == {"wind", "offshore wind", "wind step-up transformers"}
     with pytest.raises(KeyError):
         M.chains({"gwp_embodied": {"a new term": 1.0}}, "gwp")
+
+
+# =============================================================================
+# Electrolyser stacks: max(calendar, duty), as the fuel cell (user, 26 Oct 2026)
+# =============================================================================
+ELY_STACK = dict(gwp_ely=3_257.3, gwp_ely_stack_per_mw=138_248.0,
+                 ely_stack_calendar_years=25.0 / 3.0, ely_stack_duty_hours=50_000.0)
+ELY_ASSETS = M.Assets(grid=True, electrolyser=True, tank=True, fuel_cell=True, grid_limit_mw=None)
+
+
+def _solve_ely(series, tech, strategy, objective="gwp"):
+    from dataclasses import replace
+    t = replace(tech, **ELY_STACK)
+    m, V, obj = M.build_model(series, ELY_ASSETS, t, objective=objective, ely_strategy=strategy)
+    m.add_constraints(V["cap_ely"] >= 1.0, name="force_ely")
+    M.solve(m)
+    return V, t
+
+
+@pytest.mark.parametrize("strategy, binding", [("baseload", "duty"), ("free", "calendar")])
+def test_electrolyser_stack_units_take_the_binding_limit(series, tech, strategy, binding):
+    V, t = _solve_ely(series, tech, strategy)
+    cap = float(V["cap_ely"].solution)
+    mwh = V["p_ely"].solution.values.sum() * DT * series.annual_scale
+    u = float(V["ely_stack_units"].solution)
+    calendar, duty = cap / t.ely_stack_calendar_years, mwh / t.ely_stack_duty_hours
+    assert u == pytest.approx(max(calendar, duty), rel=1e-6)
+    assert (duty > calendar) == (binding == "duty")
+
+
+def test_electrolyser_calendar_floor_is_the_old_whole_unit_charge(series, tech):
+    """Below ~68 % utilisation the split charges exactly the unit over 25 years, as before."""
+    V, t = _solve_ely(series, tech, "free")
+    cap = float(V["cap_ely"].solution)
+    q = M.solution_quantities(V)
+    terms = M.score(q, series, t)["gwp_embodied"]
+    whole = (t.gwp_ely + t.gwp_ely_stack_per_mw / t.ely_stack_calendar_years) * cap
+    assert terms["electrolyser"] + terms["electrolyser stack replacements"] == pytest.approx(whole, rel=1e-6)
+    assert t.gwp_ely + t.gwp_ely_stack_per_mw * 3 / 25.0 == pytest.approx(19_847.1, rel=1e-4)
+
+
+def test_baseload_electrolyser_pays_for_its_extra_stacks(series, tech):
+    """At the 85 % floor a 50,000 h stack is replaced 3.72 times in 25 years, not 3."""
+    V, t = _solve_ely(series, tech, "baseload")
+    cap = float(V["cap_ely"].solution)
+    u = float(V["ely_stack_units"].solution)
+    assert u * 25.0 / cap >= 0.85 * 8760 * 25 / 50_000 - 1e-6
+    assert u * 25.0 / cap > 3.0

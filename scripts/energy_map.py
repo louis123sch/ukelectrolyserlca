@@ -22,7 +22,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
-from lp_terms import (T_BATT_E, T_BATT_P, T_BOUGHT, T_DC_ENERGY, T_DC_IT, T_FC_BOP, T_FC_STACK,  # noqa: E402
+from lp_terms import (T_BATT_E, T_BATT_P, T_BOUGHT, T_DC_ENERGY, T_DC_IT, T_ELY_STACK, T_FC_BOP, T_FC_STACK,  # noqa: E402
                       T_TX_BATT, T_TX_FC, T_TX_SOLAR, T_TX_WIND)
 
 
@@ -250,7 +250,7 @@ def energy_section(gap_ids=lambda *k: []):
       model="p_ely[t] ≤ cap_ely. Hydrogen made = p_ely ÷ (kWh/kg + compression). Can run at any "
             "part load (no unit commitment).",
       loss=f"{1000 / pem['kwh_per_kg']:.2f} kg H₂ per MWh (PEM) = {pc(33.33 / pem['kwh_per_kg'], 0)} LHV",
-      lp="cap_ely (MW), p_ely[t]", term="Electrolyser capital (PEM default; AE, SOEC selectable)",
+      lp="cap_ely (MW), p_ely[t]; ely_stack_units = max(calendar, running hours / 50,000)", term=T_ELY_STACK,
       source="Gerloff 2021; electrolysers.DELIVERY_PRESSURE_BAR",
       gaps=("electrolyser", "alkaline", "soec"))
     n("gas", "Natural gas supply", 4, 0, "source", route=("hydrogen",), status="option",

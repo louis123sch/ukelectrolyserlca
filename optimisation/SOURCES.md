@@ -1277,6 +1277,37 @@ balance of plant, the facility. The register's still-excluded flows all pass
 rules 1 and 2 (ASSUMPTIONS §8). Activity codes `*_hermesmann_*` for Gerloff's
 electrolysers were renamed `*_gerloff_*`; the fossil routes keep theirs.
 
+## Changes of 26 Oct 2026 — the third source read
+
+A third read of every source (`docs/SOURCE_RECHECK_2026-10-23.md`) found no
+transcription error; these are the points the user decided to fix. London
+reference `Tech`, IPCC 2021 GWP100 on ecoinvent 3.9.1 apos:
+
+| Coefficient | 22 Oct | 26 Oct | Change | Why |
+|---|---|---|---|---|
+| Electrolyser capital, PEM (`gwp_ely`, per MW per year) | 17,670 | 19,848 | +12 % | the units are made in Germany, as Gerloff (§2: DE "provided that the opportunity for it existed"): SI Table 3's manufacturing electricity on German LV, not GB LV |
+| Electrolyser capital per MW, AE / PEM / SOEC | 824.4 / 441.8 / 484.9 t | 817.6 / 496.2 / 552.8 t | −0.8 / +12 / +14 % | as above; all three units on Gerloff §2's dataset rule — DE where it exists, then Europe, then RoW (AE's export had RoW: ten AE materials to RER, SOEC's ABS to RER, tube insulation to DE in all three); SOEC's praseodymium oxide on its own market, as exported |
+| Grid connection (`gwp_grid_per_mw`) | 286.9 | 305.0 | +6.3 % | Teffera Table 5's HV bay steelwork and grid-connection hardware (289 kg/MW), carried as a cut-off estimate at 2.5 kg CO₂e/kg (18.1) |
+| Facility, IT-driven (`dc_fixed_gwp_per_year` per MW of IT) | 158,743 | 153,986 | −3.0 % | normalised by Zhang's 5.38 MW of IT (S1 D26), not the 5.219 MW read back from the rounded 1.60e9 kWh |
+| Battery energy (`gwp_batt_e`) | 7,499 | 7,668 | +2.3 % | 101.237 → 103.515 kg per kWh nameplate: the cell factory's gas on Voß's own Chinese dataset, "market for heat, central or small-scale, natural gas" RoW (main text p. 8114, 0.0785 kg CO₂e/MJ; was the CHP-heavy district-or-industrial market at half that), +2.77; FePO4 read per 1.00 kg (Voß S32's printed 0.91 output is S31's consumption copied; the inputs are stoichiometric for 1 kg), −0.56; Jasper's tetrafluoroethylene avoided-product credit dropped (no credits, ASSUMPTIONS §5), +0.07. Cell 80.711 → 82.920 |
+| Bought green hydrogen (default mix, per kg) | 1.10 | 1.14 | +3.6 % | the PEM unit above |
+| German cell sensitivity (`voss_de`, per kWh) | 73.677 | 74.933 | +1.7 % | Voß's sea (18,500 km) and Rotterdam–Berlin lorry (700 km) legs on the cell's materials, upstream for a German factory (+1.82); FePO4 per kg (−0.56) |
+
+Electrolyser stacks by running hours (user, option B; `docs/ELECTROLYSER_STACKS.md`):
+Gerloff's unit split into plant and one stack, the LP charging the plant over 25 years
+(`gwp_ely`, PEM 3,257 kg/MW/yr) and stacks per replacement (`gwp_ely_stack_per_mw`, PEM
+138,248 kg per MW of stack) at max(3 per 25 years, running hours ÷ 50,000, Gerloff
+§2.1.2). At the floor the two give the old 19,847 exactly.
+
+Recorded, no number moved: Leng's intra-site transport (Table S2, 300 km) and
+the booster station's 3 km on-site leg are inside the delivery-to-site boundary
+(register entry); Leng's electrical installation beyond its four printed rows
+(~438 t per 100 MW scored, not itemised) is an unsourced cut-off entry that
+passes (upper 125 kg/MW/yr, 0.5 % of wind); the register now prints the
+switchyard civils the coefficient charges (98.6), not Leng's own score (539).
+Unchanged: wind, solar, the battery power term, the fuel cell, the tank, grey
+and blue hydrogen.
+
 ## Scope decisions
 
 These are choices, not data. They are recorded in `ASSUMPTIONS.md` with their

@@ -163,8 +163,12 @@ SGR_CRUCIBLE_KGCO2E_PER_KG = 7.346    # TRANSCRIBED - Carrère via Voß Table S5
 SGR_PACKAGING_KGCO2E_PER_KG = 0.432   # TRANSCRIBED - Carrère via Voß Table S5
 
 # Voß's 1,000 km "Truck China" leg, per kg of material (ESI §3.1.3). TRANSCRIBED.
-# Their sea (18.5 t·km) and European lorry (0.7) legs to a German factory are not taken.
-VOSS_LORRY_CN_TKM = 1.0
+# Their sea (~18,500 km) and European lorry (700 km, Rotterdam to Berlin) legs carry the
+# China-made materials to their German factory: not taken for the default Chinese cell, and
+# taken on the German sensitivity cell, for which they are upstream (since 26 Oct 2026, user).
+VOSS_LORRY_CN_TKM = 1.0      # TRANSCRIBED - §3.1.3 "Truck China", 1,000 km
+VOSS_SEA_TKM = 18.5           # TRANSCRIBED - §3.1.1.1 "~18 500 km ship"
+VOSS_LORRY_EU_TKM = 0.7       # TRANSCRIBED - §3.1.1.1 "700 km truck drive in Europe from Rotterdam to Berlin"
 
 # --- the container: Jasper Table 2, liquid-cooled LFP --------------------------
 CSS_KWH = 3_008.0                # TRANSCRIBED
@@ -267,9 +271,6 @@ processes = {
                             "Voß's gigafactory electricity, German variant only"),
     "heat_gas_small_row": _p("market for heat, central or small-scale, natural gas", "RoW",
                              "market for heat central or small-scale natural gas RoW"),
-    "heat_gas_industrial_row": _p("market for heat, district or industrial, natural gas", "RoW",
-                                  "market for heat district or industrial natural gas RoW",
-                                  "cell factory gas in China; ecoinvent has no CN gas heat"),
     "heat_gas_industrial_rer": _p("market group for heat, district or industrial, natural gas", "RER",
                                   "market group for heat district or industrial natural gas RER",
                                   "Voß's own gigafactory heat dataset, German variant only"),
@@ -324,6 +325,11 @@ processes = {
     # as the upstream haul to a Chinese factory, the natural graphite included.
     "lorry_euro3_row": _p("market for transport, freight, lorry 16-32 metric ton, EURO3", "RoW",
                           "market for transport freight lorry 16-32 metric ton EURO3 RoW"),
+    # Voß's sea and "Truck Europe" legs (§3.1.3), on the German sensitivity cell only.
+    "container_ship_glo": _p("market for transport, freight, sea, container ship", "GLO",
+                             "market for transport freight sea container ship GLO"),
+    "lorry_euro3_rer": _p("market for transport, freight, lorry 16-32 metric ton, EURO3", "RER",
+                          "market for transport freight lorry 16-32 metric ton EURO3 RER"),
     # Jasper's provider for the container's concrete block.
     "concrete_block_de": _p("concrete block production", "DE", "concrete block production DE"),
     # Jasper's upstream material legs, kept (ecoinvent's default 100 km lorry +
@@ -513,9 +519,13 @@ voss_activities = [
     ),
     Activity(
         code=_FEPO4, name="Iron phosphate, LFP precursor (Voß 2025)",
-        reference_product="iron phosphate", unit=_kg, location="CN", production_amount=0.91,
-        comment="Voß ESI Table S32, as printed: the inputs make 0.91 kg of FePO4, which is the "
-                "amount one kg of LFP-C consumes (Table S31).",
+        reference_product="iron phosphate", unit=_kg, location="CN",
+        comment="Voß ESI Table S32, every input at the printed amount, per 1.00 kg of FePO4. S32 prints "
+                "its output as 0.91 kg, but that is S31's consumption copied across: ESI p. 23 says the "
+                "precursors are stoichiometric (Eq. S25), and on the 'without water' datasets 1.00 kg "
+                "FeSO4, 0.65 kg H3PO4 and 0.11 kg H2O2 are each ~6.6 mol, i.e. 1.00 kg of FePO4. Only "
+                "this reading reproduces Voß's own LFP-C (7.6) and cathode (17.0). Read per 0.91 kg "
+                "until 26 Oct 2026 (user).",
         technosphere=[
             ("iron_sulfate",       1.00,  _kg,  "Table S32: FeSO4"),
             ("phosphoric_acid",    0.65,  _kg,  "Table S32: H3PO4, 85 %"),
@@ -655,7 +665,16 @@ voss_activities.append(Activity(
 ))
 
 
+_CELL_BILL_KG = sum(CELL_BILL_G.values()) / 1000.0
+
+
 def _cell_per_kwh(code, factory, electricity, heat):
+    legs = [] if factory == "CN" else [
+        ("container_ship_glo", VOSS_SEA_TKM * _CELL_BILL_KG * CELLS_PER_KWH, _tkm,
+         "§3.1.3 sea leg, China to Rotterdam (~18,500 km), on the cell's materials: upstream to the German factory"),
+        ("lorry_euro3_rer", VOSS_LORRY_EU_TKM * _CELL_BILL_KG * CELLS_PER_KWH, _tkm,
+         "§3.1.3 'Truck Europe', Rotterdam to Berlin (700 km), on the cell's materials"),
+    ]
     return Activity(
         code=code, name=f"LFP/graphite prismatic cell, per kWh, made in {factory} (Voß 2025)",
         reference_product="LFP/graphite battery cell capacity", unit=_kwh, location=factory,
@@ -669,12 +688,15 @@ def _cell_per_kwh(code, factory, electricity, heat):
             (FG(_CELL), CELLS_PER_KWH, _unit, f"1000 / {CELL_WH:g} Wh per cell"),
             (electricity, CELL_FACTORY_KWH_ELECTRICITY, _kwh, f"cell factory electricity, {factory}"),
             (heat, CELL_FACTORY_MJ_HEAT, _MJ, f"cell factory gas, {factory}"),
-        ],
+        ] + legs,
     )
 
 
 voss_activities += [
-    _cell_per_kwh(R.BESS_CELL_CN, "CN", "electricity_mv_cn", "heat_gas_industrial_row"),
+    # Gas on Voß's own dataset for everything made in China (main text p. 8114, 0.0785 kg CO2e/MJ;
+    # ESI Tables S5, S31, S32 ...), since 26 Oct 2026 (user). Was the RoW "district or industrial"
+    # market, ~85 % gas-CHP heat at half that factor.
+    _cell_per_kwh(R.BESS_CELL_CN, "CN", "electricity_mv_cn", "heat_gas_small_row"),
     _cell_per_kwh(R.BESS_CELL_DE, "DE", "electricity_mv_de", "heat_gas_industrial_rer"),
 ]
 CELL_CODE = {"CN": R.BESS_CELL_CN, "DE": R.BESS_CELL_DE}[CELL_FACTORY]
@@ -956,15 +978,14 @@ jasper_activities = [
     Activity(
         code=_HFC, name="Heptafluoropropane (HFC-227ea) fire suppressant, per kg (Jasper 2026)",
         reference_product="heptafluoropropane", unit=_kg, location="GLO",
-        comment=_J + ". The 0.1 kg of tetrafluoroethylene is the source's avoided co-product and "
-                "is kept as it is printed, the way SMR keeps its avoided electricity. The "
-                "suppressant is the charge, not a release - nothing is emitted here.",
+        comment=_J + ". Jasper's 0.1 kg tetrafluoroethylene avoided co-product is NOT taken: no "
+                "credits anywhere (ASSUMPTIONS §5; user, 26 Oct 2026). The suppressant is the "
+                "charge, not a release - nothing is emitted here.",
         technosphere=[
             ("electricity_mv_glo",  5.0,   _kwh, _J),
             ("steam_heat_row",      20.0,  _MJ,  _J),
             ("hydrogen_fluoride",   0.131, _kg,  _J),
             ("tetrafluoroethylene", 0.981, _kg,  _J),
-            ("tetrafluoroethylene", -0.1,  _kg,  _J + " - avoided product"),
             ("hazardous_waste_incineration", -0.02, _kg, _J + " - production waste sent to treatment"),
         ],
     ),

@@ -35,10 +35,13 @@ first 250 km leg (materials to assembly), three stacks per unit life (Gerloff
 §2.1.2–2.1.3: the stack is "replaced 3 times", and SI Table 3's stack energy is
 already ×3), manufacturing energy, foundations.
 
-**Substitutions, each stated once where it applies.** Electricity: every kWh
-except AE's is the study's own GB grid (``gb_grid.py``, GRID_DB), not
-ecoinvent's 2018 GB market, so every grid kWh in the study is on one basis; AE
-is as Gerloff export it, on the German LV market. Iridium: Gerloff's 0.8 kg of
+**Substitutions, each stated once where it applies.** Electricity: the three
+units are manufactured in Germany, as Gerloff (§2: "Germany (DE) has been chosen
+provided that the opportunity for it existed"), so SI Table 3's manufacturing
+electricity is on ecoinvent's German LV market for AE, PEM and SOEC alike (PEM and
+SOEC were on GB LV until 26 Oct 2026, as the user's UK exports had them). The
+operation activities' electricity (GB LV) is stripped out by ``electrolysers.py``
+and charged by the LP on the study's own GB grid. Iridium: Gerloff's 0.8 kg of
 anode iridium has no 3.9.1 dataset; platinum stands in for it (SOURCE_DIFF S3).
 SOEC heat: on Mehmeti et al. 2018's natural-gas boiler, the source of the
 5.24 kWh, rather than Gerloff's coal-heavy "other than natural gas" heat (see
@@ -94,9 +97,14 @@ SOEC_STACK_KG = {                                       # TRANSCRIBED, kg per st
 AE_MATERIALS_KG_ONE_STACK, PEM_MATERIALS_KG_ONE_STACK, SOEC_MATERIALS_KG_ONE_STACK = 43_993.0, 13_871.0, 48_237.0
 
 
-def _unit_tkm(one_stack_kg: float, stack_kg: dict) -> float:
-    """t·km of the 250 km assembly leg on a unit's whole material mass, three stacks."""
-    return (one_stack_kg + (STACKS_PER_UNIT_LIFE - 1) * sum(stack_kg.values())) * GERLOFF_LORRY_KM / 1000.0
+def _plant_tkm(one_stack_kg: float, stack_kg: dict) -> float:
+    """t·km of the 250 km assembly leg on the plant's mass (the unit's materials less one stack)."""
+    return (one_stack_kg - sum(stack_kg.values())) * GERLOFF_LORRY_KM / 1000.0
+
+
+def _stack_tkm(stack_kg: dict) -> float:
+    """t·km of the 250 km assembly leg on one stack."""
+    return sum(stack_kg.values()) * GERLOFF_LORRY_KM / 1000.0
 
 
 # --- SOEC LSM layer: La2O3 and SrCO3, amounts not held (SOURCE_DIFF #11) ----------
@@ -275,9 +283,10 @@ processes = {
         identity=("market for aluminium, wrought alloy", "GLO", "aluminium, wrought alloy"),
         why="hit 0 is the ingot-to-market transfer; the market is the dataset"),
     "tube_insulation": Process(
-        query="tube insulation elastomere", pick=1,
-        identity=("tube insulation production, elastomere", "RoW", "tube insulation, elastomere"),
-        why="the RoW production dataset as exported; hit 0 is the GLO market"),
+        query="tube insulation production elastomere DE", pick=0,
+        identity=("tube insulation production, elastomere", "DE", "tube insulation, elastomere"),
+        why="Gerloff §2: Germany 'provided that the opportunity for it existed'; the exports had RoW "
+            "(DE since 26 Oct 2026)"),
     "nickel_class1": Process(
         query="nickel class 1 market GLO", pick=0,
         identity=("market for nickel, class 1", "GLO", "nickel, class 1"),
@@ -287,45 +296,13 @@ processes = {
         identity=("market for transport, freight, lorry >32 metric ton, EURO6", "RER",
                   "transport, freight, lorry >32 metric ton, EURO6"),
         why="Gerloff §2.1: materials reach assembly by lorry >32 t EURO6 over 250 km"),
-    # --- alkaline electrolyser, RoW datasets as exported ------------------------
-    "polyethylene_ld_row": Process(
-        query="polyethylene production low density granulate RoW", pick=0,
-        identity=("polyethylene production, low density, granulate", "RoW",
-                  "polyethylene, low density, granulate"),
-        why="Gerloff SI Fig. 1 names low-density polyethylene; the export (and this module "
-            "until 22 Oct 2026) carried high-density. RoW as exported"),
-    "reinforcing_steel_row": Process(
-        query="reinforcing steel production", pick=2,
-        identity=("reinforcing steel production", "RoW", "reinforcing steel"),
-        why="RoW as exported for the AE unit; hits 0-1 are the European and Austrian datasets"),
-    "electronics_row": Process(
-        query="electronics production control units", pick=1,
-        identity=("electronics production, for control units", "RoW", "electronics, for control units"),
-        why="RoW as exported for the AE unit; hit 0 is RER, which PEM and SOEC use"),
-    "glass_fibre_row": Process(
-        query="glass fibre production", pick=2,
-        identity=("glass fibre production", "RoW", "glass fibre"),
-        why="hits 0-1 are glass-fibre reinforced plastics; the plain glass fibre, RoW as exported"),
-    "cr_steel_hot_rolled_row": Process(
-        query="steel chromium steel 18/8 hot rolled production", pick=1,
-        identity=("steel production, chromium steel 18/8, hot rolled", "RoW",
-                  "steel, chromium steel 18/8, hot rolled"),
-        why="RoW as exported for the AE unit; hit 0 is RER (PEM, SOEC)"),
-    "cast_iron_row": Process(
-        query="cast iron production", pick=6,
-        identity=("cast iron production", "RoW", "cast iron"),
-        why="hits 0-5 are machining-removal services; the production dataset, RoW as exported"),
-    "ethylene_glycol_row": Process(
-        query="ethylene glycol production", pick=0,
-        identity=("ethylene glycol production", "RoW", "ethylene glycol")),
-    "polypropylene_row": Process(
-        query="polypropylene granulate production", pick=1,
-        identity=("polypropylene production, granulate", "RoW", "polypropylene, granulate"),
-        why="RoW as exported for the AE unit; hit 0 is RER"),
-    "low_alloyed_steel_hr_row": Process(
-        query="steel low-alloyed hot rolled production", pick=1,
-        identity=("steel production, low-alloyed, hot rolled", "RoW", "steel, low-alloyed, hot rolled"),
-        why="RoW as exported for the AE unit; hit 0 is RER"),
+    # --- alkaline electrolyser. Its export used RoW datasets; since 26 Oct 2026 (user) every unit
+    # follows Gerloff §2's rule - DE where it exists, then Europe, then RoW/GLO - so AE draws the
+    # same RER datasets as PEM and SOEC below. Zirconium oxide has no European dataset. ---------
+    "glass_fibre_rer": Process(
+        query="glass fibre production RER", pick=0,
+        identity=("glass fibre production", "RER", "glass fibre"),
+        why="Gerloff §2's rule, Europe first (the AE export had RoW; RER since 26 Oct 2026)"),
     "concrete_35mpa_cem3": Process(
         query="concrete production 35MPa", pick=0,
         identity=("concrete production, 35MPa, for building construction, with cement, CEM III/A",
@@ -333,10 +310,6 @@ processes = {
         why="as built: AE's 'concrete production 35MPa' search landed on CEM III/A (hit 0); "
             "PEM and SOEC on CEM II/B (hit 2). Same strength class, different cement; the SI "
             "names a North-American recipe with RoW geography"),
-    "tetrafluoroethylene_row": Process(
-        query="tetrafluoroethylene production", pick=2,
-        identity=("tetrafluoroethylene production", "RoW", "tetrafluoroethylene"),
-        why="hits 0-1 are PTFE films on glass; the polymer itself, RoW as exported"),
     "polysulfone": Process(
         query="polysulfone production membrane filtration", pick=0,
         identity=("polysulfone production, for membrane filtration production", "GLO", "polysulfone")),
@@ -348,7 +321,8 @@ processes = {
     "electricity_lv_de": Process(
         query="market for electricity low voltage DE", pick=0,
         identity=("market for electricity, low voltage", "DE", "electricity, low voltage"),
-        why="alkaline is as exported by Gerloff, on the German LV market; PEM and SOEC were re-based to GB"),
+        why="the three units are made in Germany, as Gerloff: AE as exported, PEM and SOEC moved off GB LV "
+            "on 26 Oct 2026 (user). Also AE operation's electricity, stripped out by electrolysers.py"),
     "water_deionised": Process(
         query="market for water deionised Europe without Switzerland", pick=0,
         identity=("market for water, deionised", "Europe without Switzerland", "water, deionised")),
@@ -358,7 +332,7 @@ processes = {
     "electrolyte_koh": Process(
         query="market for electrolyte KOH LiOH additive", pick=0,
         identity=("market for electrolyte, KOH, LiOH additive", "GLO", "electrolyte, KOH, LiOH additive")),
-    # --- PEM and SOEC, RER datasets as exported -----------------------------------
+    # --- RER datasets, as the PEM and SOEC exports and Gerloff §2 have them (all three units) -----
     "carbon_black": Process(
         query="carbon black production GLO", pick=0,
         identity=("carbon black production", "GLO", "carbon black")),
@@ -421,8 +395,8 @@ processes = {
     "electricity_lv_gb": Process(
         query="market for electricity low voltage GB", pick=0,
         identity=("market for electricity, low voltage", "GB", "electricity, low voltage"),
-        why="manufacturing electricity of the PEM and SOEC units as exported (GB LV); the operation "
-            "activities' electricity is stripped out by electrolysers.py and charged by the LP"),
+        why="the PEM and SOEC operation activities' electricity as exported (GB LV); it is stripped out "
+            "by electrolysers.py and charged by the LP. Manufacture is on electricity_lv_de since 26 Oct 2026"),
     "heat_rer": Process(
         query="market group for heat district or industrial other than natural gas RER", pick=0,
         identity=("market group for heat, district or industrial, other than natural gas", "RER",
@@ -438,10 +412,11 @@ processes = {
             "successor. >100kW because a 1 MW SOEC draws ~124 kW of heat. Gerloff 2021 "
             "copied the amount but swapped in heat_rer (52 % coal and peat). No GB boiler exists in 3.9.1"),
     # --- SOEC ceramics ---------------------------------------------------------------
-    "abs_row": Process(
-        query="acrylonitrile-butadiene-styrene copolymer production RoW", pick=0,
-        identity=("acrylonitrile-butadiene-styrene copolymer production", "RoW",
-                  "acrylonitrile-butadiene-styrene copolymer")),
+    "abs_rer": Process(
+        query="acrylonitrile-butadiene-styrene copolymer production RER", pick=0,
+        identity=("acrylonitrile-butadiene-styrene copolymer production", "RER",
+                  "acrylonitrile-butadiene-styrene copolymer"),
+        why="Gerloff §2's rule, Europe first (the SOEC export had RoW; RER since 26 Oct 2026)"),
     "aluminium_oxide": Process(
         query="aluminium oxide metallurgical IAI market", pick=0,
         identity=("aluminium oxide, non-metallurgical to generic market for refractory material, acid",
@@ -462,8 +437,9 @@ processes = {
             "cerium oxide'; revisit if the SOEC stack is ever scored on resource categories"),
     "praseodymium_oxide": Process(
         query="praseodymium oxide market GLO", pick=0,
-        identity=("market for praseodymium-neodymium oxide", "GLO", "praseodymium-neodymium oxide"),
-        why="ecoinvent has no praseodymium oxide alone; the mixed Pr-Nd oxide market stands in"),
+        identity=("market for praseodymium oxide", "GLO", "praseodymium oxide"),
+        why="as exported (Praseodymium oxide {GLO}| market for); until 26 Oct 2026 the mixed Pr-Nd "
+            "oxide market stood in on the mistaken view that 3.9.1 has no Pr oxide alone"),
     "samarium_seg_oxide": Process(
         query="samarium europium gadolinium oxide market GLO", pick=0,
         identity=("market for samarium-europium-gadolinium oxide", "GLO",
@@ -507,7 +483,6 @@ flows = {
 _kg, _m3, _kwh, _MJ, _unit, _m, _tkm = ("kilogram", "cubic meter", "kilowatt hour",
                                         "megajoule", "unit", "meter", "ton kilometer")
 _GRID = FG(R.GB_GRID_HV_2025, database=R.GRID_DB)     # the study's own GB grid kWh
-_N = STACKS_PER_UNIT_LIFE
 
 activities = [
     Activity(
@@ -617,50 +592,74 @@ activities = [
         ],
     ),
     Activity(
-        code=R.AE_UNIT, name="Alkaline electrolyser, 1 MW, 20-year life (Gerloff 2021)",
-        reference_product="alkaline electrolyser", unit=_unit, location="GLO",
-        comment="One 1 MW alkaline electrolyser over its 20-year life: Gerloff 2021 SI Fig. 1 (18 BoP and "
-                "3 stack components, every row at the printed amount, RoW datasets as exported), the "
-                "stack's rows three times over (§2.1.3), SI Table 3's manufacturing electricity "
-                "(already x3 on the stack) on the German LV market, and the 250 km assembly leg "
-                "(§2.1). No delivery to site, no end-of-life.",
+        code=R.AE_PLANT, name="Alkaline electrolyser plant (balance of plant), 1 MW, 20-year life (Gerloff 2021)",
+        reference_product="alkaline electrolyser plant", unit=_unit, location="DE",
+        comment="The balance of plant of one 1 MW alkaline electrolyser, built once per unit: Gerloff 2021's BoP "
+                "rows at the printed amounts, SI Table 3's BoP manufacturing electricity on German LV, "
+                "and the 250 km assembly leg on the plant's mass. Split from the unit on 26 Oct 2026 "
+                "(user) so the optimiser can charge stacks by running hours (electrolysers.py).",
         technosphere=[
-            ("polyethylene_ld_row",       464.6,    _kg,  "Water purifier / feed tank (SI Fig. 1 names LD polyethylene)"),
+            ("polyethylene_ld_rer",       464.6,    _kg,  "Water purifier / feed tank (SI Fig. 1 names LD polyethylene)"),
             ("extrusion_pipes",           464.6,    _kg,  "Water purifier / feed tank"),
             # SI Fig. 1 prints the gas separator's steel as 80 "(2 x)" and the diaphragm's
             # sheet rolling as 400; the export had 80 + 80 twice and 405 (corrected 21 Oct 2026).
-            ("reinforcing_steel_row",    5134.4,    _kg,  "Reinforcing steel, BoP (aggregated as printed)"),
+            ("reinforcing_steel_eur",    5134.4,    _kg,  "Reinforcing steel, BoP (aggregated as printed)"),
             ("sheet_rolling_steel",     10130.0,    _kg,  "Sheet rolling, steel, BoP (aggregated)"),
-            ("electronics_row",           100.0,    _kg,  "Control panel / electronics"),
+            ("electronics_rer",           100.0,    _kg,  "Control panel / electronics"),
             ("aluminium_wrought",         160.0,    _kg,  "Transformer + frequency converter"),
             ("copper_cathode",            616.7,    _kg,  "Transformer + compressor + tubing/cables"),
             ("sheet_rolling_aluminium",   100.0,    _kg,  "Transformer and rectifier"),
             ("tube_insulation",           207.9,    _kg,  "Transformer + compressor + tubing"),
             ("wire_drawing_copper",       616.7,    _kg,  "Transformer + compressor + tubing"),
-            ("glass_fibre_row",           464.6,    _kg,  "H2 drier and deoxidiser"),
+            ("glass_fibre_rer",           464.6,    _kg,  "H2 drier and deoxidiser"),
             ("sheet_rolling_cr_steel",   6697.8,    _kg, 
              "Sheet rolling, chromium steel, BoP (26,892.2 less the stack's 20,194.4)"),
-            ("cr_steel_hot_rolled_row",  6697.8,    _kg,  "Chromium steel 18/8 hot rolled, BoP (as above)"),
-            ("cast_iron_row",             716.1,    _kg,  "Compressor + pumps and coolers"),
-            ("ethylene_glycol_row",         7.0,    _kg,  "Diaphragm for compressor"),
+            ("cr_steel_hr_rer",  6697.8,    _kg,  "Chromium steel 18/8 hot rolled, BoP (as above)"),
+            ("cast_iron_rer",             716.1,    _kg,  "Compressor + pumps and coolers"),
+            ("ethylene_glycol_rer",         7.0,    _kg,  "Diaphragm for compressor"),
             ("welding_arc_steel",          29.0,    _m,   "Buffer tank (SI prints m)"),
-            ("polypropylene_row",           3.0,    _kg,  "Alkali-resistant rotary pump"),
+            ("polypropylene_rer",           3.0,    _kg,  "Alkali-resistant rotary pump"),
             ("injection_moulding",          3.0,    _kg,  "Alkali-resistant rotary pump"),
-            ("low_alloyed_steel_hr_row", 6075.6,    _kg,  "Container"),
+            ("low_alloyed_steel_hr_rer", 6075.6,    _kg,  "Container"),
             ("concrete_35mpa_cem3",         7.7,    _m3,  "Foundation"),
-            # --- the stack, three times over its 20-year life (SI Fig. 1 rows 19-21, §2.1.3) ---
-            ("sheet_rolling_cr_steel",   AE_STACK_KG["cr_steel"] * _N, _kg,
-             "Stack x3 — anode and cathode with frame, sheet rolling, chromium steel (20,194.4 per stack)"),
-            ("cr_steel_hot_rolled_row",  AE_STACK_KG["cr_steel"] * _N, _kg,
-             "Stack x3 — anode and cathode with frame, chromium steel 18/8 hot rolled"),
-            ("nickel_class1",            AE_STACK_KG["nickel"] * _N, _kg, "Stack x3 — anode + cathode, nickel (2,884.9 per stack)"),
-            ("tetrafluoroethylene_row",  AE_STACK_KG["tfe"] * _N, _kg, "Stack x3 — gasket (144.2 per stack)"),
-            ("polysulfone",              AE_STACK_KG["polysulfone"] * _N, _kg, "Stack x3 — diaphragm, Zirfon (48.8 per stack)"),
-            ("zirconium_oxide_row",      AE_STACK_KG["zro2"] * _N, _kg, "Stack x3 — diaphragm, Zirfon (73.0 per stack)"),
-            ("electricity_lv_de",      323773.4,    _kwh,
-             "SI Table 3: BoP 37,113.5 + stack 286,659.9 kWh (the stack x3 already)"),
-            ("lorry_32t_euro6",          _unit_tkm(AE_MATERIALS_KG_ONE_STACK, AE_STACK_KG), _tkm,
-             "ADDED — Gerloff §2.1: materials to assembly, 250 km on the unit's mass with three stacks"),
+            ("electricity_lv_de",      37113.5,    _kwh, "SI Table 3: BoP manufacturing electricity"),
+            ("lorry_32t_euro6",          _plant_tkm(AE_MATERIALS_KG_ONE_STACK, AE_STACK_KG), _tkm,
+             "ADDED — Gerloff §2.1: materials to assembly, 250 km on the plant's mass"),
+        ],
+    ),
+    Activity(
+        code=R.AE_STACK, name="Alkaline electrolyser stack, one, 1 MW (Gerloff 2021)",
+        reference_product="alkaline electrolyser stack", unit=_unit, location="DE",
+        comment="One stack of a 1 MW alkaline electrolyser: Gerloff 2021's stack rows at the printed amounts, a "
+                "third of SI Table 3's stack manufacturing electricity (the table's figure is already "
+                "x3), and the 250 km assembly leg on the stack's mass. Gerloff's unit holds three over "
+                "its 20 years, each good for '50,000 h or more' (§2.1.2); the optimiser charges "
+                "max(3 per 25 years, running hours / 50,000) of these per MW (user, 26 Oct 2026).",
+        technosphere=[
+            ("sheet_rolling_cr_steel",   AE_STACK_KG["cr_steel"], _kg,
+             "Stack — anode and cathode with frame, sheet rolling, chromium steel (20,194.4 per stack)"),
+            ("cr_steel_hr_rer",  AE_STACK_KG["cr_steel"], _kg,
+             "Stack — anode and cathode with frame, chromium steel 18/8 hot rolled"),
+            ("nickel_class1",            AE_STACK_KG["nickel"], _kg, "Stack — anode + cathode, nickel (2,884.9 per stack)"),
+            ("tetrafluoroethylene_rer",  AE_STACK_KG["tfe"], _kg, "Stack — gasket (144.2 per stack)"),
+            ("polysulfone",              AE_STACK_KG["polysulfone"], _kg, "Stack — diaphragm, Zirfon (48.8 per stack)"),
+            ("zirconium_oxide_row",      AE_STACK_KG["zro2"], _kg, "Stack — diaphragm, Zirfon (73.0 per stack)"),
+            ("electricity_lv_de",      286659.9 / STACKS_PER_UNIT_LIFE, _kwh,
+             "SI Table 3: stack manufacturing electricity, 286659.9 kWh for three stacks, one third"),
+            ("lorry_32t_euro6",          _stack_tkm(AE_STACK_KG), _tkm,
+             "ADDED — Gerloff §2.1: materials to assembly, 250 km on one stack"),
+        ],
+    ),
+    Activity(
+        code=R.AE_UNIT, name="Alkaline electrolyser, 1 MW, 20-year life (Gerloff 2021)",
+        reference_product="alkaline electrolyser", unit=_unit, location="GLO",
+        comment="One 1 MW alkaline electrolyser over Gerloff's 20-year life: its balance of plant "
+                "once and three stacks (§2.1.2-2.1.3), as Gerloff count it. The operation activity draws "
+                "it at one unit per lifetime hydrogen output. The optimiser charges the plant and the "
+                "stacks separately (electrolysers.py); split on 26 Oct 2026. No delivery to site, no end-of-life.",
+        technosphere=[
+            (FG(R.AE_PLANT), 1,                    _unit, "the balance of plant, once"),
+            (FG(R.AE_STACK), STACKS_PER_UNIT_LIFE, _unit, "three stacks over the 20 years (Gerloff §2.1.2-2.1.3)"),
         ],
     ),
     Activity(
@@ -679,13 +678,12 @@ activities = [
         ],
     ),
     Activity(
-        code=R.PEM_UNIT, name="PEM electrolyser, 1 MW, 20-year life (Gerloff 2021)",
-        reference_product="PEM electrolyser", unit=_unit, location="GB",
-        comment="One 1 MW PEM electrolyser over its 20-year life: Gerloff 2021 SI Fig. 2 (17 BoP and 8 stack "
-                "components at the printed amounts, RER datasets as exported), the stack's rows three "
-                "times over (§2.1.3), SI Table 3's manufacturing electricity on GB LV, and the 250 km "
-                "assembly leg. Platinum stands in for the anode's 0.8 kg of iridium. No delivery to "
-                "site, no end-of-life.",
+        code=R.PEM_PLANT, name="PEM electrolyser plant (balance of plant), 1 MW, 20-year life (Gerloff 2021)",
+        reference_product="PEM electrolyser plant", unit=_unit, location="DE",
+        comment="The balance of plant of one 1 MW PEM electrolyser, built once per unit: Gerloff 2021's BoP "
+                "rows at the printed amounts, SI Table 3's BoP manufacturing electricity on German LV, "
+                "and the 250 km assembly leg on the plant's mass. Split from the unit on 26 Oct 2026 "
+                "(user) so the optimiser can charge stacks by running hours (electrolysers.py).",
         technosphere=[
             ("extrusion_pipes",           464.6,    _kg,  "Water purifier / feed tank"),
             ("polyethylene_ld_rer",       464.6,    _kg,  "Water purifier / feed tank"),
@@ -713,25 +711,50 @@ activities = [
             ("tube_insulation",           115.0,    _kg,  "Power electronics + compressor"),
             ("zeolite",                   100.0,    _kg,  "Ion exchanger"),
             ("concrete_35mpa_cem2",         2.3,    _m3,  "Foundation"),
-            # --- the stack, three times over its 20-year life (SI Fig. 2 rows 19-26, §2.1.3) ---
-            ("aluminium_wrought",         PEM_STACK_KG["end_plate_al"] * _N, _kg, "Stack x3 — end plate, aluminium (27.0 per stack)"),
-            ("sheet_rolling_aluminium",   PEM_STACK_KG["end_plate_al"] * _N, _kg, "Stack x3 — end plate, sheet rolling"),
-            ("titanium",                  PEM_STACK_KG["titanium"] * _N, _kg, "Stack x3 — bipolar plates (528.0 per stack)"),
-            ("tetrafluoroethylene_rer",   PEM_STACK_KG["tfe"] * _N, _kg, "Stack x3 — membrane polymer, Nafion proxy (16.0 per stack)"),
-            ("carbon_black",              PEM_STACK_KG["carbon_black"] * _N, _kg,
-             "Stack x3 — electrocatalyst support, anode + cathode (4.5 + 4.5 per stack)"),
-            ("platinum",                  PEM_STACK_KG["platinum_for_pt_and_ir"] * _N, _kg,
-             "SUBSTITUTED — Stack x3: 0.075 kg platinum (cathode) + 0.8 kg iridium (anode) per stack, both as platinum"),
-            ("copper_cathode",            PEM_STACK_KG["copper"] * _N, _kg, "Stack x3 — current collector, copper (4.5 per stack)"),
-            ("sheet_rolling_copper",      PEM_STACK_KG["copper"] * _N, _kg, "Stack x3 — current collector, sheet rolling"),
-            ("sheet_rolling_cr_steel",    PEM_STACK_KG["bolts_cr_steel"] * _N, _kg,
-             "Stack x3 — bolts and screws, sheet rolling (100.0 per stack)"),
-            ("cr_steel_hr_rer",           PEM_STACK_KG["bolts_cr_steel"] * _N, _kg, "Stack x3 — bolts and screws, chromium steel"),
-            ("synthetic_rubber",          PEM_STACK_KG["rubber"] * _N, _kg, "Stack x3 — gasket (4.8 per stack)"),
-            ("electricity_lv_gb",      361672.3,    _kwh,
-             "SI Table 3: BoP 50,000 + stack 311,672.3 kWh (the stack x3 already)"),
-            ("lorry_32t_euro6",          _unit_tkm(PEM_MATERIALS_KG_ONE_STACK, PEM_STACK_KG), _tkm,
-             "ADDED — Gerloff §2.1: materials to assembly, 250 km on the unit's mass with three stacks"),
+            ("electricity_lv_de",      50000.0,    _kwh, "SI Table 3: BoP manufacturing electricity"),
+            ("lorry_32t_euro6",          _plant_tkm(PEM_MATERIALS_KG_ONE_STACK, PEM_STACK_KG), _tkm,
+             "ADDED — Gerloff §2.1: materials to assembly, 250 km on the plant's mass"),
+        ],
+    ),
+    Activity(
+        code=R.PEM_STACK, name="PEM electrolyser stack, one, 1 MW (Gerloff 2021)",
+        reference_product="PEM electrolyser stack", unit=_unit, location="DE",
+        comment="One stack of a 1 MW PEM electrolyser: Gerloff 2021's stack rows at the printed amounts, a "
+                "third of SI Table 3's stack manufacturing electricity (the table's figure is already "
+                "x3), and the 250 km assembly leg on the stack's mass. Gerloff's unit holds three over "
+                "its 20 years, each good for '50,000 h or more' (§2.1.2); the optimiser charges "
+                "max(3 per 25 years, running hours / 50,000) of these per MW (user, 26 Oct 2026).",
+        technosphere=[
+            ("aluminium_wrought",         PEM_STACK_KG["end_plate_al"], _kg, "Stack — end plate, aluminium (27.0 per stack)"),
+            ("sheet_rolling_aluminium",   PEM_STACK_KG["end_plate_al"], _kg, "Stack — end plate, sheet rolling"),
+            ("titanium",                  PEM_STACK_KG["titanium"], _kg, "Stack — bipolar plates (528.0 per stack)"),
+            ("tetrafluoroethylene_rer",   PEM_STACK_KG["tfe"], _kg, "Stack — membrane polymer, Nafion proxy (16.0 per stack)"),
+            ("carbon_black",              PEM_STACK_KG["carbon_black"], _kg,
+             "Stack — electrocatalyst support, anode + cathode (4.5 + 4.5 per stack)"),
+            ("platinum",                  PEM_STACK_KG["platinum_for_pt_and_ir"], _kg,
+             "SUBSTITUTED — Stack: 0.075 kg platinum (cathode) + 0.8 kg iridium (anode) per stack, both as platinum"),
+            ("copper_cathode",            PEM_STACK_KG["copper"], _kg, "Stack — current collector, copper (4.5 per stack)"),
+            ("sheet_rolling_copper",      PEM_STACK_KG["copper"], _kg, "Stack — current collector, sheet rolling"),
+            ("sheet_rolling_cr_steel",    PEM_STACK_KG["bolts_cr_steel"], _kg,
+             "Stack — bolts and screws, sheet rolling (100.0 per stack)"),
+            ("cr_steel_hr_rer",           PEM_STACK_KG["bolts_cr_steel"], _kg, "Stack — bolts and screws, chromium steel"),
+            ("synthetic_rubber",          PEM_STACK_KG["rubber"], _kg, "Stack — gasket (4.8 per stack)"),
+            ("electricity_lv_de",      311672.3 / STACKS_PER_UNIT_LIFE, _kwh,
+             "SI Table 3: stack manufacturing electricity, 311672.3 kWh for three stacks, one third"),
+            ("lorry_32t_euro6",          _stack_tkm(PEM_STACK_KG), _tkm,
+             "ADDED — Gerloff §2.1: materials to assembly, 250 km on one stack"),
+        ],
+    ),
+    Activity(
+        code=R.PEM_UNIT, name="PEM electrolyser, 1 MW, 20-year life (Gerloff 2021)",
+        reference_product="PEM electrolyser", unit=_unit, location="DE",
+        comment="One 1 MW PEM electrolyser over Gerloff's 20-year life: its balance of plant "
+                "once and three stacks (§2.1.2-2.1.3), as Gerloff count it. The operation activity draws "
+                "it at one unit per lifetime hydrogen output. The optimiser charges the plant and the "
+                "stacks separately (electrolysers.py); split on 26 Oct 2026. No delivery to site, no end-of-life.",
+        technosphere=[
+            (FG(R.PEM_PLANT), 1,                    _unit, "the balance of plant, once"),
+            (FG(R.PEM_STACK), STACKS_PER_UNIT_LIFE, _unit, "three stacks over the 20 years (Gerloff §2.1.2-2.1.3)"),
         ],
     ),
     Activity(
@@ -750,20 +773,19 @@ activities = [
         ],
     ),
     Activity(
-        code=R.SOEC_UNIT, name="SOEC electrolyser, 1 MW, 20-year life (Gerloff 2021)",
-        reference_product="SOEC electrolyser", unit=_unit, location="GB",
-        comment="One 1 MW solid-oxide electrolyser over its 20-year life: Gerloff 2021 SI Figs 3-5 (48 BoP "
-                "and 7 stack components at the printed amounts, RER datasets as exported), the stack's "
-                "rows three times over (§2.1.3), SI Table 3's manufacturing electricity on GB LV, the "
-                "250 km assembly leg, and ASSUMED La2O3 and SrCO3 for the LSM layer Gerloff name without "
-                "an amount. No delivery to site, no end-of-life.",
+        code=R.SOEC_PLANT, name="SOEC electrolyser plant (balance of plant), 1 MW, 20-year life (Gerloff 2021)",
+        reference_product="SOEC electrolyser plant", unit=_unit, location="DE",
+        comment="The balance of plant of one 1 MW SOEC electrolyser, built once per unit: Gerloff 2021's BoP "
+                "rows at the printed amounts, SI Table 3's BoP manufacturing electricity on German LV, "
+                "and the 250 km assembly leg on the plant's mass. Split from the unit on 26 Oct 2026 "
+                "(user) so the optimiser can charge stacks by running hours (electrolysers.py).",
         technosphere=[
             ("extrusion_pipes",           534.0,    _kg,  "Water purifier / pre-heating"),
             ("polyethylene_ld_rer",       534.0,    _kg,  "Water purifier / pre-heating"),
             ("aluminium_wrought",         401.0,    _kg,  "Frequency converters + power electronics + water pump"),
             ("sheet_rolling_aluminium",   100.0,    _kg,  "Power electronics"),
             ("electronics_rer",           100.0,    _kg,  "Control electronics"),
-            ("abs_row",                     1.4,    _kg,  "Control panel / heater"),
+            ("abs_rer",                     1.4,    _kg,  "Control panel / heater"),
             ("injection_moulding",          1.4,    _kg,  "Control panel / heater"),
             ("cast_iron_rer",            3000.0,    _kg,  "Diaphragm compressors 1-5"),
             ("ethylene_glycol_rer",        35.0,    _kg,  "Diaphragm compressors 1-5"),
@@ -778,31 +800,56 @@ activities = [
             ("low_alloyed_steel_hr_rer", 3753.6,    _kg,  "Tubing + container — pre-heating"),
             ("welding_arc_steel",          33.3,    _m,   "Buffer tank (pre-heating)"),
             ("concrete_35mpa_cem2",         2.3,    _m3,  "Foundation"),
-            # --- the stack, three times over its 20-year life (SI Fig. 5 rows 49-55, §2.1.3) ---
-            ("sheet_rolling_cr_steel",  SOEC_STACK_KG["cr_steel"] * _N, _kg,
-             "Stack x3 — air electrode / interconnect, sheet rolling, chromium steel (8,976.1 per stack)"),
-            ("cr_steel_hr_rer",         SOEC_STACK_KG["cr_steel"] * _N, _kg,
-             "Stack x3 — air electrode / interconnect, chromium steel 18/8 hot rolled"),
-            ("praseodymium_oxide",      SOEC_STACK_KG["pr_oxide"] * _N, _kg, "Stack x3 — air electrode screen printing (9.0 per stack)"),
-            ("nickel_class1",           SOEC_STACK_KG["nickel"] * _N, _kg, "Stack x3 — air electrode 7.5 + firing 136.6 per stack"),
-            ("zirconium_oxide_row",     SOEC_STACK_KG["zro2"] * _N, _kg, "Stack x3 — blocking layer (170.7 per stack)"),
-            ("samarium_seg_oxide",      SOEC_STACK_KG["seg_oxide"] * _N, _kg,
-             "Stack x3 — blocking layer 14.8 + screen printing 22.9 per stack"),
-            ("cerium_oxide",            SOEC_STACK_KG["ce_oxide"] * _N, _kg, "Stack x3 — blocking layer screen printing (91.5 per stack)"),
-            ("aluminium_oxide",         SOEC_STACK_KG["al2o3"] * _N, _kg,
-             "Stack x3 — electrolyte + H2 electrode, glass sealant (6.4 per stack)"),
-            ("boric_oxide",             SOEC_STACK_KG["b2o3"] * _N, _kg, "Stack x3 — electrolyte + H2 electrode (6.4 per stack)"),
-            ("barium_oxide",            SOEC_STACK_KG["bao"] * _N, _kg, "Stack x3 — electrolyte + H2 electrode (6.4 per stack)"),
-            ("silicone_product",        SOEC_STACK_KG["silicone"] * _N, _kg,
-             "Stack x3 — electrolyte sealant (6.4 per stack; the figure's dataset)"),
-            ("lanthanum_oxide",         SOEC_LA2O3_KG_PER_STACK * _N, _kg,
-             "ASSUMED — Stack x3: LSM layer's La2O3, 0.563 of a 19.5 kg layer per stack (Gerloff row 53 gives no amount)"),
-            ("strontium_carbonate",     SOEC_SRCO3_KG_PER_STACK * _N, _kg,
-             "ASSUMED — Stack x3: LSM layer's SrCO3, 0.128 of a 19.5 kg layer per stack"),
-            ("electricity_lv_gb",      443093.5,    _kwh,
-             "SI Table 3: BoP 76,420.2 + stack 366,673.3 kWh (the stack x3 already)"),
-            ("lorry_32t_euro6",          _unit_tkm(SOEC_MATERIALS_KG_ONE_STACK, SOEC_STACK_KG), _tkm,
-             "ADDED — Gerloff §2.1: materials to assembly, 250 km on the unit's mass with three stacks"),
+            ("electricity_lv_de",      76420.2,    _kwh, "SI Table 3: BoP manufacturing electricity"),
+            ("lorry_32t_euro6",          _plant_tkm(SOEC_MATERIALS_KG_ONE_STACK, SOEC_STACK_KG), _tkm,
+             "ADDED — Gerloff §2.1: materials to assembly, 250 km on the plant's mass"),
+        ],
+    ),
+    Activity(
+        code=R.SOEC_STACK, name="SOEC electrolyser stack, one, 1 MW (Gerloff 2021)",
+        reference_product="SOEC electrolyser stack", unit=_unit, location="DE",
+        comment="One stack of a 1 MW SOEC electrolyser: Gerloff 2021's stack rows at the printed amounts, a "
+                "third of SI Table 3's stack manufacturing electricity (the table's figure is already "
+                "x3), and the 250 km assembly leg on the stack's mass. Gerloff's unit holds three over "
+                "its 20 years, each good for '50,000 h or more' (§2.1.2); the optimiser charges "
+                "max(3 per 25 years, running hours / 50,000) of these per MW (user, 26 Oct 2026).",
+        technosphere=[
+            ("sheet_rolling_cr_steel",  SOEC_STACK_KG["cr_steel"], _kg,
+             "Stack — air electrode / interconnect, sheet rolling, chromium steel (8,976.1 per stack)"),
+            ("cr_steel_hr_rer",         SOEC_STACK_KG["cr_steel"], _kg,
+             "Stack — air electrode / interconnect, chromium steel 18/8 hot rolled"),
+            ("praseodymium_oxide",      SOEC_STACK_KG["pr_oxide"], _kg, "Stack — air electrode screen printing (9.0 per stack)"),
+            ("nickel_class1",           SOEC_STACK_KG["nickel"], _kg, "Stack — air electrode 7.5 + firing 136.6 per stack"),
+            ("zirconium_oxide_row",     SOEC_STACK_KG["zro2"], _kg, "Stack — blocking layer (170.7 per stack)"),
+            ("samarium_seg_oxide",      SOEC_STACK_KG["seg_oxide"], _kg,
+             "Stack — blocking layer 14.8 + screen printing 22.9 per stack"),
+            ("cerium_oxide",            SOEC_STACK_KG["ce_oxide"], _kg, "Stack — blocking layer screen printing (91.5 per stack)"),
+            ("aluminium_oxide",         SOEC_STACK_KG["al2o3"], _kg,
+             "Stack — electrolyte + H2 electrode, glass sealant (6.4 per stack)"),
+            ("boric_oxide",             SOEC_STACK_KG["b2o3"], _kg, "Stack — electrolyte + H2 electrode (6.4 per stack)"),
+            ("barium_oxide",            SOEC_STACK_KG["bao"], _kg, "Stack — electrolyte + H2 electrode (6.4 per stack)"),
+            ("silicone_product",        SOEC_STACK_KG["silicone"], _kg,
+             "Stack — electrolyte sealant (6.4 per stack; the figure's dataset)"),
+            ("lanthanum_oxide",         SOEC_LA2O3_KG_PER_STACK, _kg,
+             "ASSUMED — Stack: LSM layer's La2O3, 0.563 of a 19.5 kg layer per stack (Gerloff row 53 gives no amount)"),
+            ("strontium_carbonate",     SOEC_SRCO3_KG_PER_STACK, _kg,
+             "ASSUMED — Stack: LSM layer's SrCO3, 0.128 of a 19.5 kg layer per stack"),
+            ("electricity_lv_de",      366673.3 / STACKS_PER_UNIT_LIFE, _kwh,
+             "SI Table 3: stack manufacturing electricity, 366673.3 kWh for three stacks, one third"),
+            ("lorry_32t_euro6",          _stack_tkm(SOEC_STACK_KG), _tkm,
+             "ADDED — Gerloff §2.1: materials to assembly, 250 km on one stack"),
+        ],
+    ),
+    Activity(
+        code=R.SOEC_UNIT, name="SOEC electrolyser, 1 MW, 20-year life (Gerloff 2021)",
+        reference_product="SOEC electrolyser", unit=_unit, location="DE",
+        comment="One 1 MW SOEC electrolyser over Gerloff's 20-year life: its balance of plant "
+                "once and three stacks (§2.1.2-2.1.3), as Gerloff count it. The operation activity draws "
+                "it at one unit per lifetime hydrogen output. The optimiser charges the plant and the "
+                "stacks separately (electrolysers.py); split on 26 Oct 2026. No delivery to site, no end-of-life.",
+        technosphere=[
+            (FG(R.SOEC_PLANT), 1,                    _unit, "the balance of plant, once"),
+            (FG(R.SOEC_STACK), STACKS_PER_UNIT_LIFE, _unit, "three stacks over the 20 years (Gerloff §2.1.2-2.1.3)"),
         ],
     ),
     Activity(

@@ -112,6 +112,9 @@ Either the source is named and public, or no new sourcing is needed at all.
 - [ ] **Tank heel.** `cap_tank` drains to zero; a 1–5 bar minimum for the FC
       feed makes both objectives 4–22 % low per usable kg. Audit §3.3.
 
+- [ ] **Third source read, 23 Oct 2026** (`docs/SOURCE_RECHECK_2026-10-23.md`, *Outcome*):
+      every finding decided and done by 26 Oct; the stale-docs list at its foot is left.
+
 ## Verification and hygiene
 
 - [ ] **EHV band boundaries against DCUSA Schedule 32.**

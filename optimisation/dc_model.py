@@ -197,6 +197,14 @@ class Tech:
     gwp_tx_solar_per_mwp: float = 0.0
     # kg CO2e per kg of hydrogen leaked from the tank. See H2_GWP100.
     gwp_h2_leaked_per_kg: float = H2_GWP100
+    # Electrolyser stacks, charged by replacement like the fuel cell's (user, 26 Oct
+    # 2026; electrolysers.py). gwp_ely is then the balance of plant alone, per MW per
+    # year; gwp_ely_stack_per_mw is one stack per MW, charged on ely_stack_units =
+    # max(cap_ely / calendar years, running MWh / duty hours). Defaulted to zero so a
+    # Tech written before the split, whose gwp_ely is the whole unit, is unchanged.
+    gwp_ely_stack_per_mw: float = 0.0
+    ely_stack_calendar_years: float = 25.0 / 3.0
+    ely_stack_duty_hours: float = 50_000.0
     # Transformer conversion losses (conversion_losses.py). No-load: MW drawn
     # at the node per MW installed, every step. Load: share of delivered power
     # at full loading, scaled by the profile's energy-weighted loading — see
@@ -368,6 +376,8 @@ def build_model(series: Series, assets: Assets, tech: Tech, *,
     # fuel cell replacement counts — the convex max(calendar, duty) rule
     V["fc_bop_units"] = m.add_variables(lower=0.0, name="fc_bop_units")
     V["fc_stack_units"] = m.add_variables(lower=0.0, name="fc_stack_units")
+    # electrolyser stack replacements, the same rule
+    V["ely_stack_units"] = m.add_variables(lower=0.0, name="ely_stack_units")
 
     cf_w, cf_s = series_da(series.cf_wind), series_da(series.cf_solar)
     lf = loss_factors(series, tech)
@@ -445,6 +455,14 @@ def build_model(series: Series, assets: Assets, tech: Tech, *,
         name="fc_stack_calendar")
     m.add_constraints(
         V["fc_stack_units"] - fc_mwh / tech.fc_stack_duty_hours >= 0, name="fc_stack_duty")
+
+    # --- electrolyser stack replacements: max(calendar, duty), exactly ----
+    ely_mwh = (V["p_ely"] * dt).sum() * series.annual_scale
+    m.add_constraints(
+        V["ely_stack_units"] - V["cap_ely"] / tech.ely_stack_calendar_years >= 0,
+        name="ely_stack_calendar")
+    m.add_constraints(
+        V["ely_stack_units"] - ely_mwh / tech.ely_stack_duty_hours >= 0, name="ely_stack_duty")
 
     # --- strategies ------------------------------------------------------
     apply_strategy(m, V, series, assets, ely_strategy, islanded_baseload_uses_cf_floor,
@@ -526,6 +544,7 @@ def objective_terms(q, series: Series, tech: Tech, *, price, ci) -> dict:
         "battery cells and container": tech.gwp_batt_e * q["cap_batt_e"],
         "battery power conversion": tech.gwp_batt_p * q["cap_batt_p"],
         "electrolyser": tech.gwp_ely * q["cap_ely"],
+        "electrolyser stack replacements": tech.gwp_ely_stack_per_mw * q.get("ely_stack_units", 0.0),
         "H2 tank": tech.gwp_tank * q["cap_tank"],
         "fuel cell stack replacements": tech.gwp_fc_stack_per_mw * q["fc_stack_units"],
         "fuel cell BoP replacements": tech.gwp_fc_bop_per_mw * q["fc_bop_units"],
@@ -603,7 +622,7 @@ CHAINS = {
              "export credit"},
     "battery": {"battery", "battery cells and container", "battery power conversion",
                 "battery step-up transformers"},
-    "electrolyser": {"electrolyser", "electrolyser consumables"},
+    "electrolyser": {"electrolyser", "electrolyser stack replacements", "electrolyser consumables"},
     "hydrogen tank": {"H2 tank", "H2 leaked from tank"},
     "fuel cell": {"fuel cell", "fuel cell stack replacements", "fuel cell BoP replacements",
                   "fuel cell maintenance", "fuel cell step-up transformers"},

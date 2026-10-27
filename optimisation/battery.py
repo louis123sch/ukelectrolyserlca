@@ -150,7 +150,7 @@ if EMBODIED_BASIS not in EMBODIED_BASES:
 #
 # Scored once and pinned so this module runs without Brightway;
 # check_against_ecoinvent() re-scores it and fails if it has moved.
-BESS_KGCO2E_PER_KWH_NAMEPLATE = 101.237   # 22 Oct 2026: the natural-graphite legs read the right way round (was 101.107)
+BESS_KGCO2E_PER_KWH_NAMEPLATE = 103.515   # 26 Oct 2026: HFC credit dropped; cell factory gas on Voß's Chinese dataset; FePO4 per kg (was 101.237)
 
 # Share of nameplate cell capacity the battery is allowed to swing. ASSUMED.
 # Both sources report per kWh of cells; the LP's cap_batt_e is the energy
@@ -173,7 +173,7 @@ USABLE_FRACTION = 0.90
 # upstream transport was put back (Jasper's material legs; Voß's in-China leg
 # on every cell material, the natural graphite included) and Jasper's concrete
 # block restored.
-CELL_KGCO2E_PER_KWH = {"voss_cn": 80.711, "voss_de": 73.677, "jasper_fig4_311": 95.44}
+CELL_KGCO2E_PER_KWH = {"voss_cn": 82.920, "voss_de": 74.933, "jasper_fig4_311": 95.44}   # 26 Oct 2026 (was 80.711 / 73.677): see SOURCES.md
 CELL_BASIS = "voss_cn"
 
 # --- the legacy EV-pack basis -------------------------------------------------

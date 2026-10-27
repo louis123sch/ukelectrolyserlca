@@ -1,10 +1,10 @@
 # Source ledger — every inventory row and where it came from
 
-Generated 2026-10-23 10:44 by `scripts/source_ledger.py` from the modules in `optimiser_lca/`. Regenerate after any inventory edit; do not edit by hand.
+Generated 2026-10-26 12:22 by `scripts/source_ledger.py` from the modules in `optimiser_lca/`. Regenerate after any inventory edit; do not edit by hand.
 
 | Rows | Of the activity's own table | Own locator | ADDED | ASSUMED | DERIVED | TRANSCRIBED | Unaccounted |
 |---|---|---|---|---|---|---|---|
-| 870 | 584 | 263 | 5 | 15 | 3 | 0 | 0 |
+| 883 | 590 | 267 | 8 | 15 | 3 | 0 | 0 |
 
 A row *of the activity's own table* is located by the source its activity's comment names; a row with its *own locator* starts with another source, table or figure; a graded row is the module's own addition or derivation and says so. **Unaccounted** rows have an empty note and must be zero.
 
@@ -502,40 +502,58 @@ kilogram, GB. Comment: Electrically heated methane pyrolysis, 1 kg H2 at the pla
 | `tin` | market for tin | 0.0258 | kilogram | 0.0258 | Tin, the molten-metal medium make-up | activity's table |
 | `silicon_carbide` | market for silicon carbide | 3.23e-06 | kilogram | 3.23e-06 | Silicon carbide | activity's table |
 
-### `ae_gerloff_1unit` — Alkaline electrolyser, 1 MW, 20-year life (Gerloff 2021)
+### `ae_gerloff_plant_1unit` — Alkaline electrolyser plant (balance of plant), 1 MW, 20-year life (Gerloff 2021)
 
-unit, GLO. Comment: One 1 MW alkaline electrolyser over its 20-year life: Gerloff 2021 SI Fig. 1 (18 BoP and 3 stack components, every row at the printed amount, RoW datasets as exported), the stack's rows three times over (§2.1.3), SI Table 3's manufacturing electricity (already x3 on the stack) on the German LV marke…
+unit, DE. Comment: The balance of plant of one 1 MW alkaline electrolyser, built once per unit: Gerloff 2021's BoP rows at the printed amounts, SI Table 3's BoP manufacturing electricity on German LV, and the 250 km assembly leg on the plant's mass. Split from the unit on 26 Oct 2026 (user) so the optimiser can charge…
 
 | Key | Input | Printed amount | Unit | After scale | Note | Located by |
 |---|---|---|---|---|---|---|
-| `polyethylene_ld_row` | polyethylene production, low density, granulate | 464.6 | kilogram | 464.6 | Water purifier / feed tank (SI Fig. 1 names LD polyethylene) | activity's table |
+| `polyethylene_ld_rer` | polyethylene production, low density, granulate | 464.6 | kilogram | 464.6 | Water purifier / feed tank (SI Fig. 1 names LD polyethylene) | activity's table |
 | `extrusion_pipes` | market for extrusion, plastic pipes | 464.6 | kilogram | 464.6 | Water purifier / feed tank | activity's table |
-| `reinforcing_steel_row` | reinforcing steel production | 5134.4 | kilogram | 5134.4 | Reinforcing steel, BoP (aggregated as printed) | activity's table |
+| `reinforcing_steel_eur` | reinforcing steel production | 5134.4 | kilogram | 5134.4 | Reinforcing steel, BoP (aggregated as printed) | activity's table |
 | `sheet_rolling_steel` | market for sheet rolling, steel | 10130 | kilogram | 10130 | Sheet rolling, steel, BoP (aggregated) | activity's table |
-| `electronics_row` | electronics production, for control units | 100 | kilogram | 100 | Control panel / electronics | activity's table |
+| `electronics_rer` | electronics production, for control units | 100 | kilogram | 100 | Control panel / electronics | activity's table |
 | `aluminium_wrought` | market for aluminium, wrought alloy | 160 | kilogram | 160 | Transformer + frequency converter | activity's table |
 | `copper_cathode` | market for copper, cathode | 616.7 | kilogram | 616.7 | Transformer + compressor + tubing/cables | activity's table |
 | `sheet_rolling_aluminium` | market for sheet rolling, aluminium | 100 | kilogram | 100 | Transformer and rectifier | activity's table |
 | `tube_insulation` | tube insulation production, elastomere | 207.9 | kilogram | 207.9 | Transformer + compressor + tubing | activity's table |
 | `wire_drawing_copper` | market for wire drawing, copper | 616.7 | kilogram | 616.7 | Transformer + compressor + tubing | activity's table |
-| `glass_fibre_row` | glass fibre production | 464.6 | kilogram | 464.6 | H2 drier and deoxidiser | activity's table |
+| `glass_fibre_rer` | glass fibre production | 464.6 | kilogram | 464.6 | H2 drier and deoxidiser | activity's table |
 | `sheet_rolling_cr_steel` | market for sheet rolling, chromium steel | 6697.8 | kilogram | 6697.8 | Sheet rolling, chromium steel, BoP (26,892.2 less the stack's 20,194.4) | activity's table |
-| `cr_steel_hot_rolled_row` | steel production, chromium steel 18/8, hot rolled | 6697.8 | kilogram | 6697.8 | Chromium steel 18/8 hot rolled, BoP (as above) | activity's table |
-| `cast_iron_row` | cast iron production | 716.1 | kilogram | 716.1 | Compressor + pumps and coolers | activity's table |
-| `ethylene_glycol_row` | ethylene glycol production | 7 | kilogram | 7 | Diaphragm for compressor | activity's table |
+| `cr_steel_hr_rer` | steel production, chromium steel 18/8, hot rolled | 6697.8 | kilogram | 6697.8 | Chromium steel 18/8 hot rolled, BoP (as above) | activity's table |
+| `cast_iron_rer` | cast iron production | 716.1 | kilogram | 716.1 | Compressor + pumps and coolers | activity's table |
+| `ethylene_glycol_rer` | ethylene glycol production | 7 | kilogram | 7 | Diaphragm for compressor | activity's table |
 | `welding_arc_steel` | market for welding, arc, steel | 29 | meter | 29 | Buffer tank (SI prints m) | activity's table |
-| `polypropylene_row` | polypropylene production, granulate | 3 | kilogram | 3 | Alkali-resistant rotary pump | activity's table |
+| `polypropylene_rer` | polypropylene production, granulate | 3 | kilogram | 3 | Alkali-resistant rotary pump | activity's table |
 | `injection_moulding` | market for injection moulding | 3 | kilogram | 3 | Alkali-resistant rotary pump | activity's table |
-| `low_alloyed_steel_hr_row` | steel production, low-alloyed, hot rolled | 6075.6 | kilogram | 6075.6 | Container | activity's table |
+| `low_alloyed_steel_hr_rer` | steel production, low-alloyed, hot rolled | 6075.6 | kilogram | 6075.6 | Container | activity's table |
 | `concrete_35mpa_cem3` | concrete production, 35MPa, for building construction, with cement, CEM III/A | 7.7 | cubic meter | 7.7 | Foundation | activity's table |
-| `sheet_rolling_cr_steel` | market for sheet rolling, chromium steel | 60583.2 | kilogram | 60583.2 | Stack x3 — anode and cathode with frame, sheet rolling, chromium steel (20,194.4 per stack) | activity's table |
-| `cr_steel_hot_rolled_row` | steel production, chromium steel 18/8, hot rolled | 60583.2 | kilogram | 60583.2 | Stack x3 — anode and cathode with frame, chromium steel 18/8 hot rolled | activity's table |
-| `nickel_class1` | market for nickel, class 1 | 8654.7 | kilogram | 8654.7 | Stack x3 — anode + cathode, nickel (2,884.9 per stack) | activity's table |
-| `tetrafluoroethylene_row` | tetrafluoroethylene production | 432.6 | kilogram | 432.6 | Stack x3 — gasket (144.2 per stack) | activity's table |
-| `polysulfone` | polysulfone production, for membrane filtration production | 146.4 | kilogram | 146.4 | Stack x3 — diaphragm, Zirfon (48.8 per stack) | activity's table |
-| `zirconium_oxide_row` | zirconium oxide production | 219 | kilogram | 219 | Stack x3 — diaphragm, Zirfon (73.0 per stack) | activity's table |
-| `electricity_lv_de` | market for electricity, low voltage | 323773 | kilowatt hour | 323773 | SI Table 3: BoP 37,113.5 + stack 286,659.9 kWh (the stack x3 already) | own locator |
-| `lorry_32t_euro6` | market for transport, freight, lorry >32 metric ton, EURO6 | 22670.9 | ton kilometer | 22670.9 | ADDED — Gerloff §2.1: materials to assembly, 250 km on the unit's mass with three stacks | ADDED |
+| `electricity_lv_de` | market for electricity, low voltage | 37113.5 | kilowatt hour | 37113.5 | SI Table 3: BoP manufacturing electricity | own locator |
+| `lorry_32t_euro6` | market for transport, freight, lorry >32 metric ton, EURO6 | 5161.92 | ton kilometer | 5161.92 | ADDED — Gerloff §2.1: materials to assembly, 250 km on the plant's mass | ADDED |
+
+### `ae_gerloff_stack_1unit` — Alkaline electrolyser stack, one, 1 MW (Gerloff 2021)
+
+unit, DE. Comment: One stack of a 1 MW alkaline electrolyser: Gerloff 2021's stack rows at the printed amounts, a third of SI Table 3's stack manufacturing electricity (the table's figure is already x3), and the 250 km assembly leg on the stack's mass. Gerloff's unit holds three over its 20 years, each good for '50,00…
+
+| Key | Input | Printed amount | Unit | After scale | Note | Located by |
+|---|---|---|---|---|---|---|
+| `sheet_rolling_cr_steel` | market for sheet rolling, chromium steel | 20194.4 | kilogram | 20194.4 | Stack — anode and cathode with frame, sheet rolling, chromium steel (20,194.4 per stack) | activity's table |
+| `cr_steel_hr_rer` | steel production, chromium steel 18/8, hot rolled | 20194.4 | kilogram | 20194.4 | Stack — anode and cathode with frame, chromium steel 18/8 hot rolled | activity's table |
+| `nickel_class1` | market for nickel, class 1 | 2884.9 | kilogram | 2884.9 | Stack — anode + cathode, nickel (2,884.9 per stack) | activity's table |
+| `tetrafluoroethylene_rer` | tetrafluoroethylene production | 144.2 | kilogram | 144.2 | Stack — gasket (144.2 per stack) | activity's table |
+| `polysulfone` | polysulfone production, for membrane filtration production | 48.8 | kilogram | 48.8 | Stack — diaphragm, Zirfon (48.8 per stack) | activity's table |
+| `zirconium_oxide_row` | zirconium oxide production | 73 | kilogram | 73 | Stack — diaphragm, Zirfon (73.0 per stack) | activity's table |
+| `electricity_lv_de` | market for electricity, low voltage | 95553.3 | kilowatt hour | 95553.3 | SI Table 3: stack manufacturing electricity, 286659.9 kWh for three stacks, one third | own locator |
+| `lorry_32t_euro6` | market for transport, freight, lorry >32 metric ton, EURO6 | 5836.33 | ton kilometer | 5836.33 | ADDED — Gerloff §2.1: materials to assembly, 250 km on one stack | ADDED |
+
+### `ae_gerloff_1unit` — Alkaline electrolyser, 1 MW, 20-year life (Gerloff 2021)
+
+unit, GLO. Comment: One 1 MW alkaline electrolyser over Gerloff's 20-year life: its balance of plant once and three stacks (§2.1.2-2.1.3), as Gerloff count it. The operation activity draws it at one unit per lifetime hydrogen output. The optimiser charges the plant and the stacks separately (electrolysers.py); split on…
+
+| Key | Input | Printed amount | Unit | After scale | Note | Located by |
+|---|---|---|---|---|---|---|
+| `FG:ae_gerloff_plant_1unit` | → Alkaline electrolyser plant (balance of plant), 1 MW, 20-year life (Gerloff 2021) | 1 | unit | 1 | the balance of plant, once | activity's table |
+| `FG:ae_gerloff_stack_1unit` | → Alkaline electrolyser stack, one, 1 MW (Gerloff 2021) | 3 | unit | 3 | three stacks over the 20 years (Gerloff §2.1.2-2.1.3) | activity's table |
 
 ### `ae_op_gerloff_1kg_h2` — Hydrogen production, alkaline electrolysis (Gerloff 2021)
 
@@ -549,9 +567,9 @@ kilogram, DE. Comment: 1 kg H2 from the alkaline unit: Gerloff 2021 SI Table 6 o
 | `electrolyte_koh` | market for electrolyte, KOH, LiOH additive | 0.0037 | kilogram | 0.0037 | Electrolyte KOH/LiOH | activity's table |
 | `electricity_lv_de` | market for electricity, low voltage | 51.8 | kilowatt hour | 51.8 | Electricity LV DE — electrolysis, as exported (SI Table 6) | activity's table |
 
-### `pem_gerloff_1unit` — PEM electrolyser, 1 MW, 20-year life (Gerloff 2021)
+### `pem_gerloff_plant_1unit` — PEM electrolyser plant (balance of plant), 1 MW, 20-year life (Gerloff 2021)
 
-unit, GB. Comment: One 1 MW PEM electrolyser over its 20-year life: Gerloff 2021 SI Fig. 2 (17 BoP and 8 stack components at the printed amounts, RER datasets as exported), the stack's rows three times over (§2.1.3), SI Table 3's manufacturing electricity on GB LV, and the 250 km assembly leg. Platinum stands in for t…
+unit, DE. Comment: The balance of plant of one 1 MW PEM electrolyser, built once per unit: Gerloff 2021's BoP rows at the printed amounts, SI Table 3's BoP manufacturing electricity on German LV, and the 250 km assembly leg on the plant's mass. Split from the unit on 26 Oct 2026 (user) so the optimiser can charge stac…
 
 | Key | Input | Printed amount | Unit | After scale | Note | Located by |
 |---|---|---|---|---|---|---|
@@ -577,19 +595,37 @@ unit, GB. Comment: One 1 MW PEM electrolyser over its 20-year life: Gerloff 2021
 | `tube_insulation` | tube insulation production, elastomere | 115 | kilogram | 115 | Power electronics + compressor | activity's table |
 | `zeolite` | zeolite production, powder | 100 | kilogram | 100 | Ion exchanger | activity's table |
 | `concrete_35mpa_cem2` | concrete production, 35MPa, with cement, CEM II/B | 2.3 | cubic meter | 2.3 | Foundation | activity's table |
-| `aluminium_wrought` | market for aluminium, wrought alloy | 81 | kilogram | 81 | Stack x3 — end plate, aluminium (27.0 per stack) | activity's table |
-| `sheet_rolling_aluminium` | market for sheet rolling, aluminium | 81 | kilogram | 81 | Stack x3 — end plate, sheet rolling | activity's table |
-| `titanium` | titanium production | 1584 | kilogram | 1584 | Stack x3 — bipolar plates (528.0 per stack) | activity's table |
-| `tetrafluoroethylene_rer` | tetrafluoroethylene production | 48 | kilogram | 48 | Stack x3 — membrane polymer, Nafion proxy (16.0 per stack) | activity's table |
-| `carbon_black` | carbon black production | 27 | kilogram | 27 | Stack x3 — electrocatalyst support, anode + cathode (4.5 + 4.5 per stack) | activity's table |
-| `platinum` | market for platinum | 2.625 | kilogram | 2.625 | SUBSTITUTED — Stack x3: 0.075 kg platinum (cathode) + 0.8 kg iridium (anode) per stack, both as platinum | activity's table |
-| `copper_cathode` | market for copper, cathode | 13.5 | kilogram | 13.5 | Stack x3 — current collector, copper (4.5 per stack) | activity's table |
-| `sheet_rolling_copper` | market for sheet rolling, copper | 13.5 | kilogram | 13.5 | Stack x3 — current collector, sheet rolling | activity's table |
-| `sheet_rolling_cr_steel` | market for sheet rolling, chromium steel | 300 | kilogram | 300 | Stack x3 — bolts and screws, sheet rolling (100.0 per stack) | activity's table |
-| `cr_steel_hr_rer` | steel production, chromium steel 18/8, hot rolled | 300 | kilogram | 300 | Stack x3 — bolts and screws, chromium steel | activity's table |
-| `synthetic_rubber` | synthetic rubber production | 14.4 | kilogram | 14.4 | Stack x3 — gasket (4.8 per stack) | activity's table |
-| `electricity_lv_gb` | market for electricity, low voltage | 361672 | kilowatt hour | 361672 | SI Table 3: BoP 50,000 + stack 311,672.3 kWh (the stack x3 already) | own locator |
-| `lorry_32t_euro6` | market for transport, freight, lorry >32 metric ton, EURO6 | 3812.84 | ton kilometer | 3812.84 | ADDED — Gerloff §2.1: materials to assembly, 250 km on the unit's mass with three stacks | ADDED |
+| `electricity_lv_de` | market for electricity, low voltage | 50000 | kilowatt hour | 50000 | SI Table 3: BoP manufacturing electricity | own locator |
+| `lorry_32t_euro6` | market for transport, freight, lorry >32 metric ton, EURO6 | 3295.21 | ton kilometer | 3295.21 | ADDED — Gerloff §2.1: materials to assembly, 250 km on the plant's mass | ADDED |
+
+### `pem_gerloff_stack_1unit` — PEM electrolyser stack, one, 1 MW (Gerloff 2021)
+
+unit, DE. Comment: One stack of a 1 MW PEM electrolyser: Gerloff 2021's stack rows at the printed amounts, a third of SI Table 3's stack manufacturing electricity (the table's figure is already x3), and the 250 km assembly leg on the stack's mass. Gerloff's unit holds three over its 20 years, each good for '50,000 h o…
+
+| Key | Input | Printed amount | Unit | After scale | Note | Located by |
+|---|---|---|---|---|---|---|
+| `aluminium_wrought` | market for aluminium, wrought alloy | 27 | kilogram | 27 | Stack — end plate, aluminium (27.0 per stack) | activity's table |
+| `sheet_rolling_aluminium` | market for sheet rolling, aluminium | 27 | kilogram | 27 | Stack — end plate, sheet rolling | activity's table |
+| `titanium` | titanium production | 528 | kilogram | 528 | Stack — bipolar plates (528.0 per stack) | activity's table |
+| `tetrafluoroethylene_rer` | tetrafluoroethylene production | 16 | kilogram | 16 | Stack — membrane polymer, Nafion proxy (16.0 per stack) | activity's table |
+| `carbon_black` | carbon black production | 9 | kilogram | 9 | Stack — electrocatalyst support, anode + cathode (4.5 + 4.5 per stack) | activity's table |
+| `platinum` | market for platinum | 0.875 | kilogram | 0.875 | SUBSTITUTED — Stack: 0.075 kg platinum (cathode) + 0.8 kg iridium (anode) per stack, both as platinum | activity's table |
+| `copper_cathode` | market for copper, cathode | 4.5 | kilogram | 4.5 | Stack — current collector, copper (4.5 per stack) | activity's table |
+| `sheet_rolling_copper` | market for sheet rolling, copper | 4.5 | kilogram | 4.5 | Stack — current collector, sheet rolling | activity's table |
+| `sheet_rolling_cr_steel` | market for sheet rolling, chromium steel | 100 | kilogram | 100 | Stack — bolts and screws, sheet rolling (100.0 per stack) | activity's table |
+| `cr_steel_hr_rer` | steel production, chromium steel 18/8, hot rolled | 100 | kilogram | 100 | Stack — bolts and screws, chromium steel | activity's table |
+| `synthetic_rubber` | synthetic rubber production | 4.8 | kilogram | 4.8 | Stack — gasket (4.8 per stack) | activity's table |
+| `electricity_lv_de` | market for electricity, low voltage | 103891 | kilowatt hour | 103891 | SI Table 3: stack manufacturing electricity, 311672.3 kWh for three stacks, one third | own locator |
+| `lorry_32t_euro6` | market for transport, freight, lorry >32 metric ton, EURO6 | 172.544 | ton kilometer | 172.544 | ADDED — Gerloff §2.1: materials to assembly, 250 km on one stack | ADDED |
+
+### `pem_gerloff_1unit` — PEM electrolyser, 1 MW, 20-year life (Gerloff 2021)
+
+unit, DE. Comment: One 1 MW PEM electrolyser over Gerloff's 20-year life: its balance of plant once and three stacks (§2.1.2-2.1.3), as Gerloff count it. The operation activity draws it at one unit per lifetime hydrogen output. The optimiser charges the plant and the stacks separately (electrolysers.py); split on 26 O…
+
+| Key | Input | Printed amount | Unit | After scale | Note | Located by |
+|---|---|---|---|---|---|---|
+| `FG:pem_gerloff_plant_1unit` | → PEM electrolyser plant (balance of plant), 1 MW, 20-year life (Gerloff 2021) | 1 | unit | 1 | the balance of plant, once | activity's table |
+| `FG:pem_gerloff_stack_1unit` | → PEM electrolyser stack, one, 1 MW (Gerloff 2021) | 3 | unit | 3 | three stacks over the 20 years (Gerloff §2.1.2-2.1.3) | activity's table |
 
 ### `pem_op_gerloff_1kg_h2` — Hydrogen production, PEM electrolysis (Gerloff 2021)
 
@@ -603,9 +639,9 @@ kilogram, GB. Comment: 1 kg H2 from the PEM unit: Gerloff 2021 SI Table 6 operat
 | `electricity_lv_gb` | market for electricity, low voltage | 54 | kilowatt hour | 54 | Electricity LV GB — electrolysis (SI Table 6) | activity's table |
 | `heat_rer` | market group for heat, district or industrial, other than natural gas | 1.008 | megajoule | 1.008 | Heat, district or industrial (SI Table 6: 0.28 kWh = 1.008 MJ) | activity's table |
 
-### `soec_gerloff_1unit` — SOEC electrolyser, 1 MW, 20-year life (Gerloff 2021)
+### `soec_gerloff_plant_1unit` — SOEC electrolyser plant (balance of plant), 1 MW, 20-year life (Gerloff 2021)
 
-unit, GB. Comment: One 1 MW solid-oxide electrolyser over its 20-year life: Gerloff 2021 SI Figs 3-5 (48 BoP and 7 stack components at the printed amounts, RER datasets as exported), the stack's rows three times over (§2.1.3), SI Table 3's manufacturing electricity on GB LV, the 250 km assembly leg, and ASSUMED La2O3 …
+unit, DE. Comment: The balance of plant of one 1 MW SOEC electrolyser, built once per unit: Gerloff 2021's BoP rows at the printed amounts, SI Table 3's BoP manufacturing electricity on German LV, and the 250 km assembly leg on the plant's mass. Split from the unit on 26 Oct 2026 (user) so the optimiser can charge sta…
 
 | Key | Input | Printed amount | Unit | After scale | Note | Located by |
 |---|---|---|---|---|---|---|
@@ -614,7 +650,7 @@ unit, GB. Comment: One 1 MW solid-oxide electrolyser over its 20-year life: Gerl
 | `aluminium_wrought` | market for aluminium, wrought alloy | 401 | kilogram | 401 | Frequency converters + power electronics + water pump | activity's table |
 | `sheet_rolling_aluminium` | market for sheet rolling, aluminium | 100 | kilogram | 100 | Power electronics | activity's table |
 | `electronics_rer` | electronics production, for control units | 100 | kilogram | 100 | Control electronics | activity's table |
-| `abs_row` | acrylonitrile-butadiene-styrene copolymer production | 1.4 | kilogram | 1.4 | Control panel / heater | activity's table |
+| `abs_rer` | acrylonitrile-butadiene-styrene copolymer production | 1.4 | kilogram | 1.4 | Control panel / heater | activity's table |
 | `injection_moulding` | market for injection moulding | 1.4 | kilogram | 1.4 | Control panel / heater | activity's table |
 | `cast_iron_rer` | cast iron production | 3000 | kilogram | 3000 | Diaphragm compressors 1-5 | activity's table |
 | `ethylene_glycol_rer` | ethylene glycol production | 35 | kilogram | 35 | Diaphragm compressors 1-5 | activity's table |
@@ -628,21 +664,39 @@ unit, GB. Comment: One 1 MW solid-oxide electrolyser over its 20-year life: Gerl
 | `low_alloyed_steel_hr_rer` | steel production, low-alloyed, hot rolled | 3753.6 | kilogram | 3753.6 | Tubing + container — pre-heating | activity's table |
 | `welding_arc_steel` | market for welding, arc, steel | 33.3 | meter | 33.3 | Buffer tank (pre-heating) | activity's table |
 | `concrete_35mpa_cem2` | concrete production, 35MPa, with cement, CEM II/B | 2.3 | cubic meter | 2.3 | Foundation | activity's table |
-| `sheet_rolling_cr_steel` | market for sheet rolling, chromium steel | 26928.3 | kilogram | 26928.3 | Stack x3 — air electrode / interconnect, sheet rolling, chromium steel (8,976.1 per stack) | activity's table |
-| `cr_steel_hr_rer` | steel production, chromium steel 18/8, hot rolled | 26928.3 | kilogram | 26928.3 | Stack x3 — air electrode / interconnect, chromium steel 18/8 hot rolled | activity's table |
-| `praseodymium_oxide` | market for praseodymium-neodymium oxide | 27 | kilogram | 27 | Stack x3 — air electrode screen printing (9.0 per stack) | activity's table |
-| `nickel_class1` | market for nickel, class 1 | 432.3 | kilogram | 432.3 | Stack x3 — air electrode 7.5 + firing 136.6 per stack | activity's table |
-| `zirconium_oxide_row` | zirconium oxide production | 512.1 | kilogram | 512.1 | Stack x3 — blocking layer (170.7 per stack) | activity's table |
-| `samarium_seg_oxide` | market for samarium-europium-gadolinium oxide | 113.1 | kilogram | 113.1 | Stack x3 — blocking layer 14.8 + screen printing 22.9 per stack | activity's table |
-| `cerium_oxide` | cerium oxide to generic market for mischmetal | 274.5 | kilogram | 274.5 | Stack x3 — blocking layer screen printing (91.5 per stack) | activity's table |
-| `aluminium_oxide` | aluminium oxide, non-metallurgical to generic market for refractory material, acid | 19.2 | kilogram | 19.2 | Stack x3 — electrolyte + H2 electrode, glass sealant (6.4 per stack) | activity's table |
-| `boric_oxide` | boric oxide production | 19.2 | kilogram | 19.2 | Stack x3 — electrolyte + H2 electrode (6.4 per stack) | activity's table |
-| `barium_oxide` | barium oxide production | 19.2 | kilogram | 19.2 | Stack x3 — electrolyte + H2 electrode (6.4 per stack) | activity's table |
-| `silicone_product` | silicone product production | 19.2 | kilogram | 19.2 | Stack x3 — electrolyte sealant (6.4 per stack; the figure's dataset) | activity's table |
-| `lanthanum_oxide` | market for lanthanum oxide | 32.9355 | kilogram | 32.9355 | ASSUMED — Stack x3: LSM layer's La2O3, 0.563 of a 19.5 kg layer per stack (Gerloff row 53 gives no amount) | ASSUMED |
-| `strontium_carbonate` | market for strontium carbonate | 7.488 | kilogram | 7.488 | ASSUMED — Stack x3: LSM layer's SrCO3, 0.128 of a 19.5 kg layer per stack | ASSUMED |
-| `electricity_lv_gb` | market for electricity, low voltage | 443094 | kilowatt hour | 443094 | SI Table 3: BoP 76,420.2 + stack 366,673.3 kWh (the stack x3 already) | own locator |
-| `lorry_32t_euro6` | market for transport, freight, lorry >32 metric ton, EURO6 | 16786.6 | ton kilometer | 16786.6 | ADDED — Gerloff §2.1: materials to assembly, 250 km on the unit's mass with three stacks | ADDED |
+| `electricity_lv_de` | market for electricity, low voltage | 76420.2 | kilowatt hour | 76420.2 | SI Table 3: BoP manufacturing electricity | own locator |
+| `lorry_32t_euro6` | market for transport, freight, lorry >32 metric ton, EURO6 | 9695.58 | ton kilometer | 9695.58 | ADDED — Gerloff §2.1: materials to assembly, 250 km on the plant's mass | ADDED |
+
+### `soec_gerloff_stack_1unit` — SOEC electrolyser stack, one, 1 MW (Gerloff 2021)
+
+unit, DE. Comment: One stack of a 1 MW SOEC electrolyser: Gerloff 2021's stack rows at the printed amounts, a third of SI Table 3's stack manufacturing electricity (the table's figure is already x3), and the 250 km assembly leg on the stack's mass. Gerloff's unit holds three over its 20 years, each good for '50,000 h …
+
+| Key | Input | Printed amount | Unit | After scale | Note | Located by |
+|---|---|---|---|---|---|---|
+| `sheet_rolling_cr_steel` | market for sheet rolling, chromium steel | 8976.1 | kilogram | 8976.1 | Stack — air electrode / interconnect, sheet rolling, chromium steel (8,976.1 per stack) | activity's table |
+| `cr_steel_hr_rer` | steel production, chromium steel 18/8, hot rolled | 8976.1 | kilogram | 8976.1 | Stack — air electrode / interconnect, chromium steel 18/8 hot rolled | activity's table |
+| `praseodymium_oxide` | market for praseodymium oxide | 9 | kilogram | 9 | Stack — air electrode screen printing (9.0 per stack) | activity's table |
+| `nickel_class1` | market for nickel, class 1 | 144.1 | kilogram | 144.1 | Stack — air electrode 7.5 + firing 136.6 per stack | activity's table |
+| `zirconium_oxide_row` | zirconium oxide production | 170.7 | kilogram | 170.7 | Stack — blocking layer (170.7 per stack) | activity's table |
+| `samarium_seg_oxide` | market for samarium-europium-gadolinium oxide | 37.7 | kilogram | 37.7 | Stack — blocking layer 14.8 + screen printing 22.9 per stack | activity's table |
+| `cerium_oxide` | cerium oxide to generic market for mischmetal | 91.5 | kilogram | 91.5 | Stack — blocking layer screen printing (91.5 per stack) | activity's table |
+| `aluminium_oxide` | aluminium oxide, non-metallurgical to generic market for refractory material, acid | 6.4 | kilogram | 6.4 | Stack — electrolyte + H2 electrode, glass sealant (6.4 per stack) | activity's table |
+| `boric_oxide` | boric oxide production | 6.4 | kilogram | 6.4 | Stack — electrolyte + H2 electrode (6.4 per stack) | activity's table |
+| `barium_oxide` | barium oxide production | 6.4 | kilogram | 6.4 | Stack — electrolyte + H2 electrode (6.4 per stack) | activity's table |
+| `silicone_product` | silicone product production | 6.4 | kilogram | 6.4 | Stack — electrolyte sealant (6.4 per stack; the figure's dataset) | activity's table |
+| `lanthanum_oxide` | market for lanthanum oxide | 10.9785 | kilogram | 10.9785 | ASSUMED — Stack: LSM layer's La2O3, 0.563 of a 19.5 kg layer per stack (Gerloff row 53 gives no amount) | ASSUMED |
+| `strontium_carbonate` | market for strontium carbonate | 2.496 | kilogram | 2.496 | ASSUMED — Stack: LSM layer's SrCO3, 0.128 of a 19.5 kg layer per stack | ASSUMED |
+| `electricity_lv_de` | market for electricity, low voltage | 122224 | kilowatt hour | 122224 | SI Table 3: stack manufacturing electricity, 366673.3 kWh for three stacks, one third | own locator |
+| `lorry_32t_euro6` | market for transport, freight, lorry >32 metric ton, EURO6 | 2363.68 | ton kilometer | 2363.68 | ADDED — Gerloff §2.1: materials to assembly, 250 km on one stack | ADDED |
+
+### `soec_gerloff_1unit` — SOEC electrolyser, 1 MW, 20-year life (Gerloff 2021)
+
+unit, DE. Comment: One 1 MW SOEC electrolyser over Gerloff's 20-year life: its balance of plant once and three stacks (§2.1.2-2.1.3), as Gerloff count it. The operation activity draws it at one unit per lifetime hydrogen output. The optimiser charges the plant and the stacks separately (electrolysers.py); split on 26 …
+
+| Key | Input | Printed amount | Unit | After scale | Note | Located by |
+|---|---|---|---|---|---|---|
+| `FG:soec_gerloff_plant_1unit` | → SOEC electrolyser plant (balance of plant), 1 MW, 20-year life (Gerloff 2021) | 1 | unit | 1 | the balance of plant, once | activity's table |
+| `FG:soec_gerloff_stack_1unit` | → SOEC electrolyser stack, one, 1 MW (Gerloff 2021) | 3 | unit | 3 | three stacks over the 20 years (Gerloff §2.1.2-2.1.3) | activity's table |
 
 ### `soec_op_gerloff_1kg_h2` — Hydrogen production, SOEC electrolysis (Gerloff 2021)
 
@@ -712,9 +766,9 @@ kilogram, CN. Comment: Voß ESI §3.1.1.2: Engels et al. 2022's 9.62 kg CO2e/kg 
 | `lorry_euro3_row` | market for transport, freight, lorry 16-32 metric ton, EURO3 | 1 | ton kilometer | 1 | §3.1.3 'Truck China', 1,000 km: upstream, kept | own locator |
 | `co2` | Carbon dioxide, fossil | 5.19 | kilogram | 5.19 | Voß §3.1.1.2, 5.19 kg CO2e/kg before transport - a published carbon footprint, entered as fossil CO2 of its own size: GWP100 only | own locator |
 
-### `bess_iron_phosphate_0p91kg` — Iron phosphate, LFP precursor (Voß 2025)
+### `bess_iron_phosphate_1kg` — Iron phosphate, LFP precursor (Voß 2025)
 
-kilogram, CN; production amount 0.91. Comment: Voß ESI Table S32, as printed: the inputs make 0.91 kg of FePO4, which is the amount one kg of LFP-C consumes (Table S31).
+kilogram, CN. Comment: Voß ESI Table S32, every input at the printed amount, per 1.00 kg of FePO4. S32 prints its output as 0.91 kg, but that is S31's consumption copied across: ESI p. 23 says the precursors are stoichiometric (Eq. S25), and on the 'without water' datasets 1.00 kg FeSO4, 0.65 kg H3PO4 and 0.11 kg H2O2 are…
 
 | Key | Input | Printed amount | Unit | After scale | Note | Located by |
 |---|---|---|---|---|---|---|
@@ -733,7 +787,7 @@ kilogram, CN. Comment: Voß ESI Table S31, after Quan et al.'s spray-drying and 
 | Key | Input | Printed amount | Unit | After scale | Note | Located by |
 |---|---|---|---|---|---|---|
 | `lorry_euro3_row` | market for transport, freight, lorry 16-32 metric ton, EURO3 | 1 | ton kilometer | 1 | Table S31 'Truck China', 1,000 km: upstream, kept | own locator |
-| `FG:bess_iron_phosphate_0p91kg` | → Iron phosphate, LFP precursor (Voß 2025) | 0.91 | kilogram | 0.91 | Table S31: FePO4 | own locator |
+| `FG:bess_iron_phosphate_1kg` | → Iron phosphate, LFP precursor (Voß 2025) | 0.91 | kilogram | 0.91 | Table S31: FePO4 | own locator |
 | `lithium_carbonate` | market for lithium carbonate | 0.22 | kilogram | 0.22 | Table S31: Li2CO3 | own locator |
 | `glucose` | market for glucose | 0.13 | kilogram | 0.13 | Table S31: glucose (the carbon coating) | own locator |
 | `nitrogen_liquid` | market for nitrogen, liquid | 0.21 | kilogram | 0.21 | Table S31: nitrogen, inert atmosphere | own locator |
@@ -833,7 +887,7 @@ kilowatt hour, CN. Comment: 2.6082 Voß cells of 383.4 Wh make one kWh of NAMEPL
 |---|---|---|---|---|---|---|
 | `FG:bess_lfp_cell_materials_1unit` | → LFP/graphite prismatic cell, materials (Voß 2025) | 2.60824 | unit | 2.60824 | 1000 / 383.4 Wh per cell | activity's table |
 | `electricity_mv_cn` | market group for electricity, medium voltage | 18 | kilowatt hour | 18 | cell factory electricity, CN | activity's table |
-| `heat_gas_industrial_row` | market for heat, district or industrial, natural gas | 68.4 | megajoule | 68.4 | cell factory gas, CN | activity's table |
+| `heat_gas_small_row` | market for heat, central or small-scale, natural gas | 68.4 | megajoule | 68.4 | cell factory gas, CN | activity's table |
 
 ### `bess_lfp_cell_1kwh_de` — LFP/graphite prismatic cell, per kWh, made in DE (Voß 2025)
 
@@ -844,6 +898,8 @@ kilowatt hour, DE. Comment: 2.6082 Voß cells of 383.4 Wh make one kWh of NAMEPL
 | `FG:bess_lfp_cell_materials_1unit` | → LFP/graphite prismatic cell, materials (Voß 2025) | 2.60824 | unit | 2.60824 | 1000 / 383.4 Wh per cell | activity's table |
 | `electricity_mv_de` | market for electricity, medium voltage | 18 | kilowatt hour | 18 | cell factory electricity, DE | activity's table |
 | `heat_gas_industrial_rer` | market group for heat, district or industrial, natural gas | 68.4 | megajoule | 68.4 | cell factory gas, DE | activity's table |
+| `container_ship_glo` | market for transport, freight, sea, container ship | 104.742 | ton kilometer | 104.742 | §3.1.3 sea leg, China to Rotterdam (~18,500 km), on the cell's materials: upstream to the German factory | own locator |
+| `lorry_euro3_rer` | market for transport, freight, lorry 16-32 metric ton, EURO3 | 3.9632 | ton kilometer | 3.9632 | §3.1.3 'Truck Europe', Rotterdam to Berlin (700 km), on the cell's materials | own locator |
 
 ### `bess_module_47kwh_liquid` — Battery module, 47 kWh, for liquid-cooled container (Jasper 2026)
 
@@ -1078,7 +1134,7 @@ unit, GLO. Comment: Jasper et al. 2026 SI: ecoinvent's 20 ft intermodal containe
 
 ### `bess_hfc227ea_1kg` — Heptafluoropropane (HFC-227ea) fire suppressant, per kg (Jasper 2026)
 
-kilogram, GLO. Comment: Jasper et al. 2026 SI. The 0.1 kg of tetrafluoroethylene is the source's avoided co-product and is kept as it is printed, the way SMR keeps its avoided electricity. The suppressant is the charge, not a release - nothing is emitted here.
+kilogram, GLO. Comment: Jasper et al. 2026 SI. Jasper's 0.1 kg tetrafluoroethylene avoided co-product is NOT taken: no credits anywhere (ASSUMPTIONS §5; user, 26 Oct 2026). The suppressant is the charge, not a release - nothing is emitted here.
 
 | Key | Input | Printed amount | Unit | After scale | Note | Located by |
 |---|---|---|---|---|---|---|
@@ -1086,7 +1142,6 @@ kilogram, GLO. Comment: Jasper et al. 2026 SI. The 0.1 kg of tetrafluoroethylene
 | `steam_heat_row` | steam production, as energy carrier, in chemical industry | 20 | megajoule | 20 | Jasper et al. 2026 SI | own locator |
 | `hydrogen_fluoride` | market for hydrogen fluoride | 0.131 | kilogram | 0.131 | Jasper et al. 2026 SI | own locator |
 | `tetrafluoroethylene` | market for tetrafluoroethylene | 0.981 | kilogram | 0.981 | Jasper et al. 2026 SI | own locator |
-| `tetrafluoroethylene` | market for tetrafluoroethylene | -0.1 | kilogram | -0.1 | Jasper et al. 2026 SI - avoided product | own locator |
 | `hazardous_waste_incineration` | market for hazardous waste, for incineration | -0.02 | kilogram | -0.02 | Jasper et al. 2026 SI - production waste sent to treatment | own locator |
 
 ### `bess_extinguisher_tank_1kg` — Fire extinguisher tank, charged, per kg (Jasper 2026)

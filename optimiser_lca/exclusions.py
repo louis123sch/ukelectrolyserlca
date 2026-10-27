@@ -132,6 +132,14 @@ class Exclusion:
 # upper). ASSUMED until a switchgear EPD is held.
 SWITCHGEAR_KG_PER_MW = 610.0
 SWITCHGEAR_KGCO2E_PER_KG = (2.5, 4.57)
+# The rest of Teffera's HV bay (Table 5, HV subsystem, p. 85), per kWh: "Civil structures"
+# low-alloyed steel 3.52E-06 (the gantries), and "Grid connection" porcelain 6.67E-07,
+# low-alloyed steel 3.68E-07, aluminium 1.20E-07, kraft paper 3.97E-08. Put on the switchgear's
+# own basis — 610 kg per MW from the 9.95E-06 kg/kWh of MV + HV switchgear rows — and carried
+# at the same per-kg carbon (ASSUMED; mostly steel). Added 26 Oct 2026 (user).
+TEFFERA_SWITCHGEAR_KG_PER_KWH = 8.93e-7 + 2.05e-7 + 5.05e-6 + 2.72e-6 + 8.37e-7 + 2.43e-7
+TEFFERA_BAY_KG_PER_KWH = 3.52e-6 + 6.67e-7 + 3.68e-7 + 1.20e-7 + 3.97e-8
+BAY_KG_PER_MW = SWITCHGEAR_KG_PER_MW * TEFFERA_BAY_KG_PER_KWH / TEFFERA_SWITCHGEAR_KG_PER_KWH
 
 # Factory energy a transformer bill does not carry (Leng publish none): the IEA
 # PVPS unit's own process energy per kg, Table 49 — 2,368.3 kWh and 9,903.8 MJ
@@ -256,6 +264,19 @@ REGISTER: list[Exclusion] = [
               "transformers.decompose()['wind']['kgco2e_per_MW_transformer']); central: none, as Leng.",
         where=("stepup_transformers", "TX_SCOPE", "switchgear")),
     Exclusion(
+        "wind", "Leng's electrical installation beyond its four printed rows",
+        "cutoff", method="transcribed",
+        central=0.0, upper=(0.015 * 29_397_100 - 2_600.0) / 100.0 / 35.0,
+        source="Leng et al. 2026 Fig. 9b (electrical installation 1.5 % of wind-turbine engineering) and Table 3 "
+               "(29,397.1 t CO2e per 100 MW); SI Table S3 serial 5 prints only section steel, terminal blocks, "
+               "welding rod and lead seals (~2.6 t)",
+        basis="the ~438 t per 100 MW Leng score but do not itemise: probably turbine-to-box cable and conduit "
+              "(the S3 header's 'cable and conduit installation works'), or a kg/t slip on the 261 of section steel. "
+              "Not the 35 kV collection cable, which Leng book under the transmission line. Upper: all of it on the "
+              "step-ups over 35 years; central: none, as itemised. Unsourced, so on the cut-off test, which it "
+              "passes (user, 26 Oct 2026).",
+        where=("stepup_transformers", "TX_SCOPE", "wind_step_up")),
+    Exclusion(
         "wind", "step-up transformer factory energy",
         "cutoff", method="assumed",
         central=_WIND_TX_FACTORY[0], upper=_WIND_TX_FACTORY[1],
@@ -273,13 +294,23 @@ REGISTER: list[Exclusion] = [
         where=("stepup_transformers", "TX_SCOPE", "switchgear")),
     # ------------------------------------------------------------ grid connection
     Exclusion(
-        "grid connection", "switchgear, protection and the bay",
+        "grid connection", "switchgear and protection (MV + HV devices)",
         "cutoff", status="included_estimate", method="assumed",
         central=_switchgear(40.0)[0], upper=_switchgear(40.0)[1],
         source="Teffera et al. 2021 Table 5 (mass); Leng et al. 2026 S3 'electrical installation' is civils-side only",
         basis="0.61 t per MW of connection over 40 years at 2.5–4.57 kg CO2e/kg. The connection's denominator is a "
               "materials-only transformer at 137.7 kg CO2e/MW/yr, so this fails per technology while being ~0.2 % "
               "of the system (CUTOFF_RULE_PLAN.md Q7).",
+        where=("stepup_transformers", "TX_SCOPE", "switchgear")),
+    Exclusion(
+        "grid connection", "HV bay steelwork and grid-connection hardware (Teffera)",
+        "cutoff", status="included_estimate", method="assumed",
+        central=_switchgear(40.0, BAY_KG_PER_MW)[0], upper=_switchgear(40.0, BAY_KG_PER_MW)[1],
+        source="Teffera et al. 2021 Table 5, HV subsystem: civil structures and grid connection (p. 85)",
+        basis=f"{BAY_KG_PER_MW:.0f} kg per MW of connection (gantry steel, porcelain insulators, aluminium, "
+              "kraft paper) on the switchgear's 0.61 t basis, over 40 years at 2.5–4.57 kg CO2e/kg. Leng's "
+              "outdoor venue carries the yard's civils but no structural steel. Fails 1 % against the "
+              "connection's denominator, so carried (user, 26 Oct 2026).",
         where=("stepup_transformers", "TX_SCOPE", "switchgear")),
     Exclusion(
         "grid connection", "intake transformer factory energy",
@@ -291,11 +322,14 @@ REGISTER: list[Exclusion] = [
     Exclusion(
         "grid connection", "substation civils — Leng's outdoor venue (switchyard formation, concrete, rebar)",
         "sourced", status="included_inventory", method="transcribed",
-        central=2_157_000 / 100.0 / 40.0, upper=2_157_000 / 100.0 / 40.0,
-        source="Leng et al. 2026 Table S3 and Fig. 9c: outdoor venue 34.4 % of the booster station's 6,269 t CO2e per 100 MW",
+        central=3_943.4 / 40.0, upper=3_943.4 / 40.0,
+        source="Leng et al. 2026 Table S3 (the outdoor venue's nine rows) and Fig. 9c",
         basis="in the source and inside the boundary; decision D2 taken 22 Oct 2026: the venue's nine rows per MW of "
-              "connection as grid_intake_substation_civils_per_mw; the three buildings covered by Zhang's facility "
-              "building (stated substitution). Not on the 1 % test.",
+              "connection as grid_intake_substation_civils_per_mw, scored here at 3,943.4 kg CO2e per MW over 40 "
+              "years (what the coefficient charges). Leng's own score for the venue, 34.4 % of the station's 6,269 t "
+              "per 100 MW (539 kg/MW/yr), is not charged: on ecoinvent the same rows give 18 % of it, and Leng do "
+              "not say how they scored 'site formation'. The three buildings are covered by Zhang's facility building "
+              "(stated substitution). Not on the 1 % test. Label corrected 26 Oct 2026 (it printed 539).",
         where=("stepup_transformers", "TX_SCOPE", "grid_intake")),
     Exclusion(
         "grid connection", "booster-station construction machinery (Leng S3), the switchyard's share",
@@ -349,6 +383,12 @@ REGISTER: list[Exclusion] = [
               source="ASSUMPTIONS.md §6; Zhang et al. 2025 Table S1", where=("data_centre", "DC_SCOPE", "transport")),
     Exclusion("wind", "delivery to site — Leng Table S2 to-site legs (both transformers)", "boundary",
               source="ASSUMPTIONS.md §6; Leng et al. 2026 Table S2", where=("stepup_transformers", "TX_SCOPE", "delivery")),
+    Exclusion("wind", "on-site transport — Leng Table S2 'intra-site transport' (300 km) and the booster "
+              "station's 3 km on-site construction leg", "boundary",
+              source="ASSUMPTIONS.md §6; Leng et al. 2026 Table S2 and SI p. 4",
+              note="read as part of getting the equipment to and around a site that is not known: the same "
+                   "boundary as delivery to site (user, 26 Oct 2026). Serves the step-ups and the grid connection",
+              where=("stepup_transformers", "TX_SCOPE", "delivery")),
     Exclusion("bought hydrogen", "road haulage from the seller to the site", "boundary",
               source="ASSUMPTIONS.md §3; TODO.md (parked)",
               note="trailer compression is charged; the journey depends on where the seller is",

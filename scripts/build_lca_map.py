@@ -57,7 +57,7 @@ def node(name, kind, **kw):
 from map_fingerprint import fingerprint  # noqa: E402
 from lp_terms import (T_WIND, T_SOLAR, T_TX_WIND, T_TX_SOLAR, T_GRID_CONN, T_BATT_E, T_BATT_P, T_ELY,  # noqa: E402
                       T_TANK, T_FC_STACK, T_FC_BOP, T_IMPORT, T_ELY_CONS, T_FC_MAINT, T_LEAK, T_VOLL,
-                      T_DC_IT, T_DC_ENERGY, T_BOUGHT, T_TX_BATT, T_TX_FC)
+                      T_DC_IT, T_DC_ENERGY, T_BOUGHT, T_TX_BATT, T_TX_FC, T_ELY_STACK)
 
 
 # =============================================================================
@@ -924,7 +924,8 @@ def build():
                     f"{gc.ASSET_LIFE_YEARS:g} years (decision D2, 22 Oct 2026); the station's buildings are covered "
                     "by Zhang's facility building",
                     "gwp_grid_per_mw × cap_grid — LP term 'Grid connection' (the civils' share)", None),
-            part("Estimates carried on the connection: switchgear, protection and the bay, and the intake "
+            part("Estimates carried on the connection: switchgear and protection, the bay's steelwork and "
+                 "grid-connection hardware (Teffera), and the intake "
                  "transformers' factory energy (cut-off, ASSUMED); the switchyard's share of Leng's construction "
                  "machinery (sourced)", intake_est_per_kwh, ug, grade="assumed",
                  lp="inside gwp_grid_per_mw × cap_grid (dc_inputs.with_cutoff adds the register's central estimates)",
@@ -1034,23 +1035,27 @@ def build():
         cap_box.update({
             "name": f"Stack, power supply and plant — the {short} capital good, per kg at {cf_:.0%} utilisation",
             "inventory_name": cap_box["name"],
-            "lp": f"gwp_ely × cap_ely — LP term 'Electrolyser capital': {t_e.gwp_ely:,.0f} kg CO₂e per MW per year "
-                  f"when {short} is selected (per MW over {ely.PLANT_LIFETIME_YEARS:g} y; the LP sets the utilisation)",
+            "lp": f"gwp_ely × cap_ely for the plant ({t_e.gwp_ely:,.0f} kg CO₂e per MW per year over "
+                  f"{ely.PLANT_LIFETIME_YEARS:g} y) + gwp_ely_stack_per_mw × ely_stack_units for the stacks "
+                  f"({t_e.gwp_ely_stack_per_mw:,.0f} kg CO₂e per MW of stack, replaced at max(3 per "
+                  f"{ely.PLANT_LIFETIME_YEARS:g} y, running hours / {ely.STACK_DUTY_HOURS:,.0f})) when {short} is selected",
             "loss": f"{row['kwh_per_kg']:g} kWh per kg of electricity (system; rectifier taken as inside — not verified "
                     f"at source)" + (f"; plus 5.24 kWh/kg of heat" if short == "SOEC" else ""),
-            "note": "Gerloff's 1 MW unit over 20 years, with three stacks' materials (§2.1.3) and SI Table 3's "
-                    "manufacturing energy; one activity, amortised on calendar life (a duty-driven stack count is an "
-                    "open gap).",
+            "note": "Gerloff's 1 MW unit over 20 years: the balance of plant once and three stacks (§2.1.2-2.1.3), "
+                    "each with its share of SI Table 3's manufacturing energy. Split into plant and stack on 26 Oct "
+                    "2026 so the LP can charge stacks by running hours (docs/ELECTROLYSER_STACKS.md).",
         })
         ely_fus.append(fu(
             f"Electrolyser, {short} — 1 kg H₂ at {pressure:g} bar{pressure_note}, electricity excluded, at Gerloff's "
             f"{cf_:.0%} utilisation" + (" (gas-boiler heat included)" if short == "SOEC" else ""),
             row["foreground_fixed_kgco2e_per_kg"], uh,
-            lp=f"gwp_ely × cap_ely + ely_variable_gwp_per_kg × kg made, with ely_tech='{label}' — the LP splits "
-               "capital from consumables because it decides the utilisation",
-            lp_terms=[(f"{short} capital per kg at {cf_:.0%} utilisation",
-                       row["foreground_fixed_kgco2e_per_kg"] - t_e.ely_variable_gwp_per_kg,
-                       "Electrolyser capital (PEM default; AE, SOEC selectable)"),
+            lp=f"gwp_ely × cap_ely + gwp_ely_stack_per_mw × ely_stack_units + ely_variable_gwp_per_kg × kg made, "
+               f"with ely_tech='{label}' — the LP splits capital from consumables because it decides the utilisation",
+            lp_terms=[(f"{short} balance of plant per kg at {cf_:.0%} utilisation",
+                       row["plant_kgco2e_per_MW"] * row["rated_MW"] * row["units_per_kg"], T_ELY),
+                      (f"{short} three stacks per kg at {cf_:.0%} utilisation",
+                       row["foreground_fixed_kgco2e_per_kg"] - t_e.ely_variable_gwp_per_kg
+                       - row["plant_kgco2e_per_MW"] * row["rated_MW"] * row["units_per_kg"], T_ELY_STACK),
                       (f"{short} consumables per kg", t_e.ely_variable_gwp_per_kg,
                        "Electrolyser consumables (water, heat)")],
             module="optimisation/electrolysers.py",
@@ -1316,6 +1321,13 @@ def build():
                 "kg CO₂e per MW per year (PEM shown)", [f["name"] for f in ely_fus], key="electrolyser",
                 module="optimisation/electrolysers.py", grade="derived",
                 gap_keys=("electrolyser", "soec", "alkaline"), test_keys=("electrolyser",)),
+        lp_term(T_ELY_STACK, "gwp_ely_stack_per_mw × ely_stack_units", tech.gwp_ely_stack_per_mw,
+                "kg CO₂e per MW of stack replaced (PEM shown)", [f["name"] for f in ely_fus],
+                key="electrolyser stack replacements", module="optimisation/electrolysers.py", grade="derived",
+                gap_keys=("electrolyser",), test_keys=("electrolyser", "stack"),
+                note=f"ely_stack_units = max(cap_ely / {tech.ely_stack_calendar_years:.2f} y, running MWh / "
+                     f"{tech.ely_stack_duty_hours:,.0f} h): today's three stacks per 25-year plant as the floor, "
+                     "Gerloff's 50,000 h per stack above it (user, 26 Oct 2026)."),
         lp_term(T_TANK, "gwp_tank × cap_tank", tech.gwp_tank, ut, [tank_fu["name"]], key="H2 tank",
                 module="optimisation/h2_storage.py", grade="transcribed", gap_keys=("tank",), test_keys=("tank", "storage")),
         lp_term(T_FC_STACK, "gwp_fc_stack_per_mw × fc_stack_units", tech.gwp_fc_stack_per_mw,

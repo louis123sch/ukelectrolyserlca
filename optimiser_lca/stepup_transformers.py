@@ -299,8 +299,9 @@ TX_SCOPE = {
                   "the cut-off register (exclusions.py).",
     "losses": "Charged as energy in the LP (conversion_losses.py), not here.",
     "end_of_life": "EXCLUDED, as everywhere else in this study.",
-    "delivery": "EXCLUDED - Leng Table S2's legs to site and IEA's to the construction place: delivery to "
-                "site, outside the boundary.",
+    "delivery": "EXCLUDED - Leng Table S2's legs to site, its intra-site transport (300 km) and the booster "
+                "station's 3 km on-site leg, and IEA's to the construction place: delivery to site, outside the "
+                "boundary (the on-site legs since 26 Oct 2026, user).",
 }
 
 

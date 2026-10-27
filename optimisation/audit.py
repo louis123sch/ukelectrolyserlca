@@ -57,6 +57,7 @@ CARBON_EXEMPT: dict[str, str] = {}
 # coefficients would report a carbon-free fuel cell, which is false.
 CARBON_VIA: dict[str, tuple[str, ...]] = {
     "cap_fc": ("fc_bop_units", "fc_stack_units"),
+    "cap_ely": ("ely_stack_units",),        # the stacks; the plant is charged on cap_ely directly
 }
 
 # How hard an asset is run can reach an objective through a linked variable
@@ -67,6 +68,7 @@ CARBON_VIA: dict[str, tuple[str, ...]] = {
 # asymmetric.
 DUTY_VIA: dict[str, tuple[str, ...]] = {
     "p_fc": ("fc_bop_units", "fc_stack_units"),
+    "p_ely": ("ely_stack_units",),
 }
 
 # Capacities whose flow the model bounds *directly* (flow <= capacity), so
@@ -89,7 +91,7 @@ STOCK_BOUND: dict[str, str] = {
 
 # Variables that are accounting devices rather than kit, so an objective may
 # reasonably ignore them.
-NOT_ASSETS = {"fc_bop_units", "fc_stack_units", "soc", "tank",
+NOT_ASSETS = {"fc_bop_units", "fc_stack_units", "ely_stack_units", "soc", "tank",
               "exp", "imp", "ch", "dis", "h2_fc",
               "p_wind", "p_offshore", "p_solar", "p_ely", "p_fc"}
 
@@ -155,6 +157,16 @@ ACCEPTED: dict[str, str] = {
         "foreground — a US-built plant amortised at the DESNZ GB load factor. "
         "No UK inventory exists; see DATA_GAPS.md. Pass solar_basis='ecoinvent' "
         "to get the old figure back.",
+    "coverage:ely_stack_units moves carbon but not cost (cap_ely)":
+        "Electrolyser stacks are charged by replacement in carbon only (user, 26 Oct "
+        "2026; docs/ELECTROLYSER_STACKS.md, option B). NESO publishes one capex, a "
+        "fixed opex fraction and a 25-year life, with no stack-replacement line to "
+        "charge on ely_stack_units, so the cost side stays calendar-only. The carbon "
+        "floor is the old charge; the duty term only bites above ~68 % utilisation, "
+        "which the baseload strategy forces.",
+    "coverage:p_ely's own term moves carbon but not cost (cap_ely)":
+        "The electrolyser consumables, water and heat, as in the pooled finding "
+        "above: carbon only, because no price for either is sourced.",
     "coverage:p_fc's own term moves carbon but not cost (cap_fc)":
         "Fuel cell service consumables — an air filter and coolant per "
         "8,000 h, 0.003 kg CO2e/MWh since 14 Oct — are charged per MWh in "

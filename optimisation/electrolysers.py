@@ -158,6 +158,17 @@ MJ_PER_KWH = 3.6
 # NESO Green Hydrogen Data Portal, via electrolyser_costs_clean.csv.
 PLANT_LIFETIME_YEARS = 25.0
 
+# Stacks wear with running hours (user, 26 Oct 2026; docs/ELECTROLYSER_STACKS.md).
+# Gerloff's unit is a balance of plant plus three stacks for 20 years at 8,000 h/yr,
+# each stack good for "50,000 h or more" (§2.1.2). The optimiser charges the plant
+# once over PLANT_LIFETIME_YEARS and the stacks as max(calendar, duty) replacement
+# units, the fuel cell's rule: the calendar floor keeps today's three stacks per
+# 25-year plant (so nothing below ~68 % utilisation moves), and the duty term adds
+# stacks for a hard-run electrolyser.
+STACK_DUTY_HOURS = 50_000.0          # TRANSCRIBED - Gerloff 2021 §2.1.2, "50,000 h or more"
+STACKS_PER_PLANT_LIFE = 3            # TRANSCRIBED - Gerloff §2.1.2-2.1.3 (hydrogen.STACKS_PER_UNIT_LIFE)
+STACK_CALENDAR_YEARS = PLANT_LIFETIME_YEARS / STACKS_PER_PLANT_LIFE   # DERIVED - the floor: today's 3 per 25 y
+
 HOURS_PER_YEAR = 8760.0
 CACHE_PATH = OUT_DIR / "electrolyser_decomposition_cache.json"
 _MEMO: list | None = None
@@ -205,6 +216,13 @@ def decompose(label, H, bd, method):
     # The reference: what the repo's existing helper reports for this activity.
     fixed_per_kg, kwh_per_kg, _n = H.run_non_electricity_lca(act, method)
 
+    # The unit is plant + three stacks; each is scored on its own for the LP's two terms.
+    plant_code, stack_code = R.ELY_PARTS[label]
+    plant_per_unit = H.run_lca_score(bd.get_activity((R.HYDROGEN_DB, plant_code)), method)
+    stack_per_unit = H.run_lca_score(bd.get_activity((R.HYDROGEN_DB, stack_code)), method)
+    if abs(plant_per_unit + STACKS_PER_PLANT_LIFE * stack_per_unit - capital_per_unit) > 1e-6 * capital_per_unit:
+        raise ValueError(f"{label}: plant + {STACKS_PER_PLANT_LIFE} stacks does not add up to the unit")
+
     lifetime_kg = 1.0 / units_per_kg
     lifetime_kwh = lifetime_kg * kwh_per_kg
     full_load_hours = lifetime_kwh / (rated_mw * 1000.0)
@@ -224,6 +242,9 @@ def decompose(label, H, bd, method):
         "capital_kgco2e_per_MW": capital_per_unit / rated_mw,
         "capital_kgco2e_per_MW_year": capital_per_unit / rated_mw / PLANT_LIFETIME_YEARS,
         "capital_kgco2e_per_kg_h2": capital_per_unit * units_per_kg,
+        "plant_kgco2e_per_MW": plant_per_unit / rated_mw,
+        "stack_kgco2e_per_MW": stack_per_unit / rated_mw,          # one stack
+        "stacks_per_unit": STACKS_PER_PLANT_LIFE,
         "variable_kgco2e_per_kg": variable_per_kg,
         "foreground_fixed_kgco2e_per_kg": fixed_per_kg,
         "_consumables": consumables,
@@ -247,7 +268,8 @@ def decompose_all(use_cache: bool = True, refresh: bool = False):
     if use_cache and CACHE_PATH.exists():
         try:
             cached = json.loads(CACHE_PATH.read_text(encoding="utf-8"))
-            if sorted(r["technology"] for r in cached) == sorted(TECHNOLOGIES):
+            if (sorted(r["technology"] for r in cached) == sorted(TECHNOLOGIES)
+                    and all("stack_kgco2e_per_MW" in r for r in cached)):
                 _MEMO = cached
                 return _MEMO
         except Exception:

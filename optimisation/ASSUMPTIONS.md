@@ -56,7 +56,15 @@ and inside the boundary). Transportation (delivery to site), disposal and
 recycling are outside the boundary — so the facility carries no
 decommissioning or demolition burden. See §6. Zhang's own figures put the
 facility at 7.53 MW with 5.38 MW of IT; the 7,306 / 5,219 kW read out of the
-1.60e9 kWh they print sit 3 % under those, a rounding of the source's.
+1.60e9 kWh they print sit 3 % under those (7.53 MW × 8,760 h × 25 y is 1.649e9,
+printed rounded down). The energy-driven part is charged per MWh of that printed
+electricity, so it is unaffected. The IT-driven part (servers, UPS, building,
+construction) was sized on 5.38 MW of IT, so since 26 Oct 2026 it is normalised
+by 5.38 MW, not by the 5.219 MW read back (`data_centre.ZHANG_IT_MW`; it was 3.1 %
+high per MW of IT before). Zhang's §2.2b names chillers, cooling towers, pumps and
+piping as in scope but S1 does not disaggregate them, and the 2,000 kg initial
+R134a charge is a sizing note, not an inventory row: both are taken as inside
+Zhang's own rows and not added (user, 26 Oct 2026).
 
 ## 3. Hydrogen the study *makes* is co-located with its use; hydrogen it *buys* is compressed but not hauled
 
@@ -313,9 +321,9 @@ ceiling. A flow that fails is included (status below). Register:
 
 | Technology | Flow | Kind | Status | Central | Upper | Unit | Share at upper | Verdict |
 |---|---|---|---|---|---|---|---|---|
-| battery | cell processing materials (NMP make-up, argon, nitrogen, compressed air) | cutoff | excluded | 9.47 | 47.4 | kg CO2e per usable MWh per year | 0.63% | pass |
-| battery | site installation (crane and commissioning diesel) | cutoff | excluded | 7.77 | 15.5 | kg CO2e per usable MWh per year | 0.21% | pass |
-| battery | container switchgear (MV, one per container) | cutoff | included_estimate | 102 | 186 | kg CO2e per MW per year | 1.73% | included (estimate) |
+| battery | cell processing materials (NMP make-up, argon, nitrogen, compressed air) | cutoff | excluded | 9.47 | 47.4 | kg CO2e per usable MWh per year | 0.62% | pass |
+| battery | site installation (crane and commissioning diesel) | cutoff | excluded | 7.77 | 15.5 | kg CO2e per usable MWh per year | 0.20% | pass |
+| battery | container switchgear (MV, one per container) | cutoff | included_estimate | 102 | 186 | kg CO2e per MW per year | 1.70% | included (estimate) |
 | fuel cell | container switchgear (MV, one per container) | cutoff | included_estimate | 76.2 | 139 | kg CO2e per MW per year, calendar replacements | 1.06% | included (estimate) |
 | fuel cell | balance-of-plant assembly energy | cutoff | excluded | 50.8 | 127 | kg CO2e per MW per year, calendar replacements | 0.97% | pass |
 | hydrogen tank | forming of the vessel steel (rolling, welding) | cutoff | included_inventory | 8.02 | 33.9 | kg CO2e per kg of capacity per year | — | in the inventory |
@@ -323,29 +331,31 @@ ceiling. A flow that fails is included (status below). Register:
 | hydrogen tank | compressor hardware | cutoff | excluded | 0.01 | 0.03 | kg CO2e per kg of capacity per year | 0.04% | pass |
 | wind | step-up switchgear (turbine MV switchgear) | cutoff | excluded | 43.6 | 79.6 | kg CO2e per MW per year (turbine + step-ups) | 0.32% | pass |
 | wind | step-up transformer replacement rate | cutoff | excluded | 0 | 98.2 | kg CO2e per MW per year (turbine + step-ups) | 0.40% | pass |
+| wind | Leng's electrical installation beyond its four printed rows | cutoff | excluded | 0 | 125 | kg CO2e per MW per year (turbine + step-ups) | 0.51% | pass |
 | wind | step-up transformer factory energy | cutoff | excluded | 17.3 | 34.2 | kg CO2e per MW per year (turbine + step-ups) | 0.14% | pass |
 | solar | step-up switchgear (inverter-station MV switchgear) | cutoff | excluded | 40.1 | 73.4 | kg CO2e per MWp per year (plant + step-ups) | 0.30% | pass |
-| grid connection | switchgear, protection and the bay | cutoff | included_estimate | 38.1 | 69.7 | kg CO2e per MW of connection per year | 24.29% | included (estimate) |
-| grid connection | intake transformer factory energy | cutoff | included_estimate | 7.67 | 15.1 | kg CO2e per MW of connection per year | 5.27% | included (estimate) |
-| grid connection | substation civils — Leng's outdoor venue (switchyard formation, concrete, rebar) | sourced | included_inventory | 539 | 539 | kg CO2e per MW of connection per year | — | sourced — built as inventory rows |
-| grid connection | booster-station construction machinery (Leng S3), the switchyard's share | sourced | included_estimate | 4.85 | 14.1 | kg CO2e per MW of connection per year | 4.92% | sourced — carried as the source's own figure |
+| grid connection | switchgear and protection (MV + HV devices) | cutoff | included_estimate | 38.1 | 69.7 | kg CO2e per MW of connection per year | 22.85% | included (estimate) |
+| grid connection | HV bay steelwork and grid-connection hardware (Teffera) | cutoff | included_estimate | 18.1 | 33 | kg CO2e per MW of connection per year | 10.83% | included (estimate) |
+| grid connection | intake transformer factory energy | cutoff | included_estimate | 7.67 | 15.1 | kg CO2e per MW of connection per year | 4.96% | included (estimate) |
+| grid connection | substation civils — Leng's outdoor venue (switchyard formation, concrete, rebar) | sourced | included_inventory | 98.6 | 98.6 | kg CO2e per MW of connection per year | — | sourced — built as inventory rows |
+| grid connection | booster-station construction machinery (Leng S3), the switchyard's share | sourced | included_estimate | 4.85 | 14.1 | kg CO2e per MW of connection per year | 4.63% | sourced — carried as the source's own figure |
 | electrolyser | SOEC electrolyte layer — lanthanum oxide and strontium carbonate | cutoff | included_inventory | 75 | 150 | kg CO2e per MW per year | — | in the inventory |
-| facility | internal MV/LV electrical distribution (transformers, switchgear) | cutoff | excluded | 4.6e+04 | 9.3e+04 | kg CO2e per year | 0.59% | pass |
+| facility | internal MV/LV electrical distribution (transformers, switchgear) | cutoff | excluded | 4.6e+04 | 9.3e+04 | kg CO2e per year | 0.60% | pass |
 
 ### Rule 2 — per technology
 
 | Technology | Denominator | Unit | Cut-off entries | Still excluded | Sum of upper shares | Verdict |
 |---|---|---|---|---|---|---|
-| wind | 2.47e+04 | kg CO2e/MW/yr | 3 | 3 | 0.86% | pass |
+| wind | 2.47e+04 | kg CO2e/MW/yr | 4 | 4 | 1.36% | pass |
 | solar | 2.41e+04 | kg CO2e/MWp/yr | 1 | 1 | 0.30% | pass |
-| battery | 3.27e+03 | kg CO2e/MW/yr (p) and per usable MWh/yr (e) | 3 | 2 | 0.84% | pass |
-| electrolyser | 1.77e+04 | kg CO2e/MW/yr | 1 | 0 | 0.00% | n/a |
+| battery | 3.27e+03 | kg CO2e/MW/yr (p) and per usable MWh/yr (e) | 3 | 2 | 0.82% | pass |
+| electrolyser | 1.98e+04 | kg CO2e/MW/yr | 1 | 0 | 0.00% | n/a |
 | hydrogen tank | 80.8 | kg CO2e per kg capacity/yr | 3 | 1 | 0.04% | pass |
 | fuel cell | 1.31e+04 | kg CO2e/MW/yr, calendar replacements | 2 | 1 | 0.97% | pass |
-| grid connection | 287 | kg CO2e/MW/yr | 2 | 0 | 0.00% | n/a |
+| grid connection | 305 | kg CO2e/MW/yr | 3 | 0 | 0.00% | n/a |
 | grid electricity | — | kg CO2e/kWh (series mean; no entries) | 0 | 0 | 0.00% | n/a |
-| bought hydrogen | 1.12 | kg CO2e/kg | 0 | 0 | 0.00% | n/a |
-| facility | 1.59e+07 | kg CO2e/yr | 1 | 1 | 0.59% | pass |
+| bought hydrogen | 1.14 | kg CO2e/kg | 0 | 0 | 0.00% | n/a |
+| facility | 1.54e+07 | kg CO2e/yr | 1 | 1 | 0.60% | pass |
 
 ### Boundary items — reported, not tested
 
@@ -358,6 +368,7 @@ ceiling. A flow that fails is included (status below). Register:
 | solar | delivery to site — Smith A14 rail, lorry and sea rows | ASSUMPTIONS.md §6; Smith 2024 Table A14 — the sea leg alone is 201 t·km/m² for the import chain (~1.5 % of the plant) |
 | facility | delivery to site — Zhang's Transportation phase | ASSUMPTIONS.md §6; Zhang et al. 2025 Table S1 |
 | wind | delivery to site — Leng Table S2 to-site legs (both transformers) | ASSUMPTIONS.md §6; Leng et al. 2026 Table S2 |
+| wind | on-site transport — Leng Table S2 'intra-site transport' (300 km) and the booster station's 3 km on-site construction leg | ASSUMPTIONS.md §6; Leng et al. 2026 Table S2 and SI p. 4 — read as part of getting the equipment to and around a site that is not known: the same boundary as delivery to site (user, 26 Oct 2026). Serves the step-ups and the grid connection |
 | bought hydrogen | road haulage from the seller to the site | ASSUMPTIONS.md §3; TODO.md (parked) — trailer compression is charged; the journey depends on where the seller is |
 | facility | standby diesel generator — Zhang's 8.6e6 MJ | ASSUMPTIONS.md §7 — scored and reported by data_centre.py / dc_inputs; out of every objective because backup is a decision variable |
 
