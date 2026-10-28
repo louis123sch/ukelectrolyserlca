@@ -442,7 +442,7 @@ once at the end, after the last inventory change. The sequence is the same:
    `option_summary.csv`, and the sensitivity sweeps for the CSVs the TODO
    calls stale (`sensitivity_stepups_*.csv`, plus `sensitivity_cutoff_*.csv`
    from 1.4).
-4. `python scripts/build_lca_map.py` (~7 min, Brightway, `MKL_THREADING_LAYER=TBB`).
+4. `python scripts/build_lca_map.py` (under a minute since 28 Oct 2026: generated from the code, every score in one solve; Brightway, `MKL_THREADING_LAYER=TBB`).
 5. `python scripts/check_lca_map.py` with Brightway: 0 problems, or stop.
 6. Republish to the same artifact URL (read it first, then publish with
    `url`), read it back (3.3 §13).

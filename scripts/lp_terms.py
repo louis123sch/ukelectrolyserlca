@@ -1,14 +1,9 @@
-"""The LP's carbon terms as the map names them: one box each under "How the LP
-organises it", and the name the energy-flow tab's boxes link to.
+"""Display names for the LP's carbon terms, and the names the energy-flow tab links to.
 
-Each box carries the ``dc_model.objective_terms`` key it stands for (its ``key``),
-and ``check_lca_map.py`` asserts that the set of keyed boxes equals the set of
-carbon terms objective_terms produces and that every coefficient equals
-build_tech's. The two facility constants (``objective_constants``, reported as
-``contributions()['gwp_facility']``) are boxes too, flagged ``constant``.
-
-Shared by build_lca_map.py and energy_map.py so a rename cannot leave the
-energy tab pointing at a box that no longer exists.
+The terms themselves are read from ``dc_model.objective_terms`` and
+``facility_terms`` by ``build_lca_map.py``; this only names their boxes. A
+term with no entry here is shown by its key. Shared with energy_map.py so a
+rename cannot leave the energy tab pointing at a box that no longer exists.
 """
 
 T_WIND = "Onshore wind"

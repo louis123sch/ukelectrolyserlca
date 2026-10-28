@@ -100,6 +100,7 @@ GAS_KWH_HHV_PER_M3 = 39.5 / 3.6
 # (kept as constants so this module runs without Brightway; verified against
 #  the activities by ``check_against_inventory()``)
 from optimiser_lca import registry as _R  # noqa: E402
+from optimisation import trace as T  # noqa: E402
 from optimiser_lca import hydrogen as _H  # noqa: E402
 INVENTORY = {
     # elec_kwh_per_kg is what the ACTIVITY carries (check_against_inventory holds
@@ -294,7 +295,23 @@ def green_h2_electricity_gco2e_per_kwh(basis: str | None = None, *,
     share = _resolve_grid_share(grid_share)
     behind = GREEN_H2_ELECTRICITY_BASES[basis]["gco2e_per_kwh"]
     delivered = behind * GRID_DELIVERY_LOSS_GROSS_UP + GRID_DELIVERY_NETWORK_GCO2E_PER_KWH
-    return (1.0 - share) * behind + share * delivered
+    if T.active():
+        spec = GREEN_H2_ELECTRICITY_BASES[basis]
+        wind = None
+        if basis == "ecoinvent_onshore":
+            from optimisation import renewables as ren
+            wind = T.ecoinvent(*ren.TECHNOLOGIES["onshore_wind"][:2])
+        T.step("bought_h2.green.electricity_behind_meter", behind, "g CO2e per kWh",
+               f"The seller's renewable electricity: {spec['label']}", uses=[wind] if wind else [],
+               scores=wind, factor=1000.0, grade=spec["grade"], note=spec["note"])
+    return T.step("bought_h2.green.electricity", (1.0 - share) * behind + share * delivered,
+                  "g CO2e per kWh", f"The seller's electricity, {share:.0%} of it taken over the "
+                  f"network at {GREEN_H2_SELLER_VOLTAGE} voltage",
+                  uses=["bought_h2.green.electricity_behind_meter"],
+                  inputs={"grid_share": share, "loss_gross_up": GRID_DELIVERY_LOSS_GROSS_UP,
+                          "network_gco2e_per_kwh": GRID_DELIVERY_NETWORK_GCO2E_PER_KWH},
+                  grade="assumed", note="The share moves delivery losses and the network's embodied "
+                                        "carbon, never where the electricity came from.")
 
 
 def green_h2_gwp_per_kg(basis: str | None = None, *,
@@ -316,8 +333,16 @@ def green_h2_gwp_per_kg(basis: str | None = None, *,
     intensity = green_h2_electricity_gco2e_per_kwh(basis, grid_share=grid_share)
     row = next(r for r in ely.decompose_all()
                if r["technology"] == "PEM operation")
-    return (row["foreground_fixed_kgco2e_per_kg"]
-            + row["kwh_per_kg"] * intensity / 1000.0)
+    pem = T.activity(_R.HYDROGEN_DB, _R.PEM_OP)
+    T.step("bought_h2.green.pem_fixed_per_kg", row["foreground_fixed_kgco2e_per_kg"], "kg CO2e per kg H2",
+           "Everything in the seller's PEM activity that is not electricity: its electrolyser "
+           "capital good plus water and heat", uses=[pem], grade="derived")
+    return T.step("bought_h2.green.production",
+                  (row["foreground_fixed_kgco2e_per_kg"]
+                   + row["kwh_per_kg"] * intensity / 1000.0),
+                  "kg CO2e per kg H2", "Bought green hydrogen at the seller's gate",
+                  uses=["bought_h2.green.pem_fixed_per_kg", "bought_h2.green.electricity"],
+                  inputs={"kwh_per_kg": row["kwh_per_kg"]}, grade="derived")
 
 
 # --- getting it onto the trailer: compression -------------------------------
@@ -421,10 +446,23 @@ def bought_h2_compression_kgco2e_per_kg(colour: str, basis: str | None = None,
     expected size of this term for green; that figure assumed the seller
     compressed on *grid* electricity, which no green producer does.
     """
-    return (bought_h2_compression_kwh_per_kg(colour)
-            * bought_h2_compression_gco2e_per_kwh(colour, basis,
-                                                  grid_share=grid_share)
-            / 1000.0)
+    if T.active() and colour != "green":
+        from optimiser_lca.registry import GRID_DB, GB_GRID_HV_2025
+        grid = T.activity(GRID_DB, GB_GRID_HV_2025)
+        T.step("bought_h2.fossil_seller_grid", FOSSIL_SELLER_GRID_GCO2E_PER_KWH, "g CO2e per kWh",
+               "A fossil seller's compressor runs on the study's own GB grid, 2025 mean at high voltage",
+               uses=[grid], scores=grid, factor=1000.0, grade="derived")
+    return T.step(f"bought_h2.{colour}.compression",
+                  (bought_h2_compression_kwh_per_kg(colour)
+                   * bought_h2_compression_gco2e_per_kwh(colour, basis,
+                                                         grid_share=grid_share)
+                   / 1000.0),
+                  "kg CO2e per kg H2", f"Compressing {colour} hydrogen onto a "
+                  f"{BOUGHT_H2_TRAILER_PRESSURE_BAR:g} bar trailer at the seller's gate",
+                  uses=["bought_h2.green.electricity" if colour == "green" else "bought_h2.fossil_seller_grid"],
+                  inputs={"kwh_per_kg": bought_h2_compression_kwh_per_kg(colour),
+                          "from_bar": bought_h2_production_pressure_bar(colour),
+                          "to_bar": BOUGHT_H2_TRAILER_PRESSURE_BAR}, grade="derived")
 
 
 def bought_h2_compression_gbp_per_kg(colour: str, case: str = "central") -> float:

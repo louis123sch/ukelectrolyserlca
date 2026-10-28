@@ -1,16 +1,17 @@
 """The LCA map is held to the live model.
 
-``scripts/check_lca_map.py`` re-derives the map from the code: every LP term
-at ``build_tech``'s coefficient, every foreground exchange against its
-inventory module, every activity of every inventory shown, the energy tab
-against a fresh ``energy_section()``, and — since 22 Oct 2026 — the
-fingerprint of what the map was built from against what is live now, and the
-page against the JSON. This runs the checker's no-Brightway sections under
-pytest, so an inventory or coefficient edit without a map rebuild goes red
-here rather than waiting to be noticed.
+The map is generated from the code (``scripts/build_lca_map.py``: the LP's own
+term functions, the coefficient modules' trace steps, and Brightway), and
+``scripts/check_lca_map.py`` re-reads the written map against the live
+repository: the fingerprint of what it was built from, the build's own
+problem list, the graph's integrity, every LP term against ``dc_model``,
+every inventory activity and exchange, the energy tab and the page. This runs
+its no-Brightway sections under pytest, so an inventory, coefficient-code or
+term edit without a map rebuild goes red here rather than waiting to be
+noticed.
 
 Skipped when no map has been built. Rebuild with
-``python scripts/build_lca_map.py`` (Brightway, ~7 min) and republish.
+``python scripts/build_lca_map.py`` (Brightway, under a minute) and republish.
 """
 from __future__ import annotations
 

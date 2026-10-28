@@ -81,6 +81,8 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 OUT_DIR = ROOT / "optimisation_outputs"
 
+from optimisation import trace as T  # noqa: E402
+
 CACHE_PATH = OUT_DIR / "h2_storage_decomposition_cache.json"
 _MEMO: list | None = None
 
@@ -217,6 +219,35 @@ def decompose(use_cache: bool = True, refresh: bool = False):
     CACHE_PATH.write_text(json.dumps(rows, indent=2), encoding="utf-8")
     _MEMO = rows
     return rows
+
+
+def traced(row: dict) -> dict:
+    """``row`` unchanged, with its figures recorded (``optimisation.trace``)."""
+    from optimiser_lca import h2_tank, registry as R
+    k = f"tank.{row['design']}"
+    tank = T.activity(R.H2_STORAGE_DB, R.H2_TANK)
+    T.step(f"{k}.per_kg_capacity", row["kgco2e_per_kg_capacity"], "kg CO2e per kg of capacity",
+           f"The vessel per kg it holds: {row['steel_process']} at "
+           f"{row['steel_kg_per_kg_h2']:.1f} kg per kg H2, its forming, and its frame and pad",
+           uses=[tank] if row["is_as_built"] else
+                [T.ecoinvent(*h2_tank.processes[TANK_DESIGNS[row["design"]]["steel_process"]].identity)],
+           scores=tank if row["is_as_built"] else None,
+           inputs={"steel_kg_per_kg_h2": row["steel_kg_per_kg_h2"],
+                   "kgco2e_per_kg_steel": row["kgco2e_per_kg_steel"],
+                   "forming": row["forming_kgco2e_per_kg_capacity"],
+                   "foundations": row["foundations_kgco2e_per_kg_capacity"]},
+           grade="transcribed" if row["is_as_built"] else "assumed",
+           source="Gandiglio et al. 2022 Table 5" if row["is_as_built"]
+                  else "derived from a ~1 wt% Type I cylinder")
+    T.step(f"{k}.lifetime_years", row["lifetime_years"], "years", "Tank life (dc_config)",
+           grade="assumed")
+    T.step(f"{k}.per_kg_capacity_year", row["kgco2e_per_kg_capacity_year"],
+           "kg CO2e per kg of capacity per year", "The vessel over its life",
+           uses=[f"{k}.per_kg_capacity", f"{k}.lifetime_years"], grade="derived")
+    T.step(f"{k}.leakage_per_hour", row["leakage_frac_per_hour"], "fraction of stock per hour",
+           "Standing loss", grade="assumed" if row["leakage_is_assumed"] else "transcribed",
+           note="ASSUMED, with no source, and load-bearing; see the module docstring.")
+    return row
 
 
 def build():

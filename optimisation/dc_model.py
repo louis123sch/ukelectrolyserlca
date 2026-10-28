@@ -786,6 +786,17 @@ def solve(m, solver="highs", **kw):
             "the reliability constraint is hard and this is the result.")
     return m
 
+def facility_terms(tech: Tech, demand_mwh: float) -> dict:
+    """The data centre's own carbon, by driver, for a year of ``demand_mwh``.
+
+    Constant across architectures, so it is held out of the LP (see
+    ``objective_constants``) and reported here. The LCA map reads its terms
+    from this function as it reads ``objective_terms``.
+    """
+    return {"data centre, IT capacity": tech.dc_fixed_gwp_per_year,
+            "data centre, cooling consumables": tech.dc_other_gwp_per_mwh * demand_mwh}
+
+
 def contributions(V, obj, series, tech, assets) -> dict:
     """Break a solved system's cost and carbon into where they came from.
 
@@ -798,8 +809,7 @@ def contributions(V, obj, series, tech, assets) -> dict:
     terms = score(solution_quantities(V), series, tech)
     terms["cost_operational"]["connection fixed"] = obj["cost_const"]
     mwh = float(series.demand_mw.sum() * dt) * scale
-    facility = {"data centre, IT capacity": tech.dc_fixed_gwp_per_year,
-                "data centre, cooling consumables": tech.dc_other_gwp_per_mwh * mwh}
+    facility = facility_terms(tech, mwh)
     return {
         "gwp_embodied": terms["gwp_embodied"],
         "gwp_operational": terms["gwp_operational"],

@@ -97,6 +97,8 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 OUT_DIR = ROOT / "optimisation_outputs"
 
+from optimisation import trace as T  # noqa: E402
+
 CACHE_PATH = OUT_DIR / "fuel_cell_decomposition_cache.json"
 _MEMO: dict | None = None
 
@@ -157,7 +159,45 @@ def _with_calendar_lives(d: dict) -> dict:
     d["bop_kgco2e_per_MW_year"] = d["bop_kgco2e_per_MW"] / BOP_CALENDAR_LIFETIME_YEARS
     d["stack_calendar_lifetime_years"] = STACK_CALENDAR_LIFETIME_YEARS
     d["stack_calendar_life_is_assumed"] = STACK_CALENDAR_LIFE_IS_ASSUMED
+    if T.active():
+        _trace(d)
     return d
+
+
+def _trace(d: dict) -> None:
+    """Record the decomposed figures (``optimisation.trace``)."""
+    from optimiser_lca import registry as R
+    op = T.activity(R.FUEL_CELL_DB, R.FC_OP)
+    stack, gramc = T.activity(R.FUEL_CELL_DB, R.FC_STACK), T.activity(R.FUEL_CELL_DB, R.FC_STACK_GRAMC)
+    bop, service = T.activity(R.FUEL_CELL_DB, R.FC_BOP), T.activity(R.FUEL_CELL_DB, R.FC_SERVICE)
+    T.step("fuel_cell.stack_per_MW.babatunde_2024", d["stack_kgco2e_per_MW"], "kg CO2e per MW, one stack",
+           "One MW of stack, read back out of the per-kWh operation activity at its own "
+           "amortisation hours", uses=[stack, op], scores=stack, factor=1000.0, grade="derived",
+           source=STACK_BASES["babatunde_2024"],
+           inputs={"stack_lifetime_hours": d["stack_lifetime_hours"]})
+    T.step("fuel_cell.stack_per_MW.gramc_2025", d["stack_kgco2e_per_MW_gramc_2025"],
+           "kg CO2e per MW, one stack", "The sensitivity stack, one MW", uses=[gramc],
+           scores=gramc, factor=1000.0, grade="derived", source=STACK_BASES["gramc_2025"])
+    T.step("fuel_cell.bop_per_MW", d["bop_kgco2e_per_MW"], "kg CO2e per MW",
+           "One MW of stationary balance of plant, container included", uses=[bop, op],
+           scores=bop, factor=1000.0, grade="derived",
+           inputs={"bop_duty_lifetime_hours": d["bop_duty_lifetime_hours"]})
+    T.step("fuel_cell.bop_container_per_MW", d["bop_container_kgco2e_per_MW"], "kg CO2e per MW",
+           "Of which the 20 ft container, at one container per "
+           f"{d['bop_kw_per_container']:g} kW", uses=["fuel_cell.bop_per_MW"], grade="assumed",
+           inputs={"kW_per_container": d["bop_kw_per_container"]})
+    T.step("fuel_cell.maintenance_per_MWh", d["maintenance_kgco2e_per_MWh"], "kg CO2e per MWh",
+           "Service per MWh delivered (air filter and coolant per 8,000 h, Usai 2021)",
+           uses=[service, op], grade="derived")
+    T.step("fuel_cell.h2_kg_per_MWh", d["h2_kg_per_MWh"], "kg H2 per MWh",
+           "Hydrogen burned per MWh delivered, as the operation activity carries it",
+           uses=[op], grade="transcribed")
+    T.step("fuel_cell.bop_calendar_years", d["bop_calendar_lifetime_years"], "years",
+           "Balance-of-plant calendar life", grade="assumed" if BOP_LIFETIME_IS_ASSUMED else "transcribed",
+           note="Nedstack-indicative; swept 15/20/25 y. See DATA_GAPS.md.")
+    T.step("fuel_cell.stack_calendar_years", d["stack_calendar_lifetime_years"], "years",
+           "Stack calendar life", grade="assumed" if STACK_CALENDAR_LIFE_IS_ASSUMED else "transcribed",
+           note="Swept 5/10/15 y. See DATA_GAPS.md.")
 
 
 # Which stack inventory the LP charges. Babatunde's 2 kW graphite-plate stack
@@ -179,9 +219,13 @@ def stack_kgco2e_per_mw(d: dict, basis: str | None = None) -> float:
     """Embodied carbon of one MW of stack, on the named basis."""
     basis = basis or STACK_BASIS
     if basis == "babatunde_2024":
-        return float(d["stack_kgco2e_per_MW"])
+        return T.step("fuel_cell.stack_per_MW", float(d["stack_kgco2e_per_MW"]),
+                      "kg CO2e per MW, one stack", f"The stack the LP charges: {STACK_BASES[basis]}",
+                      uses=["fuel_cell.stack_per_MW.babatunde_2024"], grade="derived")
     if basis == "gramc_2025":
-        return float(d["stack_kgco2e_per_MW_gramc_2025"])
+        return T.step("fuel_cell.stack_per_MW", float(d["stack_kgco2e_per_MW_gramc_2025"]),
+                      "kg CO2e per MW, one stack", f"The stack the LP charges: {STACK_BASES[basis]}",
+                      uses=["fuel_cell.stack_per_MW.gramc_2025"], grade="derived")
     raise ValueError(f"stack basis must be one of {list(STACK_BASES)}, got {basis!r}")
 
 

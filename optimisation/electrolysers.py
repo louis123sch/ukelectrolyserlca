@@ -77,6 +77,8 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 OUT_DIR = ROOT / "optimisation_outputs"
 
+from optimisation import trace as T  # noqa: E402
+
 # label -> rated MW of the capital unit. See "The 1 MW rating" above: derived
 # from the inventories' own arithmetic, not transcribed, and enforced by
 # check_rating().
@@ -303,10 +305,10 @@ def with_heat_source(row: dict, source: str | None = None) -> dict:
         raise ValueError(f"SOEC heat source {source!r}; choose from {SOEC_HEAT_SOURCES}")
     out = dict(row, heat_source=None, heat_kwh_electric_per_kg=0.0)
     if row["technology"] != "SOEC operation":
-        return out
+        return _traced(out)
     out["heat_source"] = source
     if source == "gas_boiler":
-        return out
+        return _traced(out)
     heat = [c for c in row["_consumables"] if "heat" in c[0]]
     if len(heat) != 1:
         raise ValueError(f"SOEC: expected exactly 1 heat consumable, found {len(heat)}. "
@@ -316,7 +318,34 @@ def with_heat_source(row: dict, source: str | None = None) -> dict:
     out["kwh_per_kg"] = row["kwh_per_kg"] + boiler_kwh
     out["variable_kgco2e_per_kg"] = row["variable_kgco2e_per_kg"] - heat_score
     out["heat_kwh_electric_per_kg"] = boiler_kwh
-    return out
+    return _traced(out)
+
+
+def _traced(row: dict) -> dict:
+    """Record one technology's decomposed figures (``optimisation.trace``)."""
+    from optimiser_lca import registry as R
+    label = row["technology"]
+    k = "electrolyser." + label.split()[0]
+    plant_code, stack_code = R.ELY_PARTS[label]
+    op = T.activity(R.HYDROGEN_DB, R.ELECTROLYSER_CODES[label])
+    plant, stack = T.activity(R.HYDROGEN_DB, plant_code), T.activity(R.HYDROGEN_DB, stack_code)
+    rated = TECHNOLOGIES[label]
+    T.step(f"{k}.plant_per_MW", row["plant_kgco2e_per_MW"], "kg CO2e per MW",
+           "The balance of plant, built once per unit (Gerloff 2021)", uses=[plant],
+           scores=plant, factor=1.0 / rated, grade="derived")
+    T.step(f"{k}.stack_per_MW", row["stack_kgco2e_per_MW"], "kg CO2e per MW, one stack",
+           "One stack, 1 MW (Gerloff 2021); a unit holds three over its life", uses=[stack],
+           scores=stack, factor=1.0 / rated, grade="derived")
+    T.step(f"{k}.variable_per_kg", row["variable_kgco2e_per_kg"], "kg CO2e per kg H2",
+           "Consumables per kg made: every input of the operation activity that is neither "
+           "the capital good nor electricity (water, heat, electrolyte)"
+           + (", the heat moved onto electricity" if row.get("heat_source") == "electric_boiler" else ""),
+           uses=[op], grade="derived", source="decompose(): the per-kg activity, taken apart")
+    T.step(f"{k}.kwh_per_kg", row["kwh_per_kg"], "kWh per kg H2",
+           "Electricity per kg made, as the operation activity carries it"
+           + (", plus the electric boiler" if row.get("heat_kwh_electric_per_kg") else ""),
+           uses=[op], grade="transcribed", inputs={"heat_kwh_electric_per_kg": row.get("heat_kwh_electric_per_kg")})
+    return row
 
 
 def build():

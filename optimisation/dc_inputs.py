@@ -39,6 +39,7 @@ OUT_DIR = ROOT / "optimisation_outputs"
 DC_CACHE = OUT_DIR / "dc_facility_decomposition_v3_cache.json"   # v3: IT normalised on 5.38 MW
 
 from optimisation import dc_model, sites
+from optimisation import trace as T
 
 DISCOUNT_RATE = 0.06        # ASSUMED, unsourced; one discount-rate policy is a TODO (audit §4)
 
@@ -166,6 +167,8 @@ def build_series(site, start: str, end: str, size_mw_it: float,
     from optimiser_lca import grid as grid_lca
     voltage = nc.delivery_voltage(transmission, tdr_band)
     grid_gwp = grid_lca.delivered(df["grid_generation_kgco2e_per_kwh"].to_numpy(), voltage)
+    if T.active():
+        _trace_grid(df, grid_gwp, voltage, site, start, end, meta)
 
     net = profiles.WIND_NET_FACTOR if wind_net_factor is None else float(wind_net_factor)
     if not 0.5 <= net <= 1.0:
@@ -201,6 +204,35 @@ def build_series(site, start: str, end: str, size_mw_it: float,
     meta["carbon_api_region"] = site.carbon_api_region
     meta["tnuos_zone"] = site.tnuos_zone
     return series, meta
+
+
+def _trace_grid(df, grid_gwp, voltage, site, start, end, meta):
+    """Record how the LP's half-hourly grid carbon is made (``optimisation.trace``).
+    The series is shown by its mean over the window; the LP charges it half-hour
+    by half-hour."""
+    from optimiser_lca import grid as grid_lca
+    sources = [T.ecoinvent(*p.identity, database=p.database) for p in grid_lca.SOURCES.values()]
+    T.step("grid.generation_mean", float(df["grid_generation_kgco2e_per_kwh"].mean()),
+           "kg CO2e per kWh generated, mean of the window",
+           f"Grid generation intensity, {getattr(site, 'key', site)} {start} to {end}: each "
+           "half-hour is the sum over fuels of the region's share times that fuel's score",
+           uses=sources, grade="derived", source="NESO Carbon Intensity API regional mix; "
+           "optimiser_lca/grid.py SOURCES scored on ecoinvent 3.9.1 apos",
+           inputs={"half_hours": len(df), "grid_file": str(meta.get("grid_file", ""))},
+           note="Wind is split by ecoinvent's own GB market weights; imports by where they "
+                "came from in that half-hour; pumped storage carries its plant plus the "
+                "electricity it returns (optimiser_lca/grid.py).")
+    d = grid_lca.delivery(voltage)
+    chain = [T.ecoinvent(m, "GB") for v, m, _t in grid_lca._CHAIN[:grid_lca.VOLTAGES.index(voltage) + 1]]
+    T.step(f"grid.delivery.{voltage}", d["gross_up"], "kWh generated per kWh delivered",
+           f"Losses down to {voltage} voltage, from ecoinvent's GB voltage chain",
+           uses=chain, inputs={"network_gco2e_per_kwh": d["network_gco2e_per_kwh"]},
+           grade="derived", note="The network's own embodied carbon is added per kWh delivered; "
+           "optimiser_lca.grid.check_delivery re-derives both from the live database.")
+    T.step("grid.delivered_mean", float(grid_gwp.mean()), "kg CO2e per kWh delivered, mean of the window",
+           f"Grid carbon delivered at the site's {voltage} voltage: the series the LP charges",
+           uses=["grid.generation_mean", f"grid.delivery.{voltage}"], grade="derived",
+           note="Shown as the mean; the LP multiplies each half-hour's value by that half-hour's import.")
 
 
 def resample(series: dc_model.Series, freq_hours: float) -> dc_model.Series:
@@ -416,7 +448,7 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
     crf_e = batt.capital_recovery_factor(DISCOUNT_RATE, float(ec.lifetime_years))
 
     # tank
-    tank_row = next(r for r in h2s.decompose() if r["design"] == tank_design)
+    tank_row = h2s.traced(next(r for r in h2s.decompose() if r["design"] == tank_design))
     tk = hc.tank_costs()
     tkc = tk[tk.case == cost_case].iloc[0]
 
@@ -428,8 +460,13 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
     fc_bop_years = float(fc_bop_calendar_years or d["bop_calendar_lifetime_years"])
     fc_stack_years = float(fc_stack_calendar_years or d["stack_calendar_lifetime_years"])
     fc_kw_box = float(fc_kw_per_container or d["bop_kw_per_container"])
-    gwp_fc_bop = (d["bop_kgco2e_per_MW"] - d["bop_container_kgco2e_per_MW"]
-                  + d["bop_container_kgco2e_per_MW"] * d["bop_kw_per_container"] / fc_kw_box)
+    gwp_fc_bop = T.step("fuel_cell.bop_per_MW_charged",
+                        (d["bop_kgco2e_per_MW"] - d["bop_container_kgco2e_per_MW"]
+                         + d["bop_container_kgco2e_per_MW"] * d["bop_kw_per_container"] / fc_kw_box),
+                        "kg CO2e per MW", "Balance of plant per MW, its container rescaled to "
+                        f"{fc_kw_box:g} kW per container",
+                        uses=["fuel_cell.bop_per_MW", "fuel_cell.bop_container_per_MW"],
+                        inputs={"kW_per_container": fc_kw_box}, grade="assumed")
     fcc = hc.fuel_cell_costs(bop_calendar_years=fc_bop_years)
     fcr = fcc[fcc.case == cost_case].iloc[0]
 
@@ -495,53 +532,124 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
     # From the electrolyser that actually feeds this tank, not from the tank's
     # pressure alone. h2_storage cannot know which technology was chosen; this
     # is the only place that does.
-    compression_kwh = h2s.compression_kwh_per_kg(
-        ely.DELIVERY_PRESSURE_BAR[ely_tech], tank_row["pressure_bar"])
+    compression_kwh = T.step(
+        "tank.compression_kwh_per_kg",
+        h2s.compression_kwh_per_kg(ely.DELIVERY_PRESSURE_BAR[ely_tech], tank_row["pressure_bar"]),
+        "kWh per kg H2", f"Compression from the {ely_tech.split()[0]} electrolyser's "
+        f"{ely.DELIVERY_PRESSURE_BAR[ely_tech]:g} bar to the tank's {tank_row['pressure_bar']:g} bar",
+        inputs={"from_bar": ely.DELIVERY_PRESSURE_BAR[ely_tech], "to_bar": tank_row["pressure_bar"],
+                "real_over_isothermal": h2s.COMPRESSION_REAL_OVER_ISOTHERMAL},
+        grade="assumed" if ely_tech in ely.DELIVERY_PRESSURE_ASSUMED else "derived",
+        source="h2_storage.compression_kwh_per_kg: isothermal minimum scaled to a real multistage machine")
     # cap_ely is the electrolyser's whole electrical input: dc_model divides it
     # by ely_kwh_per_kg + compression. An electric boiler adds to that input but
     # is not stack, so stack carbon and cost per MW go on the stack's share only.
     # The boiler's own capital is not charged (see SOURCES.md).
     ely_input_kwh = ely_row["kwh_per_kg"] + compression_kwh
-    stack_share = (ely_input_kwh - ely_row["heat_kwh_electric_per_kg"]) / ely_input_kwh
+    stack_share = T.step("electrolyser.stack_share",
+                         (ely_input_kwh - ely_row["heat_kwh_electric_per_kg"]) / ely_input_kwh,
+                         "fraction of cap_ely", "Share of the electrolyser's electrical input that is "
+                         "stack: cap_ely also carries compression and any electric boiler",
+                         uses=[f"electrolyser.{ely_tech.split()[0]}.kwh_per_kg", "tank.compression_kwh_per_kg"],
+                         inputs={"heat_kwh_electric_per_kg": ely_row["heat_kwh_electric_per_kg"]})
 
     dc = data_centre_coefficients()
     # PUE reaches the facility only through demand, which the energy-driven part
     # is charged against. The IT-driven part must not move with it.
     scale_it = size_mw_it / dc["reference_it_mw"]
+    if T.active():
+        from optimiser_lca import registry as R
+        facility = T.activity(R.DATA_CENTRE_DB, R.DATA_CENTRE)
+        T.step("data_centre.it_per_year", dc["it_kgco2e_per_year"], "kg CO2e per year",
+               "The facility's IT-driven burden (shell, servers, UPS) per year of operation",
+               uses=[facility], grade="derived", inputs={"reference_it_MW": dc["reference_it_mw"],
+                                                          "operation_years": dc["operation_years"]},
+               source="Zhang et al. 2025, split by driver (baseline_grid.decompose_data_centre_by_driver)",
+               note="The standby genset is scored and left out: backup is a decision variable here.")
+        T.step("data_centre.energy_per_MWh", dc["energy_kgco2e_per_mwh"], "kg CO2e per MWh",
+               "The facility's energy-driven burden (water, treatment, refrigerant) per MWh delivered",
+               uses=[facility], grade="derived")
+    eb = f"electrolyser.{ely_tech.split()[0]}"
+    b1 = [f"bought_h2.{h2_colour}.delivered"] if h2_colour else []
+    b2 = [f"bought_h2.{h2_colour_2}.delivered"] if h2_colour_2 else []
+
+    def step(field, value, unit, title, uses=(), **kw):
+        """Record one LP coefficient (``optimisation.trace``) as ``coefficient.<field>``."""
+        return T.step(f"coefficient.{field}", value, unit, title, uses=uses, depth=1, **kw)
 
     tech = dc_model.Tech(
-        gwp_wind=gen_gwp("onshore_wind"), gwp_offshore=gen_gwp("offshore_wind"),
-        gwp_solar=gen_gwp("solar_pv"),
-        gwp_batt_p=be["power_kgco2e_per_kW"] * 1000.0 / batt.ASSET_LIFE_YEARS,
-        gwp_batt_e=be["energy_kgco2e_per_kWh"] * 1000.0 / batt.ASSET_LIFE_YEARS,
+        gwp_wind=step("gwp_wind", gen_gwp("onshore_wind"), "kg CO2e per MW per year",
+                      "Onshore wind, per MW built", ["onshore_wind.annual_per_MW"]),
+        gwp_offshore=step("gwp_offshore", gen_gwp("offshore_wind"), "kg CO2e per MW per year",
+                          "Offshore wind, per MW built", ["offshore_wind.annual_per_MW"]),
+        gwp_solar=step("gwp_solar", gen_gwp("solar_pv"), "kg CO2e per MWp per year",
+                       "Solar PV, per MWp built", ["solar_pv.annual_per_MW"]),
+        gwp_batt_p=step("gwp_batt_p", be["power_kgco2e_per_kW"] * 1000.0 / batt.ASSET_LIFE_YEARS,
+                        "kg CO2e per MW per year", "Battery power conversion, per MW, over the battery's life",
+                        ["battery.pcs_per_kW"], inputs={"asset_life_years": batt.ASSET_LIFE_YEARS}),
+        gwp_batt_e=step("gwp_batt_e", be["energy_kgco2e_per_kWh"] * 1000.0 / batt.ASSET_LIFE_YEARS,
+                        "kg CO2e per MWh per year", "Battery cells, racks and container, per usable MWh, "
+                        "over the battery's life", ["battery.energy_per_usable_kWh"],
+                        inputs={"asset_life_years": batt.ASSET_LIFE_YEARS}),
         # The balance of plant once over the plant's life; the stacks by replacement
         # (gwp_ely_stack_per_mw x ely_stack_units, dc_model). At the calendar floor the
         # two add back to the whole unit over 25 years, as charged before 26 Oct 2026.
-        gwp_ely=ely_row["plant_kgco2e_per_MW"] / ely.PLANT_LIFETIME_YEARS * stack_share,
-        gwp_ely_stack_per_mw=ely_row["stack_kgco2e_per_MW"] * stack_share,
+        gwp_ely=step("gwp_ely", ely_row["plant_kgco2e_per_MW"] / ely.PLANT_LIFETIME_YEARS * stack_share,
+                     "kg CO2e per MW per year", f"{ely_tech.split()[0]} electrolyser balance of plant, "
+                     "per MW of cap_ely, over the plant's life",
+                     [f"{eb}.plant_per_MW", "electrolyser.stack_share"],
+                     inputs={"plant_lifetime_years": ely.PLANT_LIFETIME_YEARS}),
+        gwp_ely_stack_per_mw=step("gwp_ely_stack_per_mw", ely_row["stack_kgco2e_per_MW"] * stack_share,
+                                  "kg CO2e per MW replaced", f"One {ely_tech.split()[0]} stack per MW "
+                                  "of cap_ely, charged per replacement (max of calendar and duty)",
+                                  [f"{eb}.stack_per_MW", "electrolyser.stack_share"],
+                                  inputs={"calendar_years": ely.STACK_CALENDAR_YEARS,
+                                          "duty_hours": ely.STACK_DUTY_HOURS}),
         ely_stack_calendar_years=ely.STACK_CALENDAR_YEARS,
         ely_stack_duty_hours=ely.STACK_DUTY_HOURS,
-        gwp_tank=tank_row["kgco2e_per_kg_capacity_year"],
-        gwp_fc_bop_per_mw=gwp_fc_bop,
-        gwp_fc_stack_per_mw=fc.stack_kgco2e_per_mw(d, fc_stack_basis),
-        gwp_fc_maint_per_mwh=d["maintenance_kgco2e_per_MWh"],
-        gwp_grid_per_mw=gc.kgco2e_per_mw_year(),
+        gwp_tank=step("gwp_tank", tank_row["kgco2e_per_kg_capacity_year"], "kg CO2e per kg of capacity per year",
+                      f"Hydrogen tank ({tank_design}), per kg it holds",
+                      [f"tank.{tank_design}.per_kg_capacity_year"]),
+        gwp_fc_bop_per_mw=step("gwp_fc_bop_per_mw", gwp_fc_bop, "kg CO2e per MW replaced",
+                               "Fuel cell balance of plant, per MW, charged per replacement "
+                               "(max of calendar and duty)", ["fuel_cell.bop_per_MW_charged"],
+                               inputs={"calendar_years": fc_bop_years,
+                                       "duty_hours": d["bop_duty_lifetime_hours"]}),
+        gwp_fc_stack_per_mw=step("gwp_fc_stack_per_mw", fc.stack_kgco2e_per_mw(d, fc_stack_basis),
+                                 "kg CO2e per MW replaced", "Fuel cell stack, per MW, charged per "
+                                 "replacement (max of calendar and duty)", ["fuel_cell.stack_per_MW"],
+                                 inputs={"calendar_years": fc_stack_years,
+                                         "duty_hours": d["stack_lifetime_hours"]}),
+        gwp_fc_maint_per_mwh=step("gwp_fc_maint_per_mwh", d["maintenance_kgco2e_per_MWh"], "kg CO2e per MWh",
+                                  "Fuel cell service, per MWh delivered", ["fuel_cell.maintenance_per_MWh"]),
+        gwp_grid_per_mw=step("gwp_grid_per_mw", gc.kgco2e_per_mw_year(), "kg CO2e per MW per year",
+                             "Grid connection, per MW of cap_grid", ["grid_connection.per_MW_year"]),
         # The step-up between generator terminals and the site collection
         # network — 690 V (LOW) up to medium voltage, which is where the data
         # centre draws. Wind is the real per-turbine units from Leng's bill of
         # materials, solar IEA PVPS T12-33:2026's inverter-station units, both
         # built as foreground activities by optimiser_lca, and each amortised
         # over its generator's life. See transformers.py.
-        gwp_tx_wind_per_mw=tx.kgco2e_per_mw_year(
+        gwp_tx_wind_per_mw=step("gwp_tx_wind_per_mw", tx.kgco2e_per_mw_year(
             "onshore_wind", life_years=float(emb.loc["onshore_wind"].study_lifetime_years)),
-        gwp_tx_solar_per_mwp=tx.kgco2e_per_mw_year(
+            "kg CO2e per MW per year", "Wind step-up transformers, per MW of wind",
+            ["tx.onshore_wind.per_MW_year", "onshore_wind.lifetime_years"]),
+        gwp_tx_solar_per_mwp=step("gwp_tx_solar_per_mwp", tx.kgco2e_per_mw_year(
             "solar_pv", life_years=float(emb.loc["solar_pv"].study_lifetime_years)),
+            "kg CO2e per MWp per year", "Solar step-up transformers, per MWp of solar",
+            ["tx.solar_pv.per_MW_year", "solar_pv.lifetime_years"]),
         # The battery's and fuel cell's containerised LV → 20 kV step-ups
         # (Jasper 2026's unit on the IEA PVPS composition), each over the
         # asset's own life: the battery's 15 y, the fuel cell's BoP calendar
         # life — so a swept BoP life carries its transformer with it.
-        gwp_tx_batt_per_mw=tx.kgco2e_per_mw_year("battery", life_years=float(batt.ASSET_LIFE_YEARS)),
-        gwp_tx_fc_per_mw=tx.kgco2e_per_mw_year("fuel_cell", life_years=float(fc_bop_years)),
+        gwp_tx_batt_per_mw=step("gwp_tx_batt_per_mw",
+                                tx.kgco2e_per_mw_year("battery", life_years=float(batt.ASSET_LIFE_YEARS)),
+                                "kg CO2e per MW per year", "Battery step-up transformers, per MW of PCS",
+                                ["tx.battery.per_MW_year"]),
+        gwp_tx_fc_per_mw=step("gwp_tx_fc_per_mw",
+                              tx.kgco2e_per_mw_year("fuel_cell", life_years=float(fc_bop_years)),
+                              "kg CO2e per MW per year", "Fuel-cell step-up transformers, per MW of fuel cell",
+                              ["tx.fuel_cell.per_MW_year", "fuel_cell.bop_calendar_years"]),
         fc_bop_calendar_years=fc_bop_years,
         fc_bop_duty_hours=d["bop_duty_lifetime_hours"],
         fc_stack_calendar_years=fc_stack_years,
@@ -558,17 +666,31 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
         cost_fc_bop_per_mw=float(fcr.bop_GBP_per_MW),
         cost_grid_per_mw_year=meta["capacity_GBP_per_MW_year"],
         cost_grid_fixed_per_year=meta["fixed_GBP_per_year"],
-        ely_kwh_per_kg=ely_row["kwh_per_kg"],
-        ely_variable_gwp_per_kg=ely_row["variable_kgco2e_per_kg"],
-        tank_compression_kwh_per_kg=compression_kwh,
-        tank_leakage_per_hour=tank_row["leakage_frac_per_hour"],
+        ely_kwh_per_kg=step("ely_kwh_per_kg", ely_row["kwh_per_kg"], "kWh per kg H2",
+                            "Electrolyser electricity per kg made", [f"{eb}.kwh_per_kg"]),
+        ely_variable_gwp_per_kg=step("ely_variable_gwp_per_kg", ely_row["variable_kgco2e_per_kg"],
+                                     "kg CO2e per kg H2", "Electrolyser consumables per kg made",
+                                     [f"{eb}.variable_per_kg"]),
+        tank_compression_kwh_per_kg=step("tank_compression_kwh_per_kg", compression_kwh, "kWh per kg H2",
+                                         "Compression into the tank, per kg", ["tank.compression_kwh_per_kg"]),
+        tank_leakage_per_hour=step("tank_leakage_per_hour", tank_row["leakage_frac_per_hour"],
+                                   "fraction of stock per hour", "Tank standing loss",
+                                   [f"tank.{tank_design}.leakage_per_hour"]),
         batt_rte=batt.ROUND_TRIP_EFFICIENCY,
         batt_leakage_per_hour=batt.STANDING_LOSS_PER_HOUR,
         fc_kg_h2_per_mwh=d["h2_kg_per_MWh"],
-        bought_h2_gbp_per_kg=h2_price, bought_h2_gwp_per_kg=h2_gwp,
-        bought_h2_2_gbp_per_kg=h2_price_2, bought_h2_2_gwp_per_kg=h2_gwp_2,
-        dc_fixed_gwp_per_year=dc["it_kgco2e_per_year"] * scale_it,
-        dc_other_gwp_per_mwh=dc["energy_kgco2e_per_mwh"],
+        bought_h2_gbp_per_kg=h2_price,
+        bought_h2_gwp_per_kg=step("bought_h2_gwp_per_kg", h2_gwp, "kg CO2e per kg H2",
+                                  f"Bought hydrogen ({h2_colour or 'none'}), delivered to the tank", b1),
+        bought_h2_2_gbp_per_kg=h2_price_2,
+        bought_h2_2_gwp_per_kg=step("bought_h2_2_gwp_per_kg", h2_gwp_2, "kg CO2e per kg H2",
+                                    f"Second bought colour ({h2_colour_2 or 'none'}), delivered to the tank", b2),
+        dc_fixed_gwp_per_year=step("dc_fixed_gwp_per_year", dc["it_kgco2e_per_year"] * scale_it,
+                                   "kg CO2e per year", f"The facility's IT-driven burden at {size_mw_it:g} MW IT",
+                                   ["data_centre.it_per_year"], inputs={"scale_it": scale_it}),
+        dc_other_gwp_per_mwh=step("dc_other_gwp_per_mwh", dc["energy_kgco2e_per_mwh"], "kg CO2e per MWh",
+                                  "The facility's energy-driven burden, per MWh of demand",
+                                  ["data_centre.energy_per_MWh"]),
         horizon_years=horizon_years,
         labels={"site": getattr(site, "key", site), "ely_tech": ely_tech, "tank_design": tank_design,
                 "soec_heat": ely_row["heat_source"],
@@ -653,6 +775,18 @@ def with_cutoff(tech: dc_model.Tech, mode: str | None = None) -> dc_model.Tech:
                 continue
             field = CUTOFF_FIELD[(e.technology, e.side)]
             added[field] = added.get(field, 0.0) + float(est)
+    if T.active():
+        for f, v in added.items():
+            flows = [e.flow for e in X.REGISTER if e.kind != "boundary"
+                     and CUTOFF_FIELD.get((e.technology, e.side)) == f
+                     and (e.status == "included_estimate"
+                          or (mode == "upper" and e.kind == "cutoff" and e.status == "excluded"))]
+            T.step(f"cutoff.{f}", v, "same unit as the coefficient",
+                   f"Cut-off register estimates carried on {f}", grade="assumed",
+                   inputs={"mode": mode or "central", "flows": "; ".join(flows)},
+                   source="optimiser_lca/exclusions.py",
+                   note="Unsourced flows that failed the 1 % test, carried at their central "
+                        "estimate until a source replaces them (CUTOFF_RULE_PLAN.md).")
     new = {f: getattr(tech, f) + v for f, v in added.items()}
     return replace(tech, **new,
                    labels={**(tech.labels or {}), "cutoff": mode or "central",
@@ -740,8 +874,11 @@ def _bought_h2_gwp(activity_code: str, green_basis: str | None = None, *,
         colour, green_basis, grid_share=grid_share)
 
     if colour == "green":
-        return (h2_prices.green_h2_gwp_per_kg(green_basis, grid_share=grid_share)
-                + compression)
+        return T.step("bought_h2.green.delivered",
+                      (h2_prices.green_h2_gwp_per_kg(green_basis, grid_share=grid_share)
+                       + compression),
+                      "kg CO2e per kg H2", "Bought green hydrogen, delivered: production plus "
+                      "trailer compression", uses=["bought_h2.green.production", "bought_h2.green.compression"])
 
     # Keyed on the inventories that move a fossil score. Until 14 Oct the
     # cache had no fingerprint and outlived two rewrites of the hydrogen
@@ -758,8 +895,15 @@ def _bought_h2_gwp(activity_code: str, green_basis: str | None = None, *,
             pass
     if cache.get("_fingerprint") != fp:
         cache = {"_fingerprint": fp}
+    from optimiser_lca.registry import HYDROGEN_DB as _HDB
+    ref = T.activity(_HDB, activity_code)
     if activity_code in cache:
-        return cache[activity_code] + compression
+        T.step(f"bought_h2.{colour}.production", cache[activity_code], "kg CO2e per kg H2",
+               f"Bought {colour} hydrogen at the seller's gate: its activity scored whole",
+               uses=[ref], scores=ref, grade="derived")
+        return T.step(f"bought_h2.{colour}.delivered", cache[activity_code] + compression,
+                      "kg CO2e per kg H2", f"Bought {colour} hydrogen, delivered",
+                      uses=[f"bought_h2.{colour}.production", f"bought_h2.{colour}.compression"])
     import bw2data as bd
     import lca_helpers as H
     from optimisation import baseline_grid as bg
@@ -770,7 +914,12 @@ def _bought_h2_gwp(activity_code: str, green_basis: str | None = None, *,
     cache[activity_code] = score
     OUT_DIR.mkdir(exist_ok=True)
     _H2_GWP_CACHE.write_text(json.dumps(cache, indent=2), encoding="utf-8")
-    return score + compression
+    T.step(f"bought_h2.{colour}.production", score, "kg CO2e per kg H2",
+           f"Bought {colour} hydrogen at the seller's gate: its activity scored whole",
+           uses=[ref], scores=ref, grade="derived")
+    return T.step(f"bought_h2.{colour}.delivered", score + compression, "kg CO2e per kg H2",
+                  f"Bought {colour} hydrogen, delivered",
+                  uses=[f"bought_h2.{colour}.production", f"bought_h2.{colour}.compression"])
 
 
 if __name__ == "__main__":

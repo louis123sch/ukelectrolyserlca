@@ -31,6 +31,15 @@ uses `json` only to canonicalise the basis it hashes into `sources_id()`).
 Any new file read or data-module import in the package needs a line in
 `ALLOWED_IO` in `tests/test_lca_style.py` and a reason.
 
+**A number in `optimisation/` that becomes an LP carbon coefficient is wrapped
+in `T.step(...)` (`optimisation/trace.py`) where it is computed, with the steps
+and activities it `uses`.** The LCA map is generated from those records
+(28 Oct 2026), so it shows the expression, file and line that made each number.
+`step` returns its value unchanged and costs nothing outside the map's build.
+A step whose value is an activity's score says so with `scores=`, and the map's
+build rescores it. A new coefficient with no step shows up as a build problem,
+since the map cannot reach it.
+
 ## 2. The module, top to bottom
 
 Every module has the same order, separated by the `# ===` rules:

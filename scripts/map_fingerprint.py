@@ -25,7 +25,7 @@ COEFFICIENTS_CSV = ROOT / "optimisation_outputs" / "tech_lca_coefficients.csv"
 
 # The parts the checker compares. git_head is recorded for the reader only: a
 # commit that touches nothing the map shows must not make the map stale.
-COMPARED = ("inventories", "coefficients", "grid_sources_id", "register")
+COMPARED = ("inventories", "coefficients", "grid_sources_id", "register", "trace_code")
 
 
 def _digest(obj) -> str:
@@ -80,6 +80,20 @@ def register_digest() -> str | None:
     return _digest(rows)
 
 
+def trace_code_digest() -> str:
+    """The code the map is read from: every module that records a trace step,
+    the trace itself, and dc_model (the LP's terms). Since 28 Oct 2026 the map
+    is generated from this code, so editing it makes the map stale."""
+    files = sorted(p for p in (ROOT / "optimisation").glob("*.py")
+                   if "T.step(" in p.read_text(encoding="utf-8"))
+    files += [ROOT / "optimisation" / "trace.py", ROOT / "optimisation" / "dc_model.py"]
+    h = hashlib.sha256()
+    for p in sorted(set(files)):
+        h.update(p.name.encode())
+        h.update(p.read_bytes().replace(b"\r\n", b"\n"))
+    return h.hexdigest()[:16]
+
+
 def git_head() -> str | None:
     try:
         return subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, capture_output=True,
@@ -95,6 +109,7 @@ def fingerprint() -> dict:
         "coefficients": coefficients_digest(),
         "grid_sources_id": grid.sources_id(),
         "register": register_digest(),
+        "trace_code": trace_code_digest(),
         "git_head": git_head(),
     }
 

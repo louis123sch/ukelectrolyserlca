@@ -4,7 +4,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <style>
-/* Layout: one full-height workbench — toolbar on top, the process tree on a pannable
+/* Layout: one full-height workbench — toolbar on top, the process graph on a pannable
    drafting canvas, and a datasheet panel docked right (a bottom sheet on phones). */
 :root {
   --bg: #eef1ef;           /* drafting ground, a grey with a green bias */
@@ -260,6 +260,21 @@ svg#flow { width: 100%; height: 100%; display: block; cursor: grab; touch-action
   .brand .sub { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+.card.k-study rect.body, .card.k-chain rect.body, .card.k-database rect.body { fill: var(--surface); stroke: var(--ink); stroke-width: 1.2; }
+.card.k-study .name, .card.k-chain .name, .card.k-term .name, .card.k-database .name { font-weight: 600; }
+.card.k-step rect.body, .card.k-coefficient rect.body, .card.k-constant rect.body { fill: var(--surface); }
+.card.k-coefficient rect.body { stroke: var(--ink); }
+.card.shared rect.body { stroke-width: 1.6; }
+.card .shared-mark { font-family: var(--font-mono); font-size: 9px; fill: var(--accent); }
+.edge { fill: none; stroke: var(--link); }
+.edge.cross { stroke-dasharray: 4 3; }
+pre.code { margin: 0; padding: 8px 10px; background: var(--bg); border: 1px solid var(--grid); border-radius: 6px;
+  font-family: var(--font-mono); font-size: 12px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+.where { font-family: var(--font-mono); font-size: 12px; color: var(--accent); }
+.problems { border: 1px solid var(--gap-open); border-left: 4px solid var(--gap-open); border-radius: 6px; padding: 8px 10px; font-size: 12.5px; }
+.problems li { margin: 2px 0; }
+.ok { color: var(--gap-closed); font-size: 12.5px; }
+.barrow .sub2 { display: block; font-size: 11px; color: var(--muted); white-space: normal; overflow-wrap: anywhere; }
 </style>
 
 <header class="bar">
@@ -270,23 +285,23 @@ svg#flow { width: 100%; height: 100%; display: block; cursor: grab; touch-action
   <div class="stats" id="stats"></div>
   <div class="tools">
     <div class="search tree-only">
-      <input id="q" type="search" placeholder="Find an activity, flow or gap" autocomplete="off" aria-label="Search the tree">
+      <input id="q" type="search" placeholder="Find an activity, step, term or flow" autocomplete="off" aria-label="Search the map">
       <div class="results" id="results" hidden></div>
     </div>
-    <button class="btn tree-only" id="expand" title="Open one more level under the selected box">Open level</button>
+    <button class="btn tree-only" id="expand" title="Open every box under the selected one by one more level">Open level</button>
     <button class="btn tree-only" id="collapse" title="Close everything below the top levels">Collapse</button>
     <button class="btn" id="fit">Fit</button>
-    <button class="btn tree-only" id="bg" title="Show or hide ecoinvent background datasets and elementary flows">Background: shown</button>
+    <button class="btn tree-only" id="bg" title="Show or hide ecoinvent datasets and elementary flows">Background: shown</button>
   </div>
 </header>
 
 <nav class="tabs" role="tablist" aria-label="Map views">
-  <button role="tab" id="tab-tree" aria-selected="true" aria-controls="view-tree">LCA tree</button>
+  <button role="tab" id="tab-tree" aria-selected="true" aria-controls="view-tree">LCA graph</button>
   <button role="tab" id="tab-flow" aria-selected="false" aria-controls="view-flow">Energy flow</button>
 </nav>
 <div class="work">
   <div class="canvas" id="view-tree" role="tabpanel" aria-labelledby="tab-tree">
-    <svg id="tree" role="img" aria-label="LCA tree, top-down"></svg>
+    <svg id="tree" role="img" aria-label="LCA graph, top-down"></svg>
     <details class="legend" id="legend" open>
       <summary>Legend</summary>
       <h2>Provenance</h2>
@@ -295,17 +310,10 @@ svg#flow { width: 100%; height: 100%; display: block; cursor: grab; touch-action
         <span class="sw"><i style="background:var(--g-derived)"></i>Derived</span>
         <span class="sw"><i style="background:var(--g-assumed)"></i>Assumed</span>
         <span class="sw"><i style="background:var(--g-proxy)"></i>Proxy</span>
-        <span class="sw"><i style="background:var(--g-background)"></i>ecoinvent background</span>
+        <span class="sw"><i style="background:var(--g-background)"></i>ecoinvent</span>
         <span class="sw"><i style="background:var(--g-biosphere)"></i>Elementary flow</span>
       </div>
-      <h2>Data gaps</h2>
-      <div class="row">
-        <span class="sw"><i style="background:var(--gap-open)"></i>Open</span>
-        <span class="sw"><i style="background:var(--gap-known)"></i>Source known</span>
-        <span class="sw"><i style="background:var(--gap-closed)"></i>Closed</span>
-        <span class="sw"><i style="background:var(--gap-absent)"></i>Confirmed absent</span>
-      </div>
-      <div class="note">Line weight is each input's share of its parent's carbon. Numbers are kg CO₂e, IPCC 2021 GWP100.</div>
+      <div class="note">Each process is one box. A box used in several places has several lines into it; a dashed line joins a box already open elsewhere. Line weight is the input's share of the box above. Numbers are kg CO₂e, IPCC 2021 GWP100.</div>
     </details>
     <div class="hint">Click a box to open it · drag to pan · scroll to zoom</div>
   </div>
@@ -326,54 +334,63 @@ svg#flow { width: 100%; height: 100%; display: block; cursor: grab; touch-action
 
 <script id="lca-data" type="application/json">__DATA__</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dagre/0.8.5/dagre.min.js"></script>
 <script>
 (() => {
 "use strict";
 const DATA = JSON.parse(document.getElementById("lca-data").textContent);
-const GAPS = DATA.gaps;
-const CARD_W = 184, CARD_H = 70, GAP_X = 18, GAP_Y = 62, PAGE = 12;
+const GAPS = DATA.gaps || {};
+const CARD_W = 196, CARD_H = 66, PAGE = 12;
 
-// ------------------------------------------------------------- the model
+// ------------------------------------------------------------- the model: nodes and edges as built
 const byId = new Map();
-let total = 0;
-(function index(n, parent, depth) {
-  n.parent = parent; n.depth0 = depth; byId.set(n.id, n); total++;
-  (n.children || []).forEach(c => index(c, n, depth + 1));
-})(DATA.tree, null, 0);
-// Every activity, by its code, for the foreground index's pointers.
-const firstByCode = new Map();
-for (const n of byId.values()) if (n.kind === "foreground" && !firstByCode.has(n.database + "/" + n.code)) firstByCode.set(n.database + "/" + n.code, n);
+for (const [id, n] of Object.entries(DATA.nodes)) { n.id = id; n.kids = []; n.parents = []; byId.set(id, n); }
+for (const [p, c, d] of DATA.edges) {
+  const P = byId.get(p), C = byId.get(c);
+  if (!P || !C) continue;
+  const e = { p: P, c: C, ...d };
+  P.kids.push(e); C.parents.push(e);
+}
+for (const n of byId.values()) {
+  if (n.kids.some(e => e.contribution !== undefined)) n.kids.sort((a, b) => Math.abs(b.contribution || 0) - Math.abs(a.contribution || 0));
+}
+const ROOT = byId.get(DATA.root);
+const all = [...byId.values()];
 const gapNodeById = new Map();
-for (const n of byId.values()) if (n.kind === "gap") gapNodeById.set(n.gap_id, n);
 
-const open = new Set([DATA.tree.id]);
-const shownAll = new Set();          // parents whose full child list is revealed
+const open = new Set();
+const shownAll = new Set();
 let showBackground = true;
-let selected = DATA.tree;
+let selected = ROOT;
 
-function isBackground(n) { return n.kind === "ecoinvent" || n.kind === "biosphere" || (n.kind === "note" && n.exchange && !n.children); }
+const isBackground = n => n.kind === "ecoinvent" || n.kind === "biosphere";
 function kidsOf(n) {
-  let k = n.children || [];
-  if (!showBackground) k = k.filter(c => !isBackground(c));
+  let k = n.kids;
+  if (!showBackground) k = k.filter(e => !isBackground(e.c));
   return k;
 }
 
-// Build the visible hierarchy: open nodes show children, paged after PAGE.
+// Visible graph: from the root through every open box, each box once. A box
+// reached twice keeps one place and gains a second line (dashed past the first).
 function visible() {
-  function make(n) {
-    const out = { data: n };
-    if (open.has(n.id)) {
-      const kids = kidsOf(n);
-      let shown = kids;
-      if (kids.length > PAGE && !shownAll.has(n.id)) shown = kids.slice(0, PAGE);
-      out.children = shown.map(make);
-      if (shown.length < kids.length) out.children.push({ data: { id: n.id + ":more", kind: "more", name: `${kids.length - shown.length} more`, parentRef: n, hidden: kids.length - shown.length } });
+  const nodes = new Map(), edges = [];
+  const queue = [ROOT]; nodes.set(ROOT.id, ROOT);
+  while (queue.length) {
+    const n = queue.shift();
+    if (!open.has(n.id)) continue;
+    const ks = kidsOf(n);
+    const shown = ks.length > PAGE && !shownAll.has(n.id) ? ks.slice(0, PAGE) : ks;
+    for (const e of shown) {
+      const seen = nodes.has(e.c.id);
+      edges.push({ e, cross: seen });
+      if (!seen) { nodes.set(e.c.id, e.c); queue.push(e.c); }
     }
-    return out;
+    if (shown.length < ks.length) {
+      const m = { id: n.id + "::more", kind: "more", name: `Show ${ks.length - shown.length} more`, parentRef: n, kids: [], parents: [] };
+      nodes.set(m.id, m); edges.push({ e: { p: n, c: m }, cross: false });
+    }
   }
-  const h = d3.hierarchy(make(DATA.tree));
-  h.each(d => { d.data = d.data.data; });      // unwrap: d.data is the map node itself
-  return h;
+  return { nodes, edges };
 }
 
 // ------------------------------------------------------------- formatting
@@ -388,58 +405,35 @@ const fmt = (x) => {
   if (a >= 0.001) return x.toFixed(4);
   return x.toExponential(2);
 };
-const pct = (x) => (x * 100 >= 10 ? (x * 100).toFixed(0) : (x * 100).toFixed(1)) + "%";
-function share(n) {
-  const p = n.parent, c = n.exchange && n.exchange.contribution;
-  if (!p || c === undefined || c === null) return null;
-  const base = p.score_per_unit;
-  if (!base) return null;
-  return c / base;
-}
-const GRADE_COLOR = {
-  transcribed: "var(--g-transcribed)", derived: "var(--g-derived)", assumed: "var(--g-assumed)",
-  proxy: "var(--g-proxy)", secondary: "var(--g-derived)", sourced: "var(--g-transcribed)",
-};
+const pct = (x) => (Math.abs(x * 100) >= 10 ? (x * 100).toFixed(0) : (x * 100).toFixed(1)) + "%";
+const GRADE_COLOR = { transcribed: "var(--g-transcribed)", derived: "var(--g-derived)", assumed: "var(--g-assumed)", proxy: "var(--g-proxy)" };
 const STATUS_COLOR = { "closed": "var(--gap-closed)", "open-source-known": "var(--gap-known)", "open-no-source": "var(--gap-open)", "confirmed-absent": "var(--gap-absent)", "not-applicable": "var(--gap-absent)" };
 const STATUS_LABEL = { "closed": "closed", "open-source-known": "open — source known", "open-no-source": "open — no public source", "confirmed-absent": "confirmed absent", "not-applicable": "not applicable" };
+const KIND_LABEL = { study: "study", group: "group", chain: "technology", term: "LP carbon term", coefficient: "LP coefficient", constant: "constant", step: "calculation step", database: "foreground database", foreground: "foreground activity", ecoinvent: "ecoinvent dataset", biosphere: "elementary flow", more: "" };
 function stripe(n) {
-  if (n.kind === "ecoinvent" || n.kind === "pointer") return "var(--g-background)";
+  if (n.kind === "ecoinvent") return "var(--g-background)";
   if (n.kind === "biosphere") return "var(--g-biosphere)";
-  if (n.kind === "gap") return STATUS_COLOR[n.status] || "var(--gap-open)";
-  if (n.kind === "todo") return "var(--gap-open)";
   if (n.kind === "more") return "transparent";
-  if (n.kind === "jump") return "var(--accent)";
-  if (n.status === "not") return "var(--muted)";
-  if (n.kind === "fu" || n.kind === "stage") return "var(--ink)";
+  if (["study", "group", "chain", "term", "database", "coefficient"].includes(n.kind)) return "var(--ink)";
   return GRADE_COLOR[n.grade] || "var(--ink)";
 }
-const KIND_LABEL = { root: "study", group: "group", term: "LP carbon term", step: "calculation step", jump: "link", fu: "functional unit", stage: "stage of the chain", part: "component", foreground: "foreground activity", ecoinvent: "ecoinvent dataset", biosphere: "elementary flow", note: "note", gap: "data gap", todo: "worklist item", pointer: "foreground activity", more: "" };
 function kindLine(n) {
-  if (n.kind === "foreground" && n.role) return "FOREGROUND · " + n.role.toUpperCase();
   if (n.kind === "foreground") return "FOREGROUND · " + (n.module || "").split("/").pop();
-  if (n.kind === "jump") return "LINK · CLICK TO GO";
-  if (n.kind === "fu") return "FUNCTIONAL UNIT";
-  if (n.kind === "stage") return "STAGE";
-  if (n.kind === "part") return "COMPONENT · " + (n.grade || "").toUpperCase();
-  if (n.status === "not") return "NOT MODELLED";
-  if (n.kind === "ecoinvent" && n.role) return "ECOINVENT · CAPITAL GOOD";
   if (n.kind === "ecoinvent") return "ECOINVENT" + (n.location ? " · " + n.location : "");
-  if (n.kind === "gap") return "GAP · " + (STATUS_LABEL[n.status] || "");
+  if (n.kind === "step") return "STEP · " + (n.where || "").split("/").pop();
+  if (n.kind === "term") return "LP TERM · " + (n.side || "").replace("gwp_", "");
   return (KIND_LABEL[n.kind] || n.kind).toUpperCase();
-}
-function valueLine(n) {
-  const ex = n.exchange;
-  if ((n.kind === "term" || n.kind === "step" || n.kind === "fu") && n.value !== undefined) return fmt(n.value) + " " + shortUnit(n.unit);
-  if (ex && ex.contribution !== undefined && ex.contribution !== null) {
-    const s = share(n);
-    return fmt(ex.contribution) + " kg" + (s !== null && Math.abs(s) >= 0.0005 ? " · " + pct(s) : "");
-  }
-  if (n.score_per_unit !== undefined && n.score_per_unit !== null) return fmt(n.score_per_unit) + " kg / " + (n.unit || "unit");
-  return "";
 }
 function shortUnit(u) {
   if (!u) return "";
-  return u.replace(/kg CO₂e per /, "kg/").replace(/ per year.*/, "/yr").replace(/\(.*\)/, "").slice(0, 26);
+  return u.replace(/kg CO2e per /, "kg/").replace(/ per year/, "/yr").replace(/\(.*\)/, "").slice(0, 24);
+}
+function valueLine(n) {
+  if (n.kind === "term") return n.expr || "";
+  if (n.value !== undefined && n.value !== null) return fmt(n.value) + " " + shortUnit(n.unit);
+  if (n.score !== undefined && n.score !== null) return fmt(n.score) + " kg / " + (n.unit || "unit");
+  if (n.kind === "biosphere") return "CF " + fmt(n.cf || 0);
+  return n.kids.length ? n.kids.length + " inside" : "";
 }
 function wrap(text, max, lines) {
   const words = String(text).split(/\s+/); const out = []; let cur = "";
@@ -452,106 +446,104 @@ function wrap(text, max, lines) {
   if (used < String(text).length && out.length) out[out.length - 1] = out[out.length - 1].replace(/.{0,2}$/, "") + "…";
   return out.slice(0, lines);
 }
-// The card badge counts open gaps only; closed and settled ones still appear in the panel.
 const GAP_IS_OPEN = s => s === "open-no-source" || s === "open-source-known";
 function subtreeGaps(n) { return (n.gaps || []).filter(id => GAPS[id] && GAP_IS_OPEN(GAPS[id].status)).length; }
 function gapHeading(n) {
-  const open = subtreeGaps(n), all = (n.gaps || []).filter(id => GAPS[id]).length;
-  return open ? `${open} open, ${all - open} settled` : `${all} settled, none open`;
+  const o = subtreeGaps(n), a = (n.gaps || []).filter(id => GAPS[id]).length;
+  return o ? `${o} open, ${a - o} settled` : `${a} settled, none open`;
 }
-function countKids(n) { return kidsOf(n).length; }
+function share(e) {
+  const base = e.p && e.p.score;
+  return (e.contribution === undefined || e.contribution === null || !base) ? null : e.contribution / base;
+}
 
 // ------------------------------------------------------------- drawing
 const svg = d3.select("#tree");
 const root = svg.append("g");
 const gLinks = root.append("g");
 const gNodes = root.append("g");
-const zoom = d3.zoom().scaleExtent([0.08, 2.5]).on("zoom", (e) => root.attr("transform", e.transform));
+const zoom = d3.zoom().scaleExtent([0.05, 2.5]).on("zoom", (e) => root.attr("transform", e.transform));
 svg.call(zoom).on("dblclick.zoom", null);
 const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const T = reduce ? 0 : 280;
+let pos = new Map();
 
-let lastPos = new Map();
 function render(focus) {
-  const h = visible();
-  d3.tree().nodeSize([CARD_W + GAP_X, CARD_H + GAP_Y]).separation((a, b) => (a.parent === b.parent ? 1 : 1.12))(h);
-  const nodes = h.descendants(), links = h.links();
+  const { nodes, edges } = visible();
+  const g = new dagre.graphlib.Graph({ multigraph: true });
+  g.setGraph({ rankdir: "TB", nodesep: 18, ranksep: 54, edgesep: 8, marginx: 20, marginy: 20 });
+  g.setDefaultEdgeLabel(() => ({}));
+  for (const n of nodes.values()) g.setNode(n.id, { width: CARD_W, height: CARD_H });
+  edges.forEach((v, i) => g.setEdge(v.e.p.id, v.e.c.id, {}, "e" + i));
+  dagre.layout(g);
+  pos = new Map([...nodes.keys()].map(id => [id, g.node(id)]));
+  const line = d3.line().x(p => p.x).y(p => p.y).curve(d3.curveBasis);
 
-  const link = gLinks.selectAll("path").data(links, d => d.target.data.id);
-  link.exit().remove();
-  link.enter().append("path").attr("class", "link")
-    .merge(link)
-    .attr("stroke-width", d => {
-      const s = share(d.target.data);
-      return s === null ? 1.2 : Math.max(1, Math.min(9, 1 + Math.sqrt(Math.abs(s)) * 9));
-    })
-    .attr("stroke-opacity", d => d.target.data.kind === "more" ? 0.5 : 0.9)
-    .transition().duration(T)
-    .attr("d", d => d3.linkVertical()({ source: [d.source.x, d.source.y + CARD_H / 2], target: [d.target.x, d.target.y - CARD_H / 2] }));
+  const sel = gLinks.selectAll("path").data(edges.map((v, i) => ({ ...v, pts: g.edge({ v: v.e.p.id, w: v.e.c.id, name: "e" + i }).points })));
+  sel.exit().remove();
+  sel.enter().append("path").merge(sel)
+    .attr("class", v => "edge" + (v.cross ? " cross" : ""))
+    .attr("stroke-width", v => { const s = share(v.e); return s === null ? 1.2 : Math.max(1, Math.min(9, 1 + Math.sqrt(Math.abs(s)) * 9)); })
+    .attr("d", v => line(v.pts));
 
-  const card = gNodes.selectAll("g.card").data(nodes, d => d.data.id);
+  const card = gNodes.selectAll("g.card").data([...nodes.values()], d => d.id);
   card.exit().remove();
-  const enter = card.enter().append("g")
-    .attr("tabindex", 0).attr("role", "button")
-    .attr("transform", d => { const p = d.parent && lastPos.get(d.parent.data.id); return `translate(${p ? p[0] : d.x},${p ? p[1] : d.y})`; })
-    .on("click", (e, d) => onClick(d.data))
-    .on("keydown", (e, d) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(d.data); } });
+  const enter = card.enter().append("g").attr("tabindex", 0).attr("role", "button")
+    .on("click", (e, d) => onClick(d))
+    .on("keydown", (e, d) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(d); } });
   enter.append("rect").attr("class", "body");
   enter.append("rect").attr("class", "stripe");
   enter.append("text").attr("class", "kind");
   enter.append("text").attr("class", "name");
   enter.append("text").attr("class", "val");
+  enter.append("text").attr("class", "shared-mark");
   enter.append("g").attr("class", "gapbadge");
   enter.append("g").attr("class", "toggle");
-
-  const all = enter.merge(card);
-  all.attr("class", d => `card k-${d.data.kind}` + (d.data.status === "not" ? " s-not" : "") + (d.data === selected ? " selected" : ""))
-    .attr("aria-label", d => d.data.name);
-  all.transition().duration(T).attr("transform", d => `translate(${d.x},${d.y})`);
-  all.select("rect.body").attr("x", -CARD_W / 2).attr("y", -CARD_H / 2).attr("width", CARD_W).attr("height", CARD_H).attr("rx", 5);
-  all.select("rect.stripe").attr("x", -CARD_W / 2).attr("y", -CARD_H / 2).attr("width", 5).attr("height", CARD_H).attr("rx", 2)
-    .attr("fill", d => stripe(d.data));
-  all.select("text.kind").attr("x", -CARD_W / 2 + 12).attr("y", -CARD_H / 2 + 13).text(d => d.data.kind === "more" ? "" : kindLine(d.data).slice(0, 34));
-  all.select("text.name").each(function (d) {
+  const cards = enter.merge(card);
+  cards.attr("class", d => `card k-${d.kind}` + (d === selected ? " selected" : "") + (d.parents.length > 1 ? " shared" : ""))
+    .attr("aria-label", d => d.name)
+    .attr("transform", d => { const p = pos.get(d.id); return `translate(${p.x},${p.y})`; });
+  cards.select("rect.body").attr("x", -CARD_W / 2).attr("y", -CARD_H / 2).attr("width", CARD_W).attr("height", CARD_H).attr("rx", 5);
+  cards.select("rect.stripe").attr("x", -CARD_W / 2).attr("y", -CARD_H / 2).attr("width", 5).attr("height", CARD_H).attr("rx", 2).attr("fill", d => stripe(d));
+  cards.select("text.kind").attr("x", -CARD_W / 2 + 12).attr("y", -CARD_H / 2 + 13).text(d => d.kind === "more" ? "" : kindLine(d).slice(0, 36));
+  cards.select("text.name").each(function (d) {
     const t = d3.select(this).attr("x", -CARD_W / 2 + 12).attr("y", -CARD_H / 2 + 29);
     t.selectAll("tspan").remove();
-    const lines = d.data.kind === "more" ? [`Show ${d.data.hidden} more`] : wrap(d.data.name, 29, 2);
-    lines.forEach((ln, i) => t.append("tspan").attr("x", -CARD_W / 2 + 12).attr("dy", i ? 14 : 0).text(ln));
+    wrap(d.name, 31, 2).forEach((ln, i) => t.append("tspan").attr("x", -CARD_W / 2 + 12).attr("dy", i ? 14 : 0).text(ln));
   });
-  all.select("text.val").attr("x", -CARD_W / 2 + 12).attr("y", CARD_H / 2 - 8)
-    .classed("big", d => d.data.kind === "term")
-    .text(d => d.data.kind === "more" ? "" : valueLine(d.data));
-  all.select("g.gapbadge").each(function (d) {
-    const g = d3.select(this); g.selectAll("*").remove();
-    const k = subtreeGaps(d.data); if (!k) return;
-    const label = k + (k === 1 ? " gap" : " gaps");
-    const w = 12 + label.length * 6;
-    g.attr("transform", `translate(${CARD_W / 2 - w - 6},${-CARD_H / 2 + 5})`);
-    g.append("rect").attr("width", w).attr("height", 15).attr("rx", 7.5);
-    g.append("text").attr("x", w / 2).attr("y", 11).attr("text-anchor", "middle").text(label);
+  cards.select("text.val").attr("x", -CARD_W / 2 + 12).attr("y", CARD_H / 2 - 7).classed("big", d => d.kind === "term" || d.kind === "step")
+    .text(d => d.kind === "more" ? "" : wrap(valueLine(d), 36, 1)[0] || "");
+  cards.select("text.shared-mark").attr("x", CARD_W / 2 - 8).attr("y", CARD_H / 2 - 7).attr("text-anchor", "end")
+    .text(d => d.parents.length > 1 ? "used ×" + d.parents.length : "");
+  cards.select("g.gapbadge").each(function (d) {
+    const g2 = d3.select(this); g2.selectAll("*").remove();
+    const k = subtreeGaps(d); if (!k) return;
+    const label = k + (k === 1 ? " gap" : " gaps"); const w = 12 + label.length * 6;
+    g2.attr("transform", `translate(${CARD_W / 2 - w - 6},${-CARD_H / 2 + 5})`);
+    g2.append("rect").attr("width", w).attr("height", 15).attr("rx", 7.5);
+    g2.append("text").attr("x", w / 2).attr("y", 11).attr("text-anchor", "middle").text(label);
   });
-  all.select("g.toggle").each(function (d) {
-    const g = d3.select(this); g.selectAll("*").remove();
-    const k = d.data.kind === "more" ? 0 : countKids(d.data); if (!k) return;
-    g.attr("transform", `translate(0,${CARD_H / 2})`);
-    g.append("circle").attr("r", 9);
-    g.append("text").text(open.has(d.data.id) ? "−" : "+");
-    if (!open.has(d.data.id)) g.append("text").attr("x", 22).attr("y", 1).attr("class", "count").style("text-anchor", "start").text(k);
+  cards.select("g.toggle").each(function (d) {
+    const g2 = d3.select(this); g2.selectAll("*").remove();
+    const k = d.kind === "more" ? 0 : kidsOf(d).length; if (!k) return;
+    g2.attr("transform", `translate(0,${CARD_H / 2})`);
+    g2.append("circle").attr("r", 9);
+    g2.append("text").text(open.has(d.id) ? "−" : "+");
+    if (!open.has(d.id)) g2.append("text").attr("x", 22).attr("y", 1).attr("class", "count").style("text-anchor", "start").text(k);
   });
-  lastPos = new Map(nodes.map(n => [n.data.id, [n.x, n.y]]));
   if (focus) centerOn(focus);
 }
 
-function centerOn(n, scale) {
-  const p = lastPos.get(n.id); if (!p) return;
-  const box = svg.node().getBoundingClientRect();
-  const k = scale || Math.max(d3.zoomTransform(svg.node()).k, 0.85);
-  const t = d3.zoomIdentity.translate(box.width / 2 - p[0] * k, Math.min(box.height * 0.28, 140) - p[1] * k).scale(k);
+function centerOn(n) {
+  const p = pos.get(n.id); if (!p) return;
+  const box = svg.node().getBoundingClientRect(); if (!box.width) return;
+  const k = Math.max(d3.zoomTransform(svg.node()).k, 0.8);
+  const t = d3.zoomIdentity.translate(box.width / 2 - p.x * k, Math.min(box.height * 0.3, 150) - p.y * k).scale(k);
   svg.transition().duration(T * 1.4).call(zoom.transform, t);
 }
 function fit(animate = true) {
   const b = gNodes.node().getBBox(); const box = svg.node().getBoundingClientRect();
-  if (!b.width || !box.width) return;      // a hidden pane has no size: a zero scale would turn later zooms to NaN
+  if (!b.width || !box.width) return;
   const k = Math.min(1.1, 0.92 * Math.min(box.width / (b.width + 40), box.height / (b.height + 40)));
   const t = d3.zoomIdentity.translate(box.width / 2 - (b.x + b.width / 2) * k, box.height / 2 - (b.y + b.height / 2) * k).scale(k);
   if (animate) svg.transition().duration(T * 1.4).call(zoom.transform, t); else svg.call(zoom.transform, t);
@@ -559,32 +551,31 @@ function fit(animate = true) {
 
 function onClick(n) {
   if (n.kind === "more") { shownAll.add(n.parentRef.id); render(); return; }
-  if (n.kind === "jump") {
-    const target = all.find(x => (x.kind === "term" || x.kind === "fu" || x.kind === "stage") && x.name === n.target);
-    select(n); if (target) reveal(target);
-    return;
-  }
-  if (n.kind === "pointer") {
-    const target = firstByCode.get(n.database + "/" + n.code);
-    select(n); if (target) reveal(target);
-    return;
-  }
-  if (countKids(n)) { if (open.has(n.id) && selected === n) close(n); else open.add(n.id); }
-  select(n);
-  render(n);
+  if (kidsOf(n).length) { if (open.has(n.id) && selected === n) closeFrom(n); else open.add(n.id); }
+  select(n); render(n);
 }
-function close(n) { open.delete(n.id); (n.children || []).forEach(c => close(c)); }
-function select(n) { selected = n; panel(n); gNodes.selectAll("g.card").classed("selected", d => d.data === n); }
-function reveal(n) {
-  let p = n.parent; const chain = [];
-  while (p) { chain.push(p); p = p.parent; }
-  chain.forEach(a => open.add(a.id));
-  // Make sure n is not hidden behind paging or the background filter.
-  if (n.parent) {
-    const kids = kidsOf(n.parent);
-    if (kids.indexOf(n) >= PAGE) shownAll.add(n.parent.id);
-    if (!showBackground && isBackground(n)) toggleBackground();
+function closeFrom(n) {
+  open.delete(n.id);
+  const { nodes } = visible();
+  for (const id of [...open]) if (!nodes.has(id)) open.delete(id);
+}
+function select(n) { selected = n; panel(n); gNodes.selectAll("g.card").classed("selected", d => d === n); }
+function pathTo(n) {
+  // Shortest route from the study down to n, so it can be opened box by box.
+  const prev = new Map([[ROOT.id, null]]); const q = [ROOT];
+  while (q.length) {
+    const x = q.shift(); if (x === n) break;
+    for (const e of x.kids) if (!prev.has(e.c.id)) { prev.set(e.c.id, x); q.push(e.c); }
   }
+  const chain = []; let p = prev.get(n.id);
+  while (p) { chain.unshift(p); p = prev.get(p.id); }
+  return chain;
+}
+function reveal(n) {
+  const chain = pathTo(n);
+  chain.forEach(a => open.add(a.id));
+  if (!showBackground && isBackground(n)) toggleBackground();
+  chain.forEach((a, i) => { const next = chain[i + 1] || n; const ks = kidsOf(a); if (ks.findIndex(e => e.c === next) >= PAGE) shownAll.add(a.id); });
   select(n); render(n);
 }
 
@@ -595,8 +586,7 @@ function inline(s) {
     .replace(/`([^`]+)`/g, "<code>$1</code>")
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
     .replace(/\*([^*\s][^*]*)\*/g, "<em>$1</em>")
-    .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
-    .replace(/&lt;(https?:[^&\s]+)&gt;/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+    .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
 }
 function md(text) {
   const lines = String(text).split("\n"); let out = ""; let i = 0;
@@ -625,138 +615,118 @@ function kv(rows) {
   const r = rows.filter(([, v]) => v !== undefined && v !== null && v !== "");
   return r.length ? `<dl class="kv">${r.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join("")}</dl>` : "";
 }
+const mono = (s) => `<span class="mono">${esc(s)}</span>`;
 function crumbs(n) {
-  const chain = []; let p = n.parent; while (p) { chain.unshift(p); p = p.parent; }
-  return `<nav class="crumbs" aria-label="Path">${chain.map(c => `<button data-go="${c.id}">${esc(c.name.length > 38 ? c.name.slice(0, 36) + "…" : c.name)}</button>`).join("<span>›</span>")}</nav>`;
+  const chain = pathTo(n);
+  return `<nav class="crumbs" aria-label="Path">${chain.map(c => `<button data-go="${esc(c.id)}">${esc(c.name.length > 38 ? c.name.slice(0, 36) + "…" : c.name)}</button>`).join("<span>›</span>")}</nav>`;
 }
 function gapCard(g) {
   const color = STATUS_COLOR[g.status] || "var(--gap-open)";
   const text = (g.cells || []).filter(Boolean).join(" — ");
   return `<div class="gapcard" style="border-left-color:${color}"><div class="gt">${esc(g.name)}</div>
-    <div class="chips">${chip(STATUS_LABEL[g.status] || g.section, color)}</div>
-    <div class="gb md">${md(text)}</div>
-    ${gapNodeById.get(g.id) ? `<button class="btn" data-go="${gapNodeById.get(g.id).id}">Show in register</button>` : ""}</div>`;
+    <div class="chips">${chip(STATUS_LABEL[g.status] || g.section, color)}</div><div class="gb md">${md(text)}</div></div>`;
 }
+function edgeRow(e, other, base) {
+  const s = base && e.contribution !== undefined && e.contribution !== null ? e.contribution / base : null;
+  const amount = e.amount !== undefined ? `${fmt(e.amount)} ${e.unit || ""}` : "";
+  const sub = [amount, e.note, e.why ? "Why this dataset: " + e.why : ""].filter(Boolean).join(" · ");
+  const w = s === null ? 0 : Math.min(100, Math.abs(s) * 100);
+  return `<div class="barrow"><button data-go="${esc(other.id)}"><span class="bn">${esc(other.name)}</span>` +
+    (s !== null ? `<span class="bt"><i class="${s < 0 ? "neg" : ""}" style="width:${w}%"></i></span>` : "") +
+    (sub ? `<span class="sub2">${esc(sub)}</span>` : "") +
+    `</button><span class="bv">${s !== null ? esc(pct(s)) : esc(other.kind === "step" || other.kind === "term" ? valueLine(other).split(" ")[0] : "")}</span></div>`;
+}
+
 function panel(n) {
   const el = document.getElementById("panel");
-  const ex = n.exchange || {};
-  const s = share(n);
-  const chips = [];
-  if (n.kind !== "more") chips.push(chip(KIND_LABEL[n.kind] || n.kind, "var(--muted)"));
-  if (n.grade && n.kind !== "ecoinvent" && n.kind !== "biosphere") chips.push(chip(n.grade, GRADE_COLOR[n.grade] || "var(--muted)"));
-  if (n.kind === "ecoinvent") chips.push(chip(n.background ? "ecoinvent background, one level in" : "ecoinvent 3.9.1 apos", "var(--g-background)"));
-  if (n.kind === "biosphere") chips.push(chip("elementary flow", "var(--g-biosphere)"));
-  if (n.role) chips.push(chip(n.role, "var(--accent)"));
-  if (n.status === "not") chips.push(chip("not modelled", "var(--gap-open)"));
-  if (n.inventory_name) chips.push(chip("inventory: " + n.inventory_name, "var(--muted)"));
-  if (n.key) chips.push(chip((n.constant ? "constant: " : "LP key: ") + n.key, "var(--accent)"));
-  if (n.stands_for) n.stands_for.forEach(s => chips.push(chip("stands for: " + s.name, "var(--muted)")));
-  if (n.kind === "gap") chips.push(chip(STATUS_LABEL[n.status] || "", STATUS_COLOR[n.status]));
-  if (n.register) chips.push(chip({boundary: "boundary item", sourced: "sourced, " + n.register.status.replace("_", " "),
-                                   cutoff: "cut-off: " + n.register.status.replace("_", " ")}[n.register.kind] || n.register.kind,
-                                  n.register.kind === "boundary" ? "var(--muted)" : (n.register.status === "excluded" ? "var(--gap-known)" : "var(--accent)")));
+  if (n === ROOT) return studyPanel(el);
+  const chips = [chip(KIND_LABEL[n.kind] || n.kind, "var(--muted)")];
+  if (n.grade) chips.push(chip(n.grade, GRADE_COLOR[n.grade] || "var(--muted)"));
+  if (n.variant) chips.push(chip("variant: " + n.variant, "var(--accent)"));
+  if (n.parents.length > 1) chips.push(chip("used in " + n.parents.length + " places", "var(--accent)"));
+  if (n.drilled) chips.push(chip("opened one level", "var(--g-background)"));
   let h = `<button class="btn close" id="closep">Close</button>${crumbs(n)}<h2>${esc(n.name)}</h2><div class="chips">${chips.join("")}</div>`;
 
-  const ident = kv([
-    ["LP term", n.symbol ? `<span class="mono">${esc(n.symbol)}</span>` : null],
-    ["Value", n.value !== undefined ? `<span class="mono">${esc(fmt(n.value))}</span> ${esc(n.unit || "")}` : null],
-    ["Module", n.module ? `<span class="mono">${esc(n.module)}</span>` : null],
-    ["Database", n.database ? `<span class="mono">${esc(n.database)}</span>` : null],
-    ["Code", n.code ? `<span class="mono">${esc(n.code)}</span>` : null],
-    ["Location", n.location ? esc(n.location) : null],
-    ["Product", n.product ? esc(n.product) : null],
-    ["Unit", n.unit && n.kind !== "term" ? esc(n.unit) : null],
-    ["Inventoried per", n.production_amount ? `<span class="mono">${esc(fmt(n.production_amount))}</span> ${esc(n.unit || "")} of output — every input below is shown per 1 ${esc(n.unit || "unit")}` : null],
-    ["Compartment", n.compartment ? esc(n.compartment) : null],
-    ["Search query", n.query ? `<span class="mono">${esc(n.query)}</span>` : null],
-  ]);
-  if (ident) h += `<section><h3>Identity</h3>${ident}</section>`;
-
-  const amounts = kv([
-    ["Amount", ex.amount !== undefined ? `<span class="mono">${esc(fmt(ex.amount))}</span> ${esc(ex.unit || "")} per unit of parent` : null],
-    ["As printed", ex.printed_amount !== undefined && ex.printed_amount !== null ? `<span class="mono">${esc(fmt(ex.printed_amount))}</span> ${esc(ex.unit || "")}` + (n.parent && n.parent.production_amount ? ` per ${esc(fmt(n.parent.production_amount))} ${esc(n.parent.unit || "")} batch, as the source tabulates it` : "") + (n.parent && n.parent.scale ? ` (scaled ×${esc(fmt(n.parent.scale))} at write)` : "") : null],
-    ["Contribution", ex.contribution !== undefined && ex.contribution !== null ? `<span class="mono">${esc(fmt(ex.contribution))}</span> kg CO₂e per unit of parent` + (s !== null ? ` · <strong>${esc(pct(s))}</strong> of it` : "") : null],
-    ["Carbon per unit", n.score_per_unit !== undefined && n.score_per_unit !== null ? `<span class="mono">${esc(fmt(n.score_per_unit))}</span> kg CO₂e per ${esc(n.unit || "unit")}` : null],
-    ["Characterisation", n.cf !== undefined ? `<span class="mono">${esc(fmt(n.cf))}</span> kg CO₂e per kg` : null],
-    ["Scale", n.scale ? `<span class="mono">×${esc(fmt(n.scale))}</span> ${esc(n.scale_note || "")}` : null],
-  ]);
-  if (amounts) h += `<section><h3>Amount and carbon</h3>${amounts}</section>`;
-
+  if (n.kind === "term") {
+    h += `<section><h3>In the LP</h3><pre class="code">${esc(n.expr)}</pre>` +
+      kv([["Objective part", esc((n.side || "").replace("gwp_", ""))], ["LP key", mono(n.key)],
+          ["Decision variables", (n.variables || []).length ? mono(n.variables.join(", ")) : null],
+          ["Series", (n.series || []).length ? mono(n.series.join(", ")) + (n.series.includes("ci") ? " — the grid's half-hourly carbon, shown below by its mean" : "") : null]]) +
+      `<div class="prose">Read from <span class="mono">dc_model.objective_terms</span>${n.side === "gwp_facility" ? " / <span class=\"mono\">facility_terms</span>" : ""}, the function the LP is built with.</div></section>`;
+  }
+  if (n.kind === "step" || n.kind === "coefficient" || n.kind === "constant") {
+    h += `<section><h3>Value</h3>${kv([["Value", mono(fmt(n.value)) + " " + esc(n.unit || "")],
+      ["Rescored", n.rescored !== undefined ? mono(fmt(n.rescored)) + " from its Brightway activity" + (Math.abs(n.rescored - n.value) <= 1e-3 * Math.abs(n.rescored) ? ' <span class="ok">· matches</span>' : "") : null],
+      ["Trace key", n.key ? mono(n.key) : null]])}</section>`;
+    if (n.where) h += `<section><h3>Computed in</h3><div class="where">${esc(n.where)}${n.function ? " · " + esc(n.function) + "()" : ""}</div>${n.code ? `<pre class="code">${esc(n.code)}</pre>` : ""}</section>`;
+    const ins = Object.entries(n.inputs || {});
+    if (ins.length) h += `<section><h3>Computed with</h3>${kv(ins.map(([k, v]) => [k, typeof v === "number" ? mono(fmt(v)) : esc(v)]))}</section>`;
+  }
+  if (["foreground", "ecoinvent", "biosphere", "database"].includes(n.kind)) {
+    h += `<section><h3>Identity</h3>${kv([["Module", n.module ? mono(n.module) : null], ["Database", n.database ? mono(n.database) : null],
+      ["Code", n.code ? mono(n.code) : null], ["Location", n.location ? esc(n.location) : null], ["Product", n.product ? esc(n.product) : null],
+      ["Unit", n.unit ? esc(n.unit) : null], ["Compartment", n.compartment ? esc(n.compartment) : null],
+      ["Inventoried per", n.production_amount ? mono(fmt(n.production_amount)) + " " + esc(n.unit || "") + "; inputs below are per 1" : null]])}</section>`;
+    const c = kv([["Carbon per unit", n.score !== undefined && n.score !== null ? mono(fmt(n.score)) + " kg CO₂e per " + esc(n.unit || "unit") + (n.kind === "ecoinvent" ? ", its whole supply chain" : "") : null],
+      ["Characterisation", n.cf !== undefined ? mono(fmt(n.cf)) + " kg CO₂e per " + esc(n.unit || "kg") : null],
+      ["Not drawn", n.uncharacterised_flows ? n.uncharacterised_flows + " elementary flows with no GWP factor" : null]]);
+    if (c) h += `<section><h3>Carbon</h3>${c}</section>`;
+  }
   const prov = [];
   if (n.source) prov.push(`<div class="prose md">${md(n.source)}</div>`);
-  if (ex.note) prov.push(`<div class="prose"><strong>Exchange note.</strong> ${inline(ex.note)}</div>`);
-  if (n.why) prov.push(`<div class="prose"><strong>Why this dataset.</strong> ${inline(n.why)}</div>`);
   if (n.comment) prov.push(`<div class="prose"><strong>Activity comment.</strong> ${inline(n.comment)}</div>`);
-  if (n.note && n.kind !== "gap") prov.push(`<div class="prose md">${md(n.note)}</div>`);
+  if (n.note) prov.push(`<div class="prose md">${md(n.note)}</div>`);
   if (prov.length) h += `<section><h3>Provenance</h3>${prov.join("")}</section>`;
+  if (n.gaps && n.gaps.length) h += `<section><h3>Data gaps touching this (${gapHeading(n)})</h3>${n.gaps.map(id => GAPS[id]).filter(Boolean).sort((a, b) => GAP_IS_OPEN(b.status) - GAP_IS_OPEN(a.status)).map(gapCard).join("")}</section>`;
 
-  if (n.kind === "gap") {
-    const g = GAPS[n.gap_id]; if (g) h += `<section><h3>Register entry</h3>${gapCard(g)}</section>`;
+  if (n.kids.length) {
+    const base = n.score;
+    const title = n.kind === "foreground" || n.kind === "ecoinvent" ? "Inputs, by contribution" : (n.kind === "step" || n.kind === "coefficient" ? "Made from" : "Contains");
+    h += `<section><h3>${title} (${n.kids.length})</h3><div class="bars">${n.kids.map(e => edgeRow(e, e.c, base)).join("")}</div></section>`;
   }
-  if (n.register) {
-    const r = n.register;
-    const rows = kv([
-      ["Technology", esc(r.technology)],
-      ["Kind", esc(r.kind) + (r.side ? ` (${esc(r.side)} side)` : "")],
-      ["Status", esc(r.status.replace("_", " "))],
-      ["Method", r.method ? esc(r.method) : null],
-      ["Central estimate", r.central !== null && r.central !== undefined ? `<span class="mono">${esc(fmt(r.central))}</span>` : null],
-      ["Upper estimate", r.upper !== null && r.upper !== undefined ? `<span class="mono">${esc(fmt(r.upper))}</span>` : null],
-      ["Share at upper", r.share_upper !== null && r.share_upper !== undefined ? `<strong>${esc(pct(r.share_upper))}</strong> of the technology's carbon` : null],
-      ["Verdict", r.verdict ? esc(r.verdict) : null],
-    ]);
-    if (rows) h += `<section><h3>Cut-off register (optimiser_lca/exclusions.py)</h3>${rows}</section>`;
+  if (n.parents.length) {
+    h += `<section><h3>Used by (${n.parents.length})</h3><div class="bars">${n.parents.map(e => edgeRow(e, e.p, e.p.score)).join("")}</div></section>`;
   }
-  if (n.kind === "fu" && n.parts) {
-    h += `<section><h3>Charged in the LP as</h3><div class="bars">${n.parts.map(([p, v, term]) => {
-      const t = all.find(x => x.kind === "term" && x.name === term);
-      return `<div class="barrow">${t ? `<button data-go="${t.id}"><span class="bn">${esc(p)}</span></button>` : `<span class="bn">${esc(p)}</span>`}<span class="bv">${esc(fmt(v))}</span></div>`;
-    }).join("")}</div></section>`;
-  }
-  if (n.gaps && n.gaps.length) {
-    h += `<section><h3>Data gaps touching this (${gapHeading(n)})</h3>${n.gaps.map(id => GAPS[id]).filter(Boolean)
-      .sort((a, b) => GAP_IS_OPEN(b.status) - GAP_IS_OPEN(a.status)).map(gapCard).join("")}</section>`;
-  }
-  if (n.todo && n.todo.length) {
-    h += `<section><h3>On the worklist (${n.todo.length})</h3>${n.todo.map(t => `<div class="gapcard" style="border-left-color:var(--gap-known)"><div class="gt">${esc(t.name)}</div><div class="gb">${inline(t.body)}</div><div class="chips">${chip(t.section || "", "var(--muted)")}</div></div>`).join("")}</section>`;
-  }
-
-  // Children, by contribution
-  const kids = (n.children || []).filter(c => c.exchange && c.exchange.contribution !== undefined && c.exchange.contribution !== null);
-  if (kids.length && n.score_per_unit) {
-    const max = Math.max(...kids.map(c => Math.abs(c.exchange.contribution)));
-    h += `<section><h3>Inputs by contribution (${kids.length})</h3><div class="bars">${kids.slice(0, 40).map(c => {
-      const v = c.exchange.contribution; const w = max ? Math.abs(v) / max * 100 : 0;
-      return `<div class="barrow"><button data-go="${c.id}"><span class="bn">${esc(c.name)}</span><span class="bt"><i class="${v < 0 ? "neg" : ""}" style="width:${w}%"></i></span></button><span class="bv">${esc(pct(v / n.score_per_unit))}</span></div>`;
-    }).join("")}</div></section>`;
-  } else if ((n.children || []).length) {
-    h += `<section><h3>Contains (${n.children.length})</h3><div class="bars">${n.children.slice(0, 60).map(c => `<div class="barrow"><button data-go="${c.id}"><span class="bn">${esc(c.name)}</span></button><span class="bv">${esc(valueLine(c).split(" ")[0] || "")}</span></div>`).join("")}</div></section>`;
-  }
-
-  if (n.tests && n.tests.length) h += `<section><details><summary>Tests that pin this (${n.tests.length})</summary><div><ul class="md">${n.tests.map(t => `<li><code>${esc(t)}</code></li>`).join("")}</ul></div></details></section>`;
-  const srcs = Object.entries(n.sources_md || {});
-  if (srcs.length) h += `<section><h3>SOURCES.md / ASSUMPTIONS.md</h3>${srcs.map(([k, v]) => `<details><summary>${esc(k)}</summary><div class="md">${md(v)}</div></details>`).join("")}</section>`;
-  if (n.module_doc) h += `<section><details><summary>Module notes — ${esc((n.module || "").split("/").pop())}</summary><div><pre class="doc">${esc(n.module_doc)}</pre></div></details></section>`;
-  el.innerHTML = h;
-  el.scrollTop = 0;
+  finishPanel(el, h);
+}
+function studyPanel(el) {
+  const m = DATA.meta, me = DATA.method || {};
+  const probs = DATA.problems || [];
+  let h = `<button class="btn close" id="closep">Close</button><h2>${esc(ROOT.name)}</h2>
+    <div class="prose">${inline(ROOT.note || "")}</div>
+    <section><h3>How this map is made</h3><div class="prose md">${md(
+      "Nothing here is written by hand. `scripts/build_lca_map.py` reads three things from the model:\n\n" +
+      "- **The LP's terms**, by evaluating `dc_model.objective_terms` and `facility_terms` on symbols, grouped by `dc_model.CHAINS`.\n" +
+      "- **How each coefficient is made**: `build_tech` runs inside `optimisation.trace.recording()`, and every `T.step(...)` the coefficient modules call is a box, with the file, line and expression that computed it.\n" +
+      "- **The inventories**: every activity and exchange of every foreground database, read from Brightway, and every ecoinvent dataset they touch opened one level, all scored in one solve.\n\n" +
+      `Variants recorded beside the default: ${(m.variants || []).join(", ")}. A step whose number differs in a variant has its own box, labelled with it.`)}</div></section>
+    <section><h3>Checks at build time</h3>${probs.length ? `<div class="problems"><strong>${probs.length} disagreement${probs.length > 1 ? "s" : ""} with the model:</strong><ul>${probs.map(p => `<li>${esc(p)}</li>`).join("")}</ul></div>`
+      : `<div class="ok">Every LP coefficient equals the trace that makes it, every link resolves, every pinned figure matches its activity's score, and every foreground exchange is drawn.</div>`}</section>
+    <section><h3>Method</h3>${kv([["LCIA", esc(me.lcia || "")], ["Background", esc(me.background || "")], ["Grid", esc(me.grid_method || "")], ["Cut-off rule", esc(me.cutoff_rule || "")]])}</section>
+    <section><h3>This build</h3>${kv([["Generated", esc(m.generated)], ["Boxes", mono(m.nodes.toLocaleString("en-GB"))], ["Links", mono(m.edges.toLocaleString("en-GB"))],
+      ["Trace steps", mono(m.steps)], ["Foreground activities", mono(m.foreground_activities)], ["ecoinvent opened", mono(m.ecoinvent_drilled)],
+      ["Run shown", esc(`${m.run.site}, ${m.run.start} to ${m.run.end}, ${m.run.size_mw_it} MW IT, ${m.run.h2_colour} hydrogen bought`)]])}</section>
+    <section><h3>Assumptions register (ASSUMPTIONS.md)</h3>${Object.entries(me.assumptions || {}).map(([k, v]) => `<details><summary>${esc(k)}</summary><div class="md">${md(v)}</div></details>`).join("")}</section>`;
+  finishPanel(el, h);
+}
+function finishPanel(el, h) {
+  el.innerHTML = h; el.scrollTop = 0;
   el.querySelectorAll("[data-go]").forEach(b => b.addEventListener("click", () => { const t = byId.get(b.dataset.go); if (t) reveal(t); }));
   const c = document.getElementById("closep"); if (c) c.addEventListener("click", () => { el.hidden = true; });
   el.hidden = false;
 }
 
 // ------------------------------------------------------------- search
-const all = [...byId.values()];
 const q = document.getElementById("q"), res = document.getElementById("results");
-function pathOf(n) { const c = []; let p = n.parent; while (p && p.parent) { c.unshift(p.name); p = p.parent; } return c.slice(-3).join(" › "); }
 q.addEventListener("input", () => {
   const s = q.value.trim().toLowerCase();
   if (s.length < 2) { res.hidden = true; return; }
   const hits = [];
   for (const n of all) {
-    const hay = (n.name + " " + (n.code || "") + " " + (n.location || "") + " " + (n.product || "")).toLowerCase();
+    const hay = [n.name, n.code, n.key, n.location, n.product, n.where].filter(Boolean).join(" ").toLowerCase();
     if (hay.includes(s)) { hits.push(n); if (hits.length >= 40) break; }
   }
-  res.innerHTML = hits.length ? hits.map(n => `<button data-go="${n.id}"><div class="r-name">${esc(n.name)}</div><div class="r-path">${esc(KIND_LABEL[n.kind] || n.kind)} · ${esc(pathOf(n))}</div></button>`).join("") : `<div class="empty" style="padding:10px 12px">Nothing matches “${esc(q.value)}”.</div>`;
+  res.innerHTML = hits.length ? hits.map(n => `<button data-go="${esc(n.id)}"><div class="r-name">${esc(n.name)}</div><div class="r-path">${esc(KIND_LABEL[n.kind] || n.kind)}${n.where ? " · " + esc(n.where) : n.database ? " · " + esc(n.database) : ""}</div></button>`).join("") : `<div class="empty" style="padding:10px 12px">Nothing matches “${esc(q.value)}”.</div>`;
   res.hidden = false;
   res.querySelectorAll("[data-go]").forEach(b => b.addEventListener("click", () => { res.hidden = true; reveal(byId.get(b.dataset.go)); }));
 });
@@ -766,13 +736,14 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape") res.hidden
 // ------------------------------------------------------------- controls
 document.getElementById("fit").addEventListener("click", () => { if (currentTab === "tree") fit(); });
 document.getElementById("expand").addEventListener("click", () => {
-  const n = selected || DATA.tree;
-  const frontier = []; (function walk(x) { if (open.has(x.id)) kidsOf(x).forEach(walk); else frontier.push(x); })(n);
-  frontier.forEach(x => { if (countKids(x)) open.add(x.id); });
-  render(n);
+  const { nodes } = visible();
+  const frontier = [selected];
+  for (const e of kidsOf(selected)) if (nodes.has(e.c.id)) frontier.push(e.c);
+  frontier.forEach(x => { if (kidsOf(x).length) open.add(x.id); });
+  render(selected);
 });
 document.getElementById("collapse").addEventListener("click", () => {
-  open.clear(); shownAll.clear(); initialOpen(); select(DATA.tree); render(); setTimeout(fit, T + 20);
+  open.clear(); shownAll.clear(); initialOpen(); select(ROOT); render(); setTimeout(fit, T + 20);
 });
 function toggleBackground() {
   showBackground = !showBackground;
@@ -781,18 +752,22 @@ function toggleBackground() {
 }
 document.getElementById("bg").addEventListener("click", toggleBackground);
 
-// ------------------------------------------------------------- header stats
 (function stats() {
-  const counts = {}; let open_ = 0, known = 0;
-  for (const n of all) counts[n.kind] = (counts[n.kind] || 0) + 1;
-  for (const g of Object.values(GAPS)) { if (g.status === "open-no-source") open_++; if (g.status === "open-source-known") known++; }
+  const m = DATA.meta; let open_ = 0;
+  for (const g of Object.values(GAPS)) if (GAP_IS_OPEN(g.status)) open_++;
+  const probs = (DATA.problems || []).length;
   document.getElementById("stats").innerHTML =
-    `<span><b>${total.toLocaleString("en-GB")}</b> nodes</span>` +
-    `<span><b>${(counts.foreground || 0)}</b> foreground</span>` +
-    `<span><b>${DATA.meta.activities_scored}</b> datasets scored</span>` +
-    `<span class="open"><b>${open_ + known}</b> open gaps</span>`;
-  document.getElementById("sub").textContent = DATA.tree.note;
+    `<span><b>${m.nodes.toLocaleString("en-GB")}</b> boxes</span>` +
+    `<span><b>${m.steps}</b> trace steps</span>` +
+    `<span><b>${m.foreground_activities}</b> foreground</span>` +
+    `<span class="open"><b>${open_}</b> open gaps</span>` +
+    (probs ? `<span class="open"><b>${probs}</b> disagreements</span>` : `<span>checks <b>pass</b></span>`);
+  document.getElementById("sub").textContent = "Generated from the model's code and Brightway · " + m.generated;
 })();
+function findTerm(name) {
+  return all.find(x => x.kind === "term" && x.name === name)
+    || all.find(x => x.kind === "chain" && name.toLowerCase().startsWith(x.name.toLowerCase().split(" ")[0]));
+}
 
 // ============================================================= the energy-flow tab
 const EN = DATA.energy;
@@ -954,11 +929,11 @@ function flowSelect(n) {
 
 function termButton(name) {
   if (!name) return "";
-  return `<button class="btn" data-term="${esc(name)}">Open its carbon in the LCA tree</button>`;
+  return `<button class="btn" data-term="${esc(name)}">Open its carbon in the LCA graph</button>`;
 }
 function wirePanel(el) {
   el.querySelectorAll("[data-term]").forEach(b => b.addEventListener("click", () => {
-    const t = all.find(x => (x.kind === "term" || x.kind === "group") && x.name === b.dataset.term);
+    const t = findTerm(b.dataset.term);
     showTab("tree"); if (t) reveal(t);
   }));
   el.querySelectorAll("[data-node]").forEach(b => b.addEventListener("click", () => {
@@ -1048,16 +1023,12 @@ document.getElementById("tab-flow").addEventListener("click", () => showTab("flo
 document.getElementById("fit").addEventListener("click", () => { if (currentTab === "flow") fitFlow(); });
 if (location.hash === "#energy") setTimeout(() => showTab("flow"), 0);
 
-function initialOpen() {
-  open.add(DATA.tree.id);
-  const obj = DATA.tree.children.find(c => c.name.startsWith("The LCA"));
-  if (obj) open.add(obj.id);
-}
+
+function initialOpen() { open.add(ROOT.id); open.add("lp"); }
 initialOpen();
 if (window.matchMedia("(max-width: 760px)").matches) document.getElementById("legend").open = false;
 render();
-panel(DATA.tree);
+panel(ROOT);
 fit(false);
-window.addEventListener("resize", () => {});
 })();
 </script>

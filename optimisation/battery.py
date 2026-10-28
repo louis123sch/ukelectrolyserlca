@@ -44,12 +44,16 @@ source and provenance grade (transcribed / derived / assumed).
 
 Run:  python optimisation/battery.py
 """
+import sys
 from pathlib import Path
 
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
 OUT_DIR = ROOT / "optimisation_outputs"
+
+from optimisation import trace as T  # noqa: E402
 
 CASES = ("low", "central", "high")
 
@@ -253,15 +257,47 @@ def embodied_components(basis: str | None = None, usable_fraction: float | None 
     if cell not in CELL_KGCO2E_PER_KWH:
         raise ValueError(f"cell_basis must be one of {list(CELL_KGCO2E_PER_KWH)}, got {cell!r}")
     if basis == "jasper_voss_2026":
-        nameplate = (BESS_KGCO2E_PER_KWH_NAMEPLATE - CELL_KGCO2E_PER_KWH[CELL_BASIS]
-                     + CELL_KGCO2E_PER_KWH[cell])
-        energy = nameplate / usable
+        from optimiser_lca.registry import BESS_DB, BESS_DC_BLOCK_KWH
+        block = T.activity(BESS_DB, BESS_DC_BLOCK_KWH)
+        T.step("battery.dc_block_per_kWh", BESS_KGCO2E_PER_KWH_NAMEPLATE, "kg CO2e per kWh of cells",
+               "The DC block built: Jasper 2026's liquid-cooled LFP container around Voß 2025's "
+               "cell, per nameplate kWh", uses=[block], scores=block, grade="derived",
+               source=LCA_CAVEATS["jasper_voss_2026"],
+               note="Pinned so this module runs without Brightway; check_against_ecoinvent() "
+                    "rescores it and fails if it has moved.")
+        nameplate = T.step("battery.nameplate_per_kWh",
+                           (BESS_KGCO2E_PER_KWH_NAMEPLATE - CELL_KGCO2E_PER_KWH[CELL_BASIS]
+                            + CELL_KGCO2E_PER_KWH[cell]),
+                           "kg CO2e per kWh of cells",
+                           f"The block with its cell on the {cell!r} basis",
+                           uses=["battery.dc_block_per_kWh"],
+                           inputs={"cell_basis": cell,
+                                   "pinned_cell": CELL_KGCO2E_PER_KWH[CELL_BASIS],
+                                   "this_cell": CELL_KGCO2E_PER_KWH[cell]},
+                           grade="derived")
+        energy = T.step("battery.energy_per_usable_kWh", nameplate / usable,
+                        "kg CO2e per usable kWh",
+                        "Grossed up to the cells one usable kWh needs",
+                        uses=["battery.nameplate_per_kWh"], inputs={"usable_fraction": usable},
+                        grade="assumed",
+                        note="cap_batt_e is the energy between the state-of-charge limits; "
+                             "0.90 is commercial operating practice (ASSUMED).")
     elif basis == "ecoinvent_ev_pack":
         kg_per_kwh = 1.0 / PACK_KWH_PER_KG
-        energy = kg_per_kwh * PACK_KGCO2E_PER_KG * (1.0 + CONTAINER_UPLIFT_FRACTION)
+        energy = T.step("battery.energy_per_usable_kWh",
+                        kg_per_kwh * PACK_KGCO2E_PER_KG * (1.0 + CONTAINER_UPLIFT_FRACTION),
+                        "kg CO2e per kWh", "ecoinvent's EV traction pack, per kWh (legacy basis)",
+                        uses=[T.ecoinvent(*BATTERY_ACTIVITY)], grade="transcribed",
+                        inputs={"pack_kWh_per_kg": PACK_KWH_PER_KG})
     else:
         raise ValueError(f"basis must be one of {EMBODIED_BASES}, got {basis!r}")
-    power = PCS_KGCO2E_PER_UNIT / PCS_RATED_KW
+    pcs = T.ecoinvent(*PCS_ACTIVITY)
+    T.step("battery.pcs_per_unit", PCS_KGCO2E_PER_UNIT, "kg CO2e per 500 kW inverter",
+           "Power conversion: ecoinvent's 500 kW inverter", uses=[pcs], scores=pcs,
+           grade="transcribed")
+    power = T.step("battery.pcs_per_kW", PCS_KGCO2E_PER_UNIT / PCS_RATED_KW, "kg CO2e per kW",
+                   "The inverter per kW of its rating", uses=["battery.pcs_per_unit"],
+                   inputs={"rated_kW": PCS_RATED_KW}, grade="derived")
     return {"energy_kgco2e_per_kWh": energy, "power_kgco2e_per_kW": power}
 
 

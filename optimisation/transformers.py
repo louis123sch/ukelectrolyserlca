@@ -181,6 +181,7 @@ CACHE_PATH = OUT_DIR / "transformer_decomposition_cache.json"
 # scores and amortises it.
 from optimiser_lca.registry import (TX_WIND as WIND_CODE, TX_SOLAR as SOLAR_CODE,  # noqa: E402
                                     TX_LV_CONTAINER as CONTAINER_CODE, TRANSFORMER_DB)
+from optimisation import trace as T  # noqa: E402
 
 # --- solar: the legacy plant-rated unit, kept only to reproduce old runs ------
 # What this was, before IEA PVPS T12-33:2026 supplied a real solar bill: one
@@ -443,8 +444,11 @@ def kgco2e_per_mw_year(technology: str, refresh: bool = False,
         raise ValueError(
             f"technology must be one of {list(TECHNOLOGIES)}, "
             f"got {technology!r}") from None
+    uses = _trace_units(technology, d) if T.active() else []
     if life_years is None:
-        return per_year
+        return T.step(f"tx.{technology}.per_MW_year", per_year, "kg CO2e per MW per year",
+                      "The step-up per MW of capacity, over the transformer's own life",
+                      uses=uses, inputs={"asset_life_years": d["asset_life_years"]})
     if not life_years > 0:
         raise ValueError(f"life_years must be positive, got {life_years!r}")
     # Only the unit (and its civils) is re-amortised; solar's replacements are
@@ -453,7 +457,48 @@ def kgco2e_per_mw_year(technology: str, refresh: bool = False,
     if technology == "solar_pv" and SOLAR_BASIS == "iea_pvps_2026":
         s = d["solar"]
         repl = s["replacement_kgco2e_per_MWp_30y"] / s["replacement_reference_years"]
-    return (per_year - repl) * float(d["asset_life_years"]) / float(life_years) + repl
+    return T.step(f"tx.{technology}.per_MW_year",
+                  (per_year - repl) * float(d["asset_life_years"]) / float(life_years) + repl,
+                  "kg CO2e per MW per year",
+                  f"The step-up per MW of capacity, re-amortised over the {life_years:g}-year life "
+                  "of the asset it serves", uses=uses,
+                  inputs={"life_years": life_years, "cached_life_years": d["asset_life_years"],
+                          "replacements_per_year": repl},
+                  note="A step-up has no cost line of its own (DESNZ/Arup capex reaches the point "
+                       "of connection), so it is paid for inside its generator's annuity and is "
+                       "amortised over the same life in carbon.")
+
+
+def _trace_units(technology: str, d: dict) -> list:
+    """Record the scored unit(s) behind one technology's step-up; their keys."""
+    if technology in ("onshore_wind", "offshore_wind"):
+        ref, w = T.activity(TRANSFORMER_DB, WIND_CODE), d["wind"]
+        T.step("tx.wind.unit_per_MW", w["kgco2e_per_MW"], "kg CO2e per MW",
+               "One turbine's step-up per MW of turbine, with its pad (Leng et al. 2026)",
+               uses=[ref], scores=ref, grade="derived", source=w["source"],
+               inputs={"n_turbines": w["n_turbines"], "unit_rating_MVA": w["unit_rating_MVA"]})
+        return ["tx.wind.unit_per_MW"]
+    if technology == "solar_pv" and SOLAR_BASIS == "iea_pvps_2026":
+        from optimiser_lca import registry as _R
+        s = d["solar"]
+        ref, repl = T.activity(TRANSFORMER_DB, SOLAR_CODE), T.activity(TRANSFORMER_DB, _R.TX_SOLAR_REPL30)
+        T.step("tx.solar.unit_per_MWp", s["kgco2e_per_MWp"], "kg CO2e per MWp",
+               "Inverter-station step-ups per MWp, with their building (IEA PVPS T12-33:2026)",
+               uses=[ref], scores=ref, grade="derived", source=s["source"],
+               inputs={"units_per_MWp": s["units_per_MWp"], "unit_rating_MVA": s["unit_rating_MVA"]})
+        T.step("tx.solar.replacements_30y", s["replacement_kgco2e_per_MWp_30y"],
+               "kg CO2e per MWp over 30 years", "Step-up replacements over 30 years (Smith A15)",
+               uses=[repl], scores=repl, grade="derived",
+               inputs={"replacement_fraction": s["replacement_fraction"]})
+        return ["tx.solar.unit_per_MWp", "tx.solar.replacements_30y"]
+    if technology == "solar_pv":
+        return [T.ecoinvent(LEGACY_ACTIVITY, "GLO")]
+    ref, c = T.activity(TRANSFORMER_DB, CONTAINER_CODE), d["container"]
+    T.step("tx.container.unit_per_MW", c["kgco2e_per_MW"], "kg CO2e per MW of inverter rating",
+           "The containerised LV to 20 kV step-up, per MW (Jasper 2026's unit)",
+           uses=[ref], scores=ref, grade="derived", source=c["source"],
+           inputs={"container_kW": c["container_kW"], "kg_per_container": c["kg_per_container"]})
+    return ["tx.container.unit_per_MW"]
 
 
 def check(d: dict | None = None) -> str:

@@ -94,6 +94,8 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 OUT_DIR = ROOT / "optimisation_outputs"
 
+from optimisation import trace as T  # noqa: E402
+
 # (electricity activity name, location, rated kW of the capital unit, cost key)
 TECHNOLOGIES = {
     "onshore_wind": (
@@ -151,18 +153,33 @@ WIND_LIFE_EXTENSION = "servicing_overhaul"
 WIND_LIFE_EXTENSION_IS_ASSUMED = True
 
 
-def wind_parts_fraction(life_years: float, basis: str | None = None) -> float:
+def wind_parts_fraction(life_years: float, basis: str | None = None,
+                        tech: str = "onshore_wind") -> float:
     """Extra wind capital, as a fraction of the turbine's own, to last ``life_years``."""
     basis = basis or WIND_LIFE_EXTENSION
     if basis not in WIND_LIFE_EXTENSION_BASES:
         raise ValueError(f"wind life-extension basis must be one of "
                          f"{list(WIND_LIFE_EXTENSION_BASES)}, got {basis!r}")
     if basis == "none":
-        return 0.0
-    frac = WIND_SERVICING_FRACTION_PER_20Y * float(life_years) / 20.0
-    if basis == "servicing_overhaul" and life_years > WIND_DESIGN_LIFE_YEARS:
-        frac += WIND_OVERHAUL_FRACTION
-    return frac
+        return T.step(f"{tech}.parts_fraction", 0.0, "fraction of the turbine's capital",
+                      WIND_LIFE_EXTENSION_BASES[basis], grade="derived")
+    overhaul = (WIND_OVERHAUL_FRACTION
+                if basis == "servicing_overhaul" and life_years > WIND_DESIGN_LIFE_YEARS else 0.0)
+    return T.step(f"{tech}.parts_fraction",
+                  WIND_SERVICING_FRACTION_PER_20Y * float(life_years) / 20.0 + overhaul,
+                  "fraction of the turbine's capital",
+                  f"Parts a 20-year turbine needs to last {life_years:g} years "
+                  f"({WIND_LIFE_EXTENSION_BASES[basis]})",
+                  inputs={"life_years": life_years, "basis": basis,
+                          "servicing_per_20y": WIND_SERVICING_FRACTION_PER_20Y,
+                          "overhaul": overhaul, "design_life_years": WIND_DESIGN_LIFE_YEARS},
+                  uses=[f"{tech}.lifetime_years"],
+                  grade="assumed" if WIND_LIFE_EXTENSION_IS_ASSUMED else "derived",
+                  source="Vestas V136/V162 product LCAs (Fig 7); Siemens Gamesa SG 6.2-170 EPD",
+                  note="Servicing at 4 % of capital per 20 operating years, pro rata; plus one "
+                       "gearbox/main-shaft and blade overhaul (20.5 %) once the life passes the "
+                       "25-year design life. No LCA itemises a 20-to-35-year extension: this is "
+                       "the study's own construction from those shares.")
 
 # IEA PVPS Task 12, 2023 data update (May 2024). The reference system its
 # per-kWh results are quoted against. TRANSCRIBED.
@@ -294,15 +311,39 @@ def solar_capital_kgco2e_per_mw(basis: str, ecoinvent_value: float,
         # rather than cosmetic, but note it cancels in the annual charge:
         # annual = capital_total/life = cap/life + om30/30, so the O&M term is
         # life-independent once annualised and only moves the per-kWh columns.
+        from optimiser_lca.registry import SOLAR_DB
         d = upv_decompose()
         life = float(lifetime_years or d["om_reference_years"])
-        return (d["capital_kgco2e_per_MWp"]
-                + d["om30_kgco2e_per_MWp"] * life / d["om_reference_years"])
+        cap_ref, om_ref = T.activity(SOLAR_DB, fg["capital_code"]), T.activity(SOLAR_DB, fg["om_code"])
+        T.step("solar_pv.smith_capital", d["capital_kgco2e_per_MWp"], "kg CO2e per MWp",
+               "The plant built: Smith et al. 2024's utility-scale inventory, one MWp",
+               uses=[cap_ref], scores=cap_ref, grade="derived", source=spec["label"],
+               note="Read from upv_decompose()'s cache of the foreground's score.")
+        T.step("solar_pv.smith_om30", d["om30_kgco2e_per_MWp"], "kg CO2e per MWp over 30 years",
+               "Thirty years of operation and maintenance, one MWp",
+               uses=[om_ref], scores=om_ref, grade="derived", source=spec["label"])
+        return T.step("solar_pv.basis_capital",
+                      (d["capital_kgco2e_per_MWp"]
+                       + d["om30_kgco2e_per_MWp"] * life / d["om_reference_years"]),
+                      "kg CO2e per MWp over the study's life",
+                      f"Capital plus O&M prorated from 30 to {life:g} years",
+                      uses=["solar_pv.smith_capital", "solar_pv.smith_om30", "solar_pv.lifetime_years"],
+                      inputs={"life_years": life, "om_reference_years": d["om_reference_years"]},
+                      grade="derived", source=spec["label"],
+                      note="Once annualised the O&M part no longer depends on the life "
+                           "(capital/life + om30/30), so the prorating only moves the per-kWh figures.")
     if spec["gco2e_per_kwh"] is None:
-        return ecoinvent_value
-    return (spec["gco2e_per_kwh"]
-            * IEA_PVPS_REFERENCE["yield_kwh_per_kwp_year"]
-            * IEA_PVPS_REFERENCE["lifetime_years"])
+        return T.step("solar_pv.basis_capital", ecoinvent_value, "kg CO2e per MWp",
+                      "ecoinvent's own PV plant capital, per MWp", uses=["solar_pv.ecoinvent_capital"],
+                      grade="transcribed", source=spec["label"])
+    return T.step("solar_pv.basis_capital",
+                  (spec["gco2e_per_kwh"]
+                   * IEA_PVPS_REFERENCE["yield_kwh_per_kwp_year"]
+                   * IEA_PVPS_REFERENCE["lifetime_years"]),
+                  "kg CO2e per MWp", "IEA PVPS per-kWh figure turned back into capital per MWp",
+                  inputs={"g_per_kWh": spec["gco2e_per_kwh"],
+                          **{k: v for k, v in IEA_PVPS_REFERENCE.items() if not isinstance(v, str)}},
+                  grade=spec["grade"], source=spec["label"])
 
 
 def _gwp_method(bd):
@@ -378,7 +419,16 @@ def restate(row, load_factor, lifetime_years, capital_only=True):
     lifetime_kwh_per_kw = load_factor * HOURS_PER_YEAR * lifetime_years
     eco_per_mw = row.get("ecoinvent_capital_kgco2e_per_MW", row["capital_kgco2e_per_MW"])
     residual = row.get("residual_per_kWh", 0.0) if capital_only else 0.0
-    per_kwh = row["capital_kgco2e_per_MW"] / 1000.0 / lifetime_kwh_per_kw + residual
+    tech = row.get("technology", "?")
+    per_kwh = T.step(f"{tech}.restated_per_kWh",
+                     row["capital_kgco2e_per_MW"] / 1000.0 / lifetime_kwh_per_kw + residual,
+                     "kg CO2e per kWh at this study's yield",
+                     "Capital spread over the study's lifetime output"
+                     + (", plus the per-kWh residual" if residual else ""),
+                     uses=[f"{tech}.capital", f"{tech}.load_factor", f"{tech}.lifetime_years"]
+                          + ([f"{tech}.residual_per_kWh"] if residual else []),
+                     inputs={"lifetime_kWh_per_kW": lifetime_kwh_per_kw, "hours_per_year": HOURS_PER_YEAR},
+                     grade="derived")
     return {
         "study_load_factor": load_factor,
         "study_lifetime_years": lifetime_years,
@@ -478,6 +528,36 @@ def apply_case(rows, case="central", solar_basis=None, wind_life_extension=None)
         row.setdefault("ecoinvent_capital_kgco2e_per_MW", row["capital_kgco2e_per_MW"])
         row.setdefault("residual_per_kWh", 0.0)
         life = tc._value(params, "operating_lifetime", technical_case)
+        tech = row["technology"]
+        T.step(f"{tech}.lifetime_years", life, "years",
+               f"Operating life, DESNZ/Arup 2024 ({technical_case} case)",
+               grade="transcribed", source=f"{_src}; {_note}",
+               inputs={"cost_case": case, "technical_case": technical_case})
+        T.step(f"{tech}.load_factor", tc._value(params, "net_load_factor", technical_case),
+               "net load factor", f"Net load factor, DESNZ/Arup 2024 ({technical_case} case)",
+               grade="transcribed", source=f"{_src}; {_note}",
+               note="The low-cost case pairs with the high load factor and long life "
+                    "(tech_costs.INVERSE_CASE), as DESNZ/Arup pair them.")
+        if tech != "solar_pv" or SOLAR_EMBODIED_BASES[basis] is SOLAR_EMBODIED_BASES["ecoinvent"]:
+            name, loc, rated_kw = TECHNOLOGIES[tech]
+            ei_ref = T.ecoinvent(name, loc)
+            T.step(f"{tech}.ecoinvent_capital", row["ecoinvent_capital_kgco2e_per_MW"],
+                   "kg CO2e per MW",
+                   f"ecoinvent's capital goods per MW: its unit-counted inputs per kWh, scaled "
+                   f"to one whole {rated_kw:g} kW unit and divided by its rating",
+                   uses=[ei_ref], grade="derived", source="ecoinvent 3.9.1 apos, decompose()",
+                   inputs={"rated_kW": rated_kw,
+                           "ecoinvent_lifetime_kWh_per_kW": row.get("ecoinvent_lifetime_kWh_per_kW")},
+                   note="ecoinvent models electricity per kWh with the plant inside it as a "
+                        "fraction of one unit. The inputs counted in units (turbine, network "
+                        "connection, plant) are the capital goods; check_reconstruction "
+                        "re-amortises them at ecoinvent's own life and yield and rebuilds the "
+                        "dataset exactly.")
+            if tech != "solar_pv":
+                T.step(f"{tech}.residual_per_kWh", row["residual_per_kWh"], "kg CO2e per kWh",
+                       "ecoinvent's non-capital inputs per kWh (lubricating oil, maintenance, "
+                       "transport): the dataset's score less its capital goods",
+                       uses=[ei_ref], grade="derived", source="ecoinvent 3.9.1 apos, decompose()")
         if row["technology"] == "solar_pv":
             spec = SOLAR_EMBODIED_BASES[basis]
             row["capital_kgco2e_per_MW"] = solar_capital_kgco2e_per_mw(
@@ -497,11 +577,19 @@ def apply_case(rows, case="central", solar_basis=None, wind_life_extension=None)
             row["embodied_basis_label"] = "ecoinvent 3.9.1 apos"
             row["embodied_basis_grade"] = "transcribed"
             capital_only = True
-            parts = wind_parts_fraction(life, wind_life_extension)
+            parts = wind_parts_fraction(life, wind_life_extension, tech)
             row["life_extension_basis"] = wind_life_extension or WIND_LIFE_EXTENSION
             row["life_extension_fraction"] = parts
-            row["capital_kgco2e_per_MW"] = (row["ecoinvent_capital_kgco2e_per_MW"]
-                                            * (1.0 + parts))
+            row["capital_kgco2e_per_MW"] = T.step(
+                f"{tech}.capital",
+                (row["ecoinvent_capital_kgco2e_per_MW"]
+                 * (1.0 + parts)),
+                "kg CO2e per MW over its life",
+                "Capital per MW in force, grossed up for the parts its life needs",
+                uses=[f"{tech}.ecoinvent_capital", f"{tech}.parts_fraction"], grade="derived")
+        if tech == "solar_pv":
+            T.step(f"{tech}.capital", row["capital_kgco2e_per_MW"], "kg CO2e per MW over its life",
+                   "Capital per MWp in force", uses=["solar_pv.basis_capital"], grade="derived")
         row["capital_only"] = capital_only
         row.update(restate(row,
                            tc._value(params, "net_load_factor", technical_case),
@@ -512,9 +600,15 @@ def apply_case(rows, case="central", solar_basis=None, wind_life_extension=None)
         # yield - so a capacity charge stays a capacity charge but is no
         # longer missing wind/offshore's non-capital tail. Equivalent to
         # restated_kgco2e_per_kWh x this study's own annual generation per MW.
-        row["annual_kgco2e_per_MW"] = (
-            row["restated_kgco2e_per_kWh"] * row["study_load_factor"]
-            * HOURS_PER_YEAR * 1000.0)
+        row["annual_kgco2e_per_MW"] = T.step(
+            f"{tech}.annual_per_MW",
+            (row["restated_kgco2e_per_kWh"] * row["study_load_factor"]
+             * HOURS_PER_YEAR * 1000.0),
+            "kg CO2e per MW per year",
+            "What one MW built is charged each year: the per-kWh burden times a year's output",
+            uses=[f"{tech}.restated_per_kWh", f"{tech}.load_factor"],
+            inputs={"hours_per_year": HOURS_PER_YEAR}, grade="derived",
+            note="Equivalent to capital over life, plus the residual at this study's own yield.")
         out.append(row)
     return pd.DataFrame(out)
 

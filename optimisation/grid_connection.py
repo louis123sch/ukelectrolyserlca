@@ -91,6 +91,7 @@ sys.path.insert(0, str(ROOT))
 # The foreground activity optimiser_lca/stepup_transformers.py builds, per MVA.
 # What the transformer is made of lives there; this module only scores it.
 from optimiser_lca.registry import TRANSFORMER_DB, TX_GRID as TRANSFORMER_CODE, TX_GRID_CIVILS as CIVILS_CODE  # noqa: E402
+from optimisation import trace as T  # noqa: E402
 
 LINE_ACTIVITY = "market for transmission network, electricity, high voltage"
 
@@ -177,7 +178,25 @@ def decompose(refresh: bool = False) -> dict:
 
 
 def kgco2e_per_mw_year(refresh: bool = False) -> float:
-    return decompose(refresh)["kgco2e_per_MW_year"]
+    d = decompose(refresh)
+    tx, civ = T.activity(TRANSFORMER_DB, TRANSFORMER_CODE), T.activity(TRANSFORMER_DB, CIVILS_CODE)
+    T.step("grid_connection.transformer_per_MVA", d["kgco2e_per_MVA_transformer"], "kg CO2e per MVA",
+           "The intake transformer per MVA of rating", uses=[tx], scores=tx, grade="derived",
+           source=d["transformer_source"])
+    T.step("grid_connection.transformer_per_MW", d["transformer_kgco2e_per_MW"], "kg CO2e per MW",
+           "Intake transformers per MW of connection: N-1, so two units each carrying the site",
+           uses=["grid_connection.transformer_per_MVA"],
+           inputs={"redundancy": TRANSFORMER_REDUNDANCY, "power_factor": POWER_FACTOR,
+                   "MVA_per_MW": d["transformer_MVA_per_MW"]}, grade="assumed")
+    T.step("grid_connection.civils_per_MW", d["civils_kgco2e_per_MW"], "kg CO2e per MW",
+           "Switchyard civils per MW of connection (Leng Table S3's outdoor venue)",
+           uses=[civ], scores=civ, grade="derived")
+    return T.step("grid_connection.per_MW_year", d["kgco2e_per_MW_year"], "kg CO2e per MW per year",
+                  "The connection per MW, over its life",
+                  uses=["grid_connection.transformer_per_MW", "grid_connection.civils_per_MW"],
+                  inputs={"asset_life_years": ASSET_LIFE_YEARS}, grade="derived",
+                  note="The line to the site is a fixed cost of reaching it, not a per-MW one, so "
+                       "it is reported by decompose() and not charged per MW.")
 
 
 if __name__ == "__main__":
