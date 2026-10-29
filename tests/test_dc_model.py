@@ -169,6 +169,25 @@ def test_constants_are_excluded_from_the_objective_but_not_the_total(series, tec
     assert tot["cost_GBP_per_year"] > float(obj["cost"].solution)
 
 
+def test_the_connection_is_held_inside_its_band(series, tech):
+    """floor <= cap_grid: a grid-only build cannot drop to a cheaper band than
+    the one its charges were read for, and says so when the floor binds."""
+    a = M.Assets(grid=True, grid_limit_mw=40.0, grid_floor_mw=21.5)
+    m, V, obj = M.build_model(series, a, tech, objective="cost")
+    M.solve(m)
+    assert float(V["cap_grid"].solution) == pytest.approx(21.5, rel=1e-6)
+    assert M.contributions(V, obj, series, tech, a)["grid_floor"]["binding"]
+
+
+def test_an_islanded_build_ignores_the_floor(series, tech):
+    a = M.Assets(grid=False, wind=True, solar=True, battery=True,
+                 grid_limit_mw=0.0, grid_floor_mw=21.5)
+    m, V, obj = M.build_model(series, a, tech, objective="cost", unserved_fraction=1.0)
+    M.solve(m)
+    assert float(V["cap_grid"].solution) == 0.0
+    assert not M.contributions(V, obj, series, tech, a)["grid_floor"]["binding"]
+
+
 def test_islanded_builds_pay_no_grid_fixed_charge(series, tech):
     """The fixed connection charge belongs to the connection; no grid, no charge."""
     a = M.Assets(grid=False, wind=True, solar=True, battery=True, grid_limit_mw=0.0)
@@ -631,19 +650,78 @@ def test_myopic_scores_the_lp_dispatch_exactly(series, tech, name, objective):
     # (no grid connection carbon, no bought hydrogen) before both read
     # objective_terms.
     from dataclasses import replace
-    from optimisation import myopic
-    t = replace(tech, batt_leakage_per_hour=2e-5, tank_leakage_per_hour=4e-6)
+    from optimisation import myopic, network_charges as nc
+    # The winter-peak charge on, so the parity covers it (the fixture is January).
+    t = replace(tech, batt_leakage_per_hour=2e-5, tank_leakage_per_hour=4e-6,
+                cost_grid_per_mw_year=tech.cost_grid_per_mw_year - 7_405.0,
+                cost_grid_triad_per_mw_year=7_405.0)
+    s = replace(series, triad_window=nc.triad_window(series.index))
     assets = PARITY[name]
-    V, obj = _solve(series, t, assets, objective=objective, unserved_fraction=0.01)
+    V, obj = _solve(s, t, assets, objective=objective, unserved_fraction=0.01)
     q = M.solution_quantities(V)
     caps = {k: q[k] for k in myopic.CAPACITIES}
-    df = pd.DataFrame({k: q[k] for k in myopic.FLOWS}, index=series.index)
-    got = myopic.evaluate(df, series, t, caps, grid=assets.grid)
+    df = pd.DataFrame({k: q[k] for k in myopic.FLOWS}, index=s.index)
+    got = myopic.evaluate(df, s, t, caps, grid=assets.grid)
     lp = M.totals(obj)
     # The LP's unit counts sit on max(calendar, duty) only at an optimum where
     # they carry a positive price, which both objectives give them.
     assert got["cost_GBP_per_year"] == pytest.approx(lp["cost_GBP_per_year"], rel=1e-6)
     assert got["gwp_kgco2e_per_year"] == pytest.approx(lp["gwp_kgco2e_per_year"], rel=1e-6)
+
+
+# =============================================================================
+# The national grid's location charge falls on winter-evening demand (Triads)
+# =============================================================================
+def _triad(series, tech, tariff=7_405.0):
+    """The fixture's 7,405 GBP/MW/yr locational tariff moved off cap_grid and
+    onto winter-evening demand, charged at ``tariff``."""
+    from dataclasses import replace
+    from optimisation import network_charges as nc
+    return (replace(series, triad_window=nc.triad_window(series.index)),
+            replace(tech, cost_grid_per_mw_year=tech.cost_grid_per_mw_year - 7_405.0,
+                    cost_grid_triad_per_mw_year=tariff))
+
+
+def test_a_flat_grid_only_site_pays_the_same_either_way(series, tech):
+    """Flat load, no storage: winter-evening demand is the connection, so moving
+    the charge off cap_grid changes nothing."""
+    s, t = _triad(series, tech)
+    grid_only = M.Assets(grid=True)
+    _, before = _solve(series, tech, grid_only, objective="cost")
+    _, after = _solve(s, t, grid_only, objective="cost")
+    assert M.totals(after)["cost_GBP_per_year"] == pytest.approx(
+        M.totals(before)["cost_GBP_per_year"], rel=1e-9)
+
+
+def test_a_battery_can_cut_winter_evening_demand(series, tech):
+    """With a large winter-peak tariff, a battery covers the evening window and
+    the site is charged on less than its peak import."""
+    s, t = _triad(series, tech, tariff=400_000.0)
+    V, _ = _solve(s, t, M.Assets(grid=True, battery=True), objective="cost")
+    imp = V["imp"].solution.values
+    window = s.triad_window
+    assert float(V["triad_mw"].solution) == pytest.approx(imp[window].max(), rel=1e-6)
+    assert imp[window].max() < imp.max() - 1e-3
+    assert float(V["triad_mw"].solution) < float(V["cap_grid"].solution) - 1e-3
+
+
+def test_an_islanded_build_has_no_winter_peak_demand(series, tech):
+    s, t = _triad(series, tech)
+    a = M.Assets(grid=False, wind=True, solar=True, battery=True, grid_limit_mw=0.0)
+    V, _ = _solve(s, t, a, objective="cost", unserved_fraction=1.0)
+    assert float(V["triad_mw"].solution) == 0.0
+
+
+def test_resampling_keeps_the_window():
+    """An hour is in the window if either of its half-hours is."""
+    from optimisation import dc_inputs as I, network_charges as nc
+    idx = pd.date_range("2025-01-06", periods=48, freq="30min")      # a Monday
+    s = M.Series(index=idx, dt_hours=0.5, demand_mw=np.ones(48), cf_wind=np.zeros(48),
+                 cf_solar=np.zeros(48), grid_gwp_per_mwh=np.ones(48),
+                 grid_price_per_mwh=np.ones(48), triad_window=nc.triad_window(idx))
+    r = I.resample(s, 1.0)
+    # the window is 16:30-18:30, so the hours starting 16:00, 17:00 and 18:00
+    assert list(r.index[r.triad_window].hour) == [16, 17, 18]
 
 
 @pytest.mark.parametrize("name", list(PARITY))

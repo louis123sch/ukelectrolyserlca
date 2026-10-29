@@ -79,6 +79,11 @@ REQUEST = "request.json"
 STATUS = "status.json"
 LOG = "job.log"
 SUMMARY = "summary.json"
+# The same run with the other connection tier, when the request asked for it and
+# the site's size is one its area's rule leaves uncertain
+# (network_charges.tier_is_uncertain). Its own file, so a cached main summary
+# never carries a stale comparison.
+OTHER_TIER = "summary_other_tier.json"
 
 # A child that has not written a status line for this long, but whose pid is
 # still alive, is not dead — it is inside the one step that reports nothing:
@@ -286,7 +291,7 @@ def folder_for(out_root, scenario_key: str, kind: str = "front") -> Path:
 
 
 def start(*, scenario, site, out_root, label: str, total: int,
-          kind: str = "front", **kw) -> dict:
+          kind: str = "front", both_tiers: bool = False, **kw) -> dict:
     """Launch a detached solve and return its first status.
 
     ``kw`` is passed straight to ``dc_runner.run_one`` (kind "front") or to
@@ -306,6 +311,7 @@ def start(*, scenario, site, out_root, label: str, total: int,
 
     folder = folder_for(out_root, scenario.key, kind)
     folder.mkdir(parents=True, exist_ok=True)
+    (folder / OTHER_TIER).unlink(missing_ok=True)
     _write_json(folder / REQUEST, {
         "scenario": asdict(scenario),
         # Enough to rebuild the Site without touching postcodes.io again: with
@@ -317,6 +323,7 @@ def start(*, scenario, site, out_root, label: str, total: int,
                  "transmission_connected": site.transmission_connected},
         "out_root": str(out_root),
         "kind": kind,
+        "both_tiers": bool(both_tiers),
         "kw": kw,
     })
     status = {"state": "starting", "label": label, "site_name": site.name,
@@ -450,6 +457,11 @@ def summary(folder) -> dict | None:
     return _read_json(Path(folder) / SUMMARY)
 
 
+def other_tier_summary(folder) -> dict | None:
+    """The run with the other connection tier, if this job made one."""
+    return _read_json(Path(folder) / OTHER_TIER)
+
+
 # -----------------------------------------------------------------------------
 # The child's side
 # -----------------------------------------------------------------------------
@@ -486,6 +498,9 @@ def _run(folder: Path):
             result = dc_runner.run_one(scenario, site=site,
                                        out_root=Path(req["out_root"]),
                                        progress=tick, notice=stage, **req["kw"])
+            other = _other_tier(scenario, site, req, result, tick, stage)
+            if other is not None:
+                _write_json(folder / OTHER_TIER, other)
     except BaseException as exc:              # SystemExit and KeyboardInterrupt too
         status.update(state="failed", tag="failed", heartbeat=_now(),
                       error=f"{type(exc).__name__}: {exc}",
@@ -497,6 +512,24 @@ def _run(folder: Path):
                   cached=bool(result.get("cached")),
                   solve_seconds=result.get("solve_seconds"))
     _write_json(folder / STATUS, status)
+
+
+def _other_tier(scenario, site, req, result, tick, stage) -> dict | None:
+    """Solve again with the other connection tier — only when asked, only when
+    the site did not state its tier, and only when the area's rule leaves this
+    size uncertain. None otherwise."""
+    from dataclasses import replace
+    from optimisation import dc_runner, network_charges as nc
+    if not req.get("both_tiers") or site.transmission_connected is not None:
+        return None
+    ceiling = result.get("connection_limit_mw")
+    if not ceiling or not nc.tier_is_uncertain(ceiling, site.carbon_api_region):
+        return None
+    stage("solving again with the other connection type")
+    flipped = replace(site, transmission_connected=not result["transmission_connected"])
+    return dc_runner.run_one(scenario, site=flipped,
+                             out_root=Path(req["out_root"]) / "other connection type",
+                             progress=tick, notice=stage, **req["kw"])
 
 
 def _run_thresholds(folder: Path, scenario, site, req, tick, stage) -> dict:

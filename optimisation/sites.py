@@ -191,8 +191,8 @@ class Site:
     # None means "infer from the connection size". An explicit True/False states
     # it, which is always better: whether a site takes its supply from the
     # transmission or the distribution system is a network-design fact, and
-    # inferring it from an assumed MW threshold decides the TDR band — £270,752
-    # a year against £4,670,801 — on a guess.
+    # inferring it decides the TDR band — in 2026/27, £2.08 m a year for EHV4
+    # against £7.60 m for T-Demand4 — on a rule rather than a connection offer.
     transmission_connected: bool | None = None
     key: str = ""
 

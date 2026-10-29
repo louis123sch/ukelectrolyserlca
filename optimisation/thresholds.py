@@ -470,6 +470,7 @@ def prepare(scenario, *, site, start, end, size_mw_it, pue, resample_hours,
                         size_mw_it=size_mw_it, pue=pue)
     assets = A.architecture(scenario.architecture, offshore=site.offshore_wind,
                             grid_limit_mw=meta["connection_limit_mw"],
+                            grid_floor_mw=meta.get("connection_floor_mw", 0.0),
                             flags=scenario.assets)
     # Same guard dc_runner applies, for the same reason: an architecture that
     # may buy hydrogen with no colour priced would buy it free and carbon-free.

@@ -243,16 +243,28 @@ def test_tnuos_is_zonal_and_scotland_is_floored_to_zero():
     assert by_zone.max() - by_zone.min() > 5.0
 
 
-def test_duos_red_band_is_winter_weekday_evening_only():
+def test_duos_red_band_is_weekday_midday_and_evening_all_year():
+    """LPN 2026/27 Annex 1, LV and HV time bands: red Mon-Fri all year,
+    11:00-14:00 and 16:00-19:00 UK clock; weekends green."""
     import pandas as pd
     from optimisation import network_charges as nc
     idx = pd.date_range("2025-01-01", "2025-12-29", freq="30min")
     band = nc.duos_band(idx)
-    red = idx[band == "red"]
-    assert set(red.month) <= set(nc.DUOS_RED_MONTHS)
+    clock = idx.tz_localize("UTC").tz_convert("Europe/London")
+    red = clock[(band == "red").to_numpy()]
+    assert set(red.month) == set(range(1, 13))
     assert (red.dayofweek < 5).all()
-    assert red.hour.min() >= nc.DUOS_RED_HOURS[0]
-    assert red.hour.max() < nc.DUOS_RED_HOURS[1]
+    assert set(red.hour) == {11, 12, 13, 16, 17, 18}
+    assert (band[(clock.dayofweek >= 5)] == "green").all()
+
+
+@pytest.mark.parametrize("band, row", [("HV1", "HV Site Specific Band 1"),
+                                       ("HV4", "HV Site Specific Band 4"),
+                                       ("EHV3", "Designated EHV Site Specific Band 3"),
+                                       ("EHV4", "Designated EHV Site Specific Band 4")])
+def test_a_data_centre_is_charged_on_its_band_row_not_no_residual(band, row):
+    from optimisation import network_charges as nc
+    assert nc.duos_tariff_for(band) == row
 
 
 def test_bsuos_covers_the_study_window():

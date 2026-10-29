@@ -207,6 +207,14 @@
     "region_name": "Yorkshire",
     "tnuos_zone": 5
   },
+  "54.1,-1.68": {
+    "carbon_api_region": 4,
+    "outcode": "HG3",
+    "place": "North Yorkshire",
+    "postcode": "HG3 5EX",
+    "region_name": "North East England",
+    "tnuos_zone": 3
+  },
   "54.5,-3.1": {
     "carbon_api_region": 3,
     "outcode": "LA22",

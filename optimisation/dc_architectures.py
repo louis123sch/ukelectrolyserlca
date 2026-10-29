@@ -71,31 +71,35 @@ _SHORT = dict(grid="g", wind="w", offshore_wind="o", solar="s", battery="b",
               buy_h2_2="y")
 
 
-def custom(flags: dict, *, grid_limit_mw=None, offshore=False,
+def custom(flags: dict, *, grid_limit_mw=None, grid_floor_mw=0.0, offshore=False,
            allow_export=False) -> M.Assets:
     """Asset bounds for an arbitrary tick-box combination.
 
     Same contract as a named architecture — everything is an upper bound, so a
-    ticked asset the LP does not want is still sized to zero. Two things are
+    ticked asset the LP does not want is still sized to zero. The one lower
+    bound is the grid's band floor, which only applies while the grid is
+    ticked (``dc_model.Assets.grid_floor_mw``). Two things are
     enforced rather than trusted to the caller: offshore wind is only available
     where the site has it, and unticking the grid means a hard zero import
     limit and no export, not merely a grid the LP is free to use.
     """
     f = {k: bool(flags.get(k)) for k in ASSET_FLAGS}
     f["offshore_wind"] = f["offshore_wind"] and offshore and OFFSHORE_IN_SCOPE
-    assets = M.Assets(**f, grid_limit_mw=grid_limit_mw, allow_export=allow_export)
+    assets = M.Assets(**f, grid_limit_mw=grid_limit_mw, grid_floor_mw=grid_floor_mw,
+                      allow_export=allow_export)
     if not f["grid"]:
         assets = replace(assets, grid_limit_mw=0.0, allow_export=False)
     return assets
 
 
-def architecture(name: str, *, grid_limit_mw=None, offshore=False,
+def architecture(name: str, *, grid_limit_mw=None, grid_floor_mw=0.0, offshore=False,
                  allow_export=False, flags: dict | None = None) -> M.Assets:
     """Asset bounds for one named power option, or for ``custom`` flags."""
-    base = dict(grid_limit_mw=grid_limit_mw, allow_export=allow_export)
+    base = dict(grid_limit_mw=grid_limit_mw, grid_floor_mw=grid_floor_mw,
+                allow_export=allow_export)
     offshore = offshore and OFFSHORE_IN_SCOPE
     if name == "custom":
-        return custom(flags or {}, grid_limit_mw=grid_limit_mw,
+        return custom(flags or {}, grid_limit_mw=grid_limit_mw, grid_floor_mw=grid_floor_mw,
                       offshore=offshore, allow_export=allow_export)
     if name == "grid_only":
         return M.Assets(grid=True, **base)

@@ -120,7 +120,9 @@ ACCEPTED: dict[str, str] = {
         "PEM is 21.7 %; on total energy it is 12.4 %. Pricing the heat would "
         "narrow it further. See DATA_GAPS.md.",
     "coverage:cap_grid carries carbon but is free in cost":
-        "The same fact as the applicability finding below, seen from the "
+        "Closed 28 Oct 2026: connection_cost.py charges the intake substation per "
+        "MW and the cable as a fixed cost, so this should no longer fire. Kept "
+        "for history: the same fact as the applicability finding below, seen from the "
         "objective side, and correct rather than a hole: a transmission-"
         "connected demand site in a floored TNUoS zone genuinely pays £0.00/kW "
         "of zonal tariff, and the bilateral connection charge for sole-use "
@@ -132,7 +134,8 @@ ACCEPTED: dict[str, str] = {
         "run the lexicographic tie-break in dc_pareto, so the reported "
         "connection is the smallest that is optimal on both objectives.",
     "applicability:the connection costs £0/MW/year":
-        "Correct as a tariff, not a hole. A transmission-connected demand site "
+        "Closed 28 Oct 2026 by connection_cost.py (the connection's capital). "
+        "Kept for history: correct as a tariff, not a hole. A transmission-connected demand site "
         "pays the zonal HH demand tariff plus the TDR, both modelled, and NESO's "
         "local substation tariffs are generation charges that do not apply. The "
         "zonal tariff is genuinely £0.00/kW in a floored zone. What is missing "
@@ -523,17 +526,16 @@ def check_applicability(site, start, end, size_mw_it=300.0, pue=1.2):
     c = meta["network_charges"]
     transmission = meta["transmission_connected"]
 
-    # DUoS is a London Power Networks transcription. Anywhere else it is a proxy.
-    if not transmission and c["duos_capacity_GBP_per_MW_year"] > 0:
-        if s.tnuos_zone != nc.DUOS_SOURCE_ZONE:
-            report("applicability", "warn",
-                   f"DUoS is charged from {nc.DUOS_SOURCE_AREA} tariffs at a "
-                   f"zone-{s.tnuos_zone} site ({s.name})",
-                   "Only one licence area is transcribed, so a site outside it "
-                   "is priced on the wrong DNO's tariff. See DATA_GAPS.md.")
+    # DUoS must come from the site's own licence area (duos_areas, one per region).
+    if not transmission:
+        from optimisation import duos_areas
+        want = duos_areas.AREA_NAMES[s.carbon_api_region]
+        if c.get("duos_area") != want:
+            report("applicability", "error",
+                   f"DUoS is charged from {c.get('duos_area')} at a site in {want}'s area ({s.name})",
+                   "Every region has its own 2026/27 schedule (duos_areas.FILES).")
         else:
-            report("applicability", "ok",
-                   f"DUoS licence area matches the site ({nc.DUOS_SOURCE_AREA})")
+            report("applicability", "ok", f"DUoS licence area matches the site ({want}: {c['duos_tariff']})")
     elif transmission:
         if c["duos_capacity_GBP_per_MW_year"] or c["duos_mean_GBP_per_MWh"]:
             report("applicability", "error",
@@ -598,18 +600,17 @@ def check_geography(site, start, end, size_mw_it=300.0, pue=1.2):
     if meta["transmission_connected"]:
         rows.append(("DUoS", "not charged", "transmission connection", True))
     else:
-        ok = s_.tnuos_zone == nc.DUOS_SOURCE_ZONE
-        rows.append(("DUoS", nc.DUOS_SOURCE_AREA,
-                     f"site is in zone {s_.tnuos_zone}", ok))
+        from optimisation import duos_areas
+        area = meta["network_charges"].get("duos_area")
+        ok = area == duos_areas.AREA_NAMES[s_.carbon_api_region]
+        rows.append(("DUoS", area, f"site is in region {s_.carbon_api_region}", ok))
     t = pd.DataFrame(rows, columns=["input", "resolved to", "basis", "matches site"])
     print(t.to_string(index=False))
 
     for _, r in t[~t["matches site"]].iterrows():
         report("geography", "error",
                f"{r['input']} is not resolved to this site",
-               f"using {r['resolved to']} while {r['basis']}. Only one licence "
-               f"area is transcribed, so every site outside it is priced on the "
-               f"wrong DNO's tariff.")
+               f"using {r['resolved to']} while {r['basis']}.")
     if t["matches site"].all():
         report("geography", "ok",
                f"all {len(t)} regional inputs resolve to this site")

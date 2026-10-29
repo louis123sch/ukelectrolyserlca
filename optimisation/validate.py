@@ -203,6 +203,7 @@ def check_cheap_clean_grid_builds_nothing(series, tech):
     s2.grid_gwp_per_mwh = np.zeros_like(series.grid_gwp_per_mwh)
     t2 = copy.copy(tech)
     t2.cost_grid_per_mw_year = 0.0
+    t2.cost_grid_triad_per_mw_year = 0.0
     # buy_h2 locked off: this check is about whether a free clean grid causes
     # anything to be *built*, and an unpriced colour is refused outright by
     # build_model — correctly, since free hydrogen would dominate everything.

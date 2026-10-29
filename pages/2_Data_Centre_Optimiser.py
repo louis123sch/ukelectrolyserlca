@@ -201,11 +201,13 @@ with c1:
     size_mw = st.number_input("IT load (MW)", 0.1, 1000.0, 100.0, step=1.0,
                               help="100 MW is the default — a hyperscale build, "
                                    "and the scale at which the siting and "
-                                   "connection questions actually bite. It is at "
-                                   "or above `network_charges."
-                                   "TRANSMISSION_MW_ASSUMED`, so the site is "
-                                   "treated as transmission-connected and pays "
-                                   "TNUoS rather than DUoS. Set **7.31** for the "
+                                   "connection questions actually bite. Whether "
+                                   "the site is transmission- or distribution-"
+                                   "connected follows GB's voltage rule on the "
+                                   "connection ceiling (`network_charges."
+                                   "is_transmission_connected`): a DNO connects up "
+                                   "to 240 MVA in England and Wales, much less in "
+                                   "Scotland. Set **7.31** for the "
                                    "Zhang et al. foreground's own continuous "
                                    "draw, the study's original reference case.")
 with c2:
@@ -318,7 +320,7 @@ for _k in [k for k in st.session_state
            if k.startswith("dc_map_") and k != _map_key()]:
     del st.session_state[_k]
 
-c1, c2, c3, c4, c5, c6 = st.columns([1.3, 0.9, 0.9, 1.0, 1.0, 1.1])
+c1, c2, c3, c4, c5, c6 = st.columns([1.2, 0.85, 0.85, 1.35, 1.0, 1.0])
 with c1:
     st.selectbox("Jump to a preset", [""] + list(sites.PRESETS), key="dc_preset",
                  on_change=_apply_preset,
@@ -330,27 +332,34 @@ with c2:
 with c3:
     lon = st.number_input("Longitude", -9.0, 2.0, key="dc_lon", format="%.4f", step=0.01)
 with c4:
-    conn = st.number_input(
-        "Connection cap (MW)", 0.0, 10_000.0, 0.0, step=1.0,
-        help="**0 derives it** from the IT load and PUE below, at "
-             f"{sites.CONNECTION_HEADROOM_ASSUMED:g}x the load — an assumed "
-             "headroom, not a sourced figure, since there is no public register "
-             "of available connection capacity by location. The derived ceiling "
-             "is what the LP is held to *and* what the TNUoS band is read from, "
-             "so the two cannot disagree. Enter a number when you have a real "
-             "figure for a real site.")
+    # Ticked: the user states the cap. Unticked: it is derived from the load and
+    # the headroom beside it, and the box is greyed out so it cannot be mistaken
+    # for a value in use. conn = 0.0 means "derive" everywhere below.
+    conn_set = st.checkbox(
+        "Connection cap (MW)", value=False, key="dc_conn_set",
+        help="Tick to enter a connection cap. Unticked, it is derived from the "
+             "IT load and PUE below, at the headroom to the right — an assumed "
+             "figure, not a sourced one, since there is no public register of "
+             "available connection capacity by location. Either way, the cap is "
+             "what the LP is held to *and* what the TNUoS band is read from, so "
+             "the two cannot disagree. Tick it when you have a real figure for a "
+             "real site.")
+    conn_entered = st.number_input(
+        "Connection cap (MW)", 0.1, 10_000.0, 100.0, step=1.0, key="dc_conn_mw",
+        disabled=not conn_set, label_visibility="collapsed")
+    conn = float(conn_entered) if conn_set else 0.0
 with c5:
     headroom = st.number_input(
         "Connection headroom (x load)", 1.0, 4.0,
-        float(sites.CONNECTION_HEADROOM_ASSUMED), step=0.1,
+        float(sites.CONNECTION_HEADROOM_ASSUMED), step=0.1, disabled=conn_set,
         help="How much more connection than load the site is assumed to "
-             "contract for, when the cap above is left at 0. **Assumed, not "
-             "sourced** — there is no public register of available connection "
-             "capacity. 1.0 asks what a site sized purely for its load can "
-             "achieve; the unbounded minimum-carbon build on the 300 MW "
-             "Highland run wanted 2.41x, and used it for six hours a year. "
-             "The ceiling is what the LP is held to *and* what the TNUoS band "
-             "is read from.")
+             "contract for, when no cap is entered (greyed out when one is). "
+             "**Assumed, not sourced** — there is no public register of "
+             "available connection capacity. 1.0 asks what a site sized purely "
+             "for its load can achieve; the unbounded minimum-carbon build on "
+             "the 300 MW Highland run wanted 2.41x, and used it for six hours a "
+             "year. The ceiling is what the LP is held to *and* what the TNUoS "
+             "band is read from.")
 
 with c6:
     # "Auto" is the default and should stay it. This control used to offer only
@@ -458,21 +467,36 @@ except Exception as exc:
 # ceiling -> band -> tariff, and each link used to be settable independently of
 # the others, so the page could show a 300 MW site being charged a 7 MW band.
 _load_preview = size_mw * pue          # both set in section 1, above
+_tier_uncertain = False
 if _load_preview > 0:
     from optimisation import network_charges as _nc
     _cmw, _cnote = ((float(conn), "") if conn else
                     sites.max_connection_mw(_load_preview, headroom))
-    _trans, _ = _nc.is_transmission_connected(_cmw)
+    # The same call dc_inputs.build_series makes, so the preview cannot disagree
+    # with the run.
+    _trans, _ = _nc.is_transmission_connected(_cmw, site.carbon_api_region,
+                                              site.transmission_connected)
     _band = tdr if tdr != TDR_AUTO else _nc.tdr_band_for(
-        _cmw, _load_preview * 8760.0, transmission_connected=_trans)[0]
+        _cmw, _load_preview * 8760.0, region=site.carbon_api_region,
+        transmission_connected=_trans)[0]
     _mismatch = tdr != TDR_AUTO and (_trans != _band.startswith("T-Demand"))
     st.caption(
         f"**Resolves to:** {_load_preview:,.1f} MW load → "
         f"{_cmw:,.1f} MW connection ceiling "
         f"({f'derived at {headroom:g}x' if not conn else 'as entered'}) → "
-        f"{'transmission' if _trans else 'distribution'}-connected → "
+        f"{'transmission' if _trans else 'distribution'}-connected"
+        f"{'' if _trans else ' at ' + _nc.connection_voltage(_cmw, site.carbon_api_region, False)} → "
         f"band **{_band}**"
         + (f"  ·  _{_cnote}_" if _cnote else ""))
+    _tier_uncertain = (site.transmission_connected is None
+                       and _nc.tier_is_uncertain(_cmw, site.carbon_api_region))
+    if _tier_uncertain:
+        _r = _nc.area_rule(site.carbon_api_region)
+        st.caption(
+            f"At {_cmw:,.0f} MW this site could connect either to the local network "
+            f"or straight to the national grid — in {_r.area} the published sources "
+            f"leave {_r.uncertain_from:g}–{_r.dno_max:g} MW open. Tick *Also run the "
+            "other connection type* below the Optimise button to see both.")
     if _mismatch:
         st.warning(
             f"**The band you picked does not match the connection.** "
@@ -749,7 +773,7 @@ out_root = RUNS / f"{site.key}_{size_mw:g}MW_{start[:4]}_custom"
 job = dc_job.active()
 job_running = bool(job and job["state"] in ("starting", "running"))
 
-c1, c2, _ = st.columns([1, 1, 3])
+c1, c2, c3, _ = st.columns([1, 1, 2, 1])
 with c1:
     launch = st.button("Optimise", type="primary",
                        disabled=bool(problems) or job_running,
@@ -757,11 +781,21 @@ with c1:
                        if job_running else None)
 with c2:
     refresh = st.checkbox("Ignore cache", value=False, disabled=job_running)
+with c3:
+    both_tiers = st.checkbox(
+        "Also run the other connection type", value=False, disabled=job_running,
+        help="Only does anything when the site's size is one where the network "
+             "companies' published rules leave it open whether it connects to the "
+             "local network or straight to the national grid (the note under "
+             "*Resolves to* says so). The run is then solved twice, once each way, "
+             "and the two are compared below the results. It roughly doubles the "
+             "solve time. Off by default.")
 
 if launch:
     dc_job.start(
         scenario=scenario, site=site, out_root=out_root, label=label,
-        total=n_solves + 4,
+        total=(n_solves + 4) * (2 if both_tiers and _tier_uncertain else 1),
+        both_tiers=both_tiers,
         start=start, end=end, size_mw_it=size_mw, pue=pue,
         resample_hours=(resample or None), points=int(points),
         cost_case=cost_case, horizon_years=horizon,
@@ -819,6 +853,7 @@ if job:
         _summary = dc_job.summary(job["folder"])
         if _summary:
             st.session_state["dc_summary"] = _summary
+            st.session_state["dc_other_tier"] = dc_job.other_tier_summary(job["folder"])
             st.session_state["dc_out_root"] = str(Path(job["folder"]).parent)
             _how = ("read from cache" if job.get("cached") else
                     f"{job.get('solve_seconds') or 0:.0f} s")
@@ -897,6 +932,38 @@ else:
             "knee coincides with both. Nothing on offer here trades cost "
             "against carbon, which is itself a result."
         )
+    _other = st.session_state.get("dc_other_tier")
+    if (_other and _other.get("key") == summary.get("key")
+            and _other.get("site") == summary.get("site")
+            and _other.get("size_mw_it") == summary.get("size_mw_it")):
+        def _tier_name(s):
+            return "national grid" if s.get("transmission_connected") else "local network"
+        st.subheader("Both connection types")
+        st.caption(
+            "This site's size is one where the published rules leave the connection "
+            "type open, and the run was asked to solve it both ways. The results "
+            f"above are for the **{_tier_name(summary)}**, which the area's rule "
+            "picks; this table sets them against the other.")
+        _rows = []
+        for _key, _name in POINTS_SHOWN:
+            for _s in (summary, _other):
+                _p = _s.get(_key) or {}
+                _rows.append({
+                    "point": _name, "connection": _tier_name(_s),
+                    "residual band": _s.get("tdr_band"),
+                    "cost (£m/yr)": round(_p.get("cost_GBP_per_year", float("nan")) / 1e6, 2),
+                    "emissions (t CO₂e/yr)": round(_p.get("gwp_kgco2e_per_year", float("nan")) / 1e3),
+                    "grid connection (MW)": round(_p.get("cap_grid", float("nan")), 1),
+                })
+        st.dataframe(pd.DataFrame(_rows), hide_index=True, use_container_width=True)
+    if summary.get("grid_floor_binding"):
+        st.warning(
+            f"**The grid connection sits on its band's floor** "
+            f"({summary['connection_floor_mw']:,.1f} MW, band {summary.get('tdr_band')}) "
+            f"at: {', '.join(summary['grid_floor_binding'])}. The network charges "
+            "were read for that band, so a smaller connection in a cheaper band "
+            "may well be better. Re-run with the connection limit just below "
+            f"{summary['connection_floor_mw']:,.1f} MW to find out.")
 
     # --- the sizing itself, side by side -------------------------------------
     # Asset x build x (capacity, energy) is three dimensions in a two-

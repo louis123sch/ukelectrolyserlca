@@ -1087,11 +1087,14 @@ are **generator**-side and are not a substitute.
 
 | Input | Value | Grade | Source |
 |---|---|---|---|
-| TNUoS HH demand tariff | zonal, **£0.00/kW (Scotland, floored) to £10.12/kW (South Western)**; London £7.41 | transcribed | NESO Data Portal, *TNUoS Tariffs*, CKAN datastore resource `6abe8416-149c-4c78-b65b-059eea19957a`, FY2026 Final. Fetched through the same API `h2_prices.py` uses, so it refreshes rather than going stale |
-| TNUoS demand residual (TDR) | banded £/site/day; EHV2 = £270,752/yr | transcribed | Same portal, resource `dcca94fd-343e-4d4e-8c5d-66009dec4ad3` |
-| BSUoS | £/MWh imported, half-yearly fixed; 2025 runs £12.17 → £10.74 → £15.69 | transcribed | Same portal, resource `4dfa533f-bec6-491b-a3f1-7ce92449bc9a` |
-| DUoS unit and capacity | HV Site Specific: red 3.440, amber 0.262, green 0.008 p/kWh; capacity 9.19 p/kVA/day | transcribed | London Power Networks plc, *Use of System Charging Statement* LC14 v1.3, effective 1 April 2026, **Annex 1**. No open API exists for DNO charging statements |
-| DUoS time bands | red = Mon–Fri 16:00–19:00, Nov–Feb | transcribed (red), **simplified** (amber) | The statement defines amber per-season; merged to one all-year window. Red is exact, and is an order of magnitude above amber |
+| TNUoS HH demand tariff | zonal, **£0.00/kW (seven northern zones, floored) to £14.13/kW (South Western)**; London **£6.45** | transcribed | NESO Data Portal, *TNUoS Tariffs*, CKAN datastore resource `6abe8416-149c-4c78-b65b-059eea19957a`, **FY2027 (2026/27) Final**, published 30 Jan 2026 (FY2026 until 28 Oct 2026: London £7.41). Fetched through the same API `h2_prices.py` uses, so it refreshes rather than going stale |
+| TNUoS demand residual (TDR) | banded £/site/day, FY2027 Final; EHV2 £423,174/yr, EHV4 **£2,079,911/yr**, T-Demand4 **£7,602,671/yr** (FY2026: £270,752, £1.42 m, £4.67 m) | transcribed | Same portal, resource `dcca94fd-343e-4d4e-8c5d-66009dec4ad3`; matches the final report's Table 10 |
+| TDR band boundaries | EHV <= 3,500 / 11,000 / 20,000 kVA; HV <= 500 / 1,100 / 2,000 kVA; T-Demand <= 25,131 / 64,451 / 163,880 MWh/yr | transcribed | NESO, *Final TNUoS Tariffs for 2026-27 - Tables*, Table TB; fixed for RIIO-ET3 (to March 2031) |
+| BSUoS | £/MWh imported, the tariff year's two fixed tariffs by month: **£13.74** Apr–Sep, **£12.49** Oct–Mar (FY2027) | transcribed | Same portal, resource `4dfa533f-bec6-491b-a3f1-7ce92449bc9a`, Fixed Tariffs 7 and 8. Until 28 Oct 2026 read by date, so a 2025 window paid £12.17 → £10.74 → £15.69 |
+| DUoS, 11 kV sites | each area's own Annex 1 row "HV Site Specific Band n" for the site's band: red / amber / green p/kWh, fixed p/MPAN/day, capacity p/kVA/day (`duos_areas.HV_ROWS`). E.g. HV4: London red 0.021, capacity 9.19; North West red 0, capacity 7.79; South West red 7.242, fixed 1,908.16 p/day, capacity 10.06; North Scotland capacity 20.1 | transcribed | Each DNO's *Schedule of charges and other tables 2026/27* (14 workbooks, `duos_areas.FILES`; OneDrive `connection sources/3 DUoS`). Every row re-read by `scripts/check_duos_areas.py` (29 Oct 2026: 0 problems). Until 29 Oct 2026 every site used London's table |
+| DUoS, 33 and 132 kV sites | each area's Annex 2 "Designated EHV" charges: quartiles over the area's listed import sites in the same residual band — median central, 25th/75th low/high — of super-red p/kWh, fixed p/day (carries the EHV residual), capacity p/kVA/day (`duos_areas.EHV_BANDS`). E.g. EHV4 capacity: London 2.225 (16 sites), Yorkshire 0.81 (12), North Wales 3.395 (12); fixed: £28,962/yr North West to £818,197/yr North Wales | **derived** | Same workbooks, Annex 2. A new site's tariff is set for its own node, so the median of the area's existing sites in its band stands in. Until 29 Oct 2026 these sites were charged on London's *HV* row (9.19 p/kVA/day, no fixed), which is not their tariff |
+| DUoS time bands | each area's own: Annex 1 "Time Bands for LV and HV Designated Properties" for 11 kV (e.g. red 16:00–19:00 most areas, 16:00–19:30 Northern Powergrid, 17:00–19:30 South Wales, 11:00–14:00 and 16:00–19:00 London; some areas have weekend amber); Annex 2 super-red for EHV (Nov–Feb weekdays, 16:00–19:00 to 17:00–19:30; South Wales and South West exclude 22 Dec–4 Jan; London adds Jun–Aug 11:00–14:00) | transcribed | Same workbooks (`duos_areas.HV_TIME_BANDS`, `SUPER_RED`); UK clock |
+| DUoS band families and thresholds | 11 kV takes HV1–4, 33/132 kV EHV1–4; thresholds HV 500 / 1,100 / 2,000 kVA, EHV 3,500 / 11,000 / 20,000 kVA — **the same in all 14 areas** and the same as NESO Table TB | transcribed | Each workbook's "TNUoS Mapping" and "Residual Charging Bands" sheets, checked by `scripts/check_duos_areas.py` |
 
 **The shape matters more than the level.** Two of the four charges scale with the
 *connection* rather than the energy, so a battery or hydrogen store that flattens
@@ -1107,6 +1110,136 @@ the addition is capacity- or connection-based.
 locational TNUoS at a South Western site and **nothing** in Scotland, whose
 tariffs are floored — unfloored they are −£33.84 and −£23.62/kW. That signal
 points the same way as the renewable resource, and it was entirely absent.
+
+### Winter-peak (Triad) demand (28 Oct 2026)
+`network_charges.triad_window`, `dc_model` variable `triad_mw`.
+
+| Input | Value | Grade | Source |
+|---|---|---|---|
+| What the HH locational tariff is charged on | "metered output during the Triads ... the three half hour settlement periods of highest net system demand between November and February inclusive ... separated by at least ten full days" | transcribed | NESO, *Final TNUoS Tariffs for 2026-27*, report, HH gross demand tariffs |
+| The candidate window | weekdays, November–February, settlement periods **34–37** (16:30–18:30) | transcribed | NESO Triad notices 2019/20 to 2025/26: all 21 Triads inside it (e.g. 2025/26: 5 Jan SP35, 3 Feb SP37, 20 Nov SP34) |
+| How it is charged | tariff × the most the site imports in any window step | **assumed** (method) | Errs a little high — the true charge is the mean of three half-hours, unknown until March. Needs no foresight |
+
+### Transmission or distribution — GB's voltage rule (28 Oct 2026)
+`network_charges.is_transmission_connected`, `band_floor_mw`. Replaced an
+ASSUMED 100 MW threshold. Plan: `docs/CONNECTION_TIER_PLAN.md`.
+
+| Input | Value | Grade | Source |
+|---|---|---|---|
+| What transmission is | 132 kV and above in Scotland; above 132 kV elsewhere | transcribed | Electricity Act 1989 s.64(1) ("high voltage line") and s.4(4), legislation.gov.uk, revised text current to 25 Oct 2026 |
+| Largest DNO demand, England and Wales | **240 MVA** (132 kV, dual connection) | transcribed | Electricity North West, ES216 Issue 4, *6.6kV to 132kV Connection Requirements for Capacity Loads of 9MVA to 240MVA*, July 2024, §2 Scope table "132kV 240MVA" and §5.2. Listed in ENWL's live G81 library (9 Aug 2024) and approved by its Policy Approval Panel; page 1 still carries a DRAFT watermark |
+| Largest DNO demand, Scotland | **120 MVA** (33 kV) | **assumed proxy** | ES216 §2 "33kV at Bulk Supply Points (BSP) 120MVA" — an English DNO's 33 kV ceiling, applied to Scotland, where the DNO's top voltage is 33 kV. No SPEN or SSEN design standard could be opened |
+| Connection voltage by size | **per DNO area** — `network_charges.AREA_RULES`, each rule with its own sources | transcribed where the DNO publishes, else the national default | See the table below |
+| HV and EHV | HV: at least 1 kV and below 22 kV; EHV: 22 kV and above | transcribed | ENWL, *LC14 Use of System Charging Statement 2026-27*, glossary (DCUSA definitions). Decides HV1-4 vs EHV1-4 |
+| Corroboration | sites ≥ 250 MW have not applied for distribution | secondary (primary document, not a standard) | NGED, *Data Centre Impact Study*, Nov 2025: "relating to distribution high voltage tiers capping at 132kV" |
+
+**By area (28 Oct 2026).** The largest demand each DNO connects at 11 kV, 33 kV
+and at all; above the last, transmission. "Default" means the DNO publishes no
+figure. Documents in OneDrive `DC optimiser/connection sources/1 tier rule/voltage
+by area`, with an index.
+
+| CI region | DNO | 11 kV | 33 kV | top | Source |
+|---|---|---|---|---|---|
+| 3 North West | ENWL | 15 | 120 | 240 | ES216 Issue 4 §2, §5.2 (§7.2: 7.5 MVA normally, 15 with double-banked cables) |
+| 13 London | UKPN (LPN) | under 8 | default 120 | default 240 | EDS 08-3100 v9.0 §4.2.1, EDS 08-4101 v4.0 §1: "All supplies of 8MVA and above ... shall be connected to the 33kV network" (central London; applied region-wide) |
+| 10 East, 14 South East | UKPN | 12 | default | default | EDS 08-3100 v9.0 Table 4-1: 11 kV maximum "12MVA" |
+| 4 North East, 5 Yorkshire | Northern Powergrid | 12 | default | default | IMP/001/010 v10.0 §3.11.13: above "12MVA at 11kV" consider EHV |
+| 7, 8, 9, 11 NGED areas | NGED | default 12 (supported: ST SD4OB/1 Jan 2025, 630 A per metering circuit breaker = 12.0 MVA at 11 kV, derived) | default | **250** | Data Centre Impact Study (Nov 2025): 250 MW and over have not applied for distribution (observation). POL SD3/11, ST SD1F/3, ST SD2A/1 and the Jul 2026 EHV guidance set no size rule |
+| 12 Southern England | SSEN (SEPD) | default | default | default | SSEN's planning standards (PR-NET-NPL-006 and -007 rev 2.00, June 2026; TG-NET-NPL-010; TG-NET-ENG-005 rev 3.00) set **no** size threshold: "The point of connection (POC) shall be determined by SSEN"; EHV impact assessed from 500 kVA; single customers at 132 kV by loop-in or tee |
+| 1 North Scotland | SSEN (SHEPD) | default | 120 proxy (= top) | 120 proxy | LTDS: 132 kV "regarded as transmission voltage in Scotland"; SSEN's planning standards set no size threshold (as Southern England) |
+| 2 South Scotland | SPEN (SPD) | default | 120 proxy (= top) | 120 proxy | charging statement Jan 2023 p6: "In Scotland ... 33kV downwards"; SP Transmission: demand "typically at 132KV and above"; ESDD-02-021 Issue 4 has no voltage-by-size rule (only HV spurs "up to 1MW of group demand") |
+| 6 North Wales and Merseyside | SPEN (SPM) | default | default | default | charging statement: 132 kV and below in England and Wales; SP Manweb Overview Statement (Apr 2026): "132 kV, 33 kV, 11 kV and LV" |
+
+Defaults: 11 kV **12 MVA** (UKPN and Northern Powergrid both publish it); 33 kV
+**120 MVA** and top **240 MVA** (ES216, the only DNO that publishes them — PROXY
+elsewhere).
+
+**Uncertain sizes** (`tier_is_uncertain`, the page's optional both-ways run):
+from the area's 33 kV limit to its top in England and Wales — NGED's study says
+sites below 250 MW "could connect to either distribution or transmission", and a
+transmission site energises "to a 132kV connection bay", like-for-like with the
+DNO's 132 kV; in Scotland from one 33 kV feeder (ES216 §6.2, 45 MVA) to the 120
+MVA proxy.
+
+### Policy levies and losses on imports — FY2026/27 (28 Oct 2026)
+`levies.py`. Every figure is stored as the document states it and the £/MWh is
+computed in code. Documents in OneDrive `DC optimiser/connection sources/5 levies
+and losses` (losses: `3 DUoS`). Moved from 2025/26 the same day; every 2025/26
+figure had been re-checked against its document first and matched.
+
+| Input | As stated | £/MWh | Grade | Source |
+|---|---|---|---|---|
+| RO | 0.472 ROC/MWh; £69.34/ROC | 32.73 | transcribed; product derived | Ofgem, *RO buy-out price and mutualisation threshold and ceilings 2026 to 2027* |
+| FiT | fund and supply less EII-exempt supply, Issues 62–65 (Jul 2025 – Jun 2026) | 7.96 | derived (Ofgem publishes no rate) | Ofgem, *FIT Quarterly Report* Issues 62–65. Only Q1 of 2026/27 is published; the four latest quarters keep a full seasonal year |
+| CfD | interim levy rates 10.260; 10.559 → 2.068 from 17 Aug; 5.529 (adjusted) from 1 Oct; 2.979 from 1 Jan; operational £0.1463 | 6.45 | transcribed; day-weighted | EMR Settlement, *Key Figures for Payments in 2026/27* §1, §3 |
+| Capacity Market | £3,474,489,734.79 over 11,291,571.95 MWh, 4–7 pm working days Nov–Feb (DY 2026/27) | **307.71 in window**; 8.82 on a flat load | derived | Same, §9, §12. Was £177.38 in 2025/26 |
+| Nuclear RAB | 4.683; 4.488; 3.754; 3.676 by quarter; operational £0.0063 | 4.16 | transcribed; day-weighted | Same, §5, §7 |
+| AAHEDC | 0.044269 p/kWh | 0.44 | transcribed | NESO, *AAHEDC Final Tariff and Charging Statement 2026-27*, Schedule 1 |
+| CCL | £0.00801/kWh; 92 % off under a CCA | 8.01 (0.64 with a CCA) | transcribed; CCA status **assumed** (none) | GOV.UK, *Climate Change Levy rates* |
+| Distribution losses | each area's own generic demand LLFs by connection voltage and time period (`duos_areas.LLF`, `LLF_PERIOD_RULES`); flat-load means at 33 kV range from ×1.0034 (North Scotland) to ×1.0501 (West Midlands), London ×1.0262 (all including the assumed TLM) | transcribed | Each area's 2026/27 schedule, Annex 5 (most marked "illustrative" until the BSC Panel approves the year). NGED leave Annex 5 of the schedule blank and publish it separately: *LLFs for year beginning 1 April 2026*, one workbook per area (`duos_areas.LLF_FILES`), obtained 29 Oct 2026 — 33 kV takes their "EHV connected" row. All checked by `scripts/check_duos_areas.py`. Until 29 Oct 2026 London's table for every site |
+| Transmission losses | offtaking TLM = 1 + zonal TLF (by season) + TLMO-. TLFs 2026/27 by zone (spring, summer, autumn, winter), e.g. North Scotland −0.0320 / −0.0197 / −0.0301 / −0.0493, London +0.0182 / +0.0176 / +0.0225 / +0.0312, South West +0.0182 / +0.0174 / +0.0230 / +0.0323 (`levies.TLF_ZONE_2026_27`); TLMO- 0.011 | TLFs **read from charts** (±0.0005); TLMO- **assumed** | Elexon, *Analysis Reporting for TLFs - BSC Year 2026/27* V1.0 (Apr 2026), pp. 7-8, the Adjusted Seasonal Zonal TLFs (TLFA-I009) — bar heights measured against the gridlines; every ranking in the report's text (p. 9) holds. TLMO-: *Guidance document for TLFs* v1.0 (Jan 2026), worked example. The exact files are on the Elexon Portal (login; down 29 Oct 2026). Until 29 Oct 2026 a flat 1.011 for every site |
+
+Flat levies **£59.75/MWh**; with the CM levy on a flat load **£68.57/MWh**.
+Losses on a flat load: ×1.040 at 11 kV, ×1.026 at 33 kV, ×1.013 at 132 kV,
+×1.011 on the transmission tier (was ×1.0338, the carbon side's ecoinvent factor,
+for every site). Since 29 Oct 2026 regional: the TLM alone runs from ×0.978
+(North Scotland) to ×1.034 (South West) on a flat load. Not charged: ESC/EMR settlement levies (negligible), supplier
+margin (unpublished), Green Gas Levy (gas only).
+
+### Grid connection capital (28 Oct 2026)
+`connection_cost.py`. The cost counterpart of `grid_connection.py`, priced at the
+site's connection voltage. Moved from NGED's August 2023 prices, with every site
+at 132 kV, on 28 Oct 2026.
+
+| Input | Value | Grade | Source |
+|---|---|---|---|
+| 132 kV substation | **£1,700,792–£2,790,945** per new outdoor double-transformer substation | transcribed | NGED (South Wales), *Statement of Methodology and Charges for Connection*, June 2026, §7 F7 "132kV/ EHV substation", p. 168 (same in South West and East Midlands) |
+| 33 kV substation | **£1,359,279–£1,501,688** ("EHV/HV primary substation", new outdoor double transformer) | transcribed | Same, p. 168 |
+| 11 kV switchboard | **£28,635–£40,708** ("HV only substation", external switchgear and metered circuit breaker) | transcribed | Same, p. 167 |
+| Cable, footpath or carriageway | 132 kV: £126,845 first 40 m, then **£3,171/m**; 33 kV: £9,068–19,451 first 30 m, then £221–540/m; HV: £5,163–12,324 first 20 m, then £98–261/m | transcribed | Same, §7 F5, pp. 164–165 |
+| Firm ratings | 132/33 kV pair 60 MVA; 33/11 kV pair 29 MVA | **assumed** | ES216 §5.2 and §6.2 single-transformer limits, N-1 |
+| Route | 2 km × 2 circuits | **assumed** | `grid_connection.LINE_KM`; dual connection for N-1 |
+| Annual charge | CRF at the TO's return over 40 y + **0.43 %** maintenance (+ **0.90 %** TRC on the transmission tier); NGET 5.02 %, SPT 5.14 %, SHET 4.32 % | transcribed | NESO, *Statement of Use of System Charges*, Issue 8.0, §15–16, Table 3.1 |
+| Who pays | extension assets only; reinforcement socialised below £1,720/kVA | transcribed | Ofgem, *Access SCR Final Decision*, 3 May 2022 |
+
+Central, London: 132 kV £37,431/MW of substation and £12.68 m of cable (~£2,350/MW/yr,
+~£796k/yr); 33 kV £49,327/MW and £1.53 m (~£3,100/MW/yr, ~£96k/yr); 11 kV no
+substation, £0.76 m fixed (~£48k/yr). A transmission site is priced on the
+132 kV rows (errs low for 275/400 kV).
+
+### Substation register: price nodes located, substations with spare capacity (29 Oct 2026)
+`scripts/build_substation_register.py` -> `optimisation_outputs/substation_register/`
+(`price_nodes.csv`, `substations.csv`, `summary.csv`); checked by
+`scripts/check_substation_register.py` (also writes `fallback_error.csv`).
+Not yet used by the model: it is the foundation for cable length, the spare-capacity
+check and site-specific 33/132 kV charges (`docs/COST_PLAN.md` §1.9).
+
+| Input | What | Grade | Source (OneDrive `connection sources/3 DUoS/site-specific EHV charges`) |
+|---|---|---|---|
+| Price nodes | every area's "Nodal prices" rows (local and remote £/kVA) | transcribed | each 2026/27 schedule of charges |
+| Substation locations and names | UKPN grid and primary sites; Northern Powergrid LTDS EHV sites and capacity heatmap; SSEN capacity heatmaps and substation list; ENWL substations; NGED substation locations, capacity heatmaps, LTDS node list and network models; SP Energy Networks grid and primary heat-map lists | transcribed | each company's open-data portal, fetched 29 Oct 2026 (keys in `.env`) |
+| Names where the company publishes none | ENWL: primary "NAME (number)" and BSP/GSP names from its embedded capacity registers; NGED and SP Energy Networks: their LTDS code tables | derived | same |
+| Location by place name | OpenStreetMap named places, substations and industrial sites, snapped to the nearest substation of the right level | derived; tested (North West 132 kV 23/23, 33 kV 81 %; NGED Midlands 470/480 and 248/257) | OpenStreetMap, © OpenStreetMap contributors, ODbL |
+| Codes no published file decodes | read as abbreviations of the area's substation names, two ways (word prefixes: GTCLIF = GreaT CLIFton; letters in order: CDHR = ColDHaRbour), accepted only when unique or clearly ahead | derived; tested on NGED's 22,590 known code-name pairs: answers for about half, about 90 % right where it answers; every such row is `how=code` | the same files |
+| Spare capacity | firm capacity and available demand headroom per substation (UKPN and SP Energy Networks derived as rating minus maximum demand) | transcribed / derived | the companies' capacity heatmaps |
+| Transmission substations | 517 named 275/400 kV substations | volunteer-mapped | OpenStreetMap |
+
+Located network price nodes at 33 kV (29 Oct 2026): UKPN 67-100 %, NGED Midlands 93-99 %,
+North Wales and Merseyside 92 %, North Scotland 89 %, North West 88 % (132 kV 92 %),
+Southern England 71 %, South Scotland 59 %, South West 56 %, South Wales 44 %; Northern
+Powergrid prices by group, 87-99 % of groups located. The North West's remaining codes and NGED's remaining South Wales and South West codes
+appear in none of their published files; the decoder places 145 of them. Customer and generator nodes
+are kept but flagged; unlocated network nodes mostly carry no location price
+(`summary.csv`, `unlocated_with_price`). Using the nearest located node instead
+of a site's own costs a median 0-9 % of the band-4 capacity charge in nine areas,
+18-35 % in East England, Northern Powergrid and the South West.
+
+### Electrolyser stacks and water in cost (28 Oct 2026)
+`h2_capex.electrolyser_costs` → `Tech.cost_ely_variable_per_kg`. NESO Green
+Hydrogen Data Portal variable opex, already in `price_outputs/electrolyser_costs_clean.csv`
+and previously dropped: PEM £0.003114/kWh HHV × 39.4 kWh/kg = **£0.123/kg**, AE
+£0.104/kg; SOEC takes PEM's as an **assumed** floor. Charged per kg made — the
+cost counterpart of the carbon side's duty-driven `ely_stack_units`.
 
 ---
 

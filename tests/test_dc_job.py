@@ -281,3 +281,30 @@ def test_stop_refuses_a_pid_older_than_the_job(tmp_path, monkeypatch):
         pytest.skip("no process creation time on this platform")
     assert dc_job.cancel(tmp_path) is False
     assert killed == [], "cancel killed a process that predates the job"
+
+
+def test_the_other_connection_type_is_solved_only_when_asked_and_uncertain(monkeypatch):
+    """Off by default; on, only for a size the area's rule leaves open
+    (network_charges.tier_is_uncertain), and never when the site states its tier."""
+    from dataclasses import replace
+    from optimisation import dc_job, dc_runner, sites
+    calls = []
+
+    def fake_run_one(scenario, site, **kw):
+        calls.append(site.transmission_connected)
+        return {"transmission_connected": site.transmission_connected}
+
+    monkeypatch.setattr(dc_runner, "run_one", fake_run_one)
+    london = sites.Site(lat=51.5, lon=-0.13, carbon_api_region=13, tnuos_zone=12)
+    req = {"both_tiers": True, "out_root": "unused", "kw": {}}
+    uncertain = {"connection_limit_mw": 150.0, "transmission_connected": False}
+    noop = lambda *a, **k: None
+
+    assert dc_job._other_tier(None, london, {**req, "both_tiers": False}, uncertain, noop, noop) is None
+    assert dc_job._other_tier(None, london, req, {**uncertain, "connection_limit_mw": 100.0},
+                              noop, noop) is None
+    assert dc_job._other_tier(None, replace(london, transmission_connected=False), req,
+                              uncertain, noop, noop) is None
+    assert calls == []
+    other = dc_job._other_tier(None, london, req, uncertain, noop, noop)
+    assert calls == [True] and other == {"transmission_connected": True}

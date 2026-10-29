@@ -98,8 +98,9 @@ def test_duos_bands_follow_the_uk_clock():
     winter = pd.DatetimeIndex(["2025-01-08 06:30", "2025-01-08 07:00"])   # Wednesday, GMT
     assert list(nc.duos_band(summer)) == ["green", "amber"]
     assert list(nc.duos_band(winter)) == ["green", "amber"]
-    # Red is winter-only, so on GMT it is 16:00-19:00 UTC either way.
+    # Red runs all year: 16:00 UK clock is 16:00 UTC in January, 15:00 UTC in July.
     assert nc.duos_band(pd.DatetimeIndex(["2025-01-08 16:00"])).iloc[0] == "red"
+    assert nc.duos_band(pd.DatetimeIndex(["2025-07-02 15:00"])).iloc[0] == "red"
 
 
 def test_settlement_periods_count_from_uk_midnight():

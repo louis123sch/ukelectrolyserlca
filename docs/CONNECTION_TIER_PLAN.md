@@ -8,6 +8,13 @@ supervisor's point 4 (19 Oct): if the best connection lands either side of
 
 Effort: XS < 1 h, S ≈ half a day, M ≈ 1–2 days, L > 2 days.
 
+**Status, 28 Oct 2026: steps 1–4 done**, with two departures. The Scottish
+boundary is ES216's 33 kV ceiling (120 MVA) as an assumed proxy; no SPEN or
+SSEN standard could be opened, and no second DNO standard corroborates the
+240 MVA (NGED's Nov 2025 data-centre study does, informally). The post-solve
+band check lives in the slow test rather than `audit.py`. Step 5's before/after
+is in `docs/COST_PLAN.md`.
+
 ## The problem
 
 The optimiser chooses the connection size (`cap_grid`), but only up to a cap

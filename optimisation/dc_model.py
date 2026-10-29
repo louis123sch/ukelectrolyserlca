@@ -137,6 +137,9 @@ class Assets:
     buy_h2_2: bool = False
 
     grid_limit_mw: float | None = None
+    # The smallest connection in the band the charges were read for
+    # (network_charges.band_floor_mw). Ignored when grid is off.
+    grid_floor_mw: float = 0.0
     allow_export: bool = False
 
 
@@ -203,6 +206,17 @@ class Tech:
     # max(cap_ely / calendar years, running MWh / duty hours). Defaulted to zero so a
     # Tech written before the split, whose gwp_ely is the whole unit, is unchanged.
     gwp_ely_stack_per_mw: float = 0.0
+    # Their cost: NESO's variable opex (stack replacement and water) per kg made,
+    # so running the electrolyser hard costs something in cost as in carbon.
+    # Defaulted to zero, which is the model before 28 Oct 2026.
+    cost_ely_variable_per_kg: float = 0.0
+    # The HH locational TNUoS tariff, GBP per MW of Triad demand per year. It is
+    # charged on triad_mw, the most the site imports in any Triad-candidate step,
+    # not on cap_grid, so a battery covering the winter evening peak saves it.
+    # cost_grid_per_mw_year then carries only the charges that really follow the
+    # connection (DUoS capacity, connection capital). Zero is the model before
+    # 28 Oct 2026, when the tariff sat inside cost_grid_per_mw_year.
+    cost_grid_triad_per_mw_year: float = 0.0
     ely_stack_calendar_years: float = 25.0 / 3.0
     ely_stack_duty_hours: float = 50_000.0
     # Transformer conversion losses (conversion_losses.py). No-load: MW drawn
@@ -245,6 +259,9 @@ class Series:
     cf_solar: np.ndarray
     grid_gwp_per_mwh: np.ndarray        # kg CO2e per MWh imported
     grid_price_per_mwh: np.ndarray      # GBP per MWh, wholesale + volumetric network
+    # Steps that could hold a Triad (network_charges.triad_window). None means
+    # every step, so the winter-peak charge falls on peak import.
+    triad_window: np.ndarray | None = None
 
     @property
     def n(self) -> int:
@@ -335,8 +352,9 @@ def build_model(series: Series, assets: Assets, tech: Tech, *,
     demand = series_da(series.demand_mw)
     inf = float("inf")
 
-    def cap(flag, name, upper=inf):
-        return m.add_variables(lower=0.0, upper=(upper if flag else 0.0), name=name)
+    def cap(flag, name, upper=inf, lower=0.0):
+        return m.add_variables(lower=(lower if flag else 0.0),
+                               upper=(upper if flag else 0.0), name=name)
 
     def flow(flag, name):
         return m.add_variables(lower=0.0, upper=(inf if flag else 0.0),
@@ -353,7 +371,10 @@ def build_model(series: Series, assets: Assets, tech: Tech, *,
         "cap_ely": cap(assets.electrolyser, "cap_ely"),
         "cap_tank": cap(assets.tank, "cap_tank"),
         "cap_fc": cap(assets.fuel_cell, "cap_fc"),
-        "cap_grid": cap(assets.grid, "cap_grid", grid_upper),
+        "cap_grid": cap(assets.grid, "cap_grid", grid_upper,
+                        min(assets.grid_floor_mw, grid_upper)),
+        # Demand in the Triad window: >= import in every candidate step (below).
+        "triad_mw": cap(assets.grid, "triad_mw"),
     }
     # --- flows ----------------------------------------------------------
     V.update({
@@ -435,6 +456,11 @@ def build_model(series: Series, assets: Assets, tech: Tech, *,
 
     # --- (9) grid --------------------------------------------------------
     m.add_constraints(V["imp"] - V["cap_grid"] <= 0, name="import_cap")
+    window = (np.ones(n, dtype=bool) if series.triad_window is None
+              else np.asarray(series.triad_window, dtype=bool))
+    if window.any():
+        m.add_constraints(V["imp"].isel(t=np.flatnonzero(window)) - V["triad_mw"] <= 0,
+                          name="triad_demand")
     if assets.grid and assets.allow_export:
         m.add_constraints(V["exp"] - V["cap_grid"] <= 0, name="export_cap")
 
@@ -596,11 +622,14 @@ def objective_terms(q, series: Series, tech: Tech, *, price, ci) -> dict:
                       + tech.cost_fc_stack_per_mw * q["fc_stack_units"]
                       + tech.cost_fc_bop_per_mw * q["fc_bop_units"]),
         "grid connection": tech.cost_grid_per_mw_year * q["cap_grid"],
+        "grid winter-peak charge": tech.cost_grid_triad_per_mw_year * q.get("triad_mw", 0.0),
     }
     cost_operational = {
         "grid energy + network": scale * (price * q["imp"] * dt).sum(),
         buy_1: scale * (tech.bought_h2_gbp_per_kg * q["h2_buy"]).sum(),
         buy_2: scale * (tech.bought_h2_2_gbp_per_kg * q["h2_buy_2"]).sum(),
+        "electrolyser stacks and water": scale * (tech.cost_ely_variable_per_kg
+                                                  * kg_per_mwh_in * q["p_ely"] * dt).sum(),
         "unserved (VoLL)": scale * (VOLL_GBP_PER_MWH * q["unserved"] * dt).sum(),
         "export credit": -scale * (price * q["exp"] * dt).sum(),
     }
@@ -619,10 +648,11 @@ CHAINS = {
     "wind": {"wind", "offshore wind", "wind step-up transformers"},
     "solar": {"solar", "solar step-up transformers"},
     "grid": {"grid import", "grid energy + network", "grid connection", "connection fixed",
-             "export credit"},
+             "grid winter-peak charge", "export credit"},
     "battery": {"battery", "battery cells and container", "battery power conversion",
                 "battery step-up transformers"},
-    "electrolyser": {"electrolyser", "electrolyser stack replacements", "electrolyser consumables"},
+    "electrolyser": {"electrolyser", "electrolyser stack replacements", "electrolyser consumables",
+                     "electrolyser stacks and water"},
     "hydrogen tank": {"H2 tank", "H2 leaked from tank"},
     "fuel cell": {"fuel cell", "fuel cell stack replacements", "fuel cell BoP replacements",
                   "fuel cell maintenance", "fuel cell step-up transformers"},
@@ -822,7 +852,19 @@ def contributions(V, obj, series, tech, assets) -> dict:
         "cost_chains": chains(terms, "cost"),
         "demand_MWh_per_year": mwh,
         "totals": totals(obj),
+        # A connection sitting on its band's floor is one a cheaper band would
+        # probably serve. Not re-solved automatically: re-running with the
+        # ceiling just below the floor is the user's call (CONNECTION_TIER_PLAN).
+        "grid_floor": grid_floor_status(V, assets),
     }
+
+
+def grid_floor_status(V, assets) -> dict:
+    """Whether the built connection sits on its band's floor."""
+    floor = assets.grid_floor_mw if assets.grid else 0.0
+    built = float(V["cap_grid"].solution)
+    return {"floor_mw": floor, "cap_grid_mw": built,
+            "binding": floor > 0 and built <= floor * (1 + 1e-6)}
 
 
 def solution_quantities(V) -> dict:

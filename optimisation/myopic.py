@@ -193,6 +193,9 @@ def evaluate(df: pd.DataFrame, series: M.Series, tech: M.Tech, caps: dict,
               for k in FLOWS})
     q["fc_bop_units"], q["fc_stack_units"] = bop_units, stack_units
     q["ely_stack_units"] = ely_stack_units
+    window = (np.ones(series.n, dtype=bool) if series.triad_window is None
+              else np.asarray(series.triad_window, dtype=bool))
+    q["triad_mw"] = float(q["imp"][window].max()) if window.any() else 0.0
     terms = M.score(q, series, tech)
     if grid is None:
         grid = caps.get("cap_grid", 0.0) > 0

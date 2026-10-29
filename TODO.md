@@ -20,6 +20,10 @@ scruffy.
 **Carbon side:** every open carbon item is sequenced in `docs/CARBON_PLAN.md`
 (14 Oct) — work it from there.
 
+**Cost side:** every open cost item is sequenced in `docs/COST_PLAN.md`
+(28 Oct), grid connection first — work it from there. The items themselves are
+lines here like any other.
+
 ---
 
 ## Blocking a result
@@ -49,15 +53,13 @@ Work where a number the study reports is not currently defensible.
       €500–1,040/kg high-pressure range — ~3–10× low on its own shell mass.
       Price it from `steel_kg_per_kg_h2` (Capital Equipment Cost Database).
       Needs a decision on the default design. Plan §3 item 1, §6.3.
-- [ ] **The import price carries no levies.** RO/FiT/CfD/CM/AAHEDC ≈ £54/MWh
-      plus CCL — about +50 % on the grid-only bill, and it flatters import
-      against every on-site asset. `ELECTRICITY_DELIVERED_UPLIFT` cannot reach
-      the LP (`profiles.py` never reads `price_timeslices`). Audit §3.5.
-- [ ] **Connection tier and band follow the cap, not the connection built**
-      (19 Oct, supervisor point 4). Replace the assumed 100 MW threshold with
-      GB's voltage rule (ENWL ES216, 240 MVA in England and Wales; 132 kV in
-      Scotland), and bound `cap_grid` below by its band's floor. Moves the
-      London headline. Sequenced in `docs/CONNECTION_TIER_PLAN.md`.
+
+- [ ] **Transmission loss multiplier: exact values** (29 Oct). Zonal TLFs are
+      in (`levies.TLF_ZONE_2026_27`) but READ FROM the 2026/27 report's charts
+      (±0.0005), and TLMO- is ASSUMED 0.011. When the Elexon Portal is back
+      (scripting key in .env as ELEXON_SCRIPTING_KEY), fetch TLFA-I009
+      (Adjusted Seasonal Zonal TLFs) and TLFA-I014 (indicative TLM/TLMO) for
+      BSC Year 2026/27 and replace both.
 
 ## Cheap wins
 
@@ -89,9 +91,6 @@ Either the source is named and public, or no new sourcing is needed at all.
       override hooks on `build_tech()`. No sourcing — just run the sweep and
       publish the range. The T/D threshold alone swings TDR £270k–£4.67m/year.
 
-- [ ] **Read NESO's variable opex.** `electrolyser_costs_clean.csv` carries
-      `variable_opex_GBP_per_kWh_H2_HHV` — stack replacement and water, PEM
-      £0.12/kg — and `h2_capex.electrolyser_costs()` drops it. Audit §3.3.
 - [ ] **One price base and one discount-rate policy.** DESNZ is 2023 real and
       never rebased (~6 % low against Modo/EHO 2025); DOE $ and tank € are
       converted at the exchange rate only; the 6 % on H₂ assets has no source,
@@ -104,11 +103,12 @@ Either the source is named and public, or no new sourcing is needed at all.
 - [ ] **Generation cost scope.** DESNZ opex includes the *generator's*
       TNUoS/DUoS (+11.6 % on onshore) for plant behind our meter, and
       excludes land and business rates (~21 % of `cost_wind`). Audit §3.1.
-- [ ] **Network charge shape.** DUoS uses the "No Residual" class (a data
-      centre is Band 1–4) and an unverified Nov–Feb red band (historic LPN is
-      all-year 11–14 and 16–19: £6.96 vs £2.05/MWh); TDR is banded on the
-      connection ceiling while DUoS bills `cap_grid`; TNUoS HH is a Triad
-      charge, not a capacity one. Audit §3.5.
+- [ ] **Network tariffs over the asset's life** (28 Oct). Every charge is
+      FY2025/26, applied to a connection annualised over 40 y. Run NESO's
+      five-year TNUoS forecast as a sensitivity. `COST_PLAN.md` §1.7.
+- [ ] **Decommissioning and insurance, like for like** (28 Oct). Check which
+      cost sources carry them (DESNZ generators believed to; H₂ assets are bare
+      capex + an opex %). `COST_PLAN.md` §4.3.
 - [ ] **Tank heel.** `cap_tank` drains to zero; a 1–5 bar minimum for the FC
       feed makes both objectives 4–22 % low per usable kg. Audit §3.3.
 
@@ -117,9 +117,12 @@ Either the source is named and public, or no new sourcing is needed at all.
 
 ## Verification and hygiene
 
-- [ ] **EHV band boundaries against DCUSA Schedule 32.**
-      `network_charges.EHV_BAND_KVA` came from secondary summaries and has
-      never been checked against the primary.
+- [ ] **Power factor and reactive charges** (28 Oct). PF 1.0 everywhere; the
+      DUoS reactive rate is transcribed and never used. State it as an
+      assumption unless a source puts a data centre well below 1.
+- [ ] **Decide: is connection lead time in scope?** (28 Oct). The binding GB
+      constraint on new data centres, and not a £/MW. Either model it (a cost
+      of waiting, bridging on on-site generation) or state it out of scope.
 - [ ] **Docs: reconcile 118 vs ~250 gCO₂/kWh** (reviewer, 30 Sep). 250 is the
       grid-only *total per MWh of load*, not a grid intensity: 118 (FES,
       national, direct, 2024) → 139 (API London 2025, direct) → 159
@@ -164,6 +167,10 @@ is what is *actually* absent rather than what sounds absent.
       rates) and Hermesmann's bills list compressors, so plan §6.3 option 2
       would double count as written. Distinct from the parked seller-side
       loading compressor below. `h2_storage.py`, audit §3.3.
+- [ ] **Battery and fuel-cell step-up transformers — cost side** (28 Oct).
+      Carbon since 15 Oct; no cost line. Check whether Modo's £/kW already
+      includes the transformer (probably) and the fuel-cell proxy (equipment,
+      not installed — probably not). `COST_PLAN.md` §2.3.
 
 **Closed 4 Sep as negligible** — not to be reopened without new evidence:
 connection and step-up switchgear, and the data centre's own electrical
@@ -195,12 +202,24 @@ No public source found. Revisit if the item becomes load-bearing in a result.
       functional unit for MP-E, as for every route (§3.1). A real molten-media
       plant may run near-atmospheric, which would make its compression term
       ~2.5× larger; check before turquoise carries any conclusion.
-- [ ] **Transmission connection capital cost.** A grid connection in a floored
-      TNUoS zone currently costs £0/MW/year — right as a tariff, wrong as a
-      cost, and it flatters exactly the Scottish sites the locational headline
-      turns on. Needs a module reading the Connection Charging Methodology, and
-      would remove `dc_pareto`'s lexicographic second stage.
-- [ ] **DUoS regional coverage.** Only LPN HV Site Specific is transcribed, so
-      any distribution-connected site outside London is priced on London
-      tariffs. Thirteen DNO charging statements, hand-transcribed, no API.
+- [ ] **Finish the connection cost from the data in hand** (29 Oct): plan in
+      `docs/COST_PLAN.md` §1.9 — A substation register (BUILT 29 Oct), B cable length from
+      the site's coordinates (replaces the 2 km), C spare capacity at the
+      substation (needs a decision on shortfalls), D site-specific 33/132 kV
+      charges, E build prices by area, F exact loss multiplier, G check.
+      D's blocker (each area's add-ons) has its own five-step plan in §1.9:
+      formula, known pairs, NGED pilot, anonymised areas, wire in.
+- [ ] **EHV local charges for a named node** (29 Oct). 33/132 kV sites take
+      the median of their area's listed sites in the same band
+      (`duos_areas.EHV_BANDS`). Plan: (1) the EDCM method, DCUSA Schedules 17
+      (FCP: HYDE, SOUT, SPOW, MANW, EMEB, MIDE) and 18 (LRIC: EELC, NORW, LOND,
+      NEEB, YELG, SEEB, SWAE, SWEB) — both v17.5, held since 29 Oct, with
+      ENWL's blank 2026/27 LRIC model (OneDrive `3 DUoS/site-specific EHV charges`);
+      (2) each area's EDCM model workbook, if published with its charging
+      statement; (3) node locations — LTDS or the DNO open-data portals —
+      joined to the "Nodal prices" sheet we already hold (node, name, local and
+      remote £/kVA); (4) site -> nearest node at its voltage -> nodal price ->
+      tariff by the schedule's formula + the area's residual band (held) and
+      cost adders (EDCM model); (5) check by reproducing Annex 2 charges for
+      listed sites; low/high from the area's cheapest and dearest nodes.
 

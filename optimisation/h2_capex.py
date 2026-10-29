@@ -213,8 +213,19 @@ def _neso_pem_capex(build_year=2025):
             "high": float(df[df.scenario == "High"].iloc[0].capex_GBP_per_kWe)}
 
 
+# Hydrogen's higher heating value, to turn NESO's per-kWh-HHV variable opex into
+# per kg. 39.4 kWh/kg is the standard figure (141.8 MJ/kg).
+H2_HHV_KWH_PER_KG = 39.4
+
+
 def electrolyser_costs(build_year=2025):
-    """AE and PEM from NESO (sourced); SOEC scaled off PEM (assumed)."""
+    """AE and PEM from NESO (sourced); SOEC scaled off PEM (assumed).
+
+    ``variable_opex_GBP_per_kg`` is NESO's variable opex — stack replacement and
+    water — per kg made. NESO charges stack wear on output, so it is the cost
+    counterpart of the carbon side's duty-driven ``ely_stack_units``. SOEC has
+    no NESO figure and takes PEM's, as a floor: its stacks wear faster.
+    """
     df = pd.read_csv(PRICE_DIR / "electrolyser_costs_clean.csv")
     df = df[df.build_year == build_year]
     scen = {"low": "Low", "central": "Central", "high": "High"}
@@ -230,16 +241,21 @@ def electrolyser_costs(build_year=2025):
                 "asset": label, "case": case,
                 "capex_GBP_per_kWe": float(r.capex_GBP_per_kWe),
                 "fixed_opex_frac": float(r.fixed_opex_pct_capex),
+                "variable_opex_GBP_per_kg": float(r.variable_opex_GBP_per_kWh_H2_HHV)
+                                            * H2_HHV_KWH_PER_KG,
                 "lifetime_years": float(r.plant_lifetime_years),
                 "grade": "transcribed",
                 "note": "NESO Green Hydrogen Data Portal",
             })
     pem = _neso_pem_capex(build_year)
+    pem_var = {row["case"]: row["variable_opex_GBP_per_kg"] for row in rows
+               if row["asset"] == "electrolyser_pem"}
     for case in CASES:
         rows.append({
             "asset": "electrolyser_soec", "case": case,
             "capex_GBP_per_kWe": pem[case] * SOEC_MULTIPLIER_OF_PEM[case],
             "fixed_opex_frac": 0.0275,
+            "variable_opex_GBP_per_kg": pem_var[case],
             "lifetime_years": 25.0,
             "grade": GRADE,
             "note": f"NO SOURCE — PEM x {SOEC_MULTIPLIER_OF_PEM[case]:.1f}. "

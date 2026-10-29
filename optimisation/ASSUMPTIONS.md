@@ -186,8 +186,8 @@ October intraday grid carbon sat an hour late against everything else (Audit
 
 Rules published on the UK clock convert from UTC where they are applied: the
 DUoS red/amber/green bands (`network_charges.duos_band`) and Elexon settlement
-periods (`grid_build.normalise_elexon`). The DUoS red band is November-February
-only, so it never moved; amber did, by an hour, all summer.
+periods (`grid_build.normalise_elexon`). The DUoS bands run all year (red
+weekdays 11:00–14:00 and 16:00–19:00), so in summer every band moves by an hour.
 
 ## 3c. Generation is onshore wind and ground-mount solar only
 
@@ -216,10 +216,45 @@ transformer at any rating to supply one. See SOURCES.md.
 
 Electricity is priced at the Elexon APXMIDP half-hourly wholesale price plus
 the demand-side network charges `network_charges.py` builds (TNUoS, BSUoS,
-DUoS). Levies (RO/FiT/CfD/CM/AAHEDC, CCL) and supplier margin are not
-included, so absolute £/MWh still understates a real import bill (TODO). The
-connection and UoS figures in the DESNZ tables are *generator*-side and are
-not a substitute.
+DUoS) and, since 28 Oct 2026, the FY2026/27 policy levies and losses
+`levies.py` builds: RO, FiT, CfD, AAHEDC, Nuclear RAB and CCL as one flat
+£/MWh, the Capacity Market levy on its 16:00–19:00 winter working-day window,
+and wholesale and BSUoS grossed up for losses: the site's own area's line loss
+factor for the connection voltage and time period, times the offtaking
+transmission loss multiplier for its zone and season (1 + zonal TLF read from
+Elexon's 2026/27 report charts + an assumed national adjustment of 0.011).
+**Assumed**: the site holds no Climate Change Agreement (`CCL_UNDER_CCA`;
+with one, CCL falls from £7.75 to £0.62/MWh). Supplier margin is not included.
+The connection and UoS figures in the DESNZ tables are *generator*-side and
+are not a substitute.
+
+**The national grid's location charge** (HH locational TNUoS) is charged on winter-evening demand, as the tariff is: the most the site imports in any weekday half-hour from 16:30 to 18:30, November to February, the window every Triad of the last seven winters fell in. A battery or fuel cell that covers that window saves it; the charge for the connection itself (DUoS capacity, connection capital) stays on the connection size.
+
+**One tariff year.** Every network charge — TNUoS, the residual and its band
+boundaries, BSUoS and every area's DUoS — is the **2026/27** tariff (`network_charges.TARIFF_FY`),
+applied to whatever weather and wholesale window is solved. The levies are 2026/27
+too (`levies.LEVY_FY`) since 28 Oct 2026.
+
+**The connection voltage** of a distribution site is the lowest its area's DNO connects it at, by that DNO's own published rule where there is one (`network_charges.AREA_RULES`): 11 kV up to 12 MVA by default (15 in the North West, under 8 in London), then 33 kV (up to 120 MVA, and always in Scotland), then 132 kV up to 240 MVA (250 in the NGED areas). Where a DNO publishes nothing the default stands in, and says so. Sizes the rules leave open can be solved both ways — an option, not the default. An 11 kV site takes HV residual bands and its grid electricity at medium voltage; 33 and 132 kV sites take EHV bands and high voltage.
+
+**The connection tier** follows GB's voltage rule, not a size threshold: a DNO
+connects demand up to 240 MVA in England and Wales and up to 120 MVA in
+Scotland, where 132 kV is transmission (ENWL ES216; the Scottish figure is a
+proxy). Above that the site is transmission-connected and pays no DUoS. Below it the site
+pays its own area's DUoS (`duos_areas`): an 11 kV site its area's HV Site Specific
+row, a 33 or 132 kV site the median of its area's listed EHV sites in the same
+band, each in that area's own time bands, and its area's line loss factors.
+`Site.transmission_connected` overrides the rule — a real connection offer
+beats it. The TDR band is read from the connection ceiling and the built
+connection is held inside that band (`floor ≤ cap_grid ≤ ceiling`); a run
+whose connection sits on the floor is flagged, and re-running with a lower
+ceiling is the user's call.
+
+**The connection's capital** (`connection_cost.py`) is charged on the same
+split as its carbon: the intake substation per MW of `cap_grid` and the cable
+to the network as a fixed annual cost, annualised the way CUSC Section 14
+charges connection assets. Under the Access SCR a demand customer pays for its
+extension assets only, so no reinforcement contribution is added.
 
 ## 5. Emissions are IPCC 2021 GWP100, attributional
 

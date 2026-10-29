@@ -203,6 +203,7 @@ def run_one(scenario: A.Scenario, *, site, start: str, end: str,
     assets = A.architecture(scenario.architecture,
                             offshore=site.offshore_wind,
                             grid_limit_mw=meta["connection_limit_mw"],
+                            grid_floor_mw=meta.get("connection_floor_mw", 0.0),
                             flags=scenario.assets)
     # An architecture that *may* buy hydrogen still needs a priced colour on
     # each stream it unlocks. Without one the LP buys it free and carbon-free;
@@ -258,6 +259,13 @@ def run_one(scenario: A.Scenario, *, site, start: str, end: str,
         "target_note": result.get("target_note"),
         "assets": scenario.assets,
         "network_charges": meta.get("network_charges"),
+        "connection_limit_mw": meta.get("connection_limit_mw"),
+        "connection_floor_mw": meta.get("connection_floor_mw", 0.0),
+        "tdr_band": meta.get("tdr_band"),
+        "transmission_connected": meta.get("transmission_connected"),
+        # Points whose connection sits on its band's floor: a lower band would
+        # probably be cheaper, so re-run with the ceiling just below the floor.
+        "grid_floor_binding": _floor_binding(result, assets),
         "perfect_foresight": True,
         "solve_seconds": time.time() - t0,
         "config_hash": h, "cached": False,
@@ -265,6 +273,15 @@ def run_one(scenario: A.Scenario, *, site, start: str, end: str,
     }
     summary_path.write_text(json.dumps(summary, indent=2, default=str), encoding="utf-8")
     return summary
+
+
+def _floor_binding(result: dict, assets) -> list[str]:
+    floor = assets.grid_floor_mw if assets.grid else 0.0
+    if floor <= 0:
+        return []
+    return [name for name in ("min_cost", "knee", "min_gwp")
+            if isinstance(result.get(name), dict)
+            and result[name].get("cap_grid", 0.0) <= floor * (1 + 1e-6)]
 
 
 def _worker(args):
