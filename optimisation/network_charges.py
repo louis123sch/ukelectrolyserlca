@@ -331,6 +331,7 @@ def duos_band(index: pd.DatetimeIndex, region: int = 13) -> pd.Series:
 #                        standard — see below.
 
 # Upper bound of each band, inclusive ("<= 3,500"); the last is open.
+BAND_FLOOR_STEP_MW = 0.001          # 1 kVA: the tables are in whole kVA, so the first size in a band
 EHV_BAND_KVA = ((3_500.0, "EHV1"), (11_000.0, "EHV2"),
                 (20_000.0, "EHV3"), (float("inf"), "EHV4"))
 # HV bands, for a distribution site connected below 22 kV (see connection_voltage).
@@ -563,16 +564,25 @@ def band_floor_mw(transmission_connected: bool, band: str, region: int | None, *
     below, and an EHV site's is at least the area's 11 kV limit: a connection
     under it would be an 11 kV, HV-banded one. A pinned band outside these gets
     no floor.
+
+    Every boundary in the tables is inclusive on the lower side ("<= 20,000
+    kVA" is still EHV3; "up to 15 MVA" is still 11 kV; "> 240 MVA" is
+    transmission), so the floor sits one kVA (``BAND_FLOOR_STEP_MW``) above
+    it: a connection built exactly on the boundary would be in the band below.
+    (Found by the 14-area chain run, 29 Oct 2026: 28 of 39 runs built on the
+    floor, and at 20.000 MW were EHV3 sites charged as EHV4.)
     """
     if region is None:
         return 0.0
     if transmission_connected:
-        return dno_max_mva(region) * power_factor
-    for table, least in ((HV_BAND_KVA, 0.0), (EHV_BAND_KVA, area_rule(region).max_11kv)):
+        return (dno_max_mva(region) + BAND_FLOOR_STEP_MW) * power_factor
+    r = area_rule(region)
+    least_ehv = r.max_11kv + (BAND_FLOOR_STEP_MW if r.max_11kv_inclusive else 0.0)
+    for table, least in ((HV_BAND_KVA, 0.0), (EHV_BAND_KVA, least_ehv)):
         bands = [b for _, b in table]
         if band in bands:
             i = bands.index(band)
-            below = 0.0 if i == 0 else table[i - 1][0] / 1000.0
+            below = 0.0 if i == 0 else table[i - 1][0] / 1000.0 + BAND_FLOOR_STEP_MW
             return max(below, least) * power_factor
     return 0.0
 

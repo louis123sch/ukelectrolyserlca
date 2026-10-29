@@ -37,15 +37,38 @@ def test_the_rule_needs_a_region():
         nc.is_transmission_connected(50.0, None)
 
 
-@pytest.mark.parametrize("band, floor", [("HV1", 0.0), ("HV2", 0.5), ("HV3", 1.1),
-                                         ("HV4", 2.0),
+@pytest.mark.parametrize("band, floor", [("HV1", 0.0), ("HV2", 0.501), ("HV3", 1.101),
+                                         ("HV4", 2.001),
                                          # an EHV site is over the area's 11 kV
-                                         # limit (15 MVA in the North West), so
-                                         # its floor is never below it
-                                         ("EHV1", 15.0), ("EHV2", 15.0),
-                                         ("EHV3", 15.0), ("EHV4", 20.0)])
+                                         # limit (15 MVA in the North West, "up
+                                         # to"), so its floor is never below it
+                                         ("EHV1", 15.001), ("EHV2", 15.001),
+                                         ("EHV3", 15.001), ("EHV4", 20.001)])
 def test_distribution_band_floors(band, floor):
-    assert nc.band_floor_mw(False, band, NORTH_WEST) == floor
+    """One kVA above the boundary: 2,000 kVA is still HV3, 15 MVA still 11 kV."""
+    assert nc.band_floor_mw(False, band, NORTH_WEST) == pytest.approx(floor)
+
+
+@pytest.mark.parametrize("band", ["HV2", "HV3", "HV4", "EHV2", "EHV3", "EHV4"])
+def test_a_connection_built_on_the_floor_is_in_the_band_charged(band):
+    """The chain run of 29 Oct 2026 built 28 of 39 connections on the floor; at
+    exactly 20.000 MW an EHV4 site was EHV3 by the table."""
+    top_kva = dict((b, kva) for kva, b in nc.HV_BAND_KVA + nc.EHV_BAND_KVA)
+    for region in (NORTH_WEST, LONDON, YORKSHIRE):
+        floor = nc.band_floor_mw(False, band, region)
+        if floor * 1000.0 > top_kva[band]:
+            # the area's 11 kV limit is above this band's top (EHV1-2 where 11 kV
+            # runs to 12 or 15 MVA): the band cannot be reached, and the floor
+            # lands in the first one that can
+            assert nc.tdr_band_for(floor, region=region, transmission_connected=False)[0] == "EHV3"
+            continue
+        assert nc.tdr_band_for(floor, region=region, transmission_connected=False)[0] == band
+
+
+def test_london_8mva_floor_is_inclusive():
+    """UKPN: 8 MVA 'and above' is 33 kV, so 8.000 MW is already EHV2."""
+    assert nc.band_floor_mw(False, "EHV2", LONDON) == 8.0
+    assert nc.tdr_band_for(8.0, region=LONDON, transmission_connected=False)[0] == "EHV2"
 
 
 def test_every_region_has_a_rule_that_is_in_order():
@@ -121,9 +144,12 @@ def test_the_tariff_year_is_2026_27():
     assert per_day["T-Demand4"] == pytest.approx(20_829.236682)
 
 
-def test_transmission_floor_is_the_tier_boundary():
-    assert nc.band_floor_mw(True, "T-Demand4", LONDON) == nc.E_AND_W_DNO_MAX_MVA
-    assert nc.band_floor_mw(True, "T-Demand4", HIGHLAND) == nc.SCOTLAND_DNO_MAX_MVA
+def test_transmission_floor_is_just_above_the_tier_boundary():
+    """240.000 MVA is still the DNO's (not > 240), so the floor is one kVA above."""
+    for region, top in ((LONDON, nc.E_AND_W_DNO_MAX_MVA), (HIGHLAND, nc.SCOTLAND_DNO_MAX_MVA)):
+        floor = nc.band_floor_mw(True, "T-Demand4", region)
+        assert floor == pytest.approx(top + nc.BAND_FLOOR_STEP_MW)
+        assert nc.is_transmission_connected(floor, region)[0] and not nc.is_transmission_connected(top, region)[0]
 
 
 @pytest.mark.parametrize("region, ceiling", [(LONDON, 225.0), (LONDON, 300.0),

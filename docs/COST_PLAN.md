@@ -33,6 +33,7 @@ Effort: XS < 1 h, S ≈ half a day, M ≈ 1–2 days, L > 2 days.
 | 1.9 A–D Site connection | done 29 Oct — substation register (10,829 substations, 8,432 price nodes), cable route from the site, spare-capacity flag, site-specific 33/132 kV charges | `substations.py`, `ehv_charges.py`, `scripts/build_substation_register.py` |
 | 1.9 E Build prices by area | done 29 Oct — eleven areas on their own 2026 statements, POA rows on the publishers' median (stand-in), NGED's substations kept and flagged low | `connection_cost.py`, `tests/test_connection_prices_by_area.py` |
 | 1.9 H Voltage rule and ceiling | done 29 Oct — published rule as floor, area's substation capacities above it; ceiling 1 / 0.70 (FES load factor) instead of 1.5 assumed | `substations.voltage_with_room`, `network_charges.connection_voltage(site=)`, `sites.py` |
+| 1.9 G Chain check | run 29 Oct — 14 areas x 3 sizes, 42/42 solved, 21 checks pass; found and fixed the band floor sitting on the boundary (one kVA above now) | `scripts/check_connection_chain.py`, `optimisation_outputs/connection_chain.csv` |
 
 The rest of §1–§5 is open. The table below describes the state before these.
 
@@ -324,8 +325,40 @@ the publishers, not NGED's, marked as a stand-in.
 **F. Exact transmission loss multiplier.** Waiting on the Elexon Portal
 (TLFA-I009 and TLFA-I014).
 
-**G. Check.** Re-run all 14 regions at three sizes; tests pinning each
-part to its source; records (SOURCES, DATA_GAPS, ASSUMPTIONS, TODO).
+**G. Check.** — **run 29 Oct 2026** (`scripts/check_connection_chain.py` ->
+`optimisation_outputs/connection_chain.csv`): 14 areas x 5, 60 and 150 MW IT
+at PUE 1.2, one June week (2–9 Jun 2025) hourly, both anchors of the frontier.
+42 of 42 solved; 21 checks pass. What it showed:
+
+- *Found and fixed:* the band floor sat **on** the boundary, not above it.
+  Every table boundary is inclusive below (≤ 20,000 kVA is still EHV3; "up to
+  15 MVA" is still 11 kV; > 240 MVA is transmission), so a connection built at
+  exactly 20.000 MW was an EHV3 site charged as EHV4 — and 28 of 39 runs built
+  on the floor. The floor is now one kVA above the boundary
+  (`network_charges.BAND_FLOOR_STEP_MW`); every built connection is now in the
+  band it is charged in. Tests added.
+- *The floor binds in 29 of 42 minimum-cost runs* (28 of 42 minimum-carbon):
+  the optimiser would build a smaller connection than the band read from the
+  1.43x ceiling requires. Every England-and-Wales 150 MW run sits at the
+  240/250 MW tier boundary: at that size (257 MW ceiling) the model would
+  rather be a large distribution site than a transmission one. That is the
+  size the "run both ways" option exists for; a 150 MW IT site is a case to
+  run both ways, not to read off one tier.
+- *The register moved the voltage in 4 runs* (Inverness 5 MW 11→33 kV;
+  Manchester, Bangor, Southampton 60 MW 33→132 kV) and flagged a spare-capacity
+  shortfall in 8 of 42. Transmission substations (OpenStreetMap) carry no
+  capacity, so every 150 MW run is "unknown".
+- *Site-specific local charges in 11 of 16 EHV runs*; area medians for SSEN's
+  two areas (outside the method this year) and Northern Powergrid's two (no
+  33 kV node could be placed there) — the register's next gap.
+- *Build prices:* every area on its own list; the only stand-in rows reached
+  were London's 33 kV substation (POA). SSEN Southern's printed 132 kV cable
+  range gives its 150 MW transmission run £8.9 m/yr of cable — the printed
+  figures, flagged HIGH in the code.
+- *Magnitudes, minimum-cost anchor, this one week scaled to a year:* 5 MW IT
+  £2.7–3.9 m/yr; 60 MW £31.6–43.8 m; 150 MW £87–110 m. All-in import price
+  £134–149/MWh. Cheapest area at every size: South West (Exeter). One June week
+  is not a year: these are the chain working, not results.
 
 ## 2. Carbon is charged and cost is free
 

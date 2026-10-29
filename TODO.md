@@ -205,8 +205,12 @@ No public source found. Revisit if the item becomes load-bearing in a result.
 - [ ] **Finish the connection cost from the data in hand** (29 Oct): plan in
       `docs/COST_PLAN.md` §1.9 — A substation register, B cable length, C spare
       capacity, D site-specific charges, E build prices by area and H the
-      voltage rule and 1 / 0.70 ceiling all BUILT 29 Oct. Left: F the exact
-      loss multiplier (Elexon Portal), G the 14-region re-run. Still assumed:
+      voltage rule and 1 / 0.70 ceiling all BUILT 29 Oct; G the 14-area chain
+      check RUN 29 Oct (42/42, 21 checks; found the band-floor boundary bug,
+      fixed). Left: F the exact loss multiplier (Elexon Portal). From G: a
+      150 MW IT site sits on the transmission boundary in every England and
+      Wales area — run both ways; Northern Powergrid has no placed 33 kV price
+      node, so its 33 kV sites take the area median. Still assumed:
       the 1.3 cable route factor (B), the half-published threshold for
       overruling the voltage rule (H), the publishers' median for POA price
       rows (E). Check still to do: NGED Table 6 / SPEN appendix 6

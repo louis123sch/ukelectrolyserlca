@@ -250,9 +250,13 @@ row, a 33 or 132 kV site the median of its area's listed EHV sites in the same
 band, each in that area's own time bands, and its area's line loss factors.
 `Site.transmission_connected` overrides the rule — a real connection offer
 beats it. The TDR band is read from the connection ceiling and the built
-connection is held inside that band (`floor ≤ cap_grid ≤ ceiling`); a run
-whose connection sits on the floor is flagged, and re-running with a lower
-ceiling is the user's call.
+connection is held inside that band (`floor ≤ cap_grid ≤ ceiling`); the floor
+is one kVA above the band below's inclusive top (since 29 Oct 2026 — before
+that a connection built on the floor was in the band below). A run whose
+connection sits on the floor is flagged, and re-running with a lower ceiling
+is the user's call: in the 14-area check of 29 Oct 2026 the floor bound in 29
+of 42 runs, every England-and-Wales 150 MW IT site at the transmission
+boundary.
 
 **The connection's capital** (`connection_cost.py`) is charged on the same
 split as its carbon: the intake substation per MW of `cap_grid` and the cable
