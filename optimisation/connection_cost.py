@@ -138,27 +138,34 @@ def _priced_at(voltage: str) -> str:
     return v
 
 
-def capital(voltage: str = "132 kV", case: str = "central") -> dict:
-    """Capital, £: per MW of connection, and the fixed part."""
+def capital(voltage: str = "132 kV", case: str = "central", route_km: float | None = None) -> dict:
+    """Capital, £: per MW of connection, and the fixed part.
+
+    ``route_km`` is the cable route to the substation; since 29 Oct 2026
+    ``substations.connection_point`` gives it from the site's coordinates, and
+    ``ROUTE_KM`` is only the default when no site is placed."""
     v = _priced_at(voltage)
     first_m, first_gbp, per_m = CABLE[v]
-    per_circuit = first_gbp[case] + (ROUTE_KM * 1000.0 - first_m) * per_m[case]
+    r = ROUTE_KM if route_km is None else max(float(route_km), first_m / 1000.0)
+    per_circuit = first_gbp[case] + (r * 1000.0 - first_m) * per_m[case]
     fixed = per_circuit * CIRCUITS + (HV_SWITCHBOARD_GBP[case] if v == "11 kV" else 0.0)
     per_mw = (SUBSTATION_GBP[v][case] / SUBSTATION_FIRM_MVA[v]) if v in SUBSTATION_GBP else 0.0
-    return {"per_MW_GBP": per_mw, "fixed_GBP": fixed, "priced_at": v}
+    return {"per_MW_GBP": per_mw, "fixed_GBP": fixed, "priced_at": v, "route_km": r}
 
 
 def connection_costs(region: int, transmission_connected: bool,
                      case: str = "central", power_factor: float = 1.0,
-                     connection_voltage: str | None = None) -> dict:
+                     connection_voltage: str | None = None,
+                     route_km: float | None = None) -> dict:
     """The connection's annual cost: £/MW/year on ``cap_grid`` and £/year fixed.
 
     ``connection_voltage`` is ``network_charges.connection_voltage``'s answer;
-    without it a distribution site is taken at 132 kV, as before 28 Oct 2026."""
+    without it a distribution site is taken at 132 kV, as before 28 Oct 2026.
+    ``route_km`` is the cable route from ``substations.connection_point``."""
     if case not in CASES:
         raise ValueError(f"case must be one of {CASES}, got {case!r}")
     voltage = connection_voltage or ("transmission" if transmission_connected else "132 kV")
-    cap = capital(voltage, case)
+    cap = capital(voltage, case, route_km)
     f = annual_factor(region, transmission_connected)
     return {
         "per_MW_year_GBP": cap["per_MW_GBP"] / power_factor * f,
@@ -167,7 +174,7 @@ def connection_costs(region: int, transmission_connected: bool,
         "fixed_GBP": cap["fixed_GBP"],
         "annual_factor": f,
         "rate_of_return": RATE_OF_RETURN.get(region, RATE_OF_RETURN_DEFAULT),
-        "connection_voltage": voltage, "priced_at": cap["priced_at"],
+        "connection_voltage": voltage, "priced_at": cap["priced_at"], "route_km": cap["route_km"],
         "case": case, "price_year": PRICE_YEAR,
     }
 

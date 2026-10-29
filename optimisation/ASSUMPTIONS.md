@@ -235,6 +235,8 @@ boundaries, BSUoS and every area's DUoS — is the **2026/27** tariff (`network_
 applied to whatever weather and wholesale window is solved. The levies are 2026/27
 too (`levies.LEVY_FY`) since 28 Oct 2026.
 
+**Where the connection runs to** (since 29 Oct 2026): the nearest substation at the connection voltage in the substation register, with the cable priced on the straight-line distance times an **assumed 1.3** route factor (no UK figure found). If the substation's published spare capacity is below the connection the run is flagged, and both routes round it are reported; the model builds at the nearest substation unless `shortfall_route="next"`. A 33 or 132 kV site's local network charges are set for its own nearest price node plus its area's **calibrated** add-on (`ehv_charges`), except in SSEN's two areas, which charged outside the method for 2026/27 and keep the listed-site median.
+
 **The connection voltage** of a distribution site is the lowest its area's DNO connects it at, by that DNO's own published rule where there is one (`network_charges.AREA_RULES`): 11 kV up to 12 MVA by default (15 in the North West, under 8 in London), then 33 kV (up to 120 MVA, and always in Scotland), then 132 kV up to 240 MVA (250 in the NGED areas). Where a DNO publishes nothing the default stands in, and says so. Sizes the rules leave open can be solved both ways — an option, not the default. An 11 kV site takes HV residual bands and its grid electricity at medium voltage; 33 and 132 kV sites take EHV bands and high voltage.
 
 **The connection tier** follows GB's voltage rule, not a size threshold: a DNO

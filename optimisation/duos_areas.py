@@ -339,10 +339,25 @@ def _pick(q: tuple, case: str) -> float:
 
 
 def charges(index, region: int, tdr_band: str, case: str = "central",
-            power_factor: float = 1.0) -> dict:
+            power_factor: float = 1.0, site: tuple | None = None,
+            connection_voltage: str | None = None) -> dict:
     """The area's DUoS for a distribution site in ``tdr_band``: a £/MWh series,
-    £/MW/year on the connection, £/year fixed."""
+    £/MW/year on the connection, £/year fixed.
+
+    For an EHV band with ``site=(lat, lon)`` and ``connection_voltage`` given,
+    the charges are site-specific (``ehv_charges.site_charges``: the nearest
+    price node plus the area's calibrated add-on); otherwise the area's
+    listed-site quartiles."""
     fam, n = _family_band(tdr_band)
+    if fam == "EHV" and site is not None and connection_voltage is not None:
+        from optimisation import ehv_charges
+        s = ehv_charges.site_charges(site[0], site[1], region, connection_voltage, tdr_band, case, power_factor)
+        unit = pd.Series(super_red_window(index, region) * s["super_red_p_per_kwh"] * 10.0, index=index,
+                         name="duos_GBP_per_MWh")
+        return {"duos_GBP_per_MWh": unit, "capacity_GBP_per_MW_year": s["capacity_GBP_per_MW_year"],
+                "fixed_GBP_per_year": s["fixed_GBP_per_year"],
+                "tariff": f"Designated EHV Band {n}, {s['how']}" + (f" ({case})" if s["how"] != "site-specific" else ""),
+                "area": AREA_NAMES[region], "file": FILES[region], "site_specific": s}
     if fam == "HV":
         row = HV_ROWS[_region(region)][n]
         band = hv_band_series(index, region)

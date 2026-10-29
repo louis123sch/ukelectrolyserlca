@@ -616,7 +616,9 @@ def tdr_band_for(peak_mw: float, annual_mwh: float | None = None, *,
 def import_charges(index: pd.DatetimeIndex, zone_no: int, tdr_band: str,
                    power_factor: float = 1.0,
                    transmission_connected: bool = False,
-                   duos_case: str = "central"):
+                   duos_case: str = "central",
+                   site: tuple | None = None,
+                   connection_voltage: str | None = None):
     """Split every demand-side charge into the two shapes an LP can carry.
 
     Returns ``volumetric`` — a £/MWh series to add to the wholesale price on
@@ -659,7 +661,8 @@ def import_charges(index: pd.DatetimeIndex, zone_no: int, tdr_band: str,
     else:
         from optimisation import duos_areas
         d = duos_areas.charges(index, region_for_zone(zone_no), tdr_band,
-                               case=duos_case, power_factor=power_factor)
+                               case=duos_case, power_factor=power_factor,
+                               site=site, connection_voltage=connection_voltage)
         duos_capacity_per_mw_year = d["capacity_GBP_per_MW_year"]
         duos_fixed_per_year = d["fixed_GBP_per_year"]
         duos_vol = d["duos_GBP_per_MWh"]
@@ -687,6 +690,7 @@ def import_charges(index: pd.DatetimeIndex, zone_no: int, tdr_band: str,
             "tdr_band": tdr_band,
             "duos_tariff": duos_tariff,
             "duos_area": duos_area,
+            "duos_site_specific": None if transmission_connected else d.get("site_specific"),
         },
     }
 

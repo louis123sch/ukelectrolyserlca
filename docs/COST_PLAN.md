@@ -174,7 +174,7 @@ The rest take their 132 kV group's located prices (ENWL's substation
 hierarchy gives each substation's group), with the error measured by
 hiding known points.
 
-**B. Cable route length from the site's coordinates** (replaces the 2 km
+**B. Cable route length from the site's coordinates** — **built 29 Oct 2026** (`substations.connection_point`, `connection_cost.capital(route_km)`). (replaces the 2 km
 `connection_cost.ROUTE_KM`). Distance to the nearest substation at the
 connection voltage: 11 kV a primary, 33 kV a bulk supply point or primary's
 33 kV side, 132 kV a grid site, transmission a 275/400 kV substation. *In
@@ -182,7 +182,7 @@ hand:* every distribution substation's coordinates. *Missing:* 275/400 kV
 locations (OpenStreetMap, free, 490 in GB — checked 29 Oct); a sourced ratio
 of cable route to straight-line distance (until found, ASSUMED and flagged).
 
-**C. Spare capacity at that substation.** If the site's connection exceeds
+**C. Spare capacity at that substation.** — **built 29 Oct 2026** (`substations.connection_point`: flag, both routes, `shortfall_route`). If the site's connection exceeds
 the substation's published demand headroom, the next substation in reach
 (or the next voltage) is used, or the run is flagged. *In hand:* SSEN and
 Northern Powergrid capacity maps (available demand capacity), SP Energy
@@ -201,7 +201,7 @@ error 0-1.2 £/kVA against 0.6-1.5); the area median is worst where prices
 vary (North West 3.7). Use the nearest node; where a node's 132 kV group is
 known and the nearest node is outside it, use the group's nearest member.
 
-**D. Site-specific charges at 33 and 132 kV** (replaces the area median in
+**D. Site-specific charges at 33 and 132 kV** — **built 29 Oct 2026** (`ehv_charges.py`, `scripts/calibrate_ehv_charges.py`; checked against Maxwell House and Vantage, within 16 %). (replaces the area median in
 `duos_areas.EHV_BANDS`). Location part from the nearest substation's
 "Nodal prices" row (local and remote £/kVA), turned into a capacity and
 super-red charge by the Schedule 17 or 18 formula; plus the area's residual
@@ -280,6 +280,28 @@ publishes.
 Networks connection charging statements. *Missing:* UK Power Networks,
 SSEN and Northern Powergrid statements (*Statement of Methodology and
 Charges for Connection*, 2026).
+
+*E, read off the statements (29 Oct 2026; new double-transformer substation,
+cable per additional metre in footpath or carriageway, published range):*
+
+| | NGED (the stand-in) | SSEN Southern | SSEN N. Scotland | UKPN East / South East | ENWL | SPEN | Northern Powergrid |
+|---|---|---|---|---|---|---|---|
+| 132 kV substation | £1.70-2.79 m | £11.5-13.0 m (outdoor) | N/A (transmission) | £8.0-9.2 m (indoor; London POA) | £7.0-11.3 m (outdoor) | POA | POA |
+| 33 kV primary | £1.36-1.50 m | £2.62-2.83 m | £1.94-2.85 m (indoor) | £5.2-5.8 m (indoor) | £4.04-4.77 m (indoor) | POA | POA |
+| 132 kV cable, £/m | 3,171 | 1,405-32,316 | N/A | 600-900 | 2,300-3,500 | POA | POA |
+| 33 kV cable, £/m | 221-540 | 437-1,054 | 141-439 | 400-700 | 2,300-3,200 | 557-722 | POA |
+
+NGED's 132 kV substation is 4-5x below every other publisher, so the stand-in
+understates that line by that factor elsewhere (and NGED's own figure looks
+low against the field). Annualised at 60 MVA firm it is £2,350/MW/yr against
+£9,000-13,000 — about 1 % of a 150 MW site's annual cost, so small in the total
+but wrong as a line. Decision for E: each area's own figures where published;
+for the POA areas (SPEN, Northern Powergrid, London's substation) the median of
+the publishers, not NGED's, marked as a stand-in.
+
+*Cross-check against real schemes (29 Oct 2026):* ENWL's published capital projects price a single 132/33 kV grid transformer replacement at £1.9-4.1 m and a pair at £3.4 m (Rochdale GT1 and GT2) — more than NGED's £1.7-2.8 m for a whole new double-transformer 132 kV substation, and in line with ENWL's own list (£7.0-11.3 m with switchgear, civils and land). Primary transformer pairs £1.4-1.8 m against NGED's £1.36-1.50 m "new" primary. So NGED's rows read as transformer-only prices; the other lists as whole substations. The stand-in for the POA areas should be the median of the whole-substation publishers, and NGED's own areas are arguably understated too (noted, not changed). No public per-company asset unit costs were found from Ofgem (ED2 annexes are totex-level); Northern Powergrid and UK Power Networks publish no scheme costs.
+
+*Other routes tried for E, 29 Oct 2026, all empty:* the four open-data portals (only flexibility prices and the two cost sets above); NESO's charging statements (no per-site asset values); ENWL's RIIO-ED2 costing annex (method, no asset unit costs); NGED's RIIO-ED2 document library (52 documents, no data tables); the public contracts register (search returns unrelated notices). What remains needs a person: the Business Plan Data Tables (asset unit costs by company), held by Ofgem and the companies but not published as downloads; or a budget estimate from a company.
 
 **F. Exact transmission loss multiplier.** Waiting on the Elexon Portal
 (TLFA-I009 and TLFA-I014).

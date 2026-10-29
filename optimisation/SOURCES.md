@@ -1234,6 +1234,26 @@ are kept but flagged; unlocated network nodes mostly carry no location price
 of a site's own costs a median 0-9 % of the band-4 capacity charge in nine areas,
 18-35 % in East England, Northern Powergrid and the South West.
 
+### Site connection: cable route, spare capacity, site-specific EHV charges (29 Oct 2026)
+`substations.py`, `ehv_charges.py`, `scripts/calibrate_ehv_charges.py` -> `ehv_calibration.csv`.
+COST_PLAN §1.9 parts B, C and D, on the substation register above.
+
+| Input | Value | Grade | Source |
+|---|---|---|---|
+| Connection point | nearest register substation at the connection voltage (11 kV a primary; 33 kV a bulk supply point; 132 kV a bulk supply or grid supply point; transmission a 275/400 kV substation) | derived | the register |
+| Cable route | straight line x **1.3** (`ROUTE_FACTOR_ASSUMED`) | **assumed** | no UK route-to-straight-line figure found (COST_PLAN §1.9); replaces the flat 2 km |
+| Spare capacity | the substation's published demand headroom against the connection; a shortfall is flagged with both routes round it (next substation with room; reinforcement, which a demand customer pays only above £1,720/kVA) | transcribed | the companies' capacity heatmaps; Ofgem Access SCR final decision (3 May 2022) |
+| EDCM formula | capacity p/kVA/day = local charge 1 x 100/365 + A; super-red p/kWh = remote charge 1 / super-red hours x 100 + B; fixed = band residual + sole-use charge | transcribed | DCUSA Schedule 18 v17.5 §6.3, §19.4-19.6 (Schedule 17 the same with the FCP charge 1) |
+| Nodal prices | local and remote charge 1 of the located node nearest the site at its voltage | transcribed | each area's 2026/27 "Nodal prices" sheet, via the register |
+| A, B (area-wide parts, unpublished) | NGED: median over listed sites tied to their nodes of capacity - local/365 (33 kV: South Wales 2.76, West Midlands 1.80, East Midlands 1.12, South West 0.80 p/kVA/day; quartiles give low/high); other areas: median listed capacity less the area's node median (within 0.1-0.4 p/kVA/day of the paired method on NGED) | **derived** | each area's Annex 2 import sites and nodal prices |
+| Check | Maxwell House Data Centre (East Midlands): predicted £4,088/MW/yr against £4,855 published; Vantage (South Wales, placed at Imperial Park): £10,329 against £12,008; both inside the area's quartile range. Cardiff Data Centre's location is unknown | — | NGED Annex 2, 2026/27 |
+| Not applied | SSEN's two areas charged outside the EDCM for 2026/27: listed-site medians kept | transcribed | SSEN request to Ofgem, 24 Jan 2025, and direction |
+
+Finding: a listed site's capacity charge barely tracks its node's local price
+(37 NGED sites: correlations -0.3 to +0.5); the area add-on of 1-3 p/kVA/day
+dominates. The site-specific charge is therefore mostly the area's add-on, with
+the local price as a small adjustment and the area's own spread as the range.
+
 ### Electrolyser stacks and water in cost (28 Oct 2026)
 `h2_capex.electrolyser_costs` → `Tech.cost_ely_variable_per_kg`. NESO Green
 Hydrogen Data Portal variable opex, already in `price_outputs/electrolyser_costs_clean.csv`

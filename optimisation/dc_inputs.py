@@ -105,7 +105,8 @@ def build_series(site, start: str, end: str, size_mw_it: float,
                  connection_headroom: float | None = None,
                  auto_build: bool = True, on_progress=None,
                  wind_net_factor: float | None = None,
-                 ccl_under_cca: bool | None = None) -> dc_model.Series:
+                 ccl_under_cca: bool | None = None,
+                 shortfall_route: str = "upgrade") -> dc_model.Series:
     """Aligned half-hourly inputs for one site and window.
 
     ``site`` is anything ``sites.get`` accepts — a ``Site``, a ``(lat, lon)``
@@ -168,8 +169,17 @@ def build_series(site, start: str, end: str, size_mw_it: float,
     # a cheaper band (CONNECTION_TIER_PLAN.md step 2).
     conn_floor = min(nc.band_floor_mw(transmission, tdr_band, site.carbon_api_region),
                      conn_mw)
+    conn_voltage = nc.connection_voltage(conn_mw, site.carbon_api_region, transmission)
+    # Where the connection runs to (substations.py, since 29 Oct 2026): the
+    # nearest substation at the connection voltage, its cable route and its
+    # spare capacity — the route prices the cable in connection_cost, and a
+    # 33/132 kV site's local network charges are set for its own node.
+    from optimisation import substations
+    conn_point = substations.connection_point(site.lat, site.lon, conn_voltage, conn_mw,
+                                              site.carbon_api_region, shortfall_route)
     charges = nc.import_charges(index, zone_no=site.tnuos_zone, tdr_band=tdr_band,
-                                transmission_connected=transmission)
+                                transmission_connected=transmission,
+                                site=(site.lat, site.lon), connection_voltage=conn_voltage)
     # Grid carbon is delivered at the site's own voltage: generation, grossed
     # up for losses down to it, plus the network's embodied carbon. The same
     # constants charge a bought-hydrogen seller's grid delivery.
@@ -182,7 +192,6 @@ def build_series(site, start: str, end: str, size_mw_it: float,
     # (levies.loss_series) — plus DUoS (the area's own tariff, duos_areas) and the
     # policy levies, which are charged on metered supply. Levies were absent
     # until 28 Oct 2026; losses were the carbon side's ecoinvent factor.
-    conn_voltage = nc.connection_voltage(conn_mw, site.carbon_api_region, transmission)
     loss = levies.loss_series(index, conn_voltage, site.carbon_api_region).to_numpy()
     lev = levies.import_levies(index, under_cca=ccl_under_cca)
     price = ((df["price_GBP_per_MWh"].to_numpy() + charges["bsuos_GBP_per_MWh"].to_numpy()) * loss
@@ -215,6 +224,7 @@ def build_series(site, start: str, end: str, size_mw_it: float,
     meta["connection_limit_mw"] = conn_mw
     meta["connection_limit_note"] = conn_note
     meta["connection_floor_mw"] = conn_floor
+    meta["connection_site"] = conn_point
     meta["connection_headroom"] = (
         connection_headroom if connection_headroom is not None
         else sites.CONNECTION_HEADROOM_ASSUMED)
@@ -486,7 +496,8 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
     conn = connection_cost.connection_costs(sites.get(site).carbon_api_region,
                                             bool(meta.get("transmission_connected", False)),
                                             cost_case,
-                                            connection_voltage=meta.get("connection_voltage"))
+                                            connection_voltage=meta.get("connection_voltage"),
+                                            route_km=(meta.get("connection_site") or {}).get("route_km"))
 
     # tank
     tank_row = h2s.traced(next(r for r in h2s.decompose() if r["design"] == tank_design))

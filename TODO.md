@@ -203,7 +203,10 @@ No public source found. Revisit if the item becomes load-bearing in a result.
       plant may run near-atmospheric, which would make its compression term
       ~2.5× larger; check before turquoise carries any conclusion.
 - [ ] **Finish the connection cost from the data in hand** (29 Oct): plan in
-      `docs/COST_PLAN.md` §1.9 — A substation register (BUILT 29 Oct), B cable length from
+      `docs/COST_PLAN.md` §1.9 — A substation register, B cable length, C spare
+      capacity and D site-specific charges all BUILT 29 Oct; E build prices by
+      area and F the exact loss multiplier remain. Still assumed: the 1.3 cable
+      route factor (B). Old text: A substation register (BUILT 29 Oct), B cable length from
       the site's coordinates (replaces the 2 km), C spare capacity at the
       substation (needs a decision on shortfalls), D site-specific 33/132 kV
       charges, E build prices by area, F exact loss multiplier, G check.
