@@ -209,8 +209,19 @@ No public source found. Revisit if the item becomes load-bearing in a result.
       check RUN 29 Oct (42/42, 21 checks; found the band-floor boundary bug,
       fixed). Left: F the exact loss multiplier (Elexon Portal). From G: a
       150 MW IT site sits on the transmission boundary in every England and
-      Wales area — run both ways; Northern Powergrid has no placed 33 kV price
-      node, so its 33 kV sites take the area median. Still assumed:
+      Wales area, and run both ways (29 Oct, `scripts/run_both_tiers.py`) the
+      local network is £6.5–11.5 m/yr (7–13 %) cheaper with the same carbon
+      in all six areas tried — the default tier from the 1.43x ceiling is the
+      expensive one at that size. Decide: both-ways by default in the
+      uncertain band, or a tier choice inside the LP. Northern Powergrid has
+      no placed 33 kV price node, so its 33 kV sites take the area median.
+- [ ] **Register quality, from the both-ways run** (29 Oct): OpenStreetMap
+      275/400 kV points include generators' own substations (Brighton's nearest
+      "transmission" point is Rampion wind farm's onshore substation, 23.9 km),
+      which no demand customer could join — filter to grid supply points;
+      some UKPN "bulk" names look like 11 kV sites (London's 132 kV point
+      resolved to "LEICESTER SQ 11KV") — check the level column mapping.
+      Still assumed:
       the 1.3 cable route factor (B), the half-published threshold for
       overruling the voltage rule (H), the publishers' median for POA price
       rows (E). Check still to do: NGED Table 6 / SPEN appendix 6

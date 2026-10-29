@@ -360,6 +360,29 @@ at PUE 1.2, one June week (2–9 Jun 2025) hourly, both anchors of the frontier.
   £134–149/MWh. Cheapest area at every size: South West (Exeter). One June week
   is not a year: these are the chain working, not results.
 
+*150 MW IT both ways (29 Oct 2026, `scripts/run_both_tiers.py` ->
+`optimisation_outputs/both_tiers_150mw.csv`; six England-and-Wales areas, same
+June week, tier forced each way).* **The local network wins everywhere on cost
+and ties on carbon**: minimum-cost £6.5–11.5 m/yr cheaper (7–13 %) — Brighton
+−9.4, Cardiff −6.5, Exeter −11.5, London −7.2, Manchester −8.4, Nottingham −8.7;
+minimum-carbon anchors within 0.2 % of each other on carbon and £7–11 m
+cheaper locally. Three causes, in order: the transmission residual band
+(T-Demand4 £7.60 m/yr) against EHV4 (£2.08 m) plus small local fixed charges
+— £5.3 m/yr; the cable — a 275/400 kV substation is 3.6–23.9 km away where
+the 132 kV point is 0.4–1.7 km, so £3.8–6.1 m/yr of 132 kV cable against
+£0.2–1.0 m (Brighton's nearest "transmission" point is the Rampion wind farm's
+onshore substation at 23.9 km, which no demand customer could join — a
+register quality item); and the tier floor — 240/250 MW of connection held
+and charged per MW where the local run builds 20–165 MW (£1–2 m). The local
+run's smaller connection makes it import less (Manchester 48 against 86 GWh)
+and build more solar and battery, which gives back part of the saving.
+Caveat: the forced-local run is not capped at the DNO's top, but every local
+build came in under it, so a real offer is plausible. Consequence: at 150 MW
+IT the model's default tier
+(from the 257 MW ceiling) is the expensive one; the page's both-ways option
+should be the default for sizes in the uncertain band, or the tier should be
+chosen by the LP (CONNECTION_TIER_PLAN.md: a tier variable is the next step).
+
 ## 2. Carbon is charged and cost is free
 
 Asymmetries that let the cost objective build or run something for nothing. Each
