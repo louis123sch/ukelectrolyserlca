@@ -518,18 +518,37 @@ def tier_is_uncertain(peak_mw: float, region: int, *, power_factor: float = 1.0)
 
 
 def connection_voltage(peak_mw: float, region: int | None, transmission_connected: bool, *,
-                       power_factor: float = 1.0) -> str:
+                       power_factor: float = 1.0, site: tuple | None = None) -> str:
     """The voltage a site of this size connects at: "11 kV", "33 kV", "132 kV" or
-    "transmission". Distribution sites only take the first three."""
+    "transmission". Distribution sites only take the first three.
+
+    Without ``site`` this is the area's published rule alone. With the site's
+    ``(lat, lon)`` (since 29 Oct 2026) the rule is the floor and the area's
+    own substation capacities decide above it: where every substation in reach
+    at the rule's voltage that publishes a headroom is short of the connection,
+    the site connects a voltage up (``substations.voltage_with_room``)."""
+    return connection_voltage_detail(peak_mw, region, transmission_connected,
+                                     power_factor=power_factor, site=site)[0]
+
+
+def connection_voltage_detail(peak_mw: float, region: int | None, transmission_connected: bool, *,
+                              power_factor: float = 1.0, site: tuple | None = None) -> tuple[str, str]:
+    """``connection_voltage`` with the note saying what decided it."""
     if transmission_connected:
-        return "transmission"
+        return "transmission", "transmission-connected"
     mva = peak_mw / power_factor
     r = area_rule(region)
     if mva < r.max_11kv or (r.max_11kv_inclusive and mva == r.max_11kv):
-        return "11 kV"
-    if region in SCOTTISH_CI_REGIONS or mva <= r.max_33kv:
-        return "33 kV"
-    return "132 kV"
+        rule = "11 kV"
+    elif region in SCOTTISH_CI_REGIONS or mva <= r.max_33kv:
+        rule = "33 kV"
+    else:
+        rule = "132 kV"
+    if site is None:
+        return rule, f"{r.dno}'s published rule for {r.area}, no site given"
+    from optimisation import substations
+    v, why = substations.voltage_with_room(site[0], site[1], rule, peak_mw, region)
+    return v, f"{r.dno}'s published rule gives {rule}; {why}"
 
 
 def band_floor_mw(transmission_connected: bool, band: str, region: int | None, *,
@@ -577,7 +596,8 @@ def delivery_voltage(transmission_connected: bool, tdr_band: str | None = None) 
 def tdr_band_for(peak_mw: float, annual_mwh: float | None = None, *,
                  region: int | None = None,
                  power_factor: float = 1.0,
-                 transmission_connected: bool | None = None) -> tuple[str, str]:
+                 transmission_connected: bool | None = None,
+                 site: tuple | None = None) -> tuple[str, str]:
     """The TDR band for a site, and a note on how sound the answer is.
 
     ``peak_mw`` is the agreed capacity the site would contract for — for this
@@ -587,6 +607,8 @@ def tdr_band_for(peak_mw: float, annual_mwh: float | None = None, *,
 
     ``annual_mwh`` is the site's gross annual consumption, which sets a
     transmission site's band; a distribution site's is set by ``peak_mw``.
+    ``site`` is the ``(lat, lon)`` that lets the area's substation capacities
+    decide the voltage, and so the band family (``connection_voltage``).
 
     The band matters more than its size suggests: in 2026/27 EHV2 is
     £423,174/year and T-Demand4 £7,602,671/year, so getting the tier wrong is a
@@ -606,10 +628,10 @@ def tdr_band_for(peak_mw: float, annual_mwh: float | None = None, *,
         return band, inferred
 
     kva = peak_mw * 1000.0 / power_factor
-    voltage = connection_voltage(peak_mw, region, False, power_factor=power_factor)
+    voltage, why = connection_voltage_detail(peak_mw, region, False, power_factor=power_factor, site=site)
     table = HV_BAND_KVA if voltage == "11 kV" else EHV_BAND_KVA
     band = next(b for ceiling, b in table if kva <= ceiling)
-    return band, (f"connected at {voltage} (ES216), so "
+    return band, (f"connected at {voltage} ({why}), so "
                   f"{'HV' if table is HV_BAND_KVA else 'EHV'} bands. " + inferred).strip()
 
 

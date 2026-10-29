@@ -352,14 +352,15 @@ with c5:
     headroom = st.number_input(
         "Connection headroom (x load)", 1.0, 4.0,
         float(sites.CONNECTION_HEADROOM_ASSUMED), step=0.1, disabled=conn_set,
-        help="How much more connection than load the site is assumed to "
-             "contract for, when no cap is entered (greyed out when one is). "
-             "**Assumed, not sourced** — there is no public register of "
-             "available connection capacity. 1.0 asks what a site sized purely "
-             "for its load can achieve; the unbounded minimum-carbon build on "
-             "the 300 MW Highland run wanted 2.41x, and used it for six hours a "
-             "year. The ceiling is what the LP is held to *and* what the TNUoS "
-             "band is read from.")
+        help="How much more connection than load the site contracts for, when "
+             "no cap is entered (greyed out when one is). The default 1.43 is "
+             "1 / 0.70: the 70 % data-centre load factor of the national energy "
+             "scenarios (FES Pathway Assumptions 2025, as applied in National "
+             "Grid's Data Centre Impact Study, Nov 2025). 1.0 asks what a site "
+             "sized purely for its load can achieve; the unbounded minimum-carbon "
+             "build on the 300 MW Highland run wanted 2.41x, and used it for six "
+             "hours a year. The ceiling is what the LP is held to *and* what the "
+             "TNUoS band is read from.")
 
 with c6:
     # "Auto" is the default and should stay it. This control used to offer only

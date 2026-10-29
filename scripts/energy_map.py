@@ -190,7 +190,7 @@ def energy_section(gap_ids=lambda *k: []):
       model="Reported but not charged per MW; its losses are not applied.",
       source="grid_connection.LINE_KM", gaps=("transmission connection",))
     n("meter", "Connection point and import meter", 2, 3, "component", route=R,
-      rating=f"cap_grid ≤ load × {sites.CONNECTION_HEADROOM_ASSUMED:g} (connection ceiling, ASSUMED); "
+      rating=f"cap_grid ≤ load × {sites.CONNECTION_HEADROOM_ASSUMED:.3g} (connection ceiling: 1 / the FES 70 % data-centre load factor); "
              "a connection above 100 MW counts as transmission-connected (ASSUMED)",
       model="imp[t] ≤ cap_grid. Imports are priced and scored here, on the grid side of the "
             "intake. Export is switched off (refused until modelled).",

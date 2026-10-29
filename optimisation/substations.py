@@ -56,7 +56,9 @@ REGISTER = ROOT / "optimisation_outputs" / "substation_register"
 ROUTE_FACTOR_ASSUMED = 1.3          # cable route / straight line, ASSUMED
 HIGH_COST_CAP_GBP_PER_KVA = 1720.0  # Access SCR, demand reinforcement
 SEARCH_KM = 60.0                    # how far "in reach" extends
-ASSUMED = ("ROUTE_FACTOR_ASSUMED",)
+MIN_PUBLISHED_SHARE = 0.5           # of substations in reach that must publish a headroom before the
+#                                     register overrules the published voltage rule (ASSUMED threshold)
+ASSUMED = ("ROUTE_FACTOR_ASSUMED", "MIN_PUBLISHED_SHARE")
 
 _LEVEL = {
     "primary": {"pry", "primary", "primary substation", "primary site"},
@@ -66,6 +68,16 @@ _LEVEL = {
 }
 VOLTAGE_LEVELS = {"11 kV": ("primary",), "33 kV": ("bulk",), "132 kV": ("bulk", "gsp"),
                   "transmission": ("transmission",)}
+# In Scotland 132 kV is transmission, so a 33 kV connection runs to the
+# 132/33 kV grid supply point itself (SHEPD lists them as GSPs).
+SCOTTISH_REGIONS = (1, 2)
+DISTRIBUTION_VOLTAGES = ("11 kV", "33 kV", "132 kV")
+
+
+def levels_for(voltage: str, region: int | None) -> tuple[str, ...]:
+    if voltage == "33 kV" and region in SCOTTISH_REGIONS:
+        return ("bulk", "gsp")
+    return VOLTAGE_LEVELS[voltage]
 
 
 def level_of(raw) -> str | None:
@@ -103,7 +115,7 @@ def candidates(lat: float, lon: float, voltage: str, region: int | None = None,
     if voltage not in VOLTAGE_LEVELS:
         raise ValueError(f"no substation level for voltage {voltage!r}")
     s = substations()
-    s = s[s.level_std.isin(VOLTAGE_LEVELS[voltage])]
+    s = s[s.level_std.isin(levels_for(voltage, region))]
     if region is not None and voltage != "transmission":
         s = s[s.region == region]
     d = km(lat, lon, s.lat.to_numpy(), s.lon.to_numpy())
@@ -146,6 +158,52 @@ def connection_point(lat: float, lon: float, voltage: str, conn_mw: float,
     elif status == "unknown":
         out["note"] = f"{first['name']}: no published demand headroom"
     return out
+
+
+def voltage_with_room(lat: float, lon: float, rule_voltage: str, conn_mw: float,
+                      region: int) -> tuple[str, str]:
+    """The connection voltage once the area's own substation capacities are
+    read: the lowest distribution voltage, from the published rule's up, at
+    which a substation in reach has room for the connection.
+
+    The DNO's published rule (``network_charges.connection_voltage``) is the
+    floor — a design standard that will not put 20 MVA on an 11 kV board is
+    not overruled by a primary with room. Above it the register decides: when
+    every substation in reach at that voltage that publishes its headroom is
+    short, the connection goes up a voltage (a 33 kV shortfall everywhere is a
+    132 kV offer in practice). Where no substation in reach publishes a
+    headroom the rule stands, and so it does where fewer than
+    ``MIN_PUBLISHED_SHARE`` of them do (2 of London's 117 bulk supply points
+    publish one: too few to say the area is full). 132 kV is never stepped
+    over — above the DNO's top the tier rule has already made the site
+    transmission-connected — and in Scotland 33 kV is the top. Returns
+    ``(voltage, note)``.
+    """
+    top = "33 kV" if region in SCOTTISH_REGIONS else "132 kV"
+    order = DISTRIBUTION_VOLTAGES[DISTRIBUTION_VOLTAGES.index(rule_voltage):
+                                  DISTRIBUTION_VOLTAGES.index(top) + 1]
+    steps = []
+    for v in order:
+        c = candidates(lat, lon, v, region)
+        known = c.dropna(subset=["demand_headroom_mw"])
+        room = int((known.demand_headroom_mw >= conn_mw).sum()) if len(known) else 0
+        enough_known = len(c) > 0 and len(known) / len(c) >= MIN_PUBLISHED_SHARE
+        if v == top or c.empty or not enough_known or room:
+            why = ("the published rule" if v == rule_voltage and not steps else "stepped up from " + ", ".join(steps))
+            if c.empty:
+                why += f"; no {v} substation in the register within {SEARCH_KM:g} km"
+            elif not enough_known:
+                why += (f"; only {len(known)} of {len(c)} {v} substations in reach publish a headroom "
+                        f"(under the {MIN_PUBLISHED_SHARE:.0%} needed to overrule the rule)")
+            elif not room:
+                why += "; the area's top distribution voltage, with no room published in reach"
+            else:
+                why += (f"; {room} of {len(known)} {v} substations with a published headroom in reach "
+                        f"have room for {conn_mw:,.0f} MW")
+            return v, why
+        steps.append(f"{v} ({len(known)} of {len(c)} in reach publish a headroom, "
+                     f"largest {known.demand_headroom_mw.max():,.0f} MW)")
+    raise AssertionError("unreachable")       # the top voltage always returns
 
 
 def nearest_price_node(lat: float, lon: float, region: int, voltage_kv: float,

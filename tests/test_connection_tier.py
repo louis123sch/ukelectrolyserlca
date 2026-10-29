@@ -17,7 +17,7 @@ LONDON, HIGHLAND, NORTH_WEST, YORKSHIRE, WEST_MIDLANDS, SOUTH_SCOTLAND = 13, 1, 
 
 # --- fast: the tier rule and the band floor, no solve ------------------------
 @pytest.mark.parametrize("region, mw, want", [
-    (LONDON, 225.0, False),       # 150 MW load x 1.5: distribution, under 240 MVA
+    (LONDON, 225.0, False),       # 157 MW load x 1.43: distribution, under 240 MVA
     (LONDON, 241.0, True),
     (HIGHLAND, 119.0, False),
     (HIGHLAND, 121.0, True),      # Scotland's DNO stops at 33 kV
@@ -147,7 +147,7 @@ def _run():
         print(f"  [{'PASS' if ok else 'FAIL'}] {name}   {detail}")
         if not ok: fails.append(name)
 
-    # HV4: at PUE 1.2 the 7.31 MW reference draws 8.77 MW, whose 1.5x connection
+    # HV4: at PUE 1.2 the 7.31 MW reference draws 8.77 MW, whose 1.43x connection
     # ceiling is 13.16 MVA — under ES216's 15 MVA for 11 kV, so an HV site, in the
     # top HV band (over 2,000 kVA). It was EHV3 until 28 Oct 2026, when every
     # distribution site took an EHV band.

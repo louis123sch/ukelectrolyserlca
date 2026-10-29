@@ -114,7 +114,7 @@ chk("tier and band agree everywhere",
 d["tdr_expect"] = d.band.map(TDR)
 chk("TDR charge matches the band's published tariff",
     np.allclose(d.tdr_yr, d.tdr_expect))
-chk("connection ceiling = 1.5x the load everywhere",
+chk("connection ceiling = 1 / 0.70 x the load everywhere (FES load factor)",
     np.allclose(d.conn_mw, d.demand * S.CONNECTION_HEADROOM_ASSUMED),
     f"{d.conn_mw.iloc[0]:.1f} MW from {d.demand.iloc[0]:.1f} MW load")
 print("\n" + ("ALL ALIGNED" if not fails else f"MISALIGNED: {fails}"))

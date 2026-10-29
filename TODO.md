@@ -204,14 +204,18 @@ No public source found. Revisit if the item becomes load-bearing in a result.
       ~2.5× larger; check before turquoise carries any conclusion.
 - [ ] **Finish the connection cost from the data in hand** (29 Oct): plan in
       `docs/COST_PLAN.md` §1.9 — A substation register, B cable length, C spare
-      capacity and D site-specific charges all BUILT 29 Oct; E build prices by
-      area and F the exact loss multiplier remain. Still assumed: the 1.3 cable
-      route factor (B). Old text: A substation register (BUILT 29 Oct), B cable length from
-      the site's coordinates (replaces the 2 km), C spare capacity at the
-      substation (needs a decision on shortfalls), D site-specific 33/132 kV
-      charges, E build prices by area, F exact loss multiplier, G check.
-      D's blocker (each area's add-ons) has its own five-step plan in §1.9:
-      formula, known pairs, NGED pilot, anonymised areas, wire in.
+      capacity, D site-specific charges, E build prices by area and H the
+      voltage rule and 1 / 0.70 ceiling all BUILT 29 Oct. Left: F the exact
+      loss multiplier (Elexon Portal), G the 14-region re-run. Still assumed:
+      the 1.3 cable route factor (B), the half-published threshold for
+      overruling the voltage rule (H), the publishers' median for POA price
+      rows (E). Check still to do: NGED Table 6 / SPEN appendix 6
+      connection-request sizes against the voltage rule.
+- [ ] **NGED's connection prices read as transformer-only** (29 Oct). Its 132 kV
+      substation £1.70–2.79 m against £6.96–13.04 m from the other four
+      publishers; kept and flagged (`connection_cost.NGED_SUBSTATION_FLAG`).
+      Ask NGED what the row covers, or price its four areas on the publishers'
+      median (~4x on that line, ~1 % of a 150 MW site's annual cost).
 - [ ] **EHV local charges for a named node** (29 Oct). 33/132 kV sites take
       the median of their area's listed sites in the same band
       (`duos_areas.EHV_BANDS`). Plan: (1) the EDCM method, DCUSA Schedules 17

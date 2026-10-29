@@ -136,21 +136,29 @@ CI_REGION_TO_TNUOS_ZONE = {
 # nothing rescaled it. Pin a string here only to override the derivation.
 DEFAULT_TDR_BAND = None
 
-# How much more connection than load a site is assumed to contract for.
+# How much more connection than load a site contracts for.
 #
-# ASSUMED, and the most consequential assumption here, so it is one named number
-# rather than a scatter of judgements. A connection must cover the load at
-# minimum; above that it buys the ability to import hard in a lull — to serve
-# demand and refill storage at the same time — which is precisely what the
-# optimiser reaches for when it is left unbounded. Measured on the 300 MW
-# Highland run, the unbounded minimum-carbon build wanted 2.41x the load, and
-# spent six hours a year using it.
+# The most consequential number here, so it is one named figure rather than a
+# scatter of judgements. A connection must cover the load at minimum; above
+# that it buys the ability to import hard in a lull — to serve demand and
+# refill storage at the same time — which is precisely what the optimiser
+# reaches for when it is left unbounded. Measured on the 300 MW Highland run,
+# the unbounded minimum-carbon build wanted 2.41x the load, and spent six hours
+# a year using it.
 #
-# 1.5 is deliberately below that: it grants real headroom without conceding the
-# whole peak the optimiser would take if nothing stopped it. Raise it to see
-# what the extra connection buys; set it to 1.0 to ask what a site sized purely
-# for its load can achieve.
-CONNECTION_HEADROOM_ASSUMED = 1.5
+# Since 29 Oct 2026 the figure is DERIVED from the load factor the national
+# scenarios give data centres: NESO, *Future Energy Scenarios: Pathway
+# Assumptions 2025*, applied by NGED, *Data Centre Impact Study* (Nov 2025),
+# pp. 29 and 37: "To determine installed capacity figures from annual GWh
+# consumption, a load factor of 70% was applied". A site whose average draw is
+# 70 % of its agreed capacity has contracted 1 / 0.70 = 1.43x its (flat) load.
+# NGED's own meter readings from 32 data centres (same study, pp. 20-23) show
+# the absolute peak reaching the full agreed capacity for part of every
+# representative day, so the capacity is used, not idle. Until 29 Oct 2026 the
+# figure was 1.5, ASSUMED. Raise it to see what extra connection buys; set it
+# to 1.0 to ask what a site sized purely for its load can achieve.
+DATA_CENTRE_LOAD_FACTOR_FES = 0.70
+CONNECTION_HEADROOM_ASSUMED = 1.0 / DATA_CENTRE_LOAD_FACTOR_FES     # 1.4286; name kept for callers
 
 
 def max_connection_mw(load_mw: float,
@@ -167,8 +175,10 @@ def max_connection_mw(load_mw: float,
         raise ValueError(
             f"headroom must be at least 1.0 — a connection below the load "
             f"cannot serve it — got {h}")
+    how = ("the FES 70 % data-centre load factor (NGED Data Centre Impact Study, Nov 2025)"
+           if headroom is None else "set by the caller")
     return load_mw * h, (
-        f"connection ceiling ASSUMED at {h:g}x the {load_mw:,.1f} MW load; "
+        f"connection ceiling {h:.3g}x the {load_mw:,.1f} MW load, from {how}; "
         f"see sites.CONNECTION_HEADROOM_ASSUMED")
 
 # Offshore wind needs a credible coastal connection. Judged by the resolved

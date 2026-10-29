@@ -30,6 +30,9 @@ Effort: XS < 1 h, S ≈ half a day, M ≈ 1–2 days, L > 2 days.
 | 1.5 Triad | done — HH locational tariff on `triad_mw` >= import in every weekday Nov-Feb 16:30-18:30 step (all 21 Triads 2019/20-2025/26) | `network_charges.triad_window`, `dc_model` |
 | 1.6 DUoS for every DNO area | done 29 Oct — 14 schedules: 11 kV on each area's HV row and time bands, 33/132 kV on the median of the area's Annex 2 EHV sites in the band and its super-red window, each area's own LLFs (NGED's assumed: Annex 5 blank). Checked figure by figure | `duos_areas.py`, `scripts/check_duos_areas.py` |
 | 1.8 Band boundaries | done — NESO Table TB (RIIO-ET3, fixed to 2031), T-Demand on MWh/yr | `network_charges.py` |
+| 1.9 A–D Site connection | done 29 Oct — substation register (10,829 substations, 8,432 price nodes), cable route from the site, spare-capacity flag, site-specific 33/132 kV charges | `substations.py`, `ehv_charges.py`, `scripts/build_substation_register.py` |
+| 1.9 E Build prices by area | done 29 Oct — eleven areas on their own 2026 statements, POA rows on the publishers' median (stand-in), NGED's substations kept and flagged low | `connection_cost.py`, `tests/test_connection_prices_by_area.py` |
+| 1.9 H Voltage rule and ceiling | done 29 Oct — published rule as floor, area's substation capacities above it; ceiling 1 / 0.70 (FES load factor) instead of 1.5 assumed | `substations.voltage_with_room`, `network_charges.connection_voltage(site=)`, `sites.py` |
 
 The rest of §1–§5 is open. The table below describes the state before these.
 
@@ -276,10 +279,25 @@ publishes.
   DESNZ/Ramboll *Undergrounding transmission cables* (2025); NGED
   *Underground cable costs report*.
 
-**E. Build prices by area.** *In hand:* NGED (4 areas), ENWL and SP Energy
-Networks connection charging statements. *Missing:* UK Power Networks,
-SSEN and Northern Powergrid statements (*Statement of Methodology and
-Charges for Connection*, 2026).
+**E. Build prices by area.** — **built 29 Oct 2026** (`connection_cost.PRICE_LISTS`,
+`AREA_PRICE_LIST`, `prices(region)`; 27 tests in `tests/test_connection_prices_by_area.py`).
+Eleven areas on their own statements; POA rows on the publishers' median, named
+as stand-ins; NGED's substation rows kept and flagged (`NGED_SUBSTATION_FLAG`).
+Central, 2 km: 132 kV substation £141,667–204,496/MW outside NGED against
+£37,431 inside; the whole-area table prints from `python optimisation/connection_cost.py`.
+All seven statements are in OneDrive `4 connection capital`.
+
+**H. The voltage rule and the connection ceiling** — **built 29 Oct 2026**.
+The published rule is the floor; the area's own substation capacities decide
+above it (`substations.voltage_with_room`: step up where every substation in
+reach that publishes a headroom is short, if at least half publish one — an
+assumed threshold). A 103 MW connection goes 33 -> 132 kV in Manchester and
+Reading; London and Norwich keep 33 kV for want of published headrooms.
+The ceiling is 1 / 0.70 = 1.43x the load from the FES 70 % data-centre load
+factor (NGED Data Centre Impact Study, Nov 2025, pp. 29, 37), replacing the
+assumed 1.5x; no voltage or tier changes at the test sizes, the tier flips
+between the two only for 133–146 MW IT at PUE 1.2. Not done: NGED Table 6 /
+SPEN appendix 6 connection-request sizes as a check on the rule.
 
 *E, read off the statements (29 Oct 2026; new double-transformer substation,
 cable per additional metre in footpath or carriageway, published range):*

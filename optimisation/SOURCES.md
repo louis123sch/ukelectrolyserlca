@@ -1152,7 +1152,9 @@ by area`, with an index.
 
 Defaults: 11 kV **12 MVA** (UKPN and Northern Powergrid both publish it); 33 kV
 **120 MVA** and top **240 MVA** (ES216, the only DNO that publishes them — PROXY
-elsewhere).
+elsewhere). Since 29 Oct 2026 these are the **floor** when the site's coordinates
+are known: the area's own substation capacities decide the voltage above the
+rule's (*Connection voltage from the area's substations*, below).
 
 **Uncertain sizes** (`tier_is_uncertain`, the page's optional both-ways run):
 from the area's 33 kV limit to its top in England and Wales — NGED's study says
@@ -1186,26 +1188,56 @@ for every site). Since 29 Oct 2026 regional: the TLM alone runs from ×0.978
 (North Scotland) to ×1.034 (South West) on a flat load. Not charged: ESC/EMR settlement levies (negligible), supplier
 margin (unpublished), Green Gas Levy (gas only).
 
-### Grid connection capital (28 Oct 2026)
+### Grid connection capital, by DNO area (28–29 Oct 2026)
 `connection_cost.py`. The cost counterpart of `grid_connection.py`, priced at the
-site's connection voltage. Moved from NGED's August 2023 prices, with every site
-at 132 kV, on 28 Oct 2026.
+site's connection voltage on **the site's own DNO's** connection charging
+statement (`PRICE_LISTS`, `AREA_PRICE_LIST`; 29 Oct 2026). Until then NGED
+South Wales priced every area; until 28 Oct NGED's August 2023 prices, every
+site at 132 kV. Every statement has the LC14 common table (§7 F5 cables, F7
+substations), so the rows match across companies. Statements in OneDrive
+`DC optimiser/connection sources/4 connection capital`.
 
 | Input | Value | Grade | Source |
 |---|---|---|---|
-| 132 kV substation | **£1,700,792–£2,790,945** per new outdoor double-transformer substation | transcribed | NGED (South Wales), *Statement of Methodology and Charges for Connection*, June 2026, §7 F7 "132kV/ EHV substation", p. 168 (same in South West and East Midlands) |
-| 33 kV substation | **£1,359,279–£1,501,688** ("EHV/HV primary substation", new outdoor double transformer) | transcribed | Same, p. 168 |
-| 11 kV switchboard | **£28,635–£40,708** ("HV only substation", external switchgear and metered circuit breaker) | transcribed | Same, p. 167 |
-| Cable, footpath or carriageway | 132 kV: £126,845 first 40 m, then **£3,171/m**; 33 kV: £9,068–19,451 first 30 m, then £221–540/m; HV: £5,163–12,324 first 20 m, then £98–261/m | transcribed | Same, §7 F5, pp. 164–165 |
+| Rows used | new double-transformer substation (outdoor where published, else indoor); "HV only substation" switchgear and metered circuit breaker (external where published, else internal); cable in footpath or carriageway, first 40/30/20 m then per metre | transcribed | each statement, §7 F5 and F7 |
+| NGED, 4 areas (7, 8, 9, 11) | 132 kV substation **£1,700,792–2,790,945**; 33 kV **£1,359,279–1,501,688**; switchboard £28,635–40,708; cable 132 kV £126,845 first 40 m then **£3,171/m**, 33 kV £9,068–19,451 then £221–540/m, HV £5,163–12,324 then £98–261/m | transcribed, substations **FLAGGED LOW** | NGED (South Wales), *Statement of Methodology and Charges for Connection*, June 2026, pp. 164–168 (same figures in EM, WM, SW) |
+| SSEN Southern (12) | 132 kV £11,495,717–13,043,778 (outdoor); 33 kV £2,616,172–2,833,817 (outdoor); switchboard £16,621–40,331; cable 132 kV £57,334–194,474 then £1,405–**32,316**/m, 33 kV £13,096–47,697 then £437–1,054/m, HV £6,074–13,812 then £304–691/m | transcribed | SEPD statement v1.47 (2026), pp. 148–152 |
+| SSEN North Scotland (1) | 33 kV £1,939,300–2,852,850 (indoor); switchboard £31,486–53,950; cable 33 kV £3,613–9,544 then £141–439/m, HV the same figures; 132 kV rows N/A | transcribed | SHEPD statement v1.46 (2026), pp. 146–150 |
+| UKPN East (10) / South East (14) / London (13) | 132 kV £8.0–9.0 m / £8.1–9.2 m / POA (indoor); 33 kV £5.2–5.7 m / £5.3–5.8 m / POA; switchboard £50–90k / £60–90k / £50–270k; cable 132 kV £20–50k, £21–50k, £22–50k first 40 m then £500–900, £600–900, £600–900/m; 33 kV £11–30k, £11–40k, £12–40k then £400–700/m; HV £2.0–17.3k, £3.1–14.9k, £4.6–20k then £200–900, £300–800, £400–1,000/m | transcribed | UKPN statement, August 2026, pp. 161–167, columns LPN, EPN, SPN |
+| ENWL (3) | 132 kV £6,961,000–11,270,000 (outdoor); 33 kV £4,039,000–4,767,000 (indoor); switchboard £64,300–81,800; cable 132 kV £100,000–135,000 then £2,300–3,500/m, 33 kV £74,400–91,400 then £2,300–3,200/m, HV £11,600–18,300 then £200–380/m | transcribed | ENWL statement v5.9, June 2026, pp. 156–161 (South = North) |
+| SPEN (2, 6) | substations and 132 kV cable POA; switchboard £26,403–46,776; cable 33 kV £10,912–24,119 then £557–722/m, HV £5,440–15,337 then £145–475/m | transcribed | SPEN statement, February 2026, pp. 151–153 (one statement for SP Distribution and SP Manweb) |
+| Northern Powergrid NE (4) / Yorkshire (5) | substations and 33/132 kV cable POA; switchboard £58,862–68,346 / £58,947–76,873; HV cable £7,299–14,098 / £7,099–12,721 then £146–292 / £141–262/m | transcribed | Northern Powergrid statements, June 2026, §7 |
+| POA / N/A rows | the **median over the lists that publish the row**, low and high separately: 132 kV substation £8.0–9.2 m (5 lists), 33 kV £3.33–3.81 m (6), 132 kV cable £39,667–88,422 then £1,002–2,036/m (6), 33 kV cable £11,000–35,000 then £400–700/m (8) | **stand-in**, named in the output (`stand_in`) | the rows above |
 | Firm ratings | 132/33 kV pair 60 MVA; 33/11 kV pair 29 MVA | **assumed** | ES216 §5.2 and §6.2 single-transformer limits, N-1 |
-| Route | 2 km × 2 circuits | **assumed** | `grid_connection.LINE_KM`; dual connection for N-1 |
+| Route | `substations.connection_point` x 2 circuits; 2 km only with no site | derived / **assumed** circuits | the register; dual connection for N-1 |
 | Annual charge | CRF at the TO's return over 40 y + **0.43 %** maintenance (+ **0.90 %** TRC on the transmission tier); NGET 5.02 %, SPT 5.14 %, SHET 4.32 % | transcribed | NESO, *Statement of Use of System Charges*, Issue 8.0, §15–16, Table 3.1 |
 | Who pays | extension assets only; reinforcement socialised below £1,720/kVA | transcribed | Ofgem, *Access SCR Final Decision*, 3 May 2022 |
 
-Central, London: 132 kV £37,431/MW of substation and £12.68 m of cable (~£2,350/MW/yr,
-~£796k/yr); 33 kV £49,327/MW and £1.53 m (~£3,100/MW/yr, ~£96k/yr); 11 kV no
-substation, £0.76 m fixed (~£48k/yr). A transmission site is priced on the
-132 kV rows (errs low for 275/400 kV).
+**NGED's substation rows are kept and flagged** (`NGED_SUBSTATION_FLAG`): 4–5x
+below the other four publishers, and below ENWL's real transformer-pair
+schemes (COST_PLAN §1.9 E), so they read as transformers and switchgear
+without civils and land — LOW. Central, 2 km route: 132 kV substation
+£37,431/MW in the NGED areas against £141,667–204,496 elsewhere; 33 kV
+£49,327/MW against £82,623–191,379. SEPD's 132 kV cable top of £32,316/m
+makes its central £66 m for 2 x 2 km — the printed range, erring HIGH. A
+transmission site is priced on the 132 kV rows (errs low for 275/400 kV).
+
+### Connection voltage from the area's substations; connection ceiling from the FES load factor (29 Oct 2026)
+`substations.voltage_with_room`, `network_charges.connection_voltage(site=)`,
+`sites.CONNECTION_HEADROOM_ASSUMED`.
+
+| Input | Value | Grade | Source |
+|---|---|---|---|
+| Voltage, with a site | the DNO's published rule (`AREA_RULES`) is the floor; above it the lowest voltage at which a substation within 60 km that publishes a demand headroom has room for the connection. Steps up only when at least **50 %** of the substations in reach publish a headroom (`MIN_PUBLISHED_SHARE`); never past 132 kV (33 kV in Scotland) | derived from the register; threshold **assumed** | the companies' capacity heatmaps (register); the published rules above |
+| Effect | a 103 MW connection (60 MW IT x 1.2 x 1.43) goes 33 -> 132 kV in Manchester (largest bulk headroom in reach 75 MW, 58 of 59 publish) and Reading (101 MW, 44 of 45); London (2 of 117 publish) and Norwich (3 of 31) keep 33 kV with the note | — | `tests/test_site_connection.py` |
+| Scotland's 33 kV point | the 132/33 kV grid supply point (SHEPD lists them as GSPs) | transcribed | the register; 132 kV is transmission there |
+| Connection ceiling | **1 / 0.70 = 1.43x** the flat load (was 1.5x, assumed) | derived | NESO, *FES: Pathway Assumptions 2025*, data-centre load factor 70 %, as applied in NGED, *Data Centre Impact Study*, Nov 2025, pp. 29, 37: "To determine installed capacity figures from annual GWh consumption, a load factor of 70% was applied" |
+| Corroboration | measured utilisation of 32 NGED data centres: absolute peak reaches the full agreed capacity for part of every representative day; enterprise sites peak in working hours, colocation flat | secondary | same study, pp. 20–23 |
+
+Sensitivity of the ceiling (1.5 -> 1.43): no voltage or tier changes for 7.31,
+30, 60, 100 or 150 MW IT at PUE 1.2 in eight test sites; the tier flips between
+the two for loads of 160–168 MW (240 MVA areas) and 167–175 MW (NGED's 250),
+i.e. 133–146 MW IT at PUE 1.2.
 
 ### Substation register: price nodes located, substations with spare capacity (29 Oct 2026)
 `scripts/build_substation_register.py` -> `optimisation_outputs/substation_register/`

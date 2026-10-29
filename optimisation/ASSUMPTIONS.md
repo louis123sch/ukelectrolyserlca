@@ -237,7 +237,9 @@ too (`levies.LEVY_FY`) since 28 Oct 2026.
 
 **Where the connection runs to** (since 29 Oct 2026): the nearest substation at the connection voltage in the substation register, with the cable priced on the straight-line distance times an **assumed 1.3** route factor (no UK figure found). If the substation's published spare capacity is below the connection the run is flagged, and both routes round it are reported; the model builds at the nearest substation unless `shortfall_route="next"`. A 33 or 132 kV site's local network charges are set for its own nearest price node plus its area's **calibrated** add-on (`ehv_charges`), except in SSEN's two areas, which charged outside the method for 2026/27 and keep the listed-site median.
 
-**The connection voltage** of a distribution site is the lowest its area's DNO connects it at, by that DNO's own published rule where there is one (`network_charges.AREA_RULES`): 11 kV up to 12 MVA by default (15 in the North West, under 8 in London), then 33 kV (up to 120 MVA, and always in Scotland), then 132 kV up to 240 MVA (250 in the NGED areas). Where a DNO publishes nothing the default stands in, and says so. Sizes the rules leave open can be solved both ways — an option, not the default. An 11 kV site takes HV residual bands and its grid electricity at medium voltage; 33 and 132 kV sites take EHV bands and high voltage.
+**The connection voltage** of a distribution site is the lowest its area's DNO connects it at, by that DNO's own published rule where there is one (`network_charges.AREA_RULES`): 11 kV up to 12 MVA by default (15 in the North West, under 8 in London), then 33 kV (up to 120 MVA, and always in Scotland), then 132 kV up to 240 MVA (250 in the NGED areas). Where a DNO publishes nothing the default stands in, and says so. Since 29 Oct 2026 that rule is the **floor**: with the site's coordinates the area's own substation capacities decide above it — where every substation within 60 km at the rule's voltage that publishes a spare capacity is short of the connection, the site connects a voltage up (`substations.voltage_with_room`), provided at least half of them publish one (an **assumed** threshold). Sizes the rules leave open can be solved both ways — an option, not the default. An 11 kV site takes HV residual bands and its grid electricity at medium voltage; 33 and 132 kV sites take EHV bands and high voltage.
+
+**The connection ceiling** is 1 / 0.70 = **1.43x** the flat load (`sites.CONNECTION_HEADROOM_ASSUMED`): the 70 % data-centre load factor of the national energy scenarios (FES Pathway Assumptions 2025, as applied in NGED's Data Centre Impact Study, Nov 2025). Until 29 Oct 2026 it was 1.5x, assumed. The page's headroom box overrides it.
 
 **The connection tier** follows GB's voltage rule, not a size threshold: a DNO
 connects demand up to 240 MVA in England and Wales and up to 120 MVA in
@@ -256,7 +258,12 @@ ceiling is the user's call.
 split as its carbon: the intake substation per MW of `cap_grid` and the cable
 to the network as a fixed annual cost, annualised the way CUSC Section 14
 charges connection assets. Under the Access SCR a demand customer pays for its
-extension assets only, so no reinforcement contribution is added.
+extension assets only, so no reinforcement contribution is added. Since 29 Oct
+2026 the prices are the site's own DNO's (eleven areas on their own 2026
+connection charging statements); a row a company prints as POA takes the
+**median of the lists that publish it** and is named as a stand-in. NGED's
+substation rows are kept for its four areas and **flagged low** (4–5x below
+the other publishers: transformers and switchgear without civils and land).
 
 ## 5. Emissions are IPCC 2021 GWP100, attributional
 

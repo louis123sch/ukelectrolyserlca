@@ -7,7 +7,7 @@ import sys
 import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
-from optimisation import connection_cost as cc, duos_areas as D, ehv_charges as E, substations as S  # noqa: E402
+from optimisation import connection_cost as cc, duos_areas as D, ehv_charges as E, network_charges as nc, substations as S  # noqa: E402
 
 LONDON = (51.505, -0.02)
 MAXWELL_HOUSE = (52.002384, -0.737258)      # NGED East Midlands, a listed data centre
@@ -50,6 +50,66 @@ def test_a_shortfall_is_flagged_and_both_routes_reported():
 def test_shortfall_route_next_moves_to_the_substation_with_room():
     p = S.connection_point(53.48, -2.24, "33 kV", 1.0, region=3, shortfall_route="next")
     assert p["substation"] == p["next_with_room"] and p["route_km"] > p["nearest_straight_km"]
+
+
+# --- the voltage from the area's own substation capacities (29 Oct 2026) ------
+MANCHESTER, READING, NORWICH, HIGHLAND = (53.48, -2.24), (51.45, -0.97), (52.63, 1.30), (57.48, -4.22)
+
+
+def test_a_33kv_site_with_no_room_in_reach_connects_at_132kv():
+    """103 MW (60 MW IT x 1.2 x 1.43) in Manchester: ENWL's rule says 33 kV, but
+    the largest bulk-supply-point headroom in reach is 75 MW (58 of 59 publish)."""
+    v, why = S.voltage_with_room(*MANCHESTER, "33 kV", 102.9, region=3)
+    assert v == "132 kV" and "stepped up from 33 kV" in why
+    assert nc.connection_voltage(102.9, 3, False) == "33 kV"                  # the rule alone
+    assert nc.connection_voltage(102.9, 3, False, site=MANCHESTER) == "132 kV"
+    assert S.voltage_with_room(*READING, "33 kV", 102.9, region=12)[0] == "132 kV"
+
+
+def test_a_site_with_room_keeps_the_rules_voltage():
+    v, why = S.voltage_with_room(*MANCHESTER, "33 kV", 51.4, region=3)
+    assert v == "33 kV" and "have room for 51 MW" in why
+
+
+def test_the_rule_is_the_floor_not_overruled_by_a_primary_with_room():
+    assert S.voltage_with_room(*MANCHESTER, "33 kV", 5.0, region=3)[0] == "33 kV"
+
+
+def test_too_few_published_headrooms_leave_the_rule_standing():
+    """London: 2 of 117 bulk supply points publish a headroom; Norwich 3 of 31."""
+    v, why = S.voltage_with_room(*LONDON, "33 kV", 102.9, region=13)
+    assert v == "33 kV" and "under the 50%" in why
+    assert S.voltage_with_room(*NORWICH, "33 kV", 102.9, region=10)[0] == "33 kV"
+
+
+def test_scotland_tops_out_at_33kv_and_reaches_the_grid_supply_point():
+    v, why = S.voltage_with_room(*HIGHLAND, "33 kV", 102.9, region=1)
+    assert v == "33 kV"
+    p = S.connection_point(*HIGHLAND, "33 kV", 102.9, region=1)
+    assert p["found"] and p["level"] == "gsp" and p["headroom_status"] == "unknown"
+    assert S.levels_for("33 kV", 1) == ("bulk", "gsp") and S.levels_for("33 kV", 3) == ("bulk",)
+
+
+def test_the_band_family_follows_the_site_voltage():
+    """11 kV rule, but no primary in reach has room -> 33 kV, so EHV not HV bands."""
+    import pandas as pd
+    c = S.candidates(*MANCHESTER, "11 kV", region=3)
+    known = c.dropna(subset=["demand_headroom_mw"])
+    mw = float(known.demand_headroom_mw.max()) + 0.5          # just over the largest primary's room
+    if mw > 15.0 or len(known) / len(c) < S.MIN_PUBLISHED_SHARE:
+        pytest.skip("register changed: no 11 kV size between the largest primary's room and ES216's 15 MVA")
+    assert nc.connection_voltage(mw, 3, False) == "11 kV"
+    band, note = nc.tdr_band_for(mw, mw * 8760, region=3, transmission_connected=False, site=MANCHESTER)
+    assert band.startswith("EHV") and "stepped up from 11 kV" in note
+    assert nc.tdr_band_for(mw, mw * 8760, region=3, transmission_connected=False)[0] == "HV4"
+
+
+def test_the_connection_ceiling_is_one_over_the_fes_load_factor():
+    from optimisation import sites
+    assert sites.CONNECTION_HEADROOM_ASSUMED == pytest.approx(1 / 0.70)
+    mw, note = sites.max_connection_mw(100.0)
+    assert mw == pytest.approx(142.857, abs=1e-3) and "FES 70 %" in note
+    assert "set by the caller" in sites.max_connection_mw(100.0, 1.5)[1]
 
 
 def test_site_specific_charge_is_node_price_plus_area_addon():

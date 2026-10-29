@@ -162,14 +162,18 @@ def build_series(site, start: str, end: str, size_mw_it: float,
     if tdr_band is None:
         tdr_band, tdr_note = nc.tdr_band_for(
             conn_mw, annual_mwh, region=site.carbon_api_region,
-            transmission_connected=transmission)
+            transmission_connected=transmission, site=(site.lat, site.lon))
     # The tier and band are read from the ceiling, so the connection the LP
     # builds is held inside that band: floor <= cap_grid <= ceiling. Otherwise a
     # site charged as EHV4 or T-Demand4 could build a connection that belongs to
     # a cheaper band (CONNECTION_TIER_PLAN.md step 2).
     conn_floor = min(nc.band_floor_mw(transmission, tdr_band, site.carbon_api_region),
                      conn_mw)
-    conn_voltage = nc.connection_voltage(conn_mw, site.carbon_api_region, transmission)
+    # The voltage: the area's published rule as the floor, the area's own
+    # substation capacities above it (a 33 kV site with no room in reach
+    # connects at 132 kV) — since 29 Oct 2026, with the site's coordinates.
+    conn_voltage, voltage_note = nc.connection_voltage_detail(
+        conn_mw, site.carbon_api_region, transmission, site=(site.lat, site.lon))
     # Where the connection runs to (substations.py, since 29 Oct 2026): the
     # nearest substation at the connection voltage, its cable route and its
     # spare capacity — the route prices the cable in connection_cost, and a
@@ -229,8 +233,8 @@ def build_series(site, start: str, end: str, size_mw_it: float,
         connection_headroom if connection_headroom is not None
         else sites.CONNECTION_HEADROOM_ASSUMED)
     meta["transmission_connected"] = transmission
-    meta["connection_voltage"] = nc.connection_voltage(conn_mw, site.carbon_api_region,
-                                                       transmission)
+    meta["connection_voltage"] = conn_voltage
+    meta["connection_voltage_note"] = voltage_note
     meta["connection_tier_note"] = tier_note
     meta["grid_delivery_voltage"] = voltage
     meta["wind_net_factor"] = net
