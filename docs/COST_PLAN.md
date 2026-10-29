@@ -368,11 +368,15 @@ and ties on carbon**: minimum-cost £6.5–11.5 m/yr cheaper (7–13 %) — Brig
 minimum-carbon anchors within 0.2 % of each other on carbon and £7–11 m
 cheaper locally. Three causes, in order: the transmission residual band
 (T-Demand4 £7.60 m/yr) against EHV4 (£2.08 m) plus small local fixed charges
-— £5.3 m/yr; the cable — a 275/400 kV substation is 3.6–23.9 km away where
-the 132 kV point is 0.4–1.7 km, so £3.8–6.1 m/yr of 132 kV cable against
-£0.2–1.0 m (Brighton's nearest "transmission" point is the Rampion wind farm's
-onshore substation at 23.9 km, which no demand customer could join — a
-register quality item); and the tier floor — 240/250 MW of connection held
+— £5.3 m/yr; the cable — a 275/400 kV substation is 3.6–24.2 km of route away
+where the 132 kV point is 0.4–1.7 km, so £3.8–6.1 m/yr of 132 kV cable against
+£0.2–1.0 m (Brighton's nearest "transmission" point was first the Rampion wind
+farm's onshore substation, which no demand customer could join — fixed the
+same day: generators' and interconnectors' sites are excluded from the
+transmission layer, and UKPN's 132/11 kV grid sites no longer pose as 33 kV
+points; re-run on the corrected register Brighton goes to Bolney, 24.2 km by
+route against Rampion's 23.9, and no figure here moves by more than £0.03 m);
+and the tier floor — 240/250 MW of connection held
 and charged per MW where the local run builds 20–165 MW (£1–2 m). The local
 run's smaller connection makes it import less (Manchester 48 against 86 GWh)
 and build more solar and battery, which gives back part of the saving.

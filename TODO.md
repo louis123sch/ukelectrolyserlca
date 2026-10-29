@@ -215,12 +215,14 @@ No public source found. Revisit if the item becomes load-bearing in a result.
       expensive one at that size. Decide: both-ways by default in the
       uncertain band, or a tier choice inside the LP. Northern Powergrid has
       no placed 33 kV price node, so its 33 kV sites take the area median.
-- [ ] **Register quality, from the both-ways run** (29 Oct): OpenStreetMap
-      275/400 kV points include generators' own substations (Brighton's nearest
-      "transmission" point is Rampion wind farm's onshore substation, 23.9 km),
-      which no demand customer could join — filter to grid supply points;
-      some UKPN "bulk" names look like 11 kV sites (London's 132 kV point
-      resolved to "LEICESTER SQ 11KV") — check the level column mapping.
+- [x] **Register quality, from the both-ways run** (29 Oct, fixed the same day):
+      generators' and interconnectors' own 275/400 kV sites excluded from the
+      transmission layer by name (36 of 412; Brighton now runs to Bolney); UK
+      Power Networks' "Grid Substation" rows split by the lower voltage in the
+      name — 132/11 kV grid sites are grid supply points plus an 11 kV primary,
+      bare "132KV" names are switching sites, only 132/33 (66) stay bulk supply
+      points. Still open there: the OpenStreetMap layer carries no capacity,
+      and only 17 of UKPN's 454 grid rows publish a headroom.
       Still assumed:
       the 1.3 cable route factor (B), the half-published threshold for
       overruling the voltage rule (H), the publishers' median for POA price

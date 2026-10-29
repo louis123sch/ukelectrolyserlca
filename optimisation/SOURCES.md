@@ -1243,8 +1243,23 @@ i.e. 133–146 MW IT at PUE 1.2.
 `scripts/build_substation_register.py` -> `optimisation_outputs/substation_register/`
 (`price_nodes.csv`, `substations.csv`, `summary.csv`); checked by
 `scripts/check_substation_register.py` (also writes `fallback_error.csv`).
-Not yet used by the model: it is the foundation for cable length, the spare-capacity
-check and site-specific 33/132 kV charges (`docs/COST_PLAN.md` §1.9).
+Used by the model since 29 Oct 2026 for the cable length, the spare-capacity
+check, site-specific 33/132 kV charges and the connection voltage
+(`docs/COST_PLAN.md` §1.9). Two corrections the same day, from the both-ways run:
+(1) the **transmission layer** (OpenStreetMap 275/400 kV substations) excludes
+generators' and interconnectors' own sites by name — wind farm, offshore,
+solar, power station, converter, battery, generation, flexible, interconnector
+— 36 of 412 (Brighton's nearest "transmission" point had been Rampion wind
+farm's onshore substation, 23.9 km; it is now Bolney, 18.6 km); "Washway Farm",
+a real 275 kV substation, survives. (2) **UK Power Networks' "Grid Substation"**
+rows are split by the lower voltage their name states (`ukpn_level`): 132/33
+or 66 kV stay bulk supply points (33 kV reachable, 195 rows); 132/11, 22, 20
+or 6.6 kV are 132/11 kV grid sites (82 rows: the 132 kV side reachable as a
+grid supply point, and the 11 kV board listed again as a primary); a bare
+"132KV" name is a 132 kV switching site (177 rows, 132 kV only). London has
+132/11 kV transformation in the centre, so "LEICESTER SQ 11KV" is a correct
+132 kV connection point but was wrongly a 33 kV one. `--only ukpn` rebuilds one
+company and keeps the rest from disk.
 
 | Input | What | Grade | Source (OneDrive `connection sources/3 DUoS/site-specific EHV charges`) |
 |---|---|---|---|

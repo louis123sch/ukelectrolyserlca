@@ -63,7 +63,10 @@ ASSUMED = ("ROUTE_FACTOR_ASSUMED", "MIN_PUBLISHED_SHARE")
 _LEVEL = {
     "primary": {"pry", "primary", "primary substation", "primary site"},
     "bulk": {"bsp", "bulk supply point", "grid", "grid substation", "ehv switching station"},
-    "gsp": {"gsp", "grid supply point", "super grid substation", "132kv switching station"},
+    # UKPN's 132/11 kV grid sites (London): a 132 kV side, no 33 kV; their
+    # 11 kV boards are listed again as primaries by the builder
+    "gsp": {"gsp", "grid supply point", "super grid substation", "132kv switching station",
+            "grid substation 132/11kv"},
     "transmission": {"transmission"},
 }
 VOLTAGE_LEVELS = {"11 kV": ("primary",), "33 kV": ("bulk",), "132 kV": ("bulk", "gsp"),

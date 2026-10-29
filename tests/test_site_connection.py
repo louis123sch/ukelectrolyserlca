@@ -104,6 +104,29 @@ def test_the_band_family_follows_the_site_voltage():
     assert nc.tdr_band_for(mw, mw * 8760, region=3, transmission_connected=False)[0] == "HV4"
 
 
+# --- register corrections from the both-ways run (29 Oct 2026) ------------------
+def test_transmission_layer_holds_no_generator_or_interconnector_sites():
+    t = S.substations().query("level_std == 'transmission'")
+    assert not t.name.str.contains("Wind Farm|Converter|Solar|Power Station|BESS", case=False, na=False).any()
+    assert t.name.str.contains("Washway Farm", na=False).any()       # a real 275 kV substation named after a farm
+    p = S.connection_point(50.82, -0.137, "transmission", 257.0, region=14)
+    assert p["substation"] == "Bolney Substation"                     # not Rampion's onshore substation
+
+
+def test_ukpn_132_11kv_grid_sites_are_not_33kv_points():
+    u = S.substations().query("company == 'UKPN'")
+    g = u[u.level == "Grid Substation 132/11kV"]
+    assert len(g) and (g.level_std == "gsp").all()
+    assert (u[u.level == "132kV Switching Station"].level_std == "gsp").all()
+    assert (u[u.level == "Grid Substation"].level_std == "bulk").all()
+    # every 132/11 kV grid site's 11 kV board is also a primary
+    boards = u[(u.level_std == "primary") & u.source.str.contains("132/11", na=False)]
+    assert set(boards.name) == set(g.name)
+    for v in ("33 kV",):
+        c = S.candidates(51.5074, -0.1278, v, region=13)
+        assert not c.name.str.contains(r"\b11KV$", na=False).any()
+
+
 def test_the_connection_ceiling_is_one_over_the_fes_load_factor():
     from optimisation import sites
     assert sites.CONNECTION_HEADROOM_ASSUMED == pytest.approx(1 / 0.70)

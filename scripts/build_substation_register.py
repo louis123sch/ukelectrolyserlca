@@ -251,16 +251,51 @@ def kv_of(text):
 # =============================================================================
 # per company
 # =============================================================================
+def ukpn_secondary_kv(name: str) -> float | None:
+    """The lower voltage a UKPN site name states: 'ARA GRID 132/11kV' -> 11,
+    'FINSBURY MARKET B 33KV' -> 33, 'ISLINGTON 132KV' -> 132 (no lower side
+    named), 'NEASDEN BSP' -> None."""
+    m = re.search(r"(\d+)\s*/\s*(\d+(?:\.\d+)?)\s*kV", str(name), re.I)
+    if m:
+        return float(m.group(2))
+    m = re.search(r"(\d+(?:\.\d+)?)\s*KV\b", str(name), re.I)
+    return float(m.group(1)) if m else None
+
+
+def ukpn_level(sitetype: str, name: str) -> str:
+    """UKPN calls every 132 kV-fed site a "Grid Substation", but London's are
+    often 132/11 kV with no 33 kV at all (found 29 Oct 2026: a 132 kV
+    connection resolved to "LEICESTER SQ 11KV"). Split them by the lower
+    voltage the name states: 132/33 (or 66) stays a grid substation (bulk,
+    33 kV reachable); 132/11 (or 22, 20, 6.6) is a 132/11 kV grid site (the
+    132 kV side reachable, its 11 kV board as a primary — see ``ukpn``); a
+    bare "132KV" name is a 132 kV switching site. Unnamed voltage: bulk."""
+    if str(sitetype).strip().lower() != "grid substation":
+        return sitetype
+    kv = ukpn_secondary_kv(name)
+    if kv == 132:
+        return "132kV Switching Station"
+    if kv is None or kv >= 33:
+        return "Grid Substation"
+    return "Grid Substation 132/11kV"
+
+
 def ukpn(src: Path):
     E = src / "3 DUoS" / "site-specific EHV charges"
     s = pd.read_csv(E / "UKPN grid and primary sites (fetched 2026-10-29).csv", encoding="utf-8-sig")
     s[["lat", "lon"]] = s.spatial_coordinates.str.split(",", expand=True).astype(float)
     area = {"Eastern Power Networks (EPN)": 10, "London Power Networks (LPN)": 13, "South Eastern Power Networks (SPN)": 14}
+    level = [ukpn_level(t, n) for t, n in zip(s.sitetype, s.sitename)]
     subs = pd.DataFrame({"region": s.licencearea.map(area), "company": "UKPN", "name": s.sitename,
-                         "level": s.sitetype, "voltage_kv": s.sitevoltage, "lat": s.lat, "lon": s.lon,
+                         "level": level, "voltage_kv": s.sitevoltage, "lat": s.lat, "lon": s.lon,
                          "firm_mva": s.transratingwinter,
                          "demand_headroom_mw": pd.to_numeric(s.transratingwinter, errors="coerce") - pd.to_numeric(s.maxdemandwinter, errors="coerce"),
                          "source": "UKPN grid and primary sites"})
+    # a 132/11 kV grid site's 11 kV board is a primary for an 11 kV connection
+    board = subs[subs.level == "Grid Substation 132/11kV"].copy()
+    board["level"], board["voltage_kv"] = "Primary Substation", 11
+    board["source"] = "UKPN grid and primary sites (11 kV board of a 132/11 kV grid site)"
+    subs = pd.concat([subs, board], ignore_index=True)
     nodes = []
     for region in (10, 13, 14):
         sub = subs[subs.region == region]
@@ -580,18 +615,49 @@ def spen(src: Path):
 
 
 # =============================================================================
-def main(src: Path) -> int:
+# OpenStreetMap tags a generator's or an interconnector's own 275/400 kV
+# substation like any other; no demand customer connects there (found 29 Oct
+# 2026: Brighton's nearest "transmission" point was Rampion wind farm's
+# onshore substation, 23.9 km away). Excluded by name; "Washway Farm" (a real
+# NGET 275 kV substation) survives because "Farm" alone is not in the pattern.
+NOT_A_GRID_SUPPLY_POINT = re.compile(
+    r"Wind Farm|Offshore|Solar|Power Station|Converter|BESS|Battery|Generat|Flexible|Interconnector", re.I)
+
+BUILDERS = {"ukpn": ukpn, "npg": npg, "ssen": ssen, "enwl": enwl, "nged": nged, "spen": spen}
+COMPANY_OF = {"ukpn": ("UKPN",), "npg": ("Northern Powergrid",), "ssen": ("SSEN",), "enwl": ("ENWL",),
+              "nged": ("NGED",), "spen": ("SPEN",)}
+REGIONS_OF = {"ukpn": (10, 13, 14), "npg": (4, 5), "ssen": (1, 12), "enwl": (3,), "nged": (7, 8, 9, 11), "spen": (2, 6)}
+
+
+def main(src: Path, only: list[str] | None = None) -> int:
+    """Build the register. ``only`` rebuilds just those companies (and the
+    transmission layer, always) and keeps the others' rows from the CSVs on
+    disk — the full build takes ~35 min, mostly OpenStreetMap place-snapping."""
     OUT.mkdir(parents=True, exist_ok=True)
     subs, nodes = [], []
-    for fn in (ukpn, npg, ssen, enwl, nged, spen):
-        s, n = fn(src)
+    todo = list(BUILDERS) if not only else only
+    for name in todo:
+        s, n = BUILDERS[name](src)
         subs.append(s); nodes += n
-        print(f"  {fn.__name__:<5} {len(s):>6} substations, {len(n):>6} price nodes")
+        print(f"  {name:<5} {len(s):>6} substations, {len(n):>6} price nodes")
     S = pd.concat(subs, ignore_index=True)
     N = pd.DataFrame(nodes)
+    if only:
+        old_s = pd.read_csv(OUT / "substations.csv", low_memory=False)
+        old_n = pd.read_csv(OUT / "price_nodes.csv", low_memory=False)
+        drop_co = {c for k in only for c in COMPANY_OF[k]} | {"transmission (OpenStreetMap)"}
+        drop_r = {r for k in only for r in REGIONS_OF[k]}
+        S = pd.concat([old_s[~old_s.company.isin(drop_co)], S], ignore_index=True)
+        N = pd.concat([old_n[~old_n.region.isin(drop_r)], N], ignore_index=True)
+        print(f"  kept {len(old_s[~old_s.company.isin(drop_co)]):,} substations and "
+              f"{len(old_n[~old_n.region.isin(drop_r)]):,} nodes from the register on disk")
     # national grid substations (no local price; for distance to a transmission connection)
     osm = pd.read_csv(src / "3 DUoS" / "site-specific EHV charges" / f"OpenStreetMap named substations 33kV and above, GB {F}.csv")
     tx = osm[osm.voltage_v.astype(str).str.contains("400000|275000")]
+    gen = tx.name.astype(str).str.contains(NOT_A_GRID_SUPPLY_POINT)
+    print(f"  transmission: {len(tx)} OpenStreetMap 275/400 kV substations, {int(gen.sum())} generator or "
+          f"interconnector sites excluded")
+    tx = tx[~gen]
     S = pd.concat([S, pd.DataFrame({"region": np.nan, "company": "transmission (OpenStreetMap)", "name": tx.name,
                                     "level": "transmission", "voltage_kv": tx.voltage_v, "lat": tx.lat, "lon": tx.lon,
                                     "firm_mva": np.nan, "demand_headroom_mw": np.nan, "source": "OpenStreetMap, ODbL"})],
@@ -622,4 +688,10 @@ def main(src: Path) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main(Path(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_SOURCES))
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("src", nargs="?", default=str(DEFAULT_SOURCES))
+    ap.add_argument("--only", default=None, help="comma-separated builders to rebuild (ukpn,npg,ssen,enwl,nged,spen); "
+                                                 "the rest kept from disk; the transmission layer is always rebuilt")
+    a = ap.parse_args()
+    sys.exit(main(Path(a.src), a.only.split(",") if a.only else None))
