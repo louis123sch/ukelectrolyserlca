@@ -13,6 +13,7 @@ T_TX_SOLAR = "Solar step-up transformers (0.4 → 20 kV, at the inverter station
 T_TX_BATT = "Battery step-up transformers (0.4 → 20 kV, one per container)"
 T_TX_FC = "Fuel-cell step-up transformers (0.4 → 20 kV, one per container)"
 T_GRID_CONN = "Grid connection (intake transformers, N-1)"
+T_GRID_CABLE = "Grid connection cable (the line to the site, two circuits, over its route)"
 T_BATT_E = "Battery cells, racks and container (energy capacity)"
 T_BATT_P = "Battery power conversion system (power capacity)"
 T_ELY = "Electrolyser balance of plant (PEM default; AE, SOEC selectable)"
@@ -35,7 +36,7 @@ KEY_TO_NAME = {
     "wind": T_WIND, "solar": T_SOLAR,
     "wind step-up transformers": T_TX_WIND, "solar step-up transformers": T_TX_SOLAR,
     "battery step-up transformers": T_TX_BATT, "fuel cell step-up transformers": T_TX_FC,
-    "grid connection": T_GRID_CONN,
+    "grid connection": T_GRID_CONN, "grid connection cable": T_GRID_CABLE,
     "battery cells and container": T_BATT_E, "battery power conversion": T_BATT_P,
     "electrolyser": T_ELY, "electrolyser stack replacements": T_ELY_STACK, "H2 tank": T_TANK,
     "fuel cell stack replacements": T_FC_STACK, "fuel cell BoP replacements": T_FC_BOP,

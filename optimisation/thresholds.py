@@ -331,6 +331,7 @@ def find(scenario, knob_name: str, *, site=sites.DEFAULT_PRESET,
          resample_hours: float | None = 1.0, cost_case: str = "central",
          horizon_years: float = 25.0, unserved_fraction: float = 0.0,
          connection_headroom: float | None = None,
+         connection_mode: str | None = None,
          h2_colour: str | None = None,
          green_h2_grid_share: float | None = None,
          gwp_limit_kg_per_year: float | None = None,
@@ -375,6 +376,7 @@ def find(scenario, knob_name: str, *, site=sites.DEFAULT_PRESET,
         "resample_hours": resample_hours, "cost_case": cost_case,
         "horizon_years": horizon_years, "unserved_fraction": unserved_fraction,
         "connection_headroom": connection_headroom,
+        "connection_mode": connection_mode,
         "gwp_limit_kg_per_year": gwp_limit_kg_per_year,
         "knob": knob.name, "target_share": target_share, "rel_tol": rel_tol,
         "coefficients": dc_runner._coefficient_identity(),
@@ -397,6 +399,7 @@ def find(scenario, knob_name: str, *, site=sites.DEFAULT_PRESET,
         scenario, site=site, start=start, end=end, size_mw_it=size_mw_it, pue=pue,
         resample_hours=resample_hours, cost_case=cost_case,
         horizon_years=horizon_years, connection_headroom=connection_headroom,
+        connection_mode=connection_mode,
         h2_colour=colour, green_h2_grid_share=green_h2_grid_share,
         notice=notice))
 
@@ -447,6 +450,7 @@ def find(scenario, knob_name: str, *, site=sites.DEFAULT_PRESET,
 
 def prepare(scenario, *, site, start, end, size_mw_it, pue, resample_hours,
             cost_case, horizon_years, connection_headroom, h2_colour,
+            connection_mode=None,
             green_h2_grid_share=None, notice=None):
     """Series, assets, tech and meta for one scenario — built once, swept many.
 
@@ -458,6 +462,8 @@ def prepare(scenario, *, site, start, end, size_mw_it, pue, resample_hours,
     site = sites.get(site)
     series, meta = I.build_series(site, start, end, size_mw_it, pue=pue,
                                   connection_headroom=connection_headroom,
+                                  connection_mode=connection_mode,
+                                  grid=A.architecture(scenario.architecture, flags=scenario.assets).grid,
                                   on_progress=notice)
     if resample_hours:
         series = I.resample(series, resample_hours)
@@ -557,6 +563,7 @@ def from_run(run_folder) -> dict:
             "horizon_years": cfg["horizon_years"],
             "unserved_fraction": cfg.get("unserved_fraction", 0.0),
             "connection_headroom": site_cfg.get("connection_headroom"),
+            "connection_mode": site_cfg.get("connection_mode"),
             "h2_colour": scenario.h2_colour,
             # The share the front was actually solved at, not the module
             # default: a threshold annotating that front has to price bought
@@ -610,6 +617,7 @@ def sweep(scenario, knobs=DEFAULT_KNOBS, *, progress=None, **kw) -> list[dict]:
         cost_case=kw.get("cost_case", "central"),
         horizon_years=kw.get("horizon_years", 25.0),
         connection_headroom=kw.get("connection_headroom"),
+        connection_mode=kw.get("connection_mode"),
         h2_colour=kw.get("h2_colour") or scenario.h2_colour,
         green_h2_grid_share=kw.get("green_h2_grid_share"),
         notice=kw.get("notice"))

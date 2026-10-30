@@ -177,6 +177,24 @@ def decompose(refresh: bool = False) -> dict:
     return _CACHE
 
 
+def line_kgco2e_per_km_year(refresh: bool = False) -> float:
+    """The line to the site per km of route per year: ecoinvent's high-voltage
+    transmission network per km over the asset's life. A PROXY for an
+    underground 33/132 kV cable (an overhead line's towers and conductors),
+    charged since 30 Oct 2026 on each connection option's own route and two
+    circuits (dc_inputs.with_connection_options), where it was reported only."""
+    d = decompose(refresh)
+    ref = T.ecoinvent(LINE_ACTIVITY, "GLO", database=None)
+    T.step("grid_connection.line_per_km", d["kgco2e_per_km_line"], "kg CO2e per km",
+           "The line from the network to the site, per km (ecoinvent's high-voltage transmission "
+           "network: an overhead line's towers and conductors standing in for a buried cable)",
+           uses=[ref], scores=ref, grade="proxy")
+    return T.step("grid_connection.line_per_km_year", d["kgco2e_per_km_line"] / ASSET_LIFE_YEARS,
+                  "kg CO2e per km per year", "The line per km of route, over its life",
+                  uses=["grid_connection.line_per_km"], inputs={"asset_life_years": ASSET_LIFE_YEARS},
+                  grade="proxy")
+
+
 def kgco2e_per_mw_year(refresh: bool = False) -> float:
     d = decompose(refresh)
     tx, civ = T.activity(TRANSFORMER_DB, TRANSFORMER_CODE), T.activity(TRANSFORMER_DB, CIVILS_CODE)

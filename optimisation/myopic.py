@@ -168,7 +168,7 @@ FLOWS = ("imp", "exp", "p_ely", "p_fc", "h2_buy", "h2_buy_2", "unserved",
 
 
 def evaluate(df: pd.DataFrame, series: M.Series, tech: M.Tech, caps: dict,
-             grid: bool | None = None) -> dict:
+             grid: bool | None = None, option: int | None = None) -> dict:
     """Annualised cost and carbon of a dispatch, on the LP's own basis.
 
     Scored by ``dc_model.objective_terms`` — the very terms the LP minimises —
@@ -196,6 +196,10 @@ def evaluate(df: pd.DataFrame, series: M.Series, tech: M.Tech, caps: dict,
     window = (np.ones(series.n, dtype=bool) if series.triad_window is None
               else np.asarray(series.triad_window, dtype=bool))
     q["triad_mw"] = float(q["imp"][window].max()) if window.any() else 0.0
+    # When the LP chooses its price list, the merit order is scored on the
+    # option the LP chose for this build (``option``), else the cheapest that
+    # holds its connection (dc_model.option_quantities).
+    q = M.option_quantities(q, tech, series, option)
     terms = M.score(q, series, tech)
     if grid is None:
         grid = caps.get("cap_grid", 0.0) > 0
@@ -232,8 +236,10 @@ def bracket(series, tech, caps, lp_totals, lp_vars=None, assets=None) -> pd.Data
     LP could, and the connection charge follows the same flag.
     """
     dis = dispatch(series, tech, caps, buy_h2=bool(assets and assets.buy_h2))
+    chosen = M.chosen_option(lp_vars, M.connection_options_of(tech)) if lp_vars is not None else None
     myo = evaluate(dis, series, tech, caps,
-                   grid=(assets.grid if assets is not None else None))
+                   grid=(assets.grid if assets is not None else None),
+                   option=(chosen[0] if chosen else None))
     dt, scale = series.dt_hours, series.annual_scale
     mwh = float(series.demand_mw.sum() * dt) * scale
 

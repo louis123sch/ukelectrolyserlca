@@ -1349,6 +1349,63 @@ Finding: a listed site's capacity charge barely tracks its node's local price
 dominates. The site-specific charge is therefore mostly the area's add-on, with
 the local price as a small adjustment and the area's own spread as the range.
 
+### The optimiser chooses the grid, voltage and charging band (30 Oct 2026)
+`connection_options.py`, `dc_inputs.build_series(connection_mode=)`,
+`dc_inputs.with_connection_options`, `dc_model.ConnectionOption`,
+`substations.room_points`. Plan and decisions: `docs/COST_PLAN.md` §1.11.
+
+No new source. Every figure an option carries is one already recorded above —
+the band tables and the area rules (*Transmission or distribution*), each
+area's use-of-system charges (*Demand-side network charges*, *DUoS for every
+DNO area*), the build prices (*Grid connection capital, by DNO area*), the
+losses and levies, the register's room, route and price nodes (*Substation
+register*, *The register's capacity layer*). What changed is where they are
+read: until 30 Oct 2026 one price list was fixed from 1.43x the load before
+the solve; now every price list the site could be on is an **option** with
+its size range, substation, cable and charges, and the LP picks the option
+and the connection size together, one on/off switch per option (HiGHS via
+linopy, the same solver, now with those integers). Imports are split into one
+series per **voltage group** — national grid, 132 kV, 33 kV, 11 kV — each with
+that voltage's loss factor, unit rates and delivered carbon
+(`optimiser_lca.grid.delivered` at "high" or "medium"), and each limited by
+the connections built in that group.
+
+| Element | How it is set | Grade | Where it comes from |
+|---|---|---|---|
+| Size range of a (voltage, band) | the band's floor one kVA above the band below (`band_floor_mw`); its top the band table's or the voltage's largest size; an EHV band at least the area's 11 kV limit; the national grid from the company's largest local connection, one band set by annual MWh | transcribed, as above | NESO Table TB; DCUSA band tables; `network_charges.AREA_RULES` |
+| Room cap (room mode) | today's `demand_headroom_mw` of the nearest substation at that voltage that publishes one; a second option at the next with room for the load where the nearest is short | the company's own basis and date (`headroom_basis`, `headroom_as_of`) | the register's capacity layer |
+| Cap (cap mode) | 1.43x the load, or `Site.connection_limit_mw` | derived / the caller's | `sites.CONNECTION_HEADROOM_ASSUMED` |
+| Charges per option | TDR for the band; DUoS capacity, fixed and unit rates for the band and voltage, site-specific where the nearest substation has a named node; none on the national grid | transcribed / calibrated, as above | `network_charges.import_charges` |
+| Build cost per option | the area's price list at the option's voltage, over the option's own cable route | transcribed; 1.3 route factor assumed | `connection_cost.connection_costs` |
+| Carbon per option | the one intake-transformer figure per MW for every voltage (Leng's 110 kV unit; low for 275/400 kV) | derived | `grid_connection.py` |
+| Cable carbon per option | ecoinvent 3.9.1 apos `market for transmission network, electricity, high voltage` [GLO] per km, times the option's route and two circuits, over 40 years (8.7 t CO₂e/km/yr); charged since 30 Oct 2026 (`grid_connection.line_kgco2e_per_km_year`) | **proxy** (overhead line for a buried cable, probably high) | `grid_connection.py`, `dc_inputs.with_connection_options` |
+| Unit rates of a voltage group | those of the option in the group whose size range holds the load, else the roomiest | **approximation** where an area's EHV unit rates differ by band (area-median fallback) | ASSUMPTIONS.md §4 |
+| Integer tolerance | branch-and-bound relative gap 1e-7 (`dc_model.MIP_REL_GAP`) | — | HiGHS default 1e-4 broke the frontier's 1e-6 tie-breaks |
+| Reach per voltage | 5 / 15 / 40 / 60 km (11 kV / 33 kV / 132 kV / national grid), `substations.REACH_KM` | **assumed** rules of thumb | beyond them a developer takes the next voltage up; no published figure |
+| No room in reach | `ConnectionUnavailable`, the page asks "run islanded?" | — | a zero room is a figure; nothing is invented |
+
+Checked (`scripts/run_both_tiers.py`, 30 Oct 2026): on the two forced lists
+the switched answer equals the cheaper forced run to 1e-5 (London 150 MW IT,
+June week: £88.93 m both ways); with every list it is no dearer (£88.20 m, a
+20 MW 132 kV connection in the band below, the rest made on site over that
+week). The full six-site run, the 14 x 3 chain in every mode and the
+full-year timing are in `docs/COST_PLAN.md` §1.11.
+
+### The register update check (30 Oct 2026)
+`scripts/fetch_register_sources.py --check`, `check_updates`;
+`substations.freshness`. A run reads the register on disk, never the
+portals; this says whether that register is behind them. One metadata call
+per dataset (the portal's "last modified" — opendatasoft `metas.default.modified`,
+CKAN the resource's `last_modified`) is compared with the date recorded in
+`api/manifest.json` when the file was fetched, and the manifest's own write
+time with the register's, so "fetched but not rebuilt" is caught too. Nothing
+is downloaded. The answer is cached in `substation_register/freshness.json`
+for 24 hours; every run in the room mode records it as
+`meta["register_freshness"]` (and the page shows it), with the two refresh
+commands in the note when something is stale. Offline, or with
+`UKDCLCA_NO_PORTAL_CHECK` set, the portals are not asked and the note says so;
+the check never fails a run. First run, 30 Oct 2026: 39 of 39 current.
+
 ### Electrolyser stacks and water in cost (28 Oct 2026)
 `h2_capex.electrolyser_costs` → `Tech.cost_ely_variable_per_kg`. NESO Green
 Hydrogen Data Portal variable opex, already in `price_outputs/electrolyser_costs_clean.csv`

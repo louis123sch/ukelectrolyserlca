@@ -76,6 +76,8 @@ class Step:
     note: str = ""
     scores: dict | None = None
     factor: float = 1.0
+    side: str = ""           # "cost" for a pound figure; "" is the carbon side
+    cites: list = field(default_factory=list)   # [{"source": register key, "at": table / page}]
     where: str = ""          # "optimisation/renewables.py:412"
     function: str = ""       # "apply_case"
     code: str = ""           # the expression that computed the value
@@ -115,13 +117,25 @@ def recording():
         _CURRENT.reset(token)
 
 
+@contextmanager
+def quiet():
+    """Record nothing inside the block. For a function that builds a table of
+    every case from the one-case function that records: the table's other
+    cases would otherwise reach the record under the same keys."""
+    token = _CURRENT.set(None)
+    try:
+        yield
+    finally:
+        _CURRENT.reset(token)
+
+
 def active() -> bool:
     return _CURRENT.get() is not None
 
 
 def step(key: str, value, unit: str, title: str, *, uses=(), inputs: dict | None = None,
          grade: str = "derived", source: str = "", note: str = "", scores: dict | None = None,
-         factor: float = 1.0, depth: int = 0):
+         factor: float = 1.0, side: str = "", cites=(), depth: int = 0):
     """Return ``value``; while recording, keep how it was made.
 
     key      a unique, dotted name: ``"<owner>.<what>"``
@@ -131,6 +145,9 @@ def step(key: str, value, unit: str, title: str, *, uses=(), inputs: dict | None
     inputs   the constants it is computed with, by name, as plain numbers
     grade    transcribed / derived / assumed / proxy (SOURCES.md)
     scores   an activity this value is the score of, times ``factor``
+    side     "cost" for a pound figure (the cost map's); "" for the carbon side
+    cites    where the number was read: ``(register key, "Table 3, p.6")``
+             pairs, keys of ``optimisation.source_register.SOURCES``
     depth    frames to skip when a module wraps ``step`` in its own helper, so
              the record points at the helper's caller
     """
@@ -144,9 +161,17 @@ def step(key: str, value, unit: str, title: str, *, uses=(), inputs: dict | None
     rec.add(Step(key=key, value=_num(value), unit=unit, title=title, uses=list(uses),
                  inputs={k: _num(v) if not isinstance(v, str) else v for k, v in (inputs or {}).items()},
                  grade=grade, source=source, note=note, scores=scores, factor=float(factor),
+                 side=side, cites=[{"source": c[0], "at": c[1] if len(c) > 1 else ""} for c in cites],
                  where=f"{_rel(path)}:{line}", function=frame.f_code.co_name,
                  code=_value_source(path, line)))
     return value
+
+
+def cost(key: str, value, unit: str, title: str, *, depth: int = 0, **kw):
+    """``step`` on the cost side: a pound figure, or a number only the cost
+    objective uses (a discount rate, a cost life). Kept out of the LCA map and
+    drawn on the cost map (``scripts/build_cost_map.py``)."""
+    return step(key, value, unit, title, side="cost", depth=depth + 1, **kw)
 
 
 # =============================================================================
@@ -198,5 +223,5 @@ def _value_source(path: str, line: int) -> str:
 
 
 def _is_step(func) -> bool:
-    return (isinstance(func, ast.Attribute) and func.attr == "step") or \
-           (isinstance(func, ast.Name) and func.id == "step")
+    return (isinstance(func, ast.Attribute) and func.attr in ("step", "cost")) or \
+           (isinstance(func, ast.Name) and func.id in ("step", "cost"))

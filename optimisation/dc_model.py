@@ -143,6 +143,46 @@ class Assets:
     allow_export: bool = False
 
 
+@dataclass(frozen=True)
+class ConnectionOption:
+    """One price list the grid connection may be on (COST_PLAN §1.11, 30 Oct
+    2026): a tier, a voltage and a charging band at one substation, with the
+    size range the rules allow it and the charges it carries. ``build_model``
+    gives each option an on/off switch, exactly one on, and a connection of
+    its own inside its range; their sum is ``cap_grid``. ``group`` names the
+    import series the option shares (``Series.grid_groups``): one per voltage,
+    because losses, unit rates and delivered carbon differ by voltage and the
+    bands at one voltage differ only in fixed charge and size range.
+    Assembled by ``dc_inputs.build_tech`` from ``connection_options``."""
+    key: str
+    group: str
+    floor_mw: float
+    ceiling_mw: float
+    # £/MW/year on this option's connection: DUoS capacity and the connection
+    # capital per MW. The zonal HH TNUoS tariff is the same for every option
+    # and stays on triad_mw (Tech.cost_grid_triad_per_mw_year).
+    cost_per_mw_year: float
+    # £/year while this option is on: TDR, DUoS fixed, the cable and switchgear.
+    cost_fixed_per_year: float
+    # Embodied carbon per MW of this option's connection; None takes the Tech's
+    # gwp_grid_per_mw (with its cut-off estimates), the same unit for every voltage.
+    gwp_per_mw_year: float | None = None
+    # The cable to this option's substation, kg CO2e per year while the option
+    # is on (its own route, two circuits, over the asset's life). The cost side
+    # has charged the cable since 29 Oct 2026; the carbon side only since 30 Oct.
+    gwp_fixed_per_year: float = 0.0
+    info: dict = field(default_factory=dict)
+
+
+def connection_options_of(tech) -> tuple | None:
+    """The options a Tech carries, or None for the single-price-list model.
+    (A Tech whose fields are symbols, as the LCA map builds, has none.)"""
+    opts = getattr(tech, "connection_options", None)
+    if isinstance(opts, (list, tuple)) and len(opts):
+        return tuple(opts)
+    return None
+
+
 @dataclass
 class Tech:
     """Every coefficient the LP needs, resolved before the model is built.
@@ -246,6 +286,18 @@ class Tech:
     loss_batt_load: float = 0.0
     loss_fc_noload: float = 0.0
     loss_fc_load: float = 0.0
+    # The cable from the network to the site, kg CO2e per year: the line's
+    # per-km score over the real route, two circuits, over the asset's life
+    # (grid_connection.py). A constant with one price list — it is charged
+    # whenever the grid is on — and a term on the switches with options
+    # (ConnectionOption.gwp_fixed_per_year). Zero is the model before 30 Oct
+    # 2026, when the cable was priced in money and free in carbon.
+    gwp_grid_fixed_per_year: float = 0.0
+    # The price lists the connection may be on (ConnectionOption), or None:
+    # with None, or with the grid off, the model is the single-price-list one
+    # exactly — cap_grid priced by cost_grid_per_mw_year and
+    # cost_grid_fixed_per_year, imports by the one series. COST_PLAN §1.11.
+    connection_options: tuple | None = None
     labels: dict = field(default_factory=dict)
 
 
@@ -262,6 +314,11 @@ class Series:
     # Steps that could hold a Triad (network_charges.triad_window). None means
     # every step, so the winter-peak charge falls on peak import.
     triad_window: np.ndarray | None = None
+    # One import series per voltage group when the model chooses its price
+    # list (COST_PLAN §1.11): {group: {"price_per_mwh": array, "gwp_per_mwh":
+    # array}}. grid_price_per_mwh / grid_gwp_per_mwh above are then the
+    # reference group's (the price list the pre-solve rule would have picked).
+    grid_groups: dict | None = None
 
     @property
     def n(self) -> int:
@@ -375,6 +432,10 @@ def build_model(series: Series, assets: Assets, tech: Tech, *,
                         min(assets.grid_floor_mw, grid_upper)),
         # Demand in the Triad window: >= import in every candidate step (below).
         "triad_mw": cap(assets.grid, "triad_mw"),
+        # 1 while the grid is on: carries the connection's fixed carbon (the
+        # cable) as a term, since linopy refuses a constant in an objective.
+        "grid_on": m.add_variables(lower=1.0 if assets.grid else 0.0, upper=1.0 if assets.grid else 0.0,
+                                   name="grid_on"),
     }
     # --- flows ----------------------------------------------------------
     V.update({
@@ -464,6 +525,47 @@ def build_model(series: Series, assets: Assets, tech: Tech, *,
     if assets.grid and assets.allow_export:
         m.add_constraints(V["exp"] - V["cap_grid"] <= 0, name="export_cap")
 
+    # --- (9b) the price list, chosen with the connection (COST_PLAN §1.11) --
+    # One switch per option, exactly one on; a connection per option held
+    # inside its size range while on and at zero while off; cap_grid is their
+    # sum. Imports are split by voltage group, each group's import limited by
+    # the connections built in it, so each MWh pays that voltage's losses,
+    # unit rates and delivered carbon. The switches are the only integers in
+    # the model; with no options nothing here exists.
+    opts = connection_options_of(tech) if assets.grid else None
+    group_da = None
+    if opts is not None:
+        from functools import reduce
+        import operator
+        if not series.grid_groups:
+            raise ValueError("the Tech carries connection options but the Series has no grid_groups: "
+                             "build both with dc_inputs.build_series / build_tech in the same mode")
+        missing = sorted({o.group for o in opts} - set(series.grid_groups))
+        if missing:
+            raise ValueError(f"connection options use voltage groups the Series lacks: {missing}")
+        for i, o in enumerate(opts):
+            if not (np.isfinite(o.ceiling_mw) and o.ceiling_mw >= o.floor_mw >= 0.0):
+                raise ValueError(f"connection option {o.key!r} needs 0 <= floor <= a finite ceiling, "
+                                 f"got {o.floor_mw}..{o.ceiling_mw}")
+            V[f"on_{i}"] = m.add_variables(binary=True, name=f"on_{i}")
+            V[f"cap_conn_{i}"] = m.add_variables(lower=0.0, name=f"cap_conn_{i}")
+            m.add_constraints(V[f"cap_conn_{i}"] - o.floor_mw * V[f"on_{i}"] >= 0, name=f"option_floor_{i}")
+            m.add_constraints(V[f"cap_conn_{i}"] - o.ceiling_mw * V[f"on_{i}"] <= 0, name=f"option_ceiling_{i}")
+        m.add_constraints(reduce(operator.add, [V[f"on_{i}"] for i in range(len(opts))]) == 1,
+                          name="one_price_list")
+        m.add_constraints(V["cap_grid"] - reduce(operator.add, [V[f"cap_conn_{i}"] for i in range(len(opts))]) == 0,
+                          name="cap_grid_is_the_chosen_connection")
+        group_da = {}
+        for g in sorted({o.group for o in opts}):
+            gv = group_import_var(g)
+            V[gv] = flow(True, gv)
+            members = [V[f"cap_conn_{i}"] for i, o in enumerate(opts) if o.group == g]
+            m.add_constraints(V[gv] - reduce(operator.add, members) <= 0, name=f"import_cap_{gv}")
+            group_da[g] = (series_da(series.grid_groups[g]["price_per_mwh"]),
+                           series_da(series.grid_groups[g]["gwp_per_mwh"]))
+        m.add_constraints(V["imp"] - reduce(operator.add, [V[group_import_var(g)] for g in group_da]) == 0,
+                          name="imports_by_voltage_group")
+
     # --- (10) reliability ------------------------------------------------
     total_demand_mwh = float(series.demand_mw.sum() * dt)
     m.add_constraints((V["unserved"] * dt).sum() <= unserved_fraction * total_demand_mwh,
@@ -499,7 +601,8 @@ def build_model(series: Series, assets: Assets, tech: Tech, *,
     # term added here cannot be missing from the breakdown or the bracket.
     terms = objective_terms(V, series, tech,
                             price=series_da(series.grid_price_per_mwh),
-                            ci=series_da(series.grid_gwp_per_mwh))
+                            ci=series_da(series.grid_gwp_per_mwh),
+                            group_series=group_da)
     cost = _total(terms["cost_capital"], terms["cost_operational"])
     gwp = _total(terms["gwp_embodied"], terms["gwp_operational"])
     cost_const, gwp_const = objective_constants(series, tech, grid=assets.grid)
@@ -529,10 +632,63 @@ def build_model(series: Series, assets: Assets, tech: Tech, *,
             f"objective must be 'cost', 'gwp' or 'connection', got {objective!r}")
 
     return m, V, {"cost": cost, "gwp": gwp,
-                  "cost_const": cost_const, "gwp_const": gwp_const}
+                  "cost_const": cost_const, "gwp_const": gwp_const,
+                  "options": opts}
 
 
-def objective_terms(q, series: Series, tech: Tech, *, price, ci) -> dict:
+def option_quantities(q: dict, tech: Tech, series: Series, option: int | None = None) -> dict:
+    """``q`` (a dispatch's numbers: ``cap_grid``, ``imp``) with the price-list
+    quantities the option terms read: one switch on, that option's connection
+    equal to ``cap_grid``, and every import through its voltage group.
+
+    ``option`` is the index to switch on; None takes the cheapest option whose
+    size range holds ``cap_grid``, at that connection — what a merit-order
+    operator would contract for the connection it has. Returns ``q`` unchanged
+    when the Tech has no options.
+    """
+    opts = connection_options_of(tech)
+    if opts is None:
+        return q
+    cap = float(q.get("cap_grid", 0.0))
+    if option is None:
+        fits = [(o.cost_fixed_per_year + o.cost_per_mw_year * cap, i) for i, o in enumerate(opts)
+                if o.floor_mw - 1e-6 <= cap <= o.ceiling_mw + 1e-6]
+        if not fits:         # nothing holds this connection: the nearest range by distance
+            fits = [(min(abs(cap - o.floor_mw), abs(cap - o.ceiling_mw)), i) for i, o in enumerate(opts)]
+        option = min(fits)[1]
+    out = dict(q)
+    imp = np.asarray(q.get("imp", np.zeros(series.n)), dtype=float)
+    for i, o in enumerate(opts):
+        out[f"on_{i}"] = 1.0 if i == option else 0.0
+        out[f"cap_conn_{i}"] = cap if i == option else 0.0
+    for g in {o.group for o in opts}:
+        out[group_import_var(g)] = imp if g == opts[option].group else np.zeros_like(imp)
+    return out
+
+
+def group_import_var(group: str) -> str:
+    """The LP variable carrying one voltage group's imports (``imp_33kV``)."""
+    import re
+    return "imp_" + re.sub(r"\W", "", group)
+
+
+def chosen_option(q, options) -> tuple[int, "ConnectionOption"] | None:
+    """Which option a solution switched on: ``(index, option)``, or None.
+    ``q`` is the variables (solved) or ``solution_quantities``' numbers."""
+    if not options:
+        return None
+    best, best_v = None, -1.0
+    for i, o in enumerate(options):
+        v = q.get(f"on_{i}") if isinstance(q, dict) else None
+        if v is None:
+            return None
+        v = float(v.solution) if hasattr(v, "solution") else float(v)
+        if v > best_v:
+            best, best_v = i, v
+    return (best, options[best]) if best is not None and best_v > 0.5 else None
+
+
+def objective_terms(q, series: Series, tech: Tech, *, price, ci, group_series=None) -> dict:
     """Every term of both objectives, labelled, from one set of quantities.
 
     ``q`` maps the LP's variable names to quantities: linopy variables when the
@@ -546,8 +702,24 @@ def objective_terms(q, series: Series, tech: Tech, *, price, ci) -> dict:
     scores a merit-order dispatch with it — before it existed those were three
     hand-written copies, and the myopic one had drifted (no grid connection
     carbon, no bought hydrogen).
+
+    With connection options on the Tech (COST_PLAN §1.11) the grid's four
+    terms are written over the options and the voltage groups instead:
+    capital per MW on each option's own connection, the fixed charges on its
+    switch, and energy and carbon per group on that group's import series
+    (``group_series``: {group: (price, ci)}, in whichever form ``q`` is in;
+    taken from ``series.grid_groups`` when not given).
     """
     dt, scale = series.dt_hours, series.annual_scale
+    # The options are in play only when the quantities carry their switches:
+    # an islanded build (grid off) has none, and a merit-order dispatch adds
+    # them with option_quantities.
+    opts = connection_options_of(tech)
+    if opts is not None and not (isinstance(q, dict) and dict.__contains__(q, "on_0")):
+        opts = None
+    if opts is not None and group_series is None:
+        group_series = {g: (np.asarray(d["price_per_mwh"], dtype=float), np.asarray(d["gwp_per_mwh"], dtype=float))
+                        for g, d in (series.grid_groups or {}).items()}
     kg_per_mwh_in = 1000.0 / (tech.ely_kwh_per_kg + tech.tank_compression_kwh_per_kg)
 
     # Two bought colours are two line items, not one: the whole reason for
@@ -579,7 +751,9 @@ def objective_terms(q, series: Series, tech: Tech, *, price, ci) -> dict:
         # transmission-connected site in a floored TNUoS zone pays nothing per
         # MW either — neither objective can, leaving its size to the solver's
         # stopping vertex. See grid_connection.py.
-        "grid connection": tech.gwp_grid_per_mw * q["cap_grid"],
+        "grid connection": (tech.gwp_grid_per_mw * q["cap_grid"] if opts is None else
+                            _sum((tech.gwp_grid_per_mw if o.gwp_per_mw_year is None else o.gwp_per_mw_year)
+                                 * q[f"cap_conn_{i}"] for i, o in enumerate(opts))),
         # Step-up transformers, on capacity rather than output: a transformer is
         # sized to the peak MVA it must pass and does not care how many hours a
         # year that happens. Solar is charged per MWp against an AC-rated asset,
@@ -594,8 +768,18 @@ def objective_terms(q, series: Series, tech: Tech, *, price, ci) -> dict:
         "battery step-up transformers": tech.gwp_tx_batt_per_mw * q["cap_batt_p"],
         "fuel cell step-up transformers": tech.gwp_tx_fc_per_mw * q["cap_fc"],
     }
+    # The cable to the connection substation: on grid_on (1 while the grid is
+    # on, a fixed variable so linopy takes it) with one price list, on the
+    # switches once the list is chosen. Scored without grid_on (a merit-order
+    # dispatch) it is on whenever there is a connection.
+    gwp_embodied["grid connection cable"] = (
+        tech.gwp_grid_fixed_per_year * q.get("grid_on", 1.0 if _positive(q.get("cap_grid", 0.0)) else 0.0)
+        if opts is None else
+        _sum(o.gwp_fixed_per_year * q[f"on_{i}"] for i, o in enumerate(opts)))
     gwp_operational = {
-        "grid import": scale * (ci * q["imp"] * dt).sum(),
+        "grid import": (scale * (ci * q["imp"] * dt).sum() if opts is None else
+                        _sum(scale * (group_series[g][1] * q[group_import_var(g)] * dt).sum()
+                             for g in sorted({o.group for o in opts}))),
         buy_1: scale * (tech.bought_h2_gwp_per_kg * q["h2_buy"]).sum(),
         buy_2: scale * (tech.bought_h2_2_gwp_per_kg * q["h2_buy_2"]).sum(),
         "electrolyser consumables": scale * (tech.ely_variable_gwp_per_kg
@@ -621,11 +805,19 @@ def objective_terms(q, series: Series, tech: Tech, *, price, ci) -> dict:
         "fuel cell": (tech.cost_fc * q["cap_fc"]
                       + tech.cost_fc_stack_per_mw * q["fc_stack_units"]
                       + tech.cost_fc_bop_per_mw * q["fc_bop_units"]),
-        "grid connection": tech.cost_grid_per_mw_year * q["cap_grid"],
+        "grid connection": (tech.cost_grid_per_mw_year * q["cap_grid"] if opts is None else
+                            _sum(o.cost_per_mw_year * q[f"cap_conn_{i}"] for i, o in enumerate(opts))),
         "grid winter-peak charge": tech.cost_grid_triad_per_mw_year * q.get("triad_mw", 0.0),
     }
+    if opts is not None:
+        # A constant in the single-price-list model (objective_constants); a
+        # term on the switches once the price list is chosen.
+        cost_capital["grid connection fixed charges"] = _sum(
+            o.cost_fixed_per_year * q[f"on_{i}"] for i, o in enumerate(opts))
     cost_operational = {
-        "grid energy + network": scale * (price * q["imp"] * dt).sum(),
+        "grid energy + network": (scale * (price * q["imp"] * dt).sum() if opts is None else
+                                  _sum(scale * (group_series[g][0] * q[group_import_var(g)] * dt).sum()
+                                       for g in sorted({o.group for o in opts}))),
         buy_1: scale * (tech.bought_h2_gbp_per_kg * q["h2_buy"]).sum(),
         buy_2: scale * (tech.bought_h2_2_gbp_per_kg * q["h2_buy_2"]).sum(),
         "electrolyser stacks and water": scale * (tech.cost_ely_variable_per_kg
@@ -648,7 +840,8 @@ CHAINS = {
     "wind": {"wind", "offshore wind", "wind step-up transformers"},
     "solar": {"solar", "solar step-up transformers"},
     "grid": {"grid import", "grid energy + network", "grid connection", "connection fixed",
-             "grid winter-peak charge", "export credit"},
+             "grid connection fixed charges", "grid connection cable", "grid winter-peak charge",
+             "export credit"},
     "battery": {"battery", "battery cells and container", "battery power conversion",
                 "battery step-up transformers"},
     "electrolyser": {"electrolyser", "electrolyser stack replacements", "electrolyser consumables",
@@ -693,7 +886,10 @@ def objective_constants(series: Series, tech: Tech, *, grid: bool) -> tuple[floa
     has none, so charging it put £271k/yr (London) to £4.67m/yr on every
     architecture that never touches the grid.
     """
-    cost_const = tech.cost_grid_fixed_per_year if grid else 0.0
+    # With connection options the fixed charge is a term on the switches
+    # ("grid connection fixed charges" in objective_terms), not a constant.
+    cost_const = (tech.cost_grid_fixed_per_year
+                  if grid and connection_options_of(tech) is None else 0.0)
     gwp_const = (tech.dc_fixed_gwp_per_year
                  + tech.dc_other_gwp_per_mwh
                  * float(series.demand_mw.sum() * series.dt_hours) * series.annual_scale)
@@ -703,9 +899,23 @@ def objective_constants(series: Series, tech: Tech, *, grid: bool) -> tuple[floa
 def _total(*groups):
     """Sum labelled terms. ``sum()`` would start from int 0, which a linopy
     expression accepts but a reader should not have to wonder about."""
+    return _sum(v for g in groups for v in g.values())
+
+
+def _positive(x) -> bool:
+    """Whether a plain number is positive; a symbol or expression counts as on."""
+    try:
+        return float(x) > 0.0
+    except (TypeError, ValueError):
+        return True
+
+
+def _sum(items):
+    """Sum linopy expressions, arrays or floats without a leading int 0."""
     from functools import reduce
     import operator
-    return reduce(operator.add, [v for g in groups for v in g.values()])
+    items = list(items)
+    return reduce(operator.add, items) if items else 0.0
 
 
 def apply_strategy(m, V, series, assets, strategy, islanded_uses_cf_floor, tech=None):
@@ -802,9 +1012,17 @@ def intensities(cost: float, gwp: float, unserved_mwh: float,
             "gwp_g_per_kWh": gwp_x / served if served > 0 else float("nan")}
 
 
+# The branch-and-bound gap when the model carries the price-list switches:
+# HiGHS stops at 0.01 % by default, which is £1,000 a year on a £10 m site and
+# enough to break the frontier's tie-breaks (dc_pareto.LEX_TOL is 1e-6).
+MIP_REL_GAP = 1e-7
+
+
 def solve(m, solver="highs", **kw):
     import logging
     logging.getLogger("linopy").setLevel(logging.ERROR)
+    if solver == "highs" and len(m.binaries):
+        kw.setdefault("mip_rel_gap", MIP_REL_GAP)
     m.solve(solver_name=solver, output_flag=False, progress=False, **kw)
     if m.termination_condition != "optimal":
         raise RuntimeError(
@@ -855,16 +1073,35 @@ def contributions(V, obj, series, tech, assets) -> dict:
         # A connection sitting on its band's floor is one a cheaper band would
         # probably serve. Not re-solved automatically: re-running with the
         # ceiling just below the floor is the user's call (CONNECTION_TIER_PLAN).
-        "grid_floor": grid_floor_status(V, assets),
+        # With connection options the band is chosen, so the floor is the chosen
+        # option's and sitting on it means the next band down was dearer.
+        "grid_floor": grid_floor_status(V, assets, obj.get("options")),
+        "connection": connection_status(V, obj.get("options")),
     }
 
 
-def grid_floor_status(V, assets) -> dict:
+def grid_floor_status(V, assets, options=None) -> dict:
     """Whether the built connection sits on its band's floor."""
     floor = assets.grid_floor_mw if assets.grid else 0.0
+    ceiling = assets.grid_limit_mw
+    ch = chosen_option(V, options)
+    if ch is not None:
+        floor, ceiling = ch[1].floor_mw, ch[1].ceiling_mw
     built = float(V["cap_grid"].solution)
     return {"floor_mw": floor, "cap_grid_mw": built,
-            "binding": floor > 0 and built <= floor * (1 + 1e-6)}
+            "binding": floor > 0 and built <= floor * (1 + 1e-6),
+            "ceiling_mw": ceiling,
+            "ceiling_binding": ceiling is not None and np.isfinite(ceiling) and built >= ceiling * (1 - 1e-6)}
+
+
+def connection_status(V, options) -> dict | None:
+    """The price list a solved model chose, as plain values (None without options)."""
+    ch = chosen_option(V, options)
+    if ch is None:
+        return None
+    i, o = ch
+    return {"index": i, "key": o.key, "group": o.group, "floor_mw": o.floor_mw, "ceiling_mw": o.ceiling_mw,
+            "cap_mw": float(V[f"cap_conn_{i}"].solution), **{k: v for k, v in o.info.items()}}
 
 
 def solution_quantities(V) -> dict:
@@ -955,6 +1192,9 @@ def dispatch_frame(V, series, tech=None) -> pd.DataFrame:
             "h2_buy", "h2_buy_2", "tank", "h2_fc", "p_fc", "imp", "exp",
             "unserved")
     df = pd.DataFrame({k: V[k].solution.values for k in cols}, index=series.index)
+    for k in V:                               # imports by voltage group, when the price list is chosen
+        if k.startswith("imp_"):
+            df[k] = V[k].solution.values
     df.insert(0, "demand", series.demand_mw)
     df["grid_gwp_per_mwh"] = series.grid_gwp_per_mwh
     df["price_per_mwh"] = series.grid_price_per_mwh

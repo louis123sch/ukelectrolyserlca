@@ -55,6 +55,8 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
+from optimisation import trace as T
+
 SCHEDULE_YEAR = "2026/27"
 CASES = ("low", "central", "high")
 
@@ -354,10 +356,13 @@ def charges(index, region: int, tdr_band: str, case: str = "central",
         s = ehv_charges.site_charges(site[0], site[1], region, connection_voltage, tdr_band, case, power_factor)
         unit = pd.Series(super_red_window(index, region) * s["super_red_p_per_kwh"] * 10.0, index=index,
                          name="duos_GBP_per_MWh")
-        return {"duos_GBP_per_MWh": unit, "capacity_GBP_per_MW_year": s["capacity_GBP_per_MW_year"],
-                "fixed_GBP_per_year": s["fixed_GBP_per_year"],
-                "tariff": f"Designated EHV Band {n}, {s['how']}" + (f" ({case})" if s["how"] != "site-specific" else ""),
-                "area": AREA_NAMES[region], "file": FILES[region], "site_specific": s}
+        out = {"duos_GBP_per_MWh": unit, "capacity_GBP_per_MW_year": s["capacity_GBP_per_MW_year"],
+               "fixed_GBP_per_year": s["fixed_GBP_per_year"],
+               "tariff": f"Designated EHV Band {n}, {s['how']}" + (f" ({case})" if s["how"] != "site-specific" else ""),
+               "area": AREA_NAMES[region], "file": FILES[region], "site_specific": s}
+        return _record(out, region, tdr_band, connection_voltage,
+                       f"Annex 2 and the nodal prices: {s.get('note') or s['how']}",
+                       "transcribed" if s["how"] != "site-specific" else "derived")
     if fam == "HV":
         row = HV_ROWS[_region(region)][n]
         band = hv_band_series(index, region)
@@ -372,10 +377,31 @@ def charges(index, region: int, tdr_band: str, case: str = "central",
                          name="duos_GBP_per_MWh")
         cap, fixed = _pick(b.capacity_p_per_kva_day, case), _pick(b.fixed_p_per_day, case)
         tariff = f"Designated EHV Band {n}, {case} of {b.n_sites} sites"
-    return {"duos_GBP_per_MWh": unit,
-            "capacity_GBP_per_MW_year": cap / 100.0 * 365.0 * 1000.0 / power_factor,
-            "fixed_GBP_per_year": fixed / 100.0 * 365.0,
-            "tariff": tariff, "area": AREA_NAMES[region], "file": FILES[region]}
+    out = {"duos_GBP_per_MWh": unit,
+           "capacity_GBP_per_MW_year": cap / 100.0 * 365.0 * 1000.0 / power_factor,
+           "fixed_GBP_per_year": fixed / 100.0 * 365.0,
+           "tariff": tariff, "area": AREA_NAMES[region], "file": FILES[region]}
+    where = (f"Annex 1, {tariff}: red / amber / green p/kWh, fixed p/day, capacity p/kVA/day" if fam == "HV" else
+             f"Annex 2, {tariff}: super-red p/kWh, fixed p/day, capacity p/kVA/day (quartiles of the listed sites)")
+    return _record(out, region, tdr_band, connection_voltage, where,
+                   "transcribed" if fam == "HV" else "derived",
+                   inputs={"capacity_p_per_kVA_day": cap, "fixed_p_per_day": fixed})
+
+
+def _record(out: dict, region: int, tdr_band: str, voltage: str | None, where: str, grade: str,
+            inputs: dict | None = None) -> dict:
+    """Record one site's local network charges for the cost map and return
+    ``out`` with the key they are recorded under."""
+    k = f"cost.duos.r{region}.{voltage or 'rule'}.{tdr_band}"
+    cite = [(f"duos_schedule.{region}", where)]
+    title = f"Local network charge ({AREA_NAMES[region]}, {out['tariff']})"
+    T.cost(f"{k}.unit_mean_per_MWh", float(out["duos_GBP_per_MWh"].mean()), "GBP per MWh",
+           f"{title}: unit charges, mean over the window", grade=grade, cites=cite)
+    T.cost(f"{k}.capacity_per_MW_year", out["capacity_GBP_per_MW_year"], "GBP per MW per year",
+           f"{title}: capacity charge, p/kVA/day x 365", grade=grade, cites=cite, inputs=inputs)
+    T.cost(f"{k}.fixed_per_year", out["fixed_GBP_per_year"], "GBP per year",
+           f"{title}: fixed charge, p/day x 365", grade=grade, cites=cite)
+    return {**out, "trace_key": k}
 
 
 def llf_period(index, region: int) -> np.ndarray:

@@ -100,6 +100,7 @@ def _coefficient_identity() -> dict:
 
 def run_one(scenario: A.Scenario, *, site, start: str, end: str,
             connection_headroom: float | None = None,
+            connection_mode: str | None = None,
             size_mw_it: float, pue: float, resample_hours: float | None,
             points: int, cost_case: str, horizon_years: float,
             unserved_fraction: float, out_root: Path,
@@ -140,6 +141,9 @@ def run_one(scenario: A.Scenario, *, site, start: str, end: str,
         # Hashed as asked; the value actually used is recorded on the site
         # below, after the series is built.
         "connection_headroom": connection_headroom,
+        # How the price list is chosen (COST_PLAN §1.11): None is the default
+        # mode, which is hashed by name below once the series says what it was.
+        "connection_mode": connection_mode,
         "gwp_target_kg_per_year": gwp_target_kg_per_year,
         # In the hash, not just in build_tech's arguments: the share moves both
         # the price and the burden of bought green hydrogen, so a cached run at
@@ -171,6 +175,8 @@ def run_one(scenario: A.Scenario, *, site, start: str, end: str,
     t0 = time.time()
     series, meta = I.build_series(site, start, end, size_mw_it, pue=pue,
                                   connection_headroom=connection_headroom,
+                                  connection_mode=connection_mode,
+                                  grid=A.architecture(scenario.architecture, flags=scenario.assets).grid,
                                   on_progress=notice)
     # Record what was *used*, not what was asked for. site.tdr_band is None
     # whenever the band is derived from the load, so writing it straight into
@@ -186,6 +192,8 @@ def run_one(scenario: A.Scenario, *, site, start: str, end: str,
     cfg["site"]["connection_limit_source"] = ("pinned on the site"
                                               if site.connection_limit_mw is not None
                                               else "derived from the load")
+    cfg["site"]["connection_mode"] = meta.get("connection_mode")
+    cfg["site"]["connection_chosen_by"] = meta.get("connection_chosen_by")
     if resample_hours:
         series = I.resample(series, resample_hours)
     tech = I.build_tech(site, meta, ely_tech=scenario.ely_tech or "PEM operation",
@@ -263,8 +271,21 @@ def run_one(scenario: A.Scenario, *, site, start: str, end: str,
         "connection_floor_mw": meta.get("connection_floor_mw", 0.0),
         "tdr_band": meta.get("tdr_band"),
         "transmission_connected": meta.get("transmission_connected"),
+        # The price list: chosen by the optimiser among these options, or fixed
+        # by the rule (COST_PLAN §1.11). The option each point chose is in the
+        # point itself (connection_option, connection_tier, ... from dc_pareto).
+        "connection_mode": meta.get("connection_mode"),
+        "connection_chosen_by": meta.get("connection_chosen_by"),
+        "connection_options": meta.get("connection_options"),
+        "connection_options_dropped": meta.get("connection_options_dropped"),
+        "connection_options_note": meta.get("connection_options_note"),
+        "connection_reference": meta.get("connection_reference"),
+        "connection_groups": meta.get("connection_groups"),
+        "register_freshness": meta.get("register_freshness"),
         # Points whose connection sits on its band's floor: a lower band would
         # probably be cheaper, so re-run with the ceiling just below the floor.
+        # With the price list chosen in the LP the floor is the chosen band's,
+        # so sitting on it means the band below was dearer or too small.
         "grid_floor_binding": _floor_binding(result, assets),
         "perfect_foresight": True,
         "solve_seconds": time.time() - t0,
@@ -276,12 +297,17 @@ def run_one(scenario: A.Scenario, *, site, start: str, end: str,
 
 
 def _floor_binding(result: dict, assets) -> list[str]:
-    floor = assets.grid_floor_mw if assets.grid else 0.0
-    if floor <= 0:
-        return []
-    return [name for name in ("min_cost", "knee", "min_gwp")
-            if isinstance(result.get(name), dict)
-            and result[name].get("cap_grid", 0.0) <= floor * (1 + 1e-6)]
+    out = []
+    for name in ("min_cost", "knee", "min_gwp"):
+        p = result.get(name)
+        if not isinstance(p, dict):
+            continue
+        floor = p.get("connection_floor_mw")                  # the chosen option's, when chosen
+        if floor is None:
+            floor = assets.grid_floor_mw if assets.grid else 0.0
+        if floor > 0 and p.get("cap_grid", 0.0) <= floor * (1 + 1e-6):
+            out.append(name)
+    return out
 
 
 def _worker(args):
@@ -299,6 +325,7 @@ def run_matrix(scenarios=None, *, site=sites.DEFAULT_PRESET, start="2025-01-01",
                resample_hours=1.0, points=12, cost_case="central",
                horizon_years=25.0, unserved_fraction=0.0,
                gwp_target_kg_per_year=None, connection_headroom=None,
+               connection_mode=None,
                green_h2_grid_share=None,
                batt_standing_loss_per_hour=None, tank_leakage_per_hour=None,
                out_root: Path | None = None, workers=None,
@@ -316,7 +343,8 @@ def run_matrix(scenarios=None, *, site=sites.DEFAULT_PRESET, start="2025-01-01",
               green_h2_grid_share=green_h2_grid_share,
               batt_standing_loss_per_hour=batt_standing_loss_per_hour,
               tank_leakage_per_hour=tank_leakage_per_hour,
-              connection_headroom=connection_headroom, out_root=out_root, save_dispatch=save_dispatch, refresh=refresh)
+              connection_headroom=connection_headroom, connection_mode=connection_mode,
+              out_root=out_root, save_dispatch=save_dispatch, refresh=refresh)
 
     results, t0 = [], time.time()
     if workers == 1:

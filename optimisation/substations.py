@@ -70,7 +70,12 @@ HIGH_COST_CAP_GBP_PER_KVA = 1720.0  # Access SCR, demand reinforcement
 SEARCH_KM = 60.0                    # how far "in reach" extends
 MIN_PUBLISHED_SHARE = 0.5           # of substations in reach that must publish a headroom before the
 #                                     register overrules the published voltage rule (ASSUMED threshold)
-ASSUMED = ("ROUTE_FACTOR_ASSUMED", "MIN_PUBLISHED_SHARE")
+# How far a connection at each voltage is realistically run to reach a
+# substation with room (COST_PLAN §1.11, 30 Oct 2026): beyond this the
+# engineering answer is the next voltage up, not a longer cable. Rules of
+# thumb, ASSUMED; the single-price-list model keeps SEARCH_KM.
+REACH_KM = {"11 kV": 5.0, "33 kV": 15.0, "132 kV": 40.0, "transmission": SEARCH_KM}
+ASSUMED = ("ROUTE_FACTOR_ASSUMED", "MIN_PUBLISHED_SHARE", "REACH_KM")
 
 _LEVEL = {
     "primary": {"pry", "primary", "primary substation", "primary site"},
@@ -214,14 +219,15 @@ def candidates(lat: float, lon: float, voltage: str, region: int | None = None,
 
 
 def connection_point(lat: float, lon: float, voltage: str, conn_mw: float,
-                     region: int | None = None, shortfall_route: str = "upgrade") -> dict:
+                     region: int | None = None, shortfall_route: str = "upgrade",
+                     within_km: float = SEARCH_KM) -> dict:
     """The substation the site connects to, its cable route, and the spare-capacity check."""
     if shortfall_route not in ("upgrade", "next"):
         raise ValueError("shortfall_route must be 'upgrade' or 'next'")
-    c = candidates(lat, lon, voltage, region)
+    c = candidates(lat, lon, voltage, region, within_km)
     if c.empty:
         return {"found": False, "voltage": voltage, "route_km": None, "straight_km": None,
-                "note": f"no {voltage} substation in the register within {SEARCH_KM:g} km"}
+                "note": f"no {voltage} substation in the register within {within_km:g} km"}
     first = c.iloc[0]
     head = first.demand_headroom_mw
     status = "unknown" if pd.isna(head) else ("room" if head >= conn_mw else "shortfall")
@@ -252,6 +258,44 @@ def connection_point(lat: float, lon: float, voltage: str, conn_mw: float,
                           f"and no substation with room within {SEARCH_KM:g} km"))
     elif status == "unknown":
         out["note"] = f"{first['name']}: no published demand headroom"
+    return out
+
+
+def room_points(lat: float, lon: float, voltage: str, need_mw: float,
+                region: int | None = None, within_km: float | None = None) -> list[dict]:
+    """The substations an option at this voltage can run to in the optimiser's
+    room mode (COST_PLAN §1.11, decided 30 Oct 2026): the nearest that
+    *publishes* a room figure — substations with none are skipped and listed —
+    and, where its room is below ``need_mw`` (the load), the next one at this
+    voltage with room for it, as a second point at its own cable length. Both
+    within ``REACH_KM`` for the voltage (``within_km`` overrides). Empty when
+    nothing in reach publishes a figure. A published room of zero is a figure:
+    the point is returned and the option table drops it as no room."""
+    c = candidates(lat, lon, voltage, region, REACH_KM[voltage] if within_km is None else within_km)
+    known = c.dropna(subset=["demand_headroom_mw"])
+    if known.empty:
+        return []
+
+    def point(row, which, skipped):
+        return {"substation": row["name"], "company": row.company, "level": row.level_std,
+                "straight_km": float(row.straight_km),
+                "route_km": float(row.straight_km * ROUTE_FACTOR_ASSUMED),
+                "room_mw": float(row.demand_headroom_mw),
+                "headroom_status": "room" if row.demand_headroom_mw >= need_mw else "shortfall",
+                "headroom_basis": None if pd.isna(row.get("headroom_basis", np.nan)) else str(row["headroom_basis"]),
+                "headroom_as_of": None if pd.isna(row.get("headroom_as_of", np.nan)) else str(row["headroom_as_of"]),
+                "contracted_mw": None if pd.isna(row.get("demand_contracted_mw", np.nan)) else float(row["demand_contracted_mw"]),
+                "room_net_of_contracted_mw": (None if pd.isna(row.get("headroom_net_of_contracted_mw", np.nan))
+                                              else float(row["headroom_net_of_contracted_mw"])),
+                "which": which, "skipped": list(skipped)}
+
+    first = known.iloc[0]
+    skipped = c[c.straight_km < first.straight_km]["name"].tolist()
+    out = [point(first, "nearest with a published figure", skipped)]
+    if first.demand_headroom_mw < need_mw:
+        nxt = known[known.demand_headroom_mw >= need_mw]
+        if len(nxt):
+            out.append(point(nxt.iloc[0], "next with room", []))
     return out
 
 
@@ -299,6 +343,87 @@ def voltage_with_room(lat: float, lon: float, rule_voltage: str, conn_mw: float,
         steps.append(f"{v} ({len(known)} of {len(c)} in reach publish a headroom, "
                      f"largest {known.demand_headroom_mw.max():,.0f} MW)")
     raise AssertionError("unreachable")       # the top voltage always returns
+
+
+FRESHNESS = REGISTER / "freshness.json"
+FRESHNESS_MAX_AGE_HOURS = 24.0     # how long one check of the portals is trusted
+NO_PORTAL_CHECK_ENV = "UKDCLCA_NO_PORTAL_CHECK"
+
+
+def freshness(max_age_hours: float = FRESHNESS_MAX_AGE_HOURS, *, force: bool = False) -> dict:
+    """Is the register behind what the companies publish? (the update check,
+    30 Oct 2026, asked for after §1.11.)
+
+    Two things can be behind. The **fetched files** can be older than the
+    portals: one metadata call per dataset says when the portal's copy last
+    changed (``scripts.fetch_register_sources.check_updates``), compared with
+    the date recorded when the file was fetched. And the **register** can be
+    older than the fetched files: the manifest written after the register
+    was last built. Neither run downloads anything; the answer is cached in
+    ``freshness.json`` for ``max_age_hours`` so a run does not pay 39 calls.
+
+    Returns ``{"checked": iso time, "stale": [dataset keys newer on the
+    portal], "errors": [...], "skipped": [...], "rebuild_needed": bool,
+    "ok": bool, "note": one line}``. Offline, or with the environment
+    variable ``UKDCLCA_NO_PORTAL_CHECK`` set, the portals are not asked and
+    the note says so; a run never fails on this check.
+    """
+    import datetime as dt
+    import json
+    import os
+    now = dt.datetime.now(dt.timezone.utc)
+    if not force and FRESHNESS.exists():
+        try:
+            cached = json.loads(FRESHNESS.read_text(encoding="utf-8"))
+            age = (now - dt.datetime.fromisoformat(cached["checked"])).total_seconds() / 3600.0
+            if age <= max_age_hours:
+                return cached
+        except Exception:                                         # noqa: BLE001
+            pass
+    out = {"checked": now.isoformat(timespec="seconds"), "stale": [], "errors": [], "skipped": [],
+           "rebuild_needed": False, "ok": True, "note": ""}
+    try:
+        from scripts import fetch_register_sources as F
+        folder = F.api_dir(F.DEFAULT_SOURCES)
+        reg = REGISTER / "substations.csv"
+        man = folder / "manifest.json"
+        if reg.exists() and man.exists() and man.stat().st_mtime > reg.stat().st_mtime + 60:
+            out["rebuild_needed"] = True
+        if os.environ.get(NO_PORTAL_CHECK_ENV):
+            out["skipped"] = ["every portal (" + NO_PORTAL_CHECK_ENV + " set)"]
+        else:
+            for r in F.check_updates(folder):
+                if r["stale"]:
+                    out["stale"].append(r["key"])
+                elif r["error"]:
+                    out["errors"].append(f"{r['key']}: {r['error']}")
+                elif r["skipped"]:
+                    out["skipped"].append(f"{r['key']}: {r['skipped']}")
+    except Exception as exc:                                      # noqa: BLE001
+        out["errors"].append(f"check not run: {type(exc).__name__}: {exc}"[:200])
+    out["ok"] = not out["stale"] and not out["rebuild_needed"]
+    parts = []
+    if out["stale"]:
+        parts.append(f"{len(out['stale'])} dataset(s) are newer on the portal than the fetched copy "
+                     f"({', '.join(out['stale'][:6])}{', ...' if len(out['stale']) > 6 else ''})")
+    if out["rebuild_needed"]:
+        parts.append("the register was built before the latest fetch")
+    if parts:
+        parts.append("refresh with: python scripts/fetch_register_sources.py && "
+                     "python -I scripts/build_substation_register.py --capacity-only")
+    elif not out["errors"] and not out["skipped"]:
+        parts.append("the register matches what the companies publish")
+    if out["errors"]:
+        parts.append(f"{len(out['errors'])} portal(s) could not be checked")
+    if out["skipped"]:
+        parts.append(f"{len(out['skipped'])} dataset(s) not checked (no key)")
+    out["note"] = "; ".join(parts)
+    try:
+        REGISTER.mkdir(parents=True, exist_ok=True)
+        FRESHNESS.write_text(json.dumps(out, indent=1), encoding="utf-8")
+    except Exception:                                             # noqa: BLE001
+        pass
+    return out
 
 
 NODE_AT_SUBSTATION_KM = 0.1     # a node this close to the connection substation is that substation's node

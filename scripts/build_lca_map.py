@@ -233,6 +233,10 @@ def record():
         with T.recording() as r:
             t = I.build_tech(SITE, META_CHARGES, **kw)
         runs.append((label, r, t))
+    # Pound figures are the cost map's (scripts/build_cost_map.py), not this one's.
+    for _label, r, _t in runs:
+        r.steps = {k: s for k, s in r.steps.items() if s.side != "cost"}
+        r.conflicts = {k: v for k, v in r.conflicts.items() if v[0].side != "cost"}
     return runs
 
 

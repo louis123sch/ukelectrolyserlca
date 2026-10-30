@@ -224,6 +224,44 @@ def cost_components():
             for c in CASES}
 
 
+def annual_costs(case: str) -> dict:
+    """The battery's two LP cost coefficients in one case, £/MW/y (power) and
+    £/MWh/y (energy): capital times (CRF at Modo's WACC over its life + fixed
+    opex). Each number recorded for the cost map (``trace.cost``)."""
+    modo = [("modo_bess_assumptions", "GB model assumptions, capital cost")]
+    one_h = T.cost("cost.battery.modo_1h_per_kW", MODO_1H_GBP_PER_KW, "GBP per kW",
+                   "A 1-hour system's capital", grade="transcribed", cites=modo)
+    hour = T.cost("cost.battery.modo_marginal_hour_per_kW", MODO_MARGINAL_HOUR_GBP_PER_KW, "GBP per kW",
+                  "Each further hour of duration", grade="transcribed", cites=modo)
+    mult = {"low": SURVEY_LOW_MULTIPLIER, "central": 1.0, "high": SURVEY_HIGH_MULTIPLIER}[case]
+    T.cost("cost.battery.case_multiplier", mult, "multiplier", f"The {case} case's spread on both components",
+           grade="derived",
+           cites=[] if case == "central" else [("modo_capex_survey_2024", "£400k and £700k/MW over the £580k average")],
+           note="1.0 in the central case: Modo's model assumption as published")
+    c = cost_components()[case]
+    power = T.cost("cost.battery.power_per_kW", c["power_GBP_per_kW"], "GBP per kW",
+                   "Power conversion capital: the 1-hour price less one hour of energy",
+                   uses=["cost.battery.modo_1h_per_kW", "cost.battery.modo_marginal_hour_per_kW",
+                         "cost.battery.case_multiplier"])
+    energy = T.cost("cost.battery.energy_per_kWh", c["energy_GBP_per_kWh"], "GBP per kWh",
+                    "Energy capital: the marginal hour, per kWh",
+                    uses=["cost.battery.modo_marginal_hour_per_kW", "cost.battery.case_multiplier"])
+    wacc = T.cost("cost.battery.wacc", WACC_REAL, "fraction per year", "Modo's real WACC",
+                  grade="transcribed", cites=[("modo_bess_assumptions", "WACC 5.0 % real")])
+    life = T.cost("cost.battery.life_years", ASSET_LIFE_YEARS, "years", "Modo's battery asset life",
+                  grade="transcribed", cites=[("modo_bess_assumptions", "15-year asset lifetime")])
+    opex = T.cost("cost.battery.fixed_opex_frac", FIXED_OPEX_PCT_CAPEX[case], "fraction of capital per year",
+                  "Fixed operating cost: a common 2 % convention, no published source", grade="assumed",
+                  note="Modo do not publish it; FES routes battery opex to BEIS's 2022 long-duration storage report")
+    crf = T.cost("cost.battery.crf", capital_recovery_factor(wacc, life), "per year",
+                 "Capital recovery factor at the WACC over the life",
+                 uses=["cost.battery.wacc", "cost.battery.life_years"])
+    annuity = T.cost("cost.battery.annual_factor", crf + opex, "per year", "Capital recovery plus fixed opex",
+                     uses=["cost.battery.crf", "cost.battery.fixed_opex_frac"])
+    return {"power_GBP_per_MW_year": power * 1000.0 * annuity, "energy_GBP_per_MWh_year": energy * 1000.0 * annuity,
+            "power_GBP_per_kW": power, "energy_GBP_per_kWh": energy, "annuity": annuity}
+
+
 def system_capex_gbp_per_kw(duration_h, case="central"):
     """Total capex of a system of a given duration, GBP per kW of power."""
     c = cost_components()[case]

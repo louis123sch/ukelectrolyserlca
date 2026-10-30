@@ -41,11 +41,15 @@ The onshore wind block was transcribed independently a second time by the
 That file is kept as a frozen cross-check: ``check_against_price_outputs()``
 asserts the two transcriptions agree.
 """
+import sys
 from pathlib import Path
 
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
+from optimisation import trace as T  # noqa: E402
 PRICE_DIR = ROOT / "price_outputs"
 OUT_DIR = ROOT / "optimisation_outputs"
 
@@ -161,6 +165,53 @@ def _value(params, parameter, case):
 
 
 INVERSE_CASE = {"low": "high", "central": "central", "high": "low"}
+SOURCE_KEY = {"onshore_wind": "desnz_arup_2024_onshore_solar", "solar_pv": "desnz_arup_2024_onshore_solar",
+              "offshore_wind": "desnz_arup_2024_offshore"}
+
+
+def annual_cost(tech: str, case: str) -> dict:
+    """One technology's annualised £/MW/y in one case (per MWp for solar),
+    each number recorded for the cost map (``trace.cost``)."""
+    params, source, note = TECHNOLOGIES[tech]
+    inv = INVERSE_CASE[case]
+    per = "MWp" if tech == "solar_pv" else "MW"
+    table = note.split(";")[0]
+    cite = lambda row, c: [(SOURCE_KEY[tech], f"{table}, {row}, {c} case")]    # noqa: E731
+    capex_per_kw = T.cost(f"cost.{tech}.capex_per_kW", _value(params, "total_capex", case),
+                          "GBP per kWp" if tech == "solar_pv" else "GBP per kW",
+                          "Total capital (pre-development, construction, infrastructure)",
+                          grade="transcribed", cites=cite("total capex", case))
+    opex_kgbp = T.cost(f"cost.{tech}.opex_per_MW_year", _value(params, "total_opex", case),
+                       f"thousand GBP per {per} per year",
+                       "Total yearly operating cost (insurance, connection and use of system, O&M)",
+                       grade="transcribed", cites=cite("total opex", case))
+    life = T.cost(f"cost.{tech}.lifetime_years", _value(params, "operating_lifetime", inv), "years",
+                  "Operating life (the report pairs low cost with the high life)",
+                  grade="transcribed", cites=cite("operating lifetime", inv))
+    if DISCOUNT_RATE_OVERRIDE is not None:
+        rate = T.cost(f"cost.{tech}.discount_rate", DISCOUNT_RATE_OVERRIDE, "fraction per year",
+                      "One project-wide discount rate (DISCOUNT_RATE_OVERRIDE)", grade="assumed")
+    else:
+        rate = T.cost(f"cost.{tech}.discount_rate", _value(params, "hurdle_rate", case), "fraction per year",
+                      "The report's hurdle rate, pre-tax real", grade="transcribed",
+                      cites=cite("hurdle rate", case))
+
+    capex_per_mw = capex_per_kw * 1000.0
+    opex_per_mw = opex_kgbp * 1000.0
+    crf = T.cost(f"cost.{tech}.crf", capital_recovery_factor(rate, life), "per year",
+                 "Capital recovery factor: the yearly repayment of £1 over the life at the rate",
+                 uses=[f"cost.{tech}.discount_rate", f"cost.{tech}.lifetime_years"])
+    ann_capex = capex_per_mw * crf
+    total_annual = T.cost(f"cost.{tech}.annual_per_{per}", ann_capex + opex_per_mw,
+                          f"GBP per {per} per year", "Capital repaid yearly plus the yearly operating cost",
+                          uses=[f"cost.{tech}.capex_per_kW", f"cost.{tech}.crf", f"cost.{tech}.opex_per_MW_year"],
+                          note="2023 prices as published; no land or business rates (TODO, generation cost scope)")
+    mwh_per_mw_yr = 8760.0 * _value(params, "net_load_factor", inv)
+    return {"capex_GBP_per_MW": capex_per_mw, "opex_GBP_per_MW_year": opex_per_mw, "lifetime_years": life,
+            "discount_rate": rate, "crf": crf, "annualised_capex_GBP_per_MW_year": ann_capex,
+            "total_annual_cost_GBP_per_MW_year": total_annual,
+            "net_load_factor": _value(params, "net_load_factor", inv), "MWh_per_MW_year": mwh_per_mw_yr,
+            "source": source, "trace_key": f"cost.{tech}.annual_per_{per}"}
 
 
 def annualised_table():
@@ -180,42 +231,24 @@ def annualised_table():
     across the build period and discounts it. It is not a transcription error.
     """
     rows = []
-    for tech, (params, source, note) in TECHNOLOGIES.items():
-        for case in CASES:
-            inv = INVERSE_CASE[case]
-            capex_per_kw = _value(params, "total_capex", case)
-            opex_kgbp = _value(params, "total_opex", case)
-            life = _value(params, "operating_lifetime", inv)
-            lf = _value(params, "net_load_factor", inv)
-            rate = (DISCOUNT_RATE_OVERRIDE if DISCOUNT_RATE_OVERRIDE is not None
-                    else _value(params, "hurdle_rate", case))
-
-            capex_per_mw = capex_per_kw * 1000.0
-            opex_per_mw = opex_kgbp * 1000.0
-            crf = capital_recovery_factor(rate, life)
-            ann_capex = capex_per_mw * crf
-            total_annual = ann_capex + opex_per_mw
-            mwh_per_mw_yr = 8760.0 * lf
-            lcoe = total_annual / mwh_per_mw_yr
-            reported = _value(params, "reported_lcoe", case)
-
-            rows.append({
-                "asset": tech, "case": case,
-                "technical_case": inv,
-                "capex_GBP_per_MW": capex_per_mw,
-                "opex_GBP_per_MW_year": opex_per_mw,
-                "lifetime_years": life,
-                "discount_rate": rate,
-                "crf": crf,
-                "annualised_capex_GBP_per_MW_year": ann_capex,
-                "total_annual_cost_GBP_per_MW_year": total_annual,
-                "net_load_factor": lf,
-                "MWh_per_MW_year": mwh_per_mw_yr,
-                "lcoe_GBP_per_MWh": lcoe,
-                "reported_lcoe_GBP_per_MWh": reported,
-                "lcoe_delta_pct": 100.0 * (lcoe / reported - 1.0),
-                "source": source,
-            })
+    with T.quiet():
+        for tech, (params, source, note) in TECHNOLOGIES.items():
+            for case in CASES:
+                a = annual_cost(tech, case)
+                lcoe = a["total_annual_cost_GBP_per_MW_year"] / a["MWh_per_MW_year"]
+                reported = _value(params, "reported_lcoe", case)
+                rows.append({
+                    "asset": tech, "case": case,
+                    "technical_case": INVERSE_CASE[case],
+                    **{k: a[k] for k in ("capex_GBP_per_MW", "opex_GBP_per_MW_year", "lifetime_years",
+                                         "discount_rate", "crf", "annualised_capex_GBP_per_MW_year",
+                                         "total_annual_cost_GBP_per_MW_year", "net_load_factor",
+                                         "MWh_per_MW_year")},
+                    "lcoe_GBP_per_MWh": lcoe,
+                    "reported_lcoe_GBP_per_MWh": reported,
+                    "lcoe_delta_pct": 100.0 * (lcoe / reported - 1.0),
+                    "source": source,
+                })
     return pd.DataFrame(rows)
 
 

@@ -322,6 +322,55 @@ def fetch(s: Source, keys: dict, folder: Path, manifest: dict, force: bool, dry:
     return f"fetched ({old.get('modified') or 'new'} -> {meta['modified']}, {len(data) / 1e6:.1f} MB)"
 
 
+def portal_modified(s: Source, keys: dict) -> dict:
+    """One metadata call: when the portal says this dataset last changed.
+    Returns ``{"modified": date, "title": ...}`` or ``{"skipped": why}``."""
+    if s.kind in ("ods", "ods_query"):
+        base, kname = ODS[s.company]
+        key = keys.get(kname)
+        if not key:
+            return {"skipped": f"no {kname} in .env"}
+        return ods_meta(base, key, s.dataset)
+    base, kname = CKAN[s.company]
+    key = keys.get(kname) if kname else None
+    if kname and not key:
+        return {"skipped": f"no {kname} in .env"}
+    _res, meta = ckan_resource(base, key, s)
+    return meta
+
+
+def check_updates(folder: Path, keys: dict | None = None, only=None, lookup=portal_modified) -> list[dict]:
+    """Compare the manifest's dates with the portals' (the update check, 30
+    Oct 2026): one row per source — the date fetched, the date the portal
+    shows now, and ``stale`` when the portal is newer. Metadata only; nothing
+    is downloaded. A portal that cannot be reached is ``error``, a source with
+    no key ``skipped``; neither counts as stale. ``lookup`` is replaceable for
+    tests."""
+    keys = load_keys() if keys is None else keys
+    manifest = read_manifest(folder)
+    rows = []
+    for s in SOURCES:
+        if only and s.key not in only and s.company not in only:
+            continue
+        old = manifest.get(s.key, {})
+        row = {"key": s.key, "company": s.company, "fetched_modified": old.get("modified"),
+               "fetched": old.get("fetched"), "portal_modified": None, "stale": False, "error": None, "skipped": None}
+        try:
+            m = lookup(s, keys)
+        except Exception as exc:                                  # noqa: BLE001 — offline, a changed id, a 5xx
+            row["error"] = f"{type(exc).__name__}: {exc}"[:200]
+            rows.append(row)
+            continue
+        if m.get("skipped"):
+            row["skipped"] = m["skipped"]
+        else:
+            row["portal_modified"] = m.get("modified") or None
+            row["stale"] = bool(row["portal_modified"]) and (
+                not old.get("modified") or row["portal_modified"] > old["modified"])
+        rows.append(row)
+    return rows
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--sources", default=str(DEFAULT_SOURCES))
@@ -329,6 +378,8 @@ def main() -> int:
     ap.add_argument("--force", action="store_true", help="refetch even when the portal date has not moved")
     ap.add_argument("--dry-run", action="store_true", help="show what would be fetched")
     ap.add_argument("--list", action="store_true", help="list the sources and the manifest, fetch nothing")
+    ap.add_argument("--check", action="store_true",
+                    help="ask each portal when its dataset last changed and compare with the manifest; fetch nothing")
     a = ap.parse_args()
     folder = api_dir(Path(a.sources))
     manifest = read_manifest(folder)
@@ -339,6 +390,16 @@ def main() -> int:
         unknown = sel - {s.key for s in SOURCES} - {s.company for s in SOURCES}
         if unknown:
             print(f"unknown --only names: {sorted(unknown)}"); return 2
+    if a.check:
+        rows = check_updates(folder, load_keys(), {s.key for s in todo})
+        for r in rows:
+            state = ("stale" if r["stale"] else "error" if r["error"] else "skipped" if r["skipped"] else "current")
+            print(f"  {r['key']:<22} {r['company']:<6} fetched {r['fetched_modified'] or '-':<10} portal "
+                  f"{r['portal_modified'] or '-':<10} {state}  {r['error'] or r['skipped'] or ''}")
+        n_stale = sum(r["stale"] for r in rows)
+        print(f"\n{len(rows)} sources checked: {n_stale} newer on the portal, "
+              f"{sum(bool(r['error']) for r in rows)} unreachable, {sum(bool(r['skipped']) for r in rows)} without a key")
+        return 0
     if a.list:
         print(f"{'key':<22} {'company':<6} {'kind':<9} {'dataset':<58} {'portal date':<11} {'fetched':<11} rows")
         for s in todo:

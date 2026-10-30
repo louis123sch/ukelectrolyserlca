@@ -116,6 +116,8 @@ from statistics import median
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+from optimisation import trace as T  # noqa: E402
+
 CASES = ("low", "central", "high")
 PRICE_YEAR = 2026
 VOLTAGES = ("132 kV", "33 kV", "11 kV")
@@ -336,6 +338,94 @@ def capital(voltage: str = "132 kV", case: str = "central", route_km: float | No
             "price_list": pr["list"], "stand_in": used, "flags": pr["flags"]}
 
 
+def _record(region: int, transmission: bool, case: str, power_factor: float, cap: dict, f: float,
+            placed: bool) -> dict:
+    """Every number behind one connection's build cost, for the cost map.
+    Keys follow what each number depends on, so options that share a price
+    list, voltage or route share its boxes."""
+    v, lst, r = cap["priced_at"], cap["price_list"], cap["route_km"]
+    pr, p = prices(region), PRICE_LISTS[cap["price_list"]]
+    tier = "transmission" if transmission else "distribution"
+    base = f"cost.connection.{lst}.{v}"
+
+    def row(name, label, rng_of_list, value, unit, voltage=v):
+        """One price-list row: the company's own, or the publishers' median where it prints POA."""
+        rng = rng_of_list
+        key = f"{base}.{name}"
+        if rng is not None:
+            return T.cost(key, value, unit, f"{label} ({p.name})", grade="transcribed",
+                          cites=[(f"connection_prices.{lst}", f"§7, {label}: £{rng[0]:,.0f}-£{rng[1]:,.0f} "
+                                                              f"printed, {case} taken")])
+        pub = [k for k, q in PRICE_LISTS.items()
+               if (getattr(q, name) if voltage is None else getattr(q, name).get(voltage)) is not None]
+        return T.cost(key, value, unit, f"{label}: the publishers' median ({p.name} prints POA)", grade="proxy",
+                      cites=[(f"connection_prices.{k}", f"§7, {label}") for k in pub],
+                      note=f"A stand-in: the median over the {len(pub)} price lists that publish the row")
+
+    uses_fixed = []
+    if v in SUBSTATION_FIRM_MVA:
+        sub = row("substation", f"{v} new double transformer substation", p.substation.get(v),
+                  pr["substation"][v][case], "GBP per substation")
+        mva = T.cost(f"cost.connection.firm_MVA.{v}", SUBSTATION_FIRM_MVA[v], "MVA",
+                     f"Firm rating of a {v} double-transformer substation (one transformer, N-1)", grade="assumed",
+                     cites=[("enwl_es216", "§5.2: 132/33 kV transformer ≤ 60 MVA" if v == "132 kV"
+                             else "§6.2: 33/11 kV transformer ≤ 29 MVA")])
+        T.cost(f"{base}.per_MW", sub / mva, "GBP per MW", "Substation capital per MW of connection",
+               uses=[f"{base}.substation", f"cost.connection.firm_MVA.{v}"],
+               note=NGED_SUBSTATION_FLAG if lst == "NGED" else "")
+    else:
+        T.cost(f"{base}.per_MW", 0.0, "GBP per MW", "No substation at 11 kV: the switchboard is fixed",
+               grade="derived", note="An 11 kV site connects to an existing primary's busbar")
+    first = row("cable_first", f"{v} cable, first {CABLE_FIRST_M[v]:g} m in footpath or carriageway",
+                p.cable_first.get(v), pr["cable_first"][v][case], "GBP per circuit")
+    per_m = row("cable_per_m", f"{v} cable, each additional metre", p.cable_per_m.get(v),
+                pr["cable_per_m"][v][case], "GBP per metre")
+    rk = f"{base}.route_{r:.2f}km"
+    T.cost(f"{rk}.route_km", r, "km", "Cable route from the site to the network substation",
+           grade="derived" if placed else "assumed",
+           cites=[("substation_register", "substations.connection_point: route to the nearest substation with room")]
+           if placed else [], note="" if placed else "ROUTE_KM: no site placed")
+    circuits = T.cost("cost.connection.circuits", CIRCUITS, "circuits", "Cable circuits: a dual (N-1) connection",
+                      grade="assumed", note="connection_cost.CIRCUITS: a data centre's supply is taken as dual, "
+                                            "so the cable is priced twice")
+    uses_fixed = [f"{base}.cable_first", f"{base}.cable_per_m", f"{rk}.route_km", "cost.connection.circuits"]
+    if v == "11 kV":
+        row("hv_switchboard", "HV metered switchboard", p.hv_switchboard, pr["hv_switchboard"][case],
+            "GBP", voltage=None)
+        uses_fixed.append(f"{base}.hv_switchboard")
+    T.cost(f"{rk}.fixed_capital", cap["fixed_GBP"], "GBP", "Cable (both circuits) and switchgear capital",
+           uses=uses_fixed, inputs={"per_circuit_GBP": first + (r * 1000.0 - CABLE_FIRST_M[v]) * per_m,
+                                    "circuits": circuits})
+    fk = f"cost.connection.annual_factor.r{region}.{tier}"
+    rate = T.cost(f"cost.connection.rate_of_return.r{region}", RATE_OF_RETURN.get(region, RATE_OF_RETURN_DEFAULT),
+                  "fraction per year", "Transmission owner's rate of return", grade="transcribed",
+                  cites=[("neso_use_of_system_statement", "Table 3.1, rate of return (" +
+                          {1: "SHET", 2: "SPT"}.get(region, "NGET (TOPI)") + ")")])
+    T.cost("cost.connection.life_years", ASSET_LIFE_YEARS, "years", "Connection asset depreciation life",
+           grade="transcribed", cites=[("neso_use_of_system_statement", "§15-16, 40-year depreciation")])
+    T.cost("cost.connection.maintenance_frac", MAINTENANCE_FRAC, "fraction of capital per year",
+           "Site-specific maintenance", grade="transcribed",
+           cites=[("neso_use_of_system_statement", "Appendix A, maintenance 0.43 %")])
+    fu = [f"cost.connection.rate_of_return.r{region}", "cost.connection.life_years",
+          "cost.connection.maintenance_frac"]
+    if transmission:
+        T.cost("cost.connection.trc_frac", TRC_FRAC, "fraction of capital per year", "Transmission running cost",
+               grade="transcribed", cites=[("neso_use_of_system_statement", "Appendix A, TRC 0.90 %")])
+        fu.append("cost.connection.trc_frac")
+    T.cost(fk, f, "per year", "Yearly charge per £ of connection capital: recovery at the owner's rate over "
+           "40 years, plus maintenance" + (", plus running cost" if transmission else ""), uses=fu,
+           inputs={"crf": crf(rate, ASSET_LIFE_YEARS)},
+           note="Section 14's annuity, used for both tiers (a distribution site pays up front: COST_PLAN §4.1)"
+           if not transmission else "")
+    k_mw, k_fx = f"{base}.{tier}.per_MW_year", f"{rk}.{tier}.fixed_per_year"
+    T.cost(k_mw, cap["per_MW_GBP"] / power_factor * f, "GBP per MW per year",
+           f"Connection build cost per MW, per year ({v}, {tier})", uses=[f"{base}.per_MW", fk],
+           inputs={"power_factor": power_factor})
+    T.cost(k_fx, cap["fixed_GBP"] * f, "GBP per year", f"Cable and switchgear build cost per year ({v}, {tier})",
+           uses=[f"{rk}.fixed_capital", fk])
+    return {"trace_per_MW_year": k_mw, "trace_fixed_per_year": k_fx}
+
+
 def connection_costs(region: int, transmission_connected: bool,
                      case: str = "central", power_factor: float = 1.0,
                      connection_voltage: str | None = None,
@@ -350,7 +440,10 @@ def connection_costs(region: int, transmission_connected: bool,
     voltage = connection_voltage or ("transmission" if transmission_connected else "132 kV")
     cap = capital(voltage, case, route_km, region)
     f = annual_factor(region, transmission_connected)
+    keys = (_record(region, transmission_connected, case, power_factor, cap, f, route_km is not None)
+            if T.active() else {})
     return {
+        **keys,
         "per_MW_year_GBP": cap["per_MW_GBP"] / power_factor * f,
         "fixed_per_year_GBP": cap["fixed_GBP"] * f,
         "per_MW_GBP": cap["per_MW_GBP"] / power_factor,

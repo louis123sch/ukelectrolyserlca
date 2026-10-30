@@ -152,6 +152,11 @@ Either the source is named and public, or no new sourcing is needed at all.
 - [ ] **Export is refused until it is modelled** (`dc_model.build_model`
       raises since 12 Oct). To build it: credit at an export price, not demand
       rates; give it a carbon credit; add it to `contributions()`. Audit §3.5.
+- [ ] **Cost map: fill the source links** (30 Oct). Most of the 53 entries in
+      `optimisation/source_register.py` have no public URL — the code only
+      ever recorded NESO's, Elexon's and Modo's. Add each document's address
+      as it is re-read; the map's Sources tab lists the gaps. Also hold each
+      register entry to a `SOURCES.md` row (`docs/COST_MAP_PLAN.md`).
 
 ## Balance of plant not counted
 
@@ -215,6 +220,46 @@ No public source found. Revisit if the item becomes load-bearing in a result.
       expensive one at that size. Decide: both-ways by default in the
       uncertain band, or a tier choice inside the LP. Northern Powergrid has
       no placed 33 kV price node, so its 33 kV sites take the area median.
+- [ ] **Cost map** (agreed 30 Oct 2026, for a fresh chat after the §1.11 commit):
+      the LCA map's twin for the cost objective, as **one map with a side
+      switch** (carbon / cost) so each technology's two coefficients sit on one
+      box and mismatched lives or scopes show. Read the cost terms from
+      `dc_model.objective_terms` the way `scripts/build_lca_map.py` already
+      reads the carbon ones (same chains, same page, same checker and
+      fingerprint); wrap every cost coefficient in `T.step` where it is made
+      (`dc_inputs.build_tech`: capital x annuity + fixed opex share, with the
+      rate, life and document as inputs; `connection_cost`, `network_charges`,
+      `levies`, `duos_areas`, `h2_capex`, `tech_costs`, `battery`) and trace
+      into or cite the three tables that arrive ready-made
+      (`tech_lca_coefficients` / `annualised_table`, `electrolyser_costs_clean.csv`,
+      `h2_prices_recommended.csv`); add a **document leaf** (statement, table,
+      page, date, grade) in place of the Brightway inventory layer; show the
+      half-hourly series (wholesale price, import charges by voltage group) by
+      their mean as grid carbon is. Not a results view: the page's cost
+      breakdown already does that. Start from the `lca-map` memory and
+      docs/LCA_STYLE.md; republish at the same link.
+- [x] **Let the optimiser choose the grid, voltage and charging band** (plan 30
+      Oct, built 30 Oct, `docs/COST_PLAN.md` §1.11): on/off switch per price
+      list (binaries in HiGHS, gap 1e-7), one import series per voltage group;
+      modes room (default) / cap / single (`connection_options.py`,
+      `dc_inputs.build_series(connection_mode=)`, `dc_model.ConnectionOption`,
+      page radio). Decided 30 Oct: room is a hard limit; a substation with no
+      figure is skipped for the nearest that publishes one; the next with room
+      is a second option; the voltage is chosen too, the rule as floor. Checked:
+      `run_both_tiers.py` passes in six areas (switched = cheaper forced run on
+      the two lists; cheaper again with every list), chain re-run in every
+      mode on the final code (single and cap 42/42; room 37/42, the other five
+      stop on "no room found nearby"), solve time ~3.5x on the June week for
+      London and 1.7-1.9x across the chain. **Still open:** the national
+      grid option starts at the company's top (a lower floor is one line);
+      11 kV vs above still by the published rule; a one-week window makes the
+      grid look optional (headlines from full-year runs only); future-year and
+      net-of-contracted room are reported, not caps. **No room nearby** (30
+      Oct, afternoon): zero room drops the option, reach per voltage
+      (`substations.REACH_KM`, assumed), `ConnectionUnavailable` and the page's
+      "run islanded?" instead of a fabricated 1.43x list; next: reinforcement
+      dates on the options, a "reinforced" option priced at the high-cost cap,
+      then a two-period run (COST_PLAN §1.11 *Open* vi).
 - [x] **Live, complete capacity register and the availability map** (plan 30 Oct,
       built 30 Oct, `docs/COST_PLAN.md` §1.10): R1 `scripts/fetch_register_sources.py`
       (39 portal datasets, each stamped with the portal's date) and
@@ -226,6 +271,8 @@ No public source found. Revisit if the item becomes load-bearing in a result.
       and the page panel; R6 re-run (both-ways unchanged). Decided and applied:
       location + headroom is the backbone; a price node is used only where
       matched by name to the connection substation, else the area figure.
+      **Kept as a known limitation (30 Oct):** room is checked at the connecting
+      substation only, not upstream; matters for 11 kV sites only.
       **Still open:** NGED's 33 kV switching stations and location-list rows
       publish nothing (their bulk coverage 16–50 %); UKPN and NGED publish no
       grid-supply-point capacity and NESO none; the companies' bases differ

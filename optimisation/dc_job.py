@@ -522,6 +522,8 @@ def _other_tier(scenario, site, req, result, tick, stage) -> dict | None:
     from optimisation import dc_runner, network_charges as nc
     if not req.get("both_tiers") or site.transmission_connected is not None:
         return None
+    if result.get("connection_chosen_by") == "optimiser":
+        return None            # the switched model already compared the tiers (COST_PLAN §1.11)
     ceiling = result.get("connection_limit_mw")
     if not ceiling or not nc.tier_is_uncertain(ceiling, site.carbon_api_region):
         return None

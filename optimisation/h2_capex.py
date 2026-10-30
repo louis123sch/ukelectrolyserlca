@@ -66,6 +66,9 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+
+from optimisation import trace as T  # noqa: E402
+
 PRICE_DIR = ROOT / "price_outputs"
 OUT_DIR = ROOT / "optimisation_outputs"
 
@@ -126,6 +129,84 @@ def fc_stack_cost_fraction() -> float:
     return FC_STACK_COST_FRACTION
 
 
+def fuel_cell_cost(case: str, bop_calendar_years: float | None = None) -> dict:
+    """One case of ``fuel_cell_costs``, each number recorded for the cost map."""
+    from optimisation import fuel_cell as fc
+    # From the constant, not the decomposition cache: an assumption edited in
+    # fuel_cell.py must reach the cost side without a Brightway rerun.
+    life = T.cost("cost.fuel_cell.bop_life_years", float(bop_calendar_years or fc.BOP_CALENDAR_LIFETIME_YEARS),
+                  "years", "Balance-of-plant calendar life, the same life the carbon side replaces it on",
+                  grade="assumed", note="fuel_cell.BOP_CALENDAR_LIFETIME_YEARS")
+    rate = T.cost("cost.h2_assets.discount_rate", FC_DISCOUNT_RATE, "fraction per year",
+                  "Discount rate for the fuel cell and tank", grade="assumed",
+                  note="As the electrolyser's 6 %, for consistency; one discount-rate policy is open (audit §4)")
+    crf = T.cost("cost.fuel_cell.crf", capital_recovery_factor(rate, life), "per year",
+                 "Capital recovery factor over the balance-of-plant life",
+                 uses=["cost.h2_assets.discount_rate", "cost.fuel_cell.bop_life_years"])
+    usd = T.cost("cost.fuel_cell.capex_USD_per_kW", FC_USD_PER_KW[case], "US $ per kW",
+                 "Installed capital of a 100 kW-3 MW stationary fuel cell on natural gas", grade="assumed",
+                 cites=[("doe_fc_chp_targets", {"low": "2020 target", "central": "2015 status, lower half",
+                                                 "high": "2015 status, top of range"}[case])],
+                 note="Includes a reformer this study's hydrogen-fed unit does not have: biased high")
+    fx = T.cost("fx.usd_per_gbp_2025", USD_PER_GBP_2025, "US $ per £", "2025 cross-rate, £ to US $",
+                grade="transcribed", cites=[("fes_2025_workbook", "cross-rates, 2025: £1 = €1.17, $1 = €0.913")])
+    capex = T.cost("cost.fuel_cell.capex_per_kW", usd / fx, "GBP per kW", "Installed capital in real 2025 £",
+                   uses=["cost.fuel_cell.capex_USD_per_kW", "fx.usd_per_gbp_2025"])
+    # Split capital between stack and balance of plant on
+    # FC_STACK_COST_FRACTION (17 %), frozen at what the old carbon split
+    # gave; see the constant for why it is no longer read from the LCA.
+    #
+    # It matters because the stack wears out on *duty* while BoP runs to
+    # calendar. Charging the whole system on calendar life made
+    # running the fuel cell hard free in cost while still costing carbon, so
+    # the two objectives were pricing different physics for one machine.
+    stack_frac = T.cost("cost.fuel_cell.stack_cost_fraction", fc_stack_cost_fraction(), "fraction",
+                        "Stack share of the fuel cell's capital", grade="assumed",
+                        note="Frozen 14 Oct 2026 at the old carbon split; Battelle's cost-based share is 22-41 % "
+                             "(audit §3.4)")
+    opex = T.cost("cost.fuel_cell.fixed_opex_frac", FC_FIXED_OPEX_FRAC[case], "fraction of capital per year",
+                  "Fixed operating cost", grade="assumed",
+                  note="h2_capex.FC_FIXED_OPEX_FRAC: no source; 2 / 3 / 5 % spans the low, central and high cases")
+    # BoP, split the same way as the stack so that duty reaches the
+    # cost objective as it reaches carbon. The LP charges
+    #   A_bop * (CRF + o - 1/L) * cap_fc  +  A_bop * fc_bop_units
+    # and fc_bop_units >= max(cap_fc/L, MWh/duty_hours). When calendar
+    # binds that is A_bop * (CRF + o) * cap_fc, exactly the old
+    # annuity; when duty binds it stays within about 2 % of the exact
+    # CRF on the shortened life. Charging the annuity alone made BoP
+    # replacements free in cost above 2,400 h/yr — up to 39 % low on
+    # the fuel cell line at 8,760 h. REVIEW_RESPONSE_PLAN.md §1.
+    annual = T.cost("cost.fuel_cell.annual_per_MW", capex * 1000.0 * (1.0 - stack_frac) * (crf + opex - 1.0 / life),
+                    "GBP per MW per year", "Balance of plant: capital recovery and opex, less the calendar "
+                    "replacement the LP charges per replacement",
+                    uses=["cost.fuel_cell.capex_per_kW", "cost.fuel_cell.stack_cost_fraction", "cost.fuel_cell.crf",
+                          "cost.fuel_cell.fixed_opex_frac", "cost.fuel_cell.bop_life_years"])
+    bop = T.cost("cost.fuel_cell.bop_per_MW", capex * 1000.0 * (1.0 - stack_frac), "GBP per MW replaced",
+                 "Balance of plant capital, charged per replacement",
+                 uses=["cost.fuel_cell.capex_per_kW", "cost.fuel_cell.stack_cost_fraction"])
+    # Stack capital, charged per replacement. Undiscounted, matching the
+    # carbon side, because the LP abstracts away *when* a replacement
+    # falls and a discount factor would need that schedule. This
+    # overstates a distant replacement slightly.
+    stack = T.cost("cost.fuel_cell.stack_per_MW", capex * 1000.0 * stack_frac, "GBP per MW replaced",
+                   "Stack capital, charged per replacement (undiscounted, as the carbon side)",
+                   uses=["cost.fuel_cell.capex_per_kW", "cost.fuel_cell.stack_cost_fraction"])
+    return {
+        "asset": "fuel_cell", "case": case,
+        "capex_GBP_per_kW": capex,
+        "capex_GBP_per_MW": capex * 1000.0,
+        "fixed_opex_frac": FC_FIXED_OPEX_FRAC[case],
+        "lifetime_years": life,
+        "stack_cost_fraction": stack_frac,
+        "annual_GBP_per_MW_year": annual,
+        "bop_GBP_per_MW": bop,
+        "stack_GBP_per_MW": stack,
+        "grade": GRADE,
+        "note": "DOE natural-gas system — includes a reformer this study does "
+                "not have, so biased high" if FC_INCLUDES_REFORMER else "",
+    }
+
+
 def fuel_cell_costs(bop_calendar_years: float | None = None):
     """£/kW installed, and the annualised £/kW/year that follows.
 
@@ -133,73 +214,53 @@ def fuel_cell_costs(bop_calendar_years: float | None = None):
     for a sweep, so the cost annuity moves with the life the carbon side's
     replacement count uses.
     """
-    from optimisation import fuel_cell as fc
-    # From the constant, not the decomposition cache: an assumption edited in
-    # fuel_cell.py must reach the cost side without a Brightway rerun.
-    life = float(bop_calendar_years or fc.BOP_CALENDAR_LIFETIME_YEARS)
-    crf = capital_recovery_factor(FC_DISCOUNT_RATE, life)
-    rows = []
-    for case in CASES:
-        capex = FC_USD_PER_KW[case] / USD_PER_GBP_2025
-        # Split capital between stack and balance of plant on
-        # FC_STACK_COST_FRACTION (17 %), frozen at what the old carbon split
-        # gave; see the constant for why it is no longer read from the LCA.
-        #
-        # It matters because the stack wears out on *duty* while BoP runs to
-        # calendar. Charging the whole system on calendar life made
-        # running the fuel cell hard free in cost while still costing carbon, so
-        # the two objectives were pricing different physics for one machine.
-        stack_frac = fc_stack_cost_fraction()
-        rows.append({
-            "asset": "fuel_cell", "case": case,
-            "capex_GBP_per_kW": capex,
-            "capex_GBP_per_MW": capex * 1000.0,
-            "fixed_opex_frac": FC_FIXED_OPEX_FRAC[case],
-            "lifetime_years": life,
-            "stack_cost_fraction": stack_frac,
-            # BoP, split the same way as the stack so that duty reaches the
-            # cost objective as it reaches carbon. The LP charges
-            #   A_bop * (CRF + o - 1/L) * cap_fc  +  A_bop * fc_bop_units
-            # and fc_bop_units >= max(cap_fc/L, MWh/duty_hours). When calendar
-            # binds that is A_bop * (CRF + o) * cap_fc, exactly the old
-            # annuity; when duty binds it stays within about 2 % of the exact
-            # CRF on the shortened life. Charging the annuity alone made BoP
-            # replacements free in cost above 2,400 h/yr — up to 39 % low on
-            # the fuel cell line at 8,760 h. REVIEW_RESPONSE_PLAN.md §1.
-            "annual_GBP_per_MW_year": (capex * 1000.0 * (1.0 - stack_frac)
-                                       * (crf + FC_FIXED_OPEX_FRAC[case] - 1.0 / life)),
-            "bop_GBP_per_MW": capex * 1000.0 * (1.0 - stack_frac),
-            # Stack capital, charged per replacement. Undiscounted, matching the
-            # carbon side, because the LP abstracts away *when* a replacement
-            # falls and a discount factor would need that schedule. This
-            # overstates a distant replacement slightly.
-            "stack_GBP_per_MW": capex * 1000.0 * stack_frac,
-            "grade": GRADE,
-            "note": "DOE natural-gas system — includes a reformer this study does "
-                    "not have, so biased high" if FC_INCLUDES_REFORMER else "",
-        })
-    return pd.DataFrame(rows)
+    with T.quiet():
+        return pd.DataFrame([fuel_cell_cost(case, bop_calendar_years) for case in CASES])
+
+
+def tank_cost(case: str) -> dict:
+    """One case of ``tank_costs``, each number recorded for the cost map."""
+    import dc_config as cfg
+    life = T.cost("cost.h2_tank.life_years", float(cfg.TANK_LIFETIME_YEARS), "years",
+                  "Tank life: the plant's, never replaced", grade="assumed",
+                  note="dc_config.TANK_LIFETIME_YEARS, Gandiglio's plant lifetime")
+    rate = T.cost("cost.h2_assets.discount_rate", FC_DISCOUNT_RATE, "fraction per year",
+                  "Discount rate for the fuel cell and tank", grade="assumed",
+                  note="As the electrolyser's 6 %, for consistency; one discount-rate policy is open (audit §4)")
+    crf = T.cost("cost.h2_tank.crf", capital_recovery_factor(rate, life), "per year",
+                 "Capital recovery factor over the tank's life",
+                 uses=["cost.h2_assets.discount_rate", "cost.h2_tank.life_years"])
+    eur = T.cost("cost.h2_tank.capex_EUR_per_kg", TANK_EUR_PER_KG_CAPACITY[case], "€ per kg of capacity",
+                 "Above-ground compressed vessel capital", grade="assumed",
+                 cites=[("h2_vessel_literature", {"low": "€500/kg", "central": "midpoint of €500 and €1,040/kg",
+                                                  "high": "€1,040/kg"}[case])],
+                 note="Prices a different vessel from the carbon side's 28 bar Gandiglio tank (TODO)")
+    fx = T.cost("fx.eur_per_gbp_2025", EUR_PER_GBP_2025, "€ per £", "2025 cross-rate, £ to €",
+                grade="transcribed", cites=[("fes_2025_workbook", "cross-rates, 2025: £1 = €1.17")])
+    capex = T.cost("cost.h2_tank.capex_per_kg", eur / fx, "GBP per kg of capacity", "Vessel capital in real 2025 £",
+                   uses=["cost.h2_tank.capex_EUR_per_kg", "fx.eur_per_gbp_2025"])
+    opex = T.cost("cost.h2_tank.fixed_opex_frac", TANK_FIXED_OPEX_FRAC[case], "fraction of capital per year",
+                  "Fixed operating cost", grade="assumed",
+                  note="h2_capex.TANK_FIXED_OPEX_FRAC: no source; 1 / 2 / 3 % spans the low, central and high cases")
+    annual = T.cost("cost.h2_tank.annual_per_kg", capex * (crf + opex), "GBP per kg of capacity per year",
+                    "Capital recovery plus fixed opex, per kg the tank holds",
+                    uses=["cost.h2_tank.capex_per_kg", "cost.h2_tank.crf", "cost.h2_tank.fixed_opex_frac"])
+    return {
+        "asset": "h2_tank", "case": case,
+        "capex_GBP_per_kg_capacity": capex,
+        "fixed_opex_frac": TANK_FIXED_OPEX_FRAC[case],
+        "lifetime_years": life,
+        "annual_GBP_per_kg_year": annual,
+        "grade": GRADE,
+        "note": "spread across the literature is over 2x; none of the sources "
+                "is UK or recent",
+    }
 
 
 def tank_costs():
     """£ per kg of hydrogen storage capacity."""
-    import dc_config as cfg
-    life = float(cfg.TANK_LIFETIME_YEARS)
-    crf = capital_recovery_factor(FC_DISCOUNT_RATE, life)
-    rows = []
-    for case in CASES:
-        capex = TANK_EUR_PER_KG_CAPACITY[case] / EUR_PER_GBP_2025
-        rows.append({
-            "asset": "h2_tank", "case": case,
-            "capex_GBP_per_kg_capacity": capex,
-            "fixed_opex_frac": TANK_FIXED_OPEX_FRAC[case],
-            "lifetime_years": life,
-            "annual_GBP_per_kg_year": capex * (crf + TANK_FIXED_OPEX_FRAC[case]),
-            "grade": GRADE,
-            "note": "spread across the literature is over 2x; none of the sources "
-                    "is UK or recent",
-        })
-    return pd.DataFrame(rows)
+    with T.quiet():
+        return pd.DataFrame([tank_cost(case) for case in CASES])
 
 
 def _neso_pem_capex(build_year=2025):
@@ -216,6 +277,48 @@ def _neso_pem_capex(build_year=2025):
 # Hydrogen's higher heating value, to turn NESO's per-kWh-HHV variable opex into
 # per kg. 39.4 kWh/kg is the standard figure (141.8 MJ/kg).
 H2_HHV_KWH_PER_KG = 39.4
+
+
+def electrolyser_cost(tech: str, case: str, build_year=2025) -> dict:
+    """One electrolyser's NESO (or, for SOEC, PEM-scaled) cost row, each number
+    recorded for the cost map. ``tech`` is "ae", "pem" or "soec"."""
+    with T.quiet():
+        df = electrolyser_costs(build_year)
+    r = df[(df.asset == f"electrolyser_{tech}") & (df.case == case)].iloc[0]
+    k = f"cost.electrolyser_{tech}"
+    scen = {"low": "Low", "central": "Central", "high": "High"}[case]
+    neso = lambda what: [("neso_green_h2_portal_costs", f"{'PEM' if tech != 'ae' else 'Alkaline'}, "   # noqa: E731
+                                                        f"{scen}, build year {build_year}, {what}")]
+    if tech == "soec":
+        pem = T.cost("cost.electrolyser_pem.capex_per_kWe", _neso_pem_capex(build_year)[case], "GBP per kWe",
+                     "PEM electrolyser capital", grade="transcribed", cites=neso("capex_GBP_per_kWe"))
+        mult = T.cost(f"{k}.multiplier_of_pem", SOEC_MULTIPLIER_OF_PEM[case], "multiplier",
+                      "SOEC capital as a multiple of PEM's", grade="assumed",
+                      note="NO SOURCE: SOEC is less mature than PEM and generally dearer; the size is a guess")
+        T.cost(f"{k}.capex_per_kWe", pem * mult, "GBP per kWe", "SOEC capital, scaled off PEM",
+               uses=["cost.electrolyser_pem.capex_per_kWe", f"{k}.multiplier_of_pem"], grade="assumed",
+               note="No SOEC cost source was found: an SOEC carbon result is sound, an SOEC cost result is not")
+        T.cost(f"{k}.fixed_opex_frac", float(r.fixed_opex_frac), "fraction of capital per year",
+               "Fixed operating cost: PEM's", grade="assumed", note="No SOEC source: PEM's 2.75 % taken")
+        T.cost(f"{k}.variable_opex_per_kg", float(r.variable_opex_GBP_per_kg), "GBP per kg H2",
+               "Stack replacement and water per kg made: PEM's, a floor (SOEC stacks wear faster)",
+               grade="proxy", cites=neso("variable_opex_GBP_per_kWh_H2_HHV x 39.4 kWh/kg"))
+        T.cost(f"{k}.lifetime_years", float(r.lifetime_years), "years", "Plant life", grade="assumed",
+               note="No SOEC source: PEM's 25 years taken")
+    else:
+        T.cost(f"{k}.capex_per_kWe", float(r.capex_GBP_per_kWe), "GBP per kWe", "Electrolyser capital",
+               grade="transcribed", cites=neso("capex_GBP_per_kWe"))
+        T.cost(f"{k}.fixed_opex_frac", float(r.fixed_opex_frac), "fraction of capital per year",
+               "Fixed operating cost", grade="transcribed", cites=neso("fixed_opex_pct_capex"))
+        hhv = T.cost("h2.hhv_kwh_per_kg", H2_HHV_KWH_PER_KG, "kWh per kg", "Hydrogen's higher heating value",
+                     grade="transcribed", source="the standard figure, 141.8 MJ/kg")
+        T.cost(f"{k}.variable_opex_per_kg", float(r.variable_opex_GBP_per_kg), "GBP per kg H2",
+               "Stack replacement and water per kg made (NESO charges stack wear on output)",
+               uses=["h2.hhv_kwh_per_kg"], cites=neso("variable_opex_GBP_per_kWh_H2_HHV"),
+               inputs={"GBP_per_kWh_HHV": float(r.variable_opex_GBP_per_kg) / hhv})
+        T.cost(f"{k}.lifetime_years", float(r.lifetime_years), "years", "Plant life", grade="transcribed",
+               cites=neso("plant_lifetime_years"))
+    return {**r.to_dict(), "trace_prefix": k}
 
 
 def electrolyser_costs(build_year=2025):

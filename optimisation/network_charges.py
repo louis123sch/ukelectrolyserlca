@@ -76,6 +76,8 @@ sys.path.insert(0, str(ROOT))
 OUT_DIR = ROOT / "optimisation_outputs"
 CACHE_DIR = OUT_DIR / "neso_cache"
 
+from optimisation import trace as T  # noqa: E402
+
 NESO_DATASTORE = "https://api.neso.energy/api/3/action/datastore_search"
 TNUOS_HH_RESOURCE = "6abe8416-149c-4c78-b65b-059eea19957a"
 TNUOS_TDR_RESOURCE = "dcca94fd-343e-4d4e-8c5d-66009dec4ad3"
@@ -670,12 +672,25 @@ def import_charges(index: pd.DatetimeIndex, zone_no: int, tdr_band: str,
         raise ValueError(f"TNUoS zone {zone_no} not found. "
                          f"Zones: {hh.zone_no.tolist()}")
     tnuos_per_kw = float(zone.iloc[0].tariff_GBP_per_kW)
+    fy = f"FY{TARIFF_FY - 1}/{str(TARIFF_FY)[2:]} {PUBLICATION}"
+    k_tnuos = f"cost.tnuos.zone{zone_no}.locational_per_MW_year"
+    T.cost(k_tnuos, tnuos_per_kw * 1000.0, "GBP per MW per year",
+           f"National grid locational charge (TNUoS half-hourly demand), {zone.iloc[0].zone_name}: "
+           "per MW of winter-peak (Triad) demand", grade="transcribed",
+           cites=[("neso_tnuos_hh", f"{fy}, zone {zone_no} {zone.iloc[0].zone_name}, tariff GBP per kW x 1000")],
+           inputs={"peak_GBP_per_kW": float(zone.iloc[0].peak_GBP_per_kW),
+                   "yearround_GBP_per_kW": float(zone.iloc[0].yearround_GBP_per_kW)},
+           note="Floored at zero where the published tariff is negative (Scotland)")
 
     band = tdr[tdr.band == tdr_band]
     if band.empty:
         raise ValueError(f"TDR band {tdr_band!r} not found. "
                          f"Bands: {tdr.band.tolist()}")
     tdr_per_year = float(band.iloc[0].GBP_per_site_year)
+    k_tdr = f"cost.tnuos.residual.{tdr_band}.per_year"
+    T.cost(k_tdr, tdr_per_year, "GBP per year", f"National grid residual charge (TDR), band {tdr_band}: per site",
+           grade="transcribed", cites=[("neso_tnuos_tdr", f"{fy}, band {tdr_band}, GBP per site per day x 365")],
+           inputs={"GBP_per_site_day": float(band.iloc[0].GBP_per_site_day)})
 
     # DUoS is levied by the DNOs under DCUSA on users of the *distribution*
     # network. A site with a Bilateral Connection Agreement takes its supply
@@ -701,7 +716,20 @@ def import_charges(index: pd.DatetimeIndex, zone_no: int, tdr_band: str,
         duos_tariff, duos_area = d["tariff"], d["area"]
 
     bsuos = bsuos_series(index)
+    T.cost("cost.bsuos.mean_per_MWh", float(bsuos.mean()), "GBP per MWh",
+           "Balancing charge (BSUoS), mean over the window: the year's two half-yearly fixed tariffs",
+           grade="transcribed", cites=[("neso_bsuos_fixed", f"FY{TARIFF_FY - 1}/{str(TARIFF_FY)[2:]} Final, "
+                                                            "April-September and October-March fixed tariffs")])
     volumetric = bsuos + duos_vol
+    k_net = (f"cost.network.zone{zone_no}.{'transmission' if transmission_connected else 'distribution'}"
+             f".{connection_voltage or 'rule'}.{tdr_band}")
+    k_duos = None if transmission_connected else d.get("trace_key")
+    T.cost(f"{k_net}.capacity_per_MW_year", tnuos_per_kw * 1000.0 + duos_capacity_per_mw_year,
+           "GBP per MW per year", "Network charges per MW: national locational plus local capacity charge",
+           uses=[k_tnuos] + ([f"{k_duos}.capacity_per_MW_year"] if k_duos else []))
+    T.cost(f"{k_net}.fixed_per_year", tdr_per_year + duos_fixed_per_year, "GBP per year",
+           "Network charges per site: national residual plus local fixed charge",
+           uses=[k_tdr] + ([f"{k_duos}.fixed_per_year"] if k_duos else []))
     return {
         "volumetric_GBP_per_MWh": volumetric.rename("network_GBP_per_MWh"),
         # Separately too: BSUoS is charged on loss-adjusted volumes, DUoS on
@@ -723,6 +751,8 @@ def import_charges(index: pd.DatetimeIndex, zone_no: int, tdr_band: str,
             "duos_tariff": duos_tariff,
             "duos_area": duos_area,
             "duos_site_specific": None if transmission_connected else d.get("site_specific"),
+            "trace": {"network": k_net, "tnuos": k_tnuos, "tdr": k_tdr, "duos": k_duos,
+                      "bsuos": "cost.bsuos.mean_per_MWh"},
         },
     }
 

@@ -110,6 +110,20 @@ def _extract(V, obj, series, tag):
                 for k, flow in MASS_VARS.items()})
     mwh = float(series.demand_mw.sum() * series.dt_hours) * series.annual_scale
     unserved = _energy(V, series, "unserved")
+    # The price list the solve chose, when the model chooses it (COST_PLAN §1.11).
+    st = M.connection_status(V, obj.get("options"))
+    if st is not None:
+        row.update({
+            "connection_option": st["key"], "connection_tier": st.get("tier"),
+            "connection_voltage": st.get("voltage"), "connection_band": st.get("band"),
+            "connection_group": st["group"], "connection_substation": st.get("substation"),
+            "connection_route_km": st.get("route_km"), "connection_which": st.get("which"),
+            "connection_room_mw": st.get("room_mw"), "connection_cap_basis": st.get("cap_basis"),
+            "connection_floor_mw": st["floor_mw"], "connection_ceiling_mw": st["ceiling_mw"],
+        })
+        for k in V:
+            if k.startswith("imp_"):
+                row[f"{k}_MWh_per_year"] = _energy(V, series, k)
     row.update({
         "cost_GBP_per_year": tot["cost_GBP_per_year"],
         "gwp_kgco2e_per_year": tot["gwp_kgco2e_per_year"],

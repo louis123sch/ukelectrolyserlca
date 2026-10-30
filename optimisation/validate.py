@@ -301,6 +301,41 @@ def check_superset_control_is_no_worse(run_dir: Path):
         "sub-architecture is genuinely best.")
 
 
+def check_switched_connection_matches_forced(site, start, end, size_mw_it, pue):
+    """The price list chosen in the LP against the two forced lists (COST_PLAN §1.11).
+
+    Run on the London 150 MW IT site over one June week at hourly steps (the
+    chain check's window): forced national grid, forced local network capped at
+    the company's largest connection, then the switched model restricted to
+    those two lists, which must return the cheaper forced answer; then with
+    every list, which must be no dearer.
+    """
+    from optimisation import dc_inputs as I, dc_pareto as P, network_charges as nc, sites as S
+    from scripts.run_both_tiers import run as both, TOL
+    try:
+        got = {}
+        for mode, transmission, restrict in (("single", True, False), ("single", False, False),
+                                             ("cap", None, True), ("cap", None, False)):
+            got[(mode, transmission, restrict)] = both(13, 150.0, transmission, mode=mode, restrict=restrict)
+        forced = min(got[("single", True, False)]["min_cost_cost_m_yr"], got[("single", False, False)]["min_cost_cost_m_yr"])
+        two = got[("cap", None, True)]["min_cost_cost_m_yr"]
+        every = got[("cap", None, False)]["min_cost_cost_m_yr"]
+        ok = abs(two - forced) <= TOL * forced and every <= forced * (1 + TOL)
+        return record(
+            "the optimiser's choice of price list",
+            "on the two forced lists it equals the cheaper forced run; with every list it is no dearer",
+            "The switched model (COST_PLAN §1.11) must contain the both-ways comparison it replaces.",
+            ok,
+            f"London 150 MW IT, June week: forced £{forced:.3f} m, switched on the two lists £{two:.3f} m, "
+            f"every list £{every:.3f} m on {got[('cap', None, False)]['min_cost_option']}",
+            "Forced local run capped at the company's 240 MVA; the switched run adds the smaller bands and voltages.")
+    except Exception as exc:                                             # noqa: BLE001
+        return record("the optimiser's choice of price list",
+                      "on the two forced lists it equals the cheaper forced run; with every list it is no dearer",
+                      "The switched model (COST_PLAN §1.11) must contain the both-ways comparison it replaces.",
+                      None, f"not run: {exc}")
+
+
 def _solved(series, assets, tech, objective, **kw):
     m, V, obj = M.build_model(series, assets, tech, objective=objective, **kw)
     M.solve(m)
@@ -329,7 +364,11 @@ def run(site=None, start="2025-01-01", end="2025-12-29",
     print("VALIDATION — benchmarks the optimiser must agree with")
     print("=" * 100)
     t0 = time.time()
-    series, meta = I.build_series(site, start, end, size_mw_it, pue=pue)
+    # The single price list, fixed from the ceiling: these benchmarks were
+    # written against that model, and the baseline they reproduce takes grid
+    # electricity at one voltage. The switched model has its own benchmark
+    # below (check_switched_connection_matches_forced).
+    series, meta = I.build_series(site, start, end, size_mw_it, pue=pue, connection_mode="single")
     if resample_hours:
         series = I.resample(series, resample_hours)
     tech = I.build_tech(site, meta, size_mw_it=size_mw_it, pue=pue)
@@ -349,6 +388,7 @@ def run(site=None, start="2025-01-01", end="2025-12-29",
     check_superset_control_is_no_worse(
         # dc_runner names a matrix folder by IT load, not facility draw.
         ROOT / "optimisation_outputs" / "dc_runs" / f"{site.key}_{size_mw_it:g}MW_{start[:4]}")
+    check_switched_connection_matches_forced(site, start, end, size_mw_it, pue)
 
     passed = sum(1 for c in CHECKS if c.passed)
     failed = [c for c in CHECKS if c.passed is False]
@@ -382,7 +422,8 @@ def write_doc(site, start, end, size_mw, series):
     ]
     for c in CHECKS:
         mark = "PASS" if c.passed else ("SKIP" if c.passed is None else "**FAIL**")
-        lines.append(f"| {c.name} | {c.expectation} | {c.observed} | {mark} |")
+        observed = c.observed.replace(" | ", " / ")   # an option key's own pipes would split the row
+        lines.append(f"| {c.name} | {c.expectation} | {observed} | {mark} |")
     lines += ["", "## Why each one is here", ""]
     for c in CHECKS:
         lines.append(f"**{c.name}** — {c.why}")
@@ -399,9 +440,10 @@ def write_doc(site, start, end, size_mw, series):
         "* **Cost inputs for the hydrogen chain.** Fuel cell and vessel capex are",
         "  assumed with no UK source and spreads of 4.5x and 2x. No benchmark here",
         "  can validate them — see `DATA_GAPS.md`.",
-        "* **One site, one year.** Only the London grid series is cached. Scotland and",
-        "  East England need a grid build for their regions before their results mean",
-        "  anything.",
+        "* **Seven regions, one year.** Full-year grid series are cached for North",
+        "  Scotland, the North West, Yorkshire, the East Midlands, the South West, London",
+        "  and the South East; the other regions hold only the June week, so a full-year",
+        "  run there builds its grid series first.",
         "* **No unit commitment.** The LP may run an electrolyser at 1 % of rating.",
     ]
     DOC.write_text("\n".join(lines) + "\n", encoding="utf-8")

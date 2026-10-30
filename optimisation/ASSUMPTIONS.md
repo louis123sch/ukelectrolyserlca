@@ -241,7 +241,7 @@ too (`levies.LEVY_FY`) since 28 Oct 2026.
 
 **The connection ceiling** is 1 / 0.70 = **1.43x** the flat load (`sites.CONNECTION_HEADROOM_ASSUMED`): the 70 % data-centre load factor of the national energy scenarios (FES Pathway Assumptions 2025, as applied in NGED's Data Centre Impact Study, Nov 2025). Until 29 Oct 2026 it was 1.5x, assumed. The page's headroom box overrides it.
 
-**The substation register's capacity layer** (since 30 Oct 2026, `scripts/register_capacity.py`) takes each company's own published figure on the company's own basis, and says which: "firm capacity minus maximum demand" (the standard capacity heatmaps), "headroom on connected demand" (National Grid's opportunity map, which also publishes headroom net of contracted demand), with the portal's date on every row. Those bases are not identical across companies, and the dates run from March 2025 to October 2026 — the register reports this rather than levelling it. Joins between a company's datasets are by its own site id, then by name at a compatible level, then by location within **300 m** (assumed radius); a 275/400 kV substation takes the nearest grid-supply-point record within **3 km** (assumed). Where no company dataset covers a row the builder's own figure stands, marked "builder". The "central" scenario for room in a future year is the company's own — Holistic Transition (UK Power Networks, Northern Powergrid), Best View (Electricity North West), HT (SSEN) — a **choice**. The availability listing (`optimisation.availability`) prices every candidate for a flat load at the connection ceiling with the site at the substation, so the cable is the default **2 km** route and the wholesale price the 2025 mean: it ranks places by what the grid costs there, not by what the optimiser would build. **Price nodes** are used only where the schedule's node was matched by name to the connection substation itself (decision of 30 Oct 2026); place-name and code placements are still built and reported but no longer price a run.
+**The substation register's capacity layer** (since 30 Oct 2026, `scripts/register_capacity.py`) takes each company's own published figure on the company's own basis, and says which: "firm capacity minus maximum demand" (the standard capacity heatmaps), "headroom on connected demand" (National Grid's opportunity map, which also publishes headroom net of contracted demand), with the portal's date on every row. Those bases are not identical across companies, and the dates run from March 2025 to October 2026 — the register reports this rather than levelling it. Joins between a company's datasets are by its own site id, then by name at a compatible level, then by location within **300 m** (assumed radius); a 275/400 kV substation takes the nearest grid-supply-point record within **3 km** (assumed). Where no company dataset covers a row the builder's own figure stands, marked "builder". The "central" scenario for room in a future year is the company's own — Holistic Transition (UK Power Networks, Northern Powergrid), Best View (Electricity North West), HT (SSEN) — a **choice**. The availability listing (`optimisation.availability`) prices every candidate for a flat load at the connection ceiling with the site at the substation, so the cable is the default **2 km** route and the wholesale price the 2025 mean: it ranks places by what the grid costs there, not by what the optimiser would build. **Price nodes** are used only where the schedule's node was matched by name to the connection substation itself (decision of 30 Oct 2026); place-name and code placements are still built and reported but no longer price a run. **Room is checked at the connecting substation only** (a known limitation, decided 30 Oct 2026): a primary with room may sit under a bulk or grid supply point that has none, so room is overstated for 11 kV sites (up to about 10 MW IT); sites of 30 MW IT and above connect at the bulk or grid supply point itself and are barely affected, and SSEN's figures already include the limit above. Checking the chain was judged not worth it yet: parents are named by every company, but the figures at the level above are patchy (none at National Grid's grid supply points).
 
 **The connection tier** follows GB's voltage rule, not a size threshold: a DNO
 connects demand up to 240 MVA in England and Wales and up to 120 MVA in
@@ -251,14 +251,73 @@ pays its own area's DUoS (`duos_areas`): an 11 kV site its area's HV Site Specif
 row, a 33 or 132 kV site the median of its area's listed EHV sites in the same
 band, each in that area's own time bands, and its area's line loss factors.
 `Site.transmission_connected` overrides the rule — a real connection offer
-beats it. The TDR band is read from the connection ceiling and the built
-connection is held inside that band (`floor ≤ cap_grid ≤ ceiling`); the floor
-is one kVA above the band below's inclusive top (since 29 Oct 2026 — before
-that a connection built on the floor was in the band below). A run whose
-connection sits on the floor is flagged, and re-running with a lower ceiling
-is the user's call: in the 14-area check of 29 Oct 2026 the floor bound in 29
-of 42 runs, every England-and-Wales 150 MW IT site at the transmission
-boundary.
+beats it. Until 30 Oct 2026 the TDR band was read from the connection ceiling
+and the built connection held inside that band (`floor ≤ cap_grid ≤ ceiling`;
+the floor one kVA above the band below's inclusive top since 29 Oct 2026). In
+the 14-area check of 29 Oct 2026 the floor bound in 29 of 42 runs, every
+England-and-Wales 150 MW IT site at the transmission boundary, and solved both
+ways the local network was £6.5–11.5 m/yr cheaper — which is why the band is
+now chosen in the LP (next paragraph). The single-list model is kept as
+`connection_mode="single"`.
+
+**The price list is chosen by the optimiser** (since 30 Oct 2026,
+`connection_options.py`, COST_PLAN §1.11). Every price list the site could be
+on — national grid or local network, voltage, residual band, at a named
+substation — is an option with a size range, its own cable and charges, and
+one on/off switch; exactly one is on, and the connection size is chosen with
+it, comparing the whole site's cost (or carbon). Imports take one series per
+voltage group (national grid, 132 kV, 33 kV, 11 kV) with that voltage's
+losses, unit rates and delivered carbon. What is **assumed or simplified**
+here: (i) in the default **room mode** each option is capped by *today's*
+published room at its substation, on the company's own basis and date — room
+is a hard limit, not a forecast, and room after agreed connections or in a
+future year is reported only; (ii) a substation that publishes **no figure is
+skipped** for the nearest at that voltage that does, and where that one has
+less room than the load the **next substation with room** is a second option
+at its own cable length — so a blank is neither "full" nor "unlimited"; (iii)
+the published size rule still decides between 11 kV and the voltages above (a
+connection within the area's 11 kV limit is an 11 kV one), and the **national
+grid option starts at the company's largest local connection** (240/250 MVA,
+120 in Scotland), the tier rule of 28 Oct 2026; the choice therefore runs
+from 33 kV up, and a national-grid connection *below* that top — which NGED's
+study says is also possible — is not offered; (iv) the bands at one voltage
+share that voltage's **unit rates**, taken from the band the load itself falls
+in, an approximation only where an area's 33/132 kV unit rates differ by band
+(the listed-site medians); (v) the "next with room" option takes the nearest
+substation's price node for its site-specific charges; (vi) in the **cap
+mode** every option is capped at one figure that ignores room — 1.43x the
+load or the cap entered — and only the nearest substation at each voltage is
+offered. `Site.transmission_connected` and `Site.tdr_band` still narrow the
+options to that tier or band; `Site.connection_limit_mw` is the cap mode with
+that cap. With one option left, or in the single mode, the model is exactly
+the one before this change.
+
+**No room nearby is an answer, not a connection** (30 Oct 2026, afternoon).
+A published room of zero is a figure — the place is full — so an option it
+would cap at 0 MW is dropped, not kept as a free standing charge. The search
+for a substation with room has a **reach per voltage**
+(`substations.REACH_KM`: 5 km at 11 kV, 15 km at 33 kV, 40 km at 132 kV, 60 km
+to the national grid; rules of thumb, **assumed**), because beyond that the
+engineering answer is the next voltage up, not a longer cable; the
+single-price-list model keeps its 60 km. When no price list survives at any
+voltage — everything in reach is full, publishes nothing, or does not exist —
+`build_series` raises `ConnectionUnavailable` instead of inventing a 1.43x
+connection, and the page asks "No room found nearby: run islanded?"; an
+islanded run is then the site served every hour from what is built on it,
+with no standby generator. **The cable is now in carbon as well as cost**
+(30 Oct 2026, afternoon): the line to the connection substation is charged
+per option over its own route, two circuits, over the line's 40-year life, as
+a fixed carbon term on the option's switch (`ConnectionOption.gwp_fixed_per_year`;
+`Tech.gwp_grid_fixed_per_year` with one price list). Until then an option
+with a long cable was dearer in money and free in carbon. The figure is
+ecoinvent's high-voltage transmission network per km — an overhead line's
+towers and conductors — standing in for a buried 33/132 kV cable, so a
+**proxy**, probably high: 8.7 t CO₂e per km per year, which makes a 5 km
+two-circuit cable 87 t a year, the carbon of about 370 MW of intake
+transformers, and 0.1–0.2 % of a 150 MW IT site's total. What the model still cannot see: that "full" is
+usually a *date* (reinforcement below the high-cost cap costs the customer
+time, not money), the price of reinforcement above the cap, and a flexible
+(curtailable) connection — all listed as open in COST_PLAN §1.11.
 
 **The connection's capital** (`connection_cost.py`) is charged on the same
 split as its carbon: the intake substation per MW of `cap_grid` and the cable

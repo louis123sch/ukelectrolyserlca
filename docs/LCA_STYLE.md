@@ -40,6 +40,17 @@ A step whose value is an activity's score says so with `scores=`, and the map's
 build rescores it. A new coefficient with no step shows up as a build problem,
 since the map cannot reach it.
 
+**The cost side is the same, with `T.cost(...)`** (30 Oct 2026): every pound
+figure that becomes an LP cost coefficient, and every number only the cost
+objective uses (a discount rate, a cost life), is recorded where it is made,
+with `cites=[(key, "Table 3, p.6")]` naming the document or data feed it was
+read from — a key of `optimisation/source_register.py`. A transcribed or proxy
+number with no citation, an assumed one with no note, or a citation to a key
+the register does not have is a build problem of the cost map
+(`scripts/build_cost_map.py`, checked by `scripts/check_cost_map.py`). A
+function that builds a table of every cost case calls its one-case function
+inside `T.quiet()`, so only the case the run uses is recorded.
+
 ## 2. The module, top to bottom
 
 Every module has the same order, separated by the `# ===` rules:

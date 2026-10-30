@@ -1,0 +1,2 @@
+rank,name,company,voltage_run,band_run,substation_run,route_km,headroom_run,min_cost_m_yr,min_cost_t_yr,min_cost_cap_grid,min_gwp_m_yr,min_gwp_t_yr,seconds
+1,DARTFORD GRID 132KV,UKPN,33 kV,EHV2,ELTHAM GRID 33KV,12.048857365538266,room,2.862295967808652,1905.2349194316162,0.4999995921235433,3.393795745771198,1645.0182431240582,33.93473982810974

@@ -34,6 +34,7 @@ Effort: XS < 1 h, S ≈ half a day, M ≈ 1–2 days, L > 2 days.
 | 1.9 E Build prices by area | done 29 Oct — eleven areas on their own 2026 statements, POA rows on the publishers' median (stand-in), NGED's substations kept and flagged low | `connection_cost.py`, `tests/test_connection_prices_by_area.py` |
 | 1.9 H Voltage rule and ceiling | done 29 Oct — published rule as floor, area's substation capacities above it; ceiling 1 / 0.70 (FES load factor) instead of 1.5 assumed | `substations.voltage_with_room`, `network_charges.connection_voltage(site=)`, `sites.py` |
 | 1.9 G Chain check | run 29 Oct — 14 areas x 3 sizes, 42/42 solved, 21 checks pass; found and fixed the band floor sitting on the boundary (one kVA above now). Re-run 30 Oct on the complete register: 42/42, 21 pass | `scripts/check_connection_chain.py`, `optimisation_outputs/connection_chain.csv` |
+| 1.11 S1–S6 The optimiser chooses the grid, voltage and band | built 30 Oct — one switch per price list (binaries in HiGHS), one import series per voltage group, room / cap / single modes; both-ways check passes in six areas (switched = cheaper forced run to 1e-5 on the two lists, cheaper again with every list); chain re-run in every mode; solve time ~3.5x on the June week for London, 1.7-1.9x across the 14-area chain; chain on the final code: single and cap 42/42, room 37/42 with Inverness (all sizes) and Cardiff (60, 150 MW) stopping on "no room found nearby" | `connection_options.py`, `dc_model.ConnectionOption`, `dc_inputs.with_connection_options`, `scripts/run_both_tiers.py`, `scripts/time_connection_modes.py`, page 2 |
 | 1.10 R1–R6 Live capacity register and availability map | built 30 Oct — 39 portal datasets fetched by id and dated; every company's standard capacity data with basis and date on each row (primaries 76–100 %, London 1 % -> 80 %, SSEN 100 %); contracted demand, headroom to 2050, the connection queue, 364 grid-supply-point records; "where can this size connect" ranked by cost and carbon; chain and both-ways re-run | `scripts/fetch_register_sources.py`, `scripts/register_capacity.py`, `optimisation/availability.py`, `scripts/availability_map.py`, page 2 |
 
 The rest of §1–§5 is open. The table below describes the state before these.
@@ -504,6 +505,206 @@ SPEN June 2026, UKPN and ENWL Oct 2026, SSEN's own demand heatmaps 2023 —
 hence `headroom_as_of`); the forward headroom is the companies' scenario
 forecast, not a commitment; the published voltage rules still cap what one
 site can take at a substation with room.
+
+### 1.11 Let the optimiser choose the grid, voltage and charging band (plan, 30 Oct 2026)
+
+*Why.* The connection size is already chosen by the optimiser (`cap_grid`),
+but its price list is not. Charges jump at fixed sizes (national grid above
+240/250 MW, voltage steps, charging-band steps), and a linear model cannot
+carry a jump, so `dc_inputs` picks one price list *before* solving, from the
+1.43x ceiling, and holds `cap_grid` inside that band (`grid_floor_mw`). The
+guess is from the largest connection the site could have, not the one it
+builds: the band floor binds in 29 of 42 chain runs, and a 150 MW IT site is
+put on the national grid when the local network is £6.5–11.5 m/yr cheaper in
+all six areas tried (`both_tiers_150mw.csv`). The site's own
+`transmission_connected`, `tdr_band` and connection cap still override.
+
+*Idea.* Give the model every price list as an option with an on/off switch
+(exactly one on). Each option carries its size range, its charges and its
+build cost; the model picks the option and the size together, comparing the
+whole site — grid charges, imported energy, and the plant built to cover the
+rest — in both objectives. Same solver (HiGHS via linopy, which takes on/off
+variables); one run per frontier point, as now.
+
+*The one design point that matters.* The import price per MWh differs by
+option: a national-grid site pays no local charges, and losses and local unit
+rates differ by voltage; delivered carbon differs between 11 kV and above.
+So imports cannot be one series multiplied by a switch. Instead there is one
+import series per *voltage group* — national grid, 132 kV, 33 kV, 11 kV, at
+most four — each limited by the connection built in that group. Charging
+bands within one voltage share that group's series and differ only in fixed
+charge and size range, which are cheap. The half-hourly part of the model
+grows at most fourfold; the switches (about a dozen) sit only on the
+connection.
+
+| Step | What | Done when |
+|---|---|---|
+| **S1 Option table** | `dc_inputs.connection_options(site, load)`: every price list the site could be on — tier, voltage, band; size range from the band edges, the area's voltage rule and the company's largest connection; fixed and per-MW charges; winter-peak charge; build cost at that voltage's own connection point and cable route (`substations.connection_point`); delivered-carbon voltage; room at that point, which is the option's cap in mode 2 and reported only in mode 1. Options that cannot apply are dropped (local above the company's top; a voltage the rule forbids at that size) | a table per site, checked against today's single choice for the 14 chain sites |
+| **S2 Energy series per voltage group** | price per MWh (wholesale, balancing and loss gross-up at that voltage, local unit charges, levies) and delivered carbon, one series per group present in the table | each series equals today's for the option today's code picks |
+| **S3 Model** | `dc_model`: switch per option, connection per option (`floor x switch <= cap_k <= ceiling x switch`), `cap_grid` = their sum, import per voltage group limited by that group's connections; fixed charges on the switches, per-MW charges and build cost on `cap_k`, winter-peak charge unchanged. With a single option the model is today's exactly (no switches), so every existing caller and test is untouched until it opts in | `tests/test_dc_model.py` unchanged and passing; new tests on a toy series where the answer is known by hand |
+| **S4 Frontier and outputs** | `dc_pareto` runs as before (epsilon points and tie-breaks are still one solve each); every result records the option chosen (tier, voltage, band, connection point, route). `run_both_tiers` becomes the check: the switched answer must equal the cheaper of the two forced runs | the six both-ways sites agree within solver tolerance |
+| **S5 Measure** | solve time and answer, switched vs today, on the 14 x 3 chain runs at the one-week hourly window; then one full-year run | time per solve stated; if worse than ~5x, prune options first (keep only the two cheapest voltages by a no-solve price check, `availability.price`) |
+| **S6 Wire in** | default on in `build_series`/`build_tech`, off by a flag; `connection_mode` = `"room"` (mode 2, default) or `"cap"` (mode 1: 1.43x unless a cap is given); the page gets the mode choice beside the existing cap box; page preview says "chosen by the optimiser" instead of the pre-solve band; chain check's "built in the band charged" becomes structural; `dc_runner`, `sensitivity`, `thresholds`, `dc_architectures`, `availability_map --solve` checked; the LCA map trace (`T.step` on the new coefficients) rebuilt and republished; SOURCES / ASSUMPTIONS / VALIDATION | full suite passes; chain check 42/42; map check 0 problems |
+
+Order S1 -> S2 -> S3 -> S4 -> S5 -> S6. S5 is the go/no-go: if the switched
+model is too slow even after pruning, fall back to the both-ways option
+(two forced runs, keep the cheaper), which S4 already builds.
+
+*Two modes for where each option's cap comes from (decided 30 Oct 2026).*
+Both use the same option table and switches; they differ only in each
+option's largest allowed connection.
+
+- **Mode 2, the default: room at the nearest substation.** Each option is
+  capped by the published room at its own nearest substation at that
+  voltage — a 33 kV option by the nearest bulk supply point, a 132 kV option
+  by the nearest 132 kV point, the national grid by the nearest grid supply
+  point (`substations.connection_point` per option). An option with no room
+  cannot be chosen however cheap; if nothing near has much room the model
+  builds a small connection and makes the rest on site, which is a real
+  answer ("what the site looks like where the grid is full"). Price only
+  chooses among options that physically exist. Room is a limit, not a flag.
+- **Mode 1: a cap that ignores room.** Either the 1.43x ceiling
+  (`sites.CONNECTION_HEADROOM_ASSUMED`, the default within mode 1) or a cap
+  the user enters (the page's existing cap box). Every option is capped at
+  that figure and the optimiser sweeps them; substation room is reported
+  beside the result but plays no part. For "I have an offer for X MW" or
+  "what would the site do with this connection".
+
+Also decided: the 1.43x ceiling no longer decides the price list in either
+mode — only, in mode 1, the size cap. `Site.transmission_connected`,
+`Site.tdr_band` and `Site.connection_limit_mw` still override (the last is
+mode 1 with a user cap).
+
+*Decided 30 Oct 2026:* mode 2 uses **today's room** (`demand_headroom_mw`,
+as each company publishes it), not room after agreed connections or a
+future year; those stay reported beside it.
+
+*Decided 30 Oct 2026 (the three points that were open before S1):*
+
+- **(b) A substation that publishes no room figure is skipped**, and the
+  nearest substation at that voltage that *does* publish one stands in, with
+  its longer cable priced. The option survives on real data and the result
+  says which blank substation was passed over. "No room" would have ruled
+  out real places (938 National Grid 33 kV switching stations publish
+  nothing); "no limit with a flag" would let the cheapest option win on
+  missing data.
+- **(c) Nearest plus the next with room.** Where the nearest substation at a
+  voltage has less room than the load needs, a second option is added at
+  the next substation at that voltage with enough room, at its own cable
+  length and build cost. Both share the voltage group's import series, so
+  the model gains one switch and one size variable, not a series. A
+  shortfall thereby costs money (a longer cable) instead of raising a flag.
+- **(d) The voltage is chosen too, with the published rule as the floor.**
+  Options exist at the rule's voltage and at every higher voltage with room
+  (the rule names the lowest voltage allowed at a size, never the highest),
+  so up to four import series. S5 measures what that costs in solve time.
+
+**Built 30 Oct 2026, S1 to S6.** `optimisation/connection_options.py` (S1:
+the option table, `size_ranges` / `option_table` / `with_charges` /
+`representative`; `substations.room_points` for the room mode's two points),
+`dc_inputs.build_series(connection_mode=)` (S2: one price and carbon series
+per voltage group, `Series.grid_groups`; the option table in
+`meta["connection_options"]`, the rule's single choice kept as
+`meta["connection_reference"]`), `dc_model.ConnectionOption` and the
+switches in `build_model` (S3: `on_k` binary, `cap_conn_k`, `cap_grid` their
+sum, `imp_<group>` per voltage group, the fixed charges a term on the
+switches; `objective_terms` written once over options and groups; one
+option or none is today's model exactly, and the 85 model tests pass
+unchanged), `dc_pareto._extract` (S4: every frontier row carries
+`connection_option`, tier, voltage, band, substation, route, floor and
+ceiling; `scripts/run_both_tiers.py` is the check), `dc_runner`, `dc_job`,
+`thresholds`, the page (S6: the mode radio beside the cap box — room by
+default, cap, single; the preview lists the price lists; results show "The
+grid connection the optimiser chose"; the both-ways tick box only in the
+single mode). Tests: `tests/test_connection_choice.py` (toy series, answers
+known by hand: one switch on, imports in the chosen group only, a single
+option reproduces the single-list model to the pound, the frontier reports
+the choice), `tests/test_connection_options.py` (the real option table:
+ranges from the rules, blanks skipped, next-with-room added, overrides,
+charges by band and tier). The map: every new coefficient traced
+(`connection.<option>.cost_per_MW_year` / `.cost_fixed_per_year`,
+`grid.delivered_mean.<group>`, `grid.delivery.medium`), rebuilt (137 steps,
+6,414 checks, 0 problems) and republished at the same link.
+
+*S4, the both-ways check (`run_both_tiers.py`, 150 MW IT, June week,
+hourly, six areas).* The forced local run is now capped at the company's top
+(the 29 Oct caveat). The switched model restricted to the two forced lists
+returns the cheaper forced answer to 1e-5 in all six (Manchester £98.73 m,
+Cardiff £92.05 m, Nottingham £98.88 m, Exeter £75.69 m, London £88.93 m,
+Brighton £81.03 m); with every list it is cheaper again in all six (£96.43,
+£89.61, £98.04, £73.75, £88.20, £78.91 m), because the band floor no longer
+forces a connection the build does not use: London takes a 20 MW 132 kV
+EHV3 connection, Exeter an 11 MW 11 kV HV4 one, and in the other four the
+cheapest build over a June week keeps almost no connection at all (an HV1
+list at 0–0.5 MW) and makes the load on site — a one-week summer window's
+answer, not a year's; the full-year run below is the honest one.
+
+*S5, solve time.* London 150 MW IT, June week, three-point frontier (about
+eight solves with the tie-breaks): 12 s with one fixed list, 40 s in the cap
+mode (11 lists), 43 s in the room mode (10 lists) — about 3.5x, inside the
+~5x the plan allowed, so no pruning. Chain re-run on the final code (30 Oct,
+evening, 14 areas x 3 sizes, June week, three-point frontiers, the three modes
+running at once so the times compare with each other, not with a quiet
+machine): single 42 of 42 solved, 28 s median per frontier; cap 42 of 42,
+53 s median (4-11 lists), 1.9x; room 37 of 42, 48 s median (1-20 lists),
+1.7x, and the other five (Inverness at every size, Cardiff at 60 and 150 MW)
+stop with the explicit "no room found nearby" answer instead of a connection.
+Full year (London 150 MW IT, hourly, three-point frontier): one fixed list
+2,252 s over eight solves (mean 282 s, max 1,271 s); the room and cap
+frontiers were still running when this was committed and write their rows to
+`optimisation_outputs/connection_mode_timing_room.csv` and `_cap.csv`
+(`scripts/time_connection_modes.py --modes room --out ...`).
+
+*Added the same day, at the user's request: the register update check.*
+A run never fetches from the portals; it reads the register on disk. So each
+run in the room mode now asks each portal when its dataset last changed (one
+metadata call per dataset, 39 in all, cached for a day in
+`substation_register/freshness.json`) and compares with the dates the files
+were fetched on, and the register's build time with the manifest's;
+`meta["register_freshness"]` and the page say whether the room figures are
+behind the companies, and name the two refresh commands when they are.
+`scripts/fetch_register_sources.py --check` prints the table. 30 Oct 2026:
+39 of 39 current.
+
+*Added the same day: no room nearby.* A published room of zero drops the
+option (no more 0 MW "connections" paying a standing charge); the search for a
+substation with room has a reach per voltage (`substations.REACH_KM`, 5 / 15 /
+40 / 60 km, assumed) instead of one 60 km radius, so a 58 km 33 kV cable is no
+longer listed; and when nothing in reach has room at any voltage
+`build_series` raises `ConnectionUnavailable` with the reasons by voltage
+instead of falling back to the 1.43x list, and the page asks "No room found
+nearby: run islanded?" (a tick box that runs the site with no grid). On the 14
+chain sites in the room mode that is now the answer at Inverness (every size:
+the 33 kV point with room is 21 km off at a 15 km reach), Cardiff at 60 and
+150 MW IT (National Grid's bulk points publish nothing, no transmission figure
+in reach) and nowhere else; Manchester above 5 MW IT has only the national
+grid. Decided with the user: what "full" really means — a reinforcement date,
+reinforcement paid above the high-cost cap, a flexible connection — is the
+next piece, not this one (see *Open*).
+
+*Added the same day: the cable in carbon.* The line to the site was priced in
+money over its real route since 29 Oct but reported only in carbon (at a
+notional 2 km). It is now a fixed carbon term per option over the option's own
+route, two circuits, 40 years (`ConnectionOption.gwp_fixed_per_year`; the
+single-list model's `Tech.gwp_grid_fixed_per_year` on a fixed `grid_on`
+variable so the map reads it as a term): 8.7 t CO₂e per km per year, a proxy
+from an overhead-line dataset. New map term "grid connection cable".
+
+*Open after this.* (i) The national grid option starts at the company's
+largest local connection, so a national-grid connection below 240/250 MVA
+(NGED's "either tier below 250 MW") is not offered; a lower floor
+(`uncertain_from`) is a one-line change in `size_ranges`. (ii) Between 11 kV
+and 33 kV the published size rule still decides; only 33 kV and up is
+chosen. (iii) A one-week window makes the grid look optional (see S4); every
+headline should come from a full-year run. (iv) Room after agreed
+connections and in a future year are reported, not used as caps. (v) The
+"next with room" option takes the nearest substation's price node. (vi)
+"Full" is a date more often than a wall: carry the companies' reinforcement
+and earliest-connection years on the options, add a "reinforced" option at
+the nearest substation priced at the high-cost cap above today's room and
+capped at the transformer rating (a proxy), and later a two-period run; a
+flexible (curtailable) connection once a company publishes its curtailment
+hours.
 
 ## 2. Carbon is charged and cost is free
 

@@ -84,6 +84,7 @@ def prepare(case: Case, **series_kwargs):
     from optimisation import sites
     site = sites.get(case.site)
     series, meta = I.build_series(site, case.start, case.end, case.size_mw_it, pue=case.pue,
+                                  grid=A.architecture(case.architecture, flags=case.flags).grid,
                                   **{**case.series_kwargs, **series_kwargs})
     if case.resample_hours:
         series = I.resample(series, case.resample_hours)

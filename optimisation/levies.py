@@ -102,6 +102,8 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+from optimisation import trace as T  # noqa: E402
+
 LEVY_FY = 2027                       # FY2026/27, as network_charges.TARIFF_FY
 
 RO_ROC_PER_MWH = 0.472
@@ -246,7 +248,76 @@ def loss_series(index: pd.DatetimeIndex, connection_voltage: str, region: int) -
     and period, times the zone's offtaking TLM for the season."""
     from optimisation import duos_areas
     llf = duos_areas.llf_series(index, region, connection_voltage).to_numpy()
-    return pd.Series(llf * tlm_series(index, region).to_numpy(), index=index, name="loss_gross_up")
+    tlm = tlm_series(index, region).to_numpy()
+    if T.active():
+        k = f"cost.losses.r{region}.{connection_voltage}"
+        zone = CI_REGION_TO_TLF_ZONE[region]
+        llf_src = (f"llf_file.{region}" if region in duos_areas.LLF_FILES else f"duos_schedule.{region}")
+        T.cost(f"{k}.llf_mean", float(llf.mean()), "multiplier",
+               f"Line loss factor, {duos_areas.AREA_NAMES[region]}, {connection_voltage}: mean over the window",
+               grade="transcribed" if connection_voltage != "transmission" else "derived",
+               cites=[] if connection_voltage == "transmission" else
+               [(llf_src, f"Annex 5, generic demand LLFs, {connection_voltage} row, by time period")],
+               note="1.0 for a transmission site: no distribution loss")
+        T.cost("cost.losses.tlmo_offtaking", TLMO_OFFTAKING_ASSUMED, "fraction",
+               "Offtaking share of transmission losses (TLMO-)", grade="assumed",
+               cites=[("elexon_tlf_guidance", "worked example: TLM of 1.011")],
+               note="Set per settlement period from metered data; the guidance example's figure stands in")
+        T.cost(f"cost.losses.tlm_zone{zone}_mean", float(tlm.mean()), "multiplier",
+               f"Transmission loss multiplier, TLF zone {zone}: 1 + seasonal zonal TLF + TLMO-, mean over the window",
+               uses=["cost.losses.tlmo_offtaking"],
+               cites=[("elexon_tlf_report_2026_27", f"pp. 7-8 charts, zone {zone}: "
+                                                    f"{', '.join(f'{v:+.4f}' for v in TLF_ZONE_2026_27[zone])} "
+                                                    "(spring, summer, autumn, winter)")])
+        T.cost(f"{k}.mean", float((llf * tlm).mean()), "multiplier",
+               f"Energy bought per MWh metered at {connection_voltage}: LLF x TLM, mean over the window",
+               uses=[f"{k}.llf_mean", f"cost.losses.tlm_zone{zone}_mean"],
+               note="The product is taken half-hour by half-hour; its mean is not the product of the means")
+    return pd.Series(llf * tlm, index=index, name="loss_gross_up")
+
+
+def _record_levies(flat: dict, cm: pd.Series, series: pd.Series, under_cca: bool | None):
+    """Each levy for the cost map, with the document it was read from."""
+    fy = f"{LEVY_FY - 1}/{str(LEVY_FY)[2:]}"
+    cca = CCL_UNDER_CCA if under_cca is None else under_cca
+    T.cost("cost.levy.RO", flat["RO"], "GBP per MWh", "Renewables Obligation: ROCs per MWh x buy-out price",
+           grade="derived", inputs={"ROC_per_MWh": RO_ROC_PER_MWH, "GBP_per_ROC": RO_BUYOUT_GBP_PER_ROC},
+           cites=[("ofgem_ro_2026_27", f"{fy}: buy-out £{RO_BUYOUT_GBP_PER_ROC} per ROC, obligation "
+                                       f"{RO_ROC_PER_MWH} ROCs per MWh")])
+    T.cost("cost.levy.FiT", flat["FiT"], "GBP per MWh",
+           "Feed-in Tariff levelisation: fund / (supply - exempt supply), mean of four quarters", grade="derived",
+           cites=[("ofgem_fit_quarterly", "Issues " + ", ".join(str(q[0]) for q in FIT_QUARTERS))],
+           inputs={q[1]: q[2] / (q[3] - q[4]) for q in FIT_QUARTERS})
+    T.cost("cost.levy.CfD", flat["CfD"], "GBP per MWh",
+           "Contracts for Difference: interim levy rates day-weighted over the year, plus the operational levy",
+           grade="derived", inputs={"operational_GBP_per_MWh": CFD_OPERATIONAL_GBP_PER_MWH},
+           cites=[("emr_key_figures_2026_27", "§1 and §3, interim levy rates and in-period adjustments")])
+    T.cost("cost.levy.AAHEDC", flat["AAHEDC"], "GBP per MWh",
+           "Highlands and Islands distribution subsidy (AAHEDC): p/kWh x 10", grade="transcribed",
+           cites=[("neso_aahedc_2026_27", f"Schedule 1: {AAHEDC_P_PER_KWH} p/kWh")])
+    T.cost("cost.levy.Nuclear_RAB", flat["Nuclear RAB"], "GBP per MWh",
+           "Nuclear funding (RAB): interim levy rates day-weighted, plus the operational levy", grade="derived",
+           inputs={"operational_GBP_per_MWh": NUCLEAR_RAB_OPERATIONAL_GBP_PER_MWH},
+           cites=[("emr_key_figures_2026_27", "§5 and §7")])
+    T.cost("cost.levy.CCL_under_agreement", float(cca), "yes (1) / no (0)",
+           "Whether the site holds a Climate Change Agreement (92 % off the levy)", grade="assumed",
+           note="levies.CCL_UNDER_CCA: data centres are eligible; whether this one holds one is not known")
+    T.cost("cost.levy.CCL", flat["CCL"], "GBP per MWh", "Climate Change Levy on electricity",
+           uses=["cost.levy.CCL_under_agreement"],
+           cites=[("govuk_ccl_rates", f"£{CCL_MAIN_GBP_PER_KWH}/kWh from 1 April 2026; {CCA_DISCOUNT:.0%} off "
+                                      "under an agreement")])
+    T.cost("cost.levy.CM_in_window", cm_gbp_per_mwh_in_window(), "GBP per MWh",
+           "Capacity Market: total payments / peak-period demand, charged 4-7 pm on working days, Nov-Feb",
+           grade="derived", inputs={"payments_GBP": CM_SUPPLIER_CHARGE_GBP, "peak_demand_MWh": CM_PEAK_DEMAND_MWH},
+           cites=[("emr_key_figures_2026_27", "§9 and §12, Delivery Year 2026/27")],
+           note="Working days taken as Monday-Friday: the window's bank holidays are charged too")
+    T.cost("cost.levy.CM_mean", float(cm.mean()), "GBP per MWh",
+           "Capacity Market, mean over the window on a flat load", uses=["cost.levy.CM_in_window"],
+           inputs={"share_of_half_hours_in_window": float((cm > 0).mean())})
+    T.cost("cost.levy.mean_per_MWh", float(series.mean()), "GBP per MWh",
+           "Every policy levy on metered imports, mean over the window",
+           uses=["cost.levy.RO", "cost.levy.FiT", "cost.levy.CfD", "cost.levy.AAHEDC", "cost.levy.Nuclear_RAB",
+                 "cost.levy.CCL", "cost.levy.CM_mean"])
 
 
 def import_levies(index: pd.DatetimeIndex, under_cca: bool | None = None) -> dict:
@@ -255,6 +326,8 @@ def import_levies(index: pd.DatetimeIndex, under_cca: bool | None = None) -> dic
     flat = flat_components(under_cca)
     cm = cm_window(index).astype(float) * cm_gbp_per_mwh_in_window()
     series = (sum(flat.values()) + cm).rename("levies_GBP_per_MWh")
+    if T.active():
+        _record_levies(flat, cm, series, under_cca)
     return {"levies_GBP_per_MWh": series,
             "components": {**{f"{k}_GBP_per_MWh": v for k, v in flat.items()},
                            "CM_GBP_per_MWh_in_window": cm_gbp_per_mwh_in_window(),
