@@ -215,6 +215,24 @@ No public source found. Revisit if the item becomes load-bearing in a result.
       expensive one at that size. Decide: both-ways by default in the
       uncertain band, or a tier choice inside the LP. Northern Powergrid has
       no placed 33 kV price node, so its 33 kV sites take the area median.
+- [x] **Live, complete capacity register and the availability map** (plan 30 Oct,
+      built 30 Oct, `docs/COST_PLAN.md` §1.10): R1 `scripts/fetch_register_sources.py`
+      (39 portal datasets, each stamped with the portal's date) and
+      `build_substation_register.py --capacity-only`; R2 every company's
+      standard capacity datasets with `headroom_basis` / `headroom_as_of`
+      (primaries 76–100 % everywhere, London from 1 % to 80 %; SSEN 100 % from
+      its Headroom Dashboard); R3 headroom by year to 2050 and the connection
+      queue; R4 364 grid-supply-point records; R5 `optimisation/availability.py`
+      and the page panel; R6 re-run (both-ways unchanged). Decided and applied:
+      location + headroom is the backbone; a price node is used only where
+      matched by name to the connection substation, else the area figure.
+      **Still open:** NGED's 33 kV switching stations and location-list rows
+      publish nothing (their bulk coverage 16–50 %); UKPN and NGED publish no
+      grid-supply-point capacity and NESO none; the companies' bases differ
+      and the "central" scenario is a choice; the page panel is untested in
+      the browser; the fork's survey also found Northern Powergrid's
+      `gsp-appendix-g-information` (GSP contracted positions, mostly
+      generation) and NGED's LTDS Table 3, both unused.
 - [x] **Register quality, from the both-ways run** (29 Oct, fixed the same day):
       generators' and interconnectors' own 275/400 kV sites excluded from the
       transmission layer by name (36 of 412; Brighton now runs to Bolney); UK

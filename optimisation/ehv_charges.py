@@ -108,9 +108,10 @@ def site_charges(lat: float, lon: float, region: int, voltage: str, band: str,
         fallback["note"] = f"no site-specific method for {voltage}"
         return fallback
     a, bb, basis = addon(region, vkv, case)
-    node = substations.nearest_price_node(lat, lon, region, vkv)
+    node = substations.price_node_at(lat, lon, region, vkv)
     if a is None or node is None:
-        fallback["note"] = "no calibration or no located node at this voltage"
+        fallback["note"] = ("no calibration for this area" if a is None else
+                            "no price node matched by name to the connection substation (area figure, decision of 30 Oct 2026)")
         return fallback
     hours = float(calibration().loc[region, "super_red_hours"])
     cap_p = max(0.0, node["local_GBP_per_kVA"] * 100.0 / 365.0 + a)
@@ -120,8 +121,9 @@ def site_charges(lat: float, lon: float, region: int, voltage: str, band: str,
         "super_red_p_per_kwh": sr_p, "fixed_GBP_per_year": fixed,
         "how": "site-specific", "basis": basis, "node": node, "addon_p_per_kva_day": a,
         "capacity_p_per_kva_day": cap_p, "super_red_hours": hours,
-        "note": f"node {node['node_id']} ({node['how']}, {node['straight_km']:.1f} km): local {node['local_GBP_per_kVA']:.2f}, "
-                f"remote {node['remote_GBP_per_kVA']:.2f} £/kVA/yr; area add-on {a:.2f} p/kVA/day ({basis})",
+        "note": f"node {node['node_id']} at {node['substation']} ({node['how']}, {node['straight_km']:.1f} km): "
+                f"local {node['local_GBP_per_kVA']:.2f}, remote {node['remote_GBP_per_kVA']:.2f} £/kVA/yr; "
+                f"area add-on {a:.2f} p/kVA/day ({basis})",
     }
 
 

@@ -5,9 +5,14 @@ substation with its location and published spare capacity.
     python -I scripts/build_substation_register.py ["<OneDrive>/DC optimiser/connection sources"]
 
 Writes optimisation_outputs/substation_register/{price_nodes,substations,
-summary}.csv. Every source is in the OneDrive folder `3 DUoS` (index in its
-README); nothing is fetched here. OpenStreetMap data is © OpenStreetMap
-contributors, ODbL — the `how` column marks every row it placed.
+summary,grid_supply_points,connection_queue,capacity_coverage}.csv and
+headroom_by_year.csv.gz. Nothing is fetched here: the name-and-location layer
+reads the hand-pulled files of 29 Oct 2026 in the OneDrive folder `3 DUoS`,
+and the capacity layer (`scripts/register_capacity.py`, since 30 Oct 2026)
+reads the portal datasets `scripts/fetch_register_sources.py` stamped into
+its `api/` folder — run that first to refresh. OpenStreetMap data is
+© OpenStreetMap contributors, ODbL — the `how` column marks every row it
+placed.
 
 How a price node is located, in order (column `how`):
   name   the company's own data names the node's substation (or group)
@@ -40,6 +45,9 @@ from scipy.spatial import cKDTree
 
 sys.stdout.reconfigure(encoding="utf-8")
 ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+from scripts import register_capacity as C   # noqa: E402  (the capacity layer, R2-R4)
 OUT = ROOT / "optimisation_outputs" / "substation_register"
 DEFAULT_SOURCES = Path.home() / "OneDrive - Imperial College London" / "DC optimiser" / "connection sources"
 
@@ -288,6 +296,7 @@ def ukpn(src: Path):
     level = [ukpn_level(t, n) for t, n in zip(s.sitetype, s.sitename)]
     subs = pd.DataFrame({"region": s.licencearea.map(area), "company": "UKPN", "name": s.sitename,
                          "level": level, "voltage_kv": s.sitevoltage, "lat": s.lat, "lon": s.lon,
+                         "site_id": s.sitefunctionallocation,
                          "firm_mva": s.transratingwinter,
                          "demand_headroom_mw": pd.to_numeric(s.transratingwinter, errors="coerce") - pd.to_numeric(s.maxdemandwinter, errors="coerce"),
                          "source": "UKPN grid and primary sites"})
@@ -337,11 +346,12 @@ def npg(src: Path):
     hm["region"] = hm.area.map({"NPgN": 4, "NPgY": 5})
     subs = pd.concat([
         pd.DataFrame({"region": hm.region, "company": "Northern Powergrid", "name": hm["name"], "level": hm["type"],
-                      "voltage_kv": hm.voltages, "lat": hm.latitude, "lon": hm.longitude,
+                      "voltage_kv": hm.voltages, "lat": hm.latitude, "lon": hm.longitude, "site_id": hm.mrid,
                       "firm_mva": hm.demandfirmcapacity, "demand_headroom_mw": hm.demandavailablecapacity,
                       "source": "Northern Powergrid LTDS capacity heatmap"}),
         pd.DataFrame({"region": np.nan, "company": "Northern Powergrid", "name": s.site_name, "level": s.site_purpose,
                       "voltage_kv": np.nan, "lat": s.lat, "lon": s.lon, "firm_mva": np.nan, "demand_headroom_mw": np.nan,
+                      "site_id": s.asset_number,
                       "source": "Northern Powergrid LTDS EHV sites"})])
     idx = collections.defaultdict(list)
     for r in subs.itertuples(): idx[norm(r.name)].append(r)
@@ -366,7 +376,7 @@ def ssen(src: Path):
     for region, area in ((1, "North Scotland"), (12, "Southern England")):
         for f in json.load(open(E / f"SSEN {area} LTDS capacity heatmap, named sites (May 2026).geojson", encoding="utf-8"))["features"]:
             p = f["properties"]
-            rows.append({"region": region, "company": "SSEN", "name": p["name"], "level": p["type"],
+            rows.append({"region": region, "company": "SSEN", "name": p["name"], "level": p["type"], "site_id": p.get("mRID"),
                          "voltage_kv": "-".join(str(int(v)) for v in (p.get("voltages") or [])), "lat": p["latitude"],
                          "lon": p["longitude"], "firm_mva": p.get("demandFirmCapacity"),
                          "demand_headroom_mw": p.get("demandAvailableCapacity"), "source": "SSEN LTDS capacity heatmap"})
@@ -430,7 +440,7 @@ def enwl(src: Path):
     cap["number"] = cap["number"].astype(str)
     ehv = ehv.merge(cap[["number", "demand_headroom_firm_mw"]], on="number", how="left")
     subs = pd.DataFrame({"region": 3, "company": "ENWL", "name": ehv.name.fillna(ehv.number), "level": ehv.group,
-                         "voltage_kv": ehv.infeed_voltage, "lat": ehv.lat, "lon": ehv.lon, "firm_mva": np.nan,
+                         "voltage_kv": ehv.infeed_voltage, "lat": ehv.lat, "lon": ehv.lon, "firm_mva": np.nan, "site_id": ehv.number,
                          "demand_headroom_mw": ehv.demand_headroom_firm_mw, "source": "ENWL substations + registers + heatmaps"})
     known = collections.defaultdict(list)
     for r in ehv.dropna(subset=["name"]).itertuples(): known[norm(r.name)].append(r)
@@ -478,7 +488,7 @@ def nged(src: Path):
              33: ("Primary Substation", "Bulk Supply Point", "Ehv Switching Station", "Primary", "BSP")}
     all_subs, out = [], []
     for region, (area, capkey, osmkey, zone) in AREAS.items():
-        cap = pd.DataFrame([{"region": region, "company": "NGED", "name": f["name"], "level": f["type"],
+        cap = pd.DataFrame([{"region": region, "company": "NGED", "name": f["name"], "level": f["type"], "site_id": f.get("mRID"),
                              "voltage_kv": f.get("voltages"), "lat": f["latitude"], "lon": f["longitude"],
                              "firm_mva": f.get("demandFirmCapacity"), "demand_headroom_mw": f.get("demandAvailableCapacity"),
                              "source": "NGED LTDS capacity heatmap"}
@@ -632,25 +642,32 @@ REGIONS_OF = {"ukpn": (10, 13, 14), "npg": (4, 5), "ssen": (1, 12), "enwl": (3,)
 def main(src: Path, only: list[str] | None = None) -> int:
     """Build the register. ``only`` rebuilds just those companies (and the
     transmission layer, always) and keeps the others' rows from the CSVs on
-    disk — the full build takes ~35 min, mostly OpenStreetMap place-snapping."""
+    disk — the full build takes ~35 min, mostly OpenStreetMap place-snapping.
+    ``only=[]`` (``--capacity-only``) rebuilds no company: the name-and-location
+    layer is read from disk and only the capacity layer, the grid supply points
+    and the R3 tables are redone — about a minute, the step to run after a
+    ``fetch_register_sources`` refresh."""
     OUT.mkdir(parents=True, exist_ok=True)
     subs, nodes = [], []
-    todo = list(BUILDERS) if not only else only
+    todo = list(BUILDERS) if only is None else only
     for name in todo:
         s, n = BUILDERS[name](src)
         subs.append(s); nodes += n
         print(f"  {name:<5} {len(s):>6} substations, {len(n):>6} price nodes")
-    S = pd.concat(subs, ignore_index=True)
+    S = pd.concat(subs, ignore_index=True) if subs else pd.DataFrame()
+    S["_fresh"] = True                      # built this run: the capacity layer keeps these values as the builder's
     N = pd.DataFrame(nodes)
-    if only:
+    if only is not None:
         old_s = pd.read_csv(OUT / "substations.csv", low_memory=False)
         old_n = pd.read_csv(OUT / "price_nodes.csv", low_memory=False)
         drop_co = {c for k in only for c in COMPANY_OF[k]} | {"transmission (OpenStreetMap)"}
         drop_r = {r for k in only for r in REGIONS_OF[k]}
-        S = pd.concat([old_s[~old_s.company.isin(drop_co)], S], ignore_index=True)
+        S = pd.concat([old_s[~old_s.company.isin(drop_co)].assign(_fresh=False), S], ignore_index=True)
         N = pd.concat([old_n[~old_n.region.isin(drop_r)], N], ignore_index=True)
         print(f"  kept {len(old_s[~old_s.company.isin(drop_co)]):,} substations and "
               f"{len(old_n[~old_n.region.isin(drop_r)]):,} nodes from the register on disk")
+    # the capacity layer (R2): each company's standard datasets over its site list
+    S, tally = C.apply(S, src)
     # national grid substations (no local price; for distance to a transmission connection)
     osm = pd.read_csv(src / "3 DUoS" / "site-specific EHV charges" / f"OpenStreetMap named substations 33kV and above, GB {F}.csv")
     tx = osm[osm.voltage_v.astype(str).str.contains("400000|275000")]
@@ -658,12 +675,38 @@ def main(src: Path, only: list[str] | None = None) -> int:
     print(f"  transmission: {len(tx)} OpenStreetMap 275/400 kV substations, {int(gen.sum())} generator or "
           f"interconnector sites excluded")
     tx = tx[~gen]
-    S = pd.concat([S, pd.DataFrame({"region": np.nan, "company": "transmission (OpenStreetMap)", "name": tx.name,
-                                    "level": "transmission", "voltage_kv": tx.voltage_v, "lat": tx.lat, "lon": tx.lon,
-                                    "firm_mva": np.nan, "demand_headroom_mw": np.nan, "source": "OpenStreetMap, ODbL"})],
-                  ignore_index=True)
+    tx = pd.DataFrame({"region": np.nan, "company": "transmission (OpenStreetMap)", "name": tx.name,
+                       "level": "transmission", "voltage_kv": tx.voltage_v, "lat": tx.lat, "lon": tx.lon,
+                       "firm_mva": np.nan, "demand_headroom_mw": np.nan, "source": "OpenStreetMap, ODbL"})
+    # grid supply points (R4) and the transmission layer's capacity from them
+    gsps = C.grid_supply_points(src, S, tx)
+    tx = C.transmission_capacity(tx, gsps)
+    print(f"  grid supply points: {len(gsps)} records ({gsps.lat.notna().sum()} located, "
+          f"{gsps.demand_headroom_mw.notna().sum()} with a headroom, {gsps.firm_mva.notna().sum()} with a limit or firm capacity); "
+          f"{int(tx.gsp_record.notna().sum())} of {len(tx)} transmission substations take a record's capacity")
+    S = pd.concat([S, tx], ignore_index=True)
     S.to_csv(OUT / "substations.csv", index=False)
     N.to_csv(OUT / "price_nodes.csv", index=False)
+    gsps.to_csv(OUT / "grid_supply_points.csv", index=False)
+    # R3: headroom by year and the connection queue
+    hby = C.headroom_by_year(src)
+    hby.to_csv(OUT / "headroom_by_year.csv.gz", index=False, compression="gzip")   # 278k rows: 56 MB plain
+    (OUT / "headroom_by_year.csv").unlink(missing_ok=True)
+    queue = C.connection_queue(src)
+    queue.to_csv(OUT / "connection_queue.csv", index=False)
+    print(f"  headroom by year: {len(hby):,} rows, {hby.groupby('company').size().to_dict() if len(hby) else {}}; "
+          f"queue: {len(queue):,} rows")
+    # coverage: per area and level, how many substations publish a headroom and how old it is
+    from optimisation import substations as SUB
+    cov = S.assign(level_std=S.level.map(SUB.level_of)).dropna(subset=["level_std"])
+    cov = cov[cov.level_std != "transmission"].groupby(["region", "level_std"]).agg(
+        substations=("name", "size"), with_headroom=("demand_headroom_mw", lambda s: int(s.notna().sum())),
+        as_of=("headroom_as_of", lambda s: s.dropna().astype(str).min() if s.notna().any() else ""),
+        newest=("headroom_as_of", lambda s: s.dropna().astype(str).max() if s.notna().any() else "")).reset_index()
+    cov["share"] = (cov.with_headroom / cov.substations).round(3)
+    cov.to_csv(OUT / "capacity_coverage.csv", index=False)
+    tally.to_csv(OUT / "capacity_overlay.csv", index=False)
+    print(cov.pivot(index="region", columns="level_std", values="share").to_string())
     rows = []
     for region in sorted(FILES):
         d = N[(N.region == region) & (N.kind == "network")]
@@ -693,5 +736,7 @@ if __name__ == "__main__":
     ap.add_argument("src", nargs="?", default=str(DEFAULT_SOURCES))
     ap.add_argument("--only", default=None, help="comma-separated builders to rebuild (ukpn,npg,ssen,enwl,nged,spen); "
                                                  "the rest kept from disk; the transmission layer is always rebuilt")
+    ap.add_argument("--capacity-only", action="store_true",
+                    help="rebuild no company: redo the capacity layer, grid supply points and R3 tables over the register on disk")
     a = ap.parse_args()
-    sys.exit(main(Path(a.src), a.only.split(",") if a.only else None))
+    sys.exit(main(Path(a.src), [] if a.capacity_only else (a.only.split(",") if a.only else None)))

@@ -520,6 +520,56 @@ m2.metric("Carbon Intensity region", f"{site.carbon_api_region} · {site.region_
 m3.metric("TNUoS zone", f"{site.tnuos_zone}")
 m4.metric("TNUoS demand tariff", f"£{tariff:.2f}/kW" if tariff == tariff else "—")
 
+# Where could a site of this size connect? The register read the other way
+# round (optimisation.availability, COST_PLAN §1.10 R5): every substation with
+# room for the connection, priced through the same chain as a run, no solve.
+with st.expander("Where could this size connect? — every substation with room, ranked", expanded=False):
+    st.caption(
+        "Reads the companies' own published spare capacity (the substation register) "
+        "for the connection this size needs, and prices the grid at each place through "
+        "the same chain the run uses — tier, voltage, band, the area's charges and build "
+        "prices, losses and levies — for a flat load, without solving. Room can be read "
+        "today, net of demand already agreed, or in a future year from the companies' "
+        "scenario reports. Each row says what its figure is and how old it is.")
+    _a1, _a2, _a3, _a4 = st.columns([1.1, 1.1, 0.9, 0.9])
+    _room = _a1.selectbox("Room read as", ["published today", "net of contracted demand", "in a future year"],
+                          key="av_room")
+    _year = _a2.number_input("Year", 2026, 2050, 2030, step=1, key="av_year",
+                             disabled=_room != "in a future year")
+    _by = _a3.selectbox("Rank by", ["cost", "carbon"], key="av_by")
+    _go = _a4.button("List substations with room", key="av_go", use_container_width=True)
+    if _go:
+        from optimisation import availability as _A
+        with st.spinner("Reading the register and pricing every candidate…"):
+            try:
+                _av = _A.availability(size_mw, pue, (None if conn else headroom),
+                                      year=(int(_year) if _room == "in a future year" else None),
+                                      net_of_contracted=(_room == "net of contracted demand"), by=_by)
+            except Exception as _exc:
+                st.error(f"Could not read the register: {_exc}")
+                _av = None
+        if _av is not None:
+            st.session_state["av_result"] = _av
+    _av = st.session_state.get("av_result")
+    if _av is not None and not _av.empty:
+        _z = _av.attrs
+        st.markdown(
+            f"**{len(_av):,} substations** have room for a **{_z.get('connection_mw', 0):,.0f} MW** connection "
+            f"({_z.get('load_mw', 0):,.1f} MW load). Costs are the grid alone for a flat load — wholesale "
+            f"£{_z.get('wholesale_GBP_per_MWh', 0):.0f}/MWh plus every charge — not the optimiser's answer; "
+            "press *Optimise* with the site at one of them for that.")
+        _show = _av[["rank", "area", "name", "level", "voltage", "band", "room_mw", "room_basis", "headroom_as_of",
+                     "cost_m_per_year", "cost_GBP_per_MWh", "carbon_kg_per_kwh_delivered", "duos_how"]].head(50)
+        st.dataframe(_show.rename(columns={
+            "room_mw": "room (MW)", "cost_m_per_year": "grid cost (£m/yr)", "cost_GBP_per_MWh": "£/MWh",
+            "carbon_kg_per_kwh_delivered": "kg CO₂e/kWh", "headroom_as_of": "as of"}),
+            hide_index=True, use_container_width=True)
+        st.map(_av.head(200)[["lat", "lon"]], size=600, color="#1f77b4")
+        st.dataframe(_A.summary(_av).rename(columns={"with_room": "substations with room", "cost_m_per_year": "cheapest £m/yr"}),
+                     hide_index=True, use_container_width=True)
+    elif _av is not None:
+        st.info("No substation in the register publishes room for this size on this basis.")
+
 # Readiness is about *this window*, not about the region having some file
 # somewhere. A region whose only cached series is one week of June is not ready
 # for a January window, and saying "cached" on the strength of the file

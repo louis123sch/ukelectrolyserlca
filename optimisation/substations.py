@@ -7,13 +7,25 @@ The register is built by ``scripts/build_substation_register.py`` from every
 DNO's open data (OneDrive ``connection sources/3 DUoS/site-specific EHV
 charges``) into ``optimisation_outputs/substation_register/``:
 
-    substations.csv   10,829 substations: company, level, coordinates, firm
-                      capacity and available demand headroom where published
-    price_nodes.csv   8,432 "Nodal prices" rows from the 2026/27 schedules,
-                      located by name, place or code (column ``how``)
+    substations.csv   every substation: company, level, coordinates, and since
+                      30 Oct 2026 the capacity layer (COST_PLAN §1.10 R2):
+                      ``demand_headroom_mw`` with ``headroom_basis`` (what the
+                      figure is), ``headroom_as_of`` (the portal's date) and
+                      ``source_dataset``; ``firm_mva``, ``max_demand_mw``,
+                      ``demand_contracted_mw``, ``headroom_net_of_contracted_mw``,
+                      ``constraint`` where the company publishes them
+    grid_supply_points.csv  R4: import limits, peaks and headroom at the
+                      transmission interface; the transmission layer above
+                      takes its capacity from the nearest record
+    headroom_by_year.csv.gz R3: the companies' scenario headroom to 2050
+    connection_queue.csv    R3: demand agreed or energised, by substation
+    price_nodes.csv   "Nodal prices" rows from the 2026/27 schedules, located
+                      by name, place or code (column ``how``)
 
 Until 29 Oct 2026 every site was 2 km from its substation
-(``connection_cost.ROUTE_KM``) and no substation had a capacity.
+(``connection_cost.ROUTE_KM``) and no substation had a capacity. Until 30 Oct
+2026 the capacity was the weakest dataset each company had (rating minus peak
+for UKPN and SP Energy Networks, partial heatmaps elsewhere).
 
 Which substations a connection voltage reaches
 ----------------------------------------------
@@ -62,7 +74,7 @@ ASSUMED = ("ROUTE_FACTOR_ASSUMED", "MIN_PUBLISHED_SHARE")
 
 _LEVEL = {
     "primary": {"pry", "primary", "primary substation", "primary site"},
-    "bulk": {"bsp", "bulk supply point", "grid", "grid substation", "ehv switching station"},
+    "bulk": {"bsp", "bulk supply point", "supply point", "grid", "grid substation", "ehv switching station"},
     # UKPN's 132/11 kV grid sites (London): a 132 kV side, no 33 kV; their
     # 11 kV boards are listed again as primaries by the builder
     "gsp": {"gsp", "grid supply point", "super grid substation", "132kv switching station",
@@ -91,12 +103,87 @@ def level_of(raw) -> str | None:
     return None
 
 
+CAPACITY_COLS = ("firm_mva", "max_demand_mw", "demand_headroom_mw", "demand_contracted_mw",
+                 "headroom_net_of_contracted_mw")
+
+
 @lru_cache(maxsize=1)
 def substations() -> pd.DataFrame:
     s = pd.read_csv(REGISTER / "substations.csv", low_memory=False)
     s["level_std"] = s["level"].map(level_of)
     s = s.dropna(subset=["lat", "lon", "level_std"]).reset_index(drop=True)
-    s["demand_headroom_mw"] = pd.to_numeric(s["demand_headroom_mw"], errors="coerce")
+    for c in CAPACITY_COLS:
+        s[c] = pd.to_numeric(s[c], errors="coerce") if c in s else np.nan
+    for c in ("headroom_basis", "headroom_as_of", "source_dataset", "constraint", "site_id"):
+        if c not in s:
+            s[c] = np.nan
+    return s
+
+
+@lru_cache(maxsize=1)
+def grid_supply_points() -> pd.DataFrame:
+    p = REGISTER / "grid_supply_points.csv"
+    return pd.read_csv(p, low_memory=False) if p.exists() else pd.DataFrame()
+
+
+@lru_cache(maxsize=1)
+def headroom_by_year() -> pd.DataFrame:
+    p = REGISTER / "headroom_by_year.csv.gz"
+    return pd.read_csv(p, low_memory=False) if p.exists() else pd.DataFrame()
+
+
+@lru_cache(maxsize=1)
+def connection_queue() -> pd.DataFrame:
+    p = REGISTER / "connection_queue.csv"
+    return pd.read_csv(p, low_memory=False) if p.exists() else pd.DataFrame()
+
+
+def _name_key(s) -> str:
+    """A company's own name for a substation, as a join key between its datasets."""
+    import re
+    t = re.sub(r"\d+(\.\d+)?\s*/?\s*(\d+(\.\d+)?)?\s*KV", " ", str(s).upper())
+    t = re.sub(r"\b(PRIMARY|BSP|GSP|GRID|SUBSTATION|S/S|LOCAL|MAIN|T\d|SGT\d*|\d+)\b", " ", t)
+    return "".join(re.findall(r"[A-Z]+", t))
+
+
+def with_year_headroom(year: int, scenario: str | None = None) -> pd.DataFrame:
+    """``substations()`` with ``headroom_year_mw``: the company's scenario demand
+    headroom in ``year`` (R3), joined to each substation by its id, then its
+    name, then the nearest location within 300 m of the same company. Rows the
+    forward view does not cover keep NaN. ``scenario`` None takes each
+    company's central scenario (``register_capacity.CENTRAL_SCENARIO``)."""
+    s = substations().copy()
+    h = headroom_by_year()
+    s["headroom_year_mw"] = np.nan
+    s["headroom_year_scenario"] = pd.Series(np.nan, index=s.index, dtype=object)
+    if h.empty:
+        return s
+    h = h[h.year == int(year)]
+    h = h[h.central] if scenario is None else h[h.scenario == scenario]
+    if h.empty:
+        return s
+    from scipy.spatial import cKDTree
+    for company, hc in h.groupby("company"):
+        idx = s.index[s.company == company]
+        if not len(idx):
+            continue
+        by_id = {str(i): v for i, v in zip(hc.site_id, hc.headroom_mw) if pd.notna(i)}
+        by_name = {_name_key(n): v for n, v in zip(hc["name"], hc.headroom_mw) if isinstance(n, str)}
+        scn = {str(i): sc for i, sc in zip(hc.site_id, hc.scenario)} | {_name_key(n): sc for n, sc in zip(hc["name"], hc.scenario)}
+        placed = hc.dropna(subset=["lat", "lon"])
+        tree = cKDTree(np.c_[placed.lat, placed.lon * 0.6]) if len(placed) else None
+        for k in idx:
+            sid = str(s.at[k, "site_id"]) if pd.notna(s.at[k, "site_id"]) else None
+            key = _name_key(s.at[k, "name"])
+            if sid and sid in by_id:
+                s.at[k, "headroom_year_mw"], s.at[k, "headroom_year_scenario"] = by_id[sid], scn[sid]
+            elif key in by_name:
+                s.at[k, "headroom_year_mw"], s.at[k, "headroom_year_scenario"] = by_name[key], scn[key]
+            elif tree is not None:
+                d, i = tree.query([s.at[k, "lat"], s.at[k, "lon"] * 0.6])
+                if d * 111.0 <= 0.3:
+                    r = placed.iloc[i]
+                    s.at[k, "headroom_year_mw"], s.at[k, "headroom_year_scenario"] = r.headroom_mw, r.scenario
     return s
 
 
@@ -148,6 +235,11 @@ def connection_point(lat: float, lon: float, voltage: str, conn_mw: float,
         "route_factor_assumed": ROUTE_FACTOR_ASSUMED,
         "nearest": first["name"], "nearest_straight_km": float(first.straight_km),
         "nearest_headroom_mw": None if pd.isna(head) else float(head), "headroom_status": status,
+        "headroom_basis": None if pd.isna(first.get("headroom_basis", np.nan)) else str(first["headroom_basis"]),
+        "headroom_as_of": None if pd.isna(first.get("headroom_as_of", np.nan)) else str(first["headroom_as_of"]),
+        "nearest_contracted_mw": None if pd.isna(first.get("demand_contracted_mw", np.nan)) else float(first["demand_contracted_mw"]),
+        "nearest_headroom_net_of_contracted_mw": (None if pd.isna(first.get("headroom_net_of_contracted_mw", np.nan))
+                                                  else float(first["headroom_net_of_contracted_mw"])),
         "shortfall_route": shortfall_route,
         "next_with_room": None if nxt is None else nxt["name"],
         "next_with_room_straight_km": None if nxt is None else float(nxt.straight_km),
@@ -209,11 +301,44 @@ def voltage_with_room(lat: float, lon: float, rule_voltage: str, conn_mw: float,
     raise AssertionError("unreachable")       # the top voltage always returns
 
 
+NODE_AT_SUBSTATION_KM = 0.1     # a node this close to the connection substation is that substation's node
+
+
+def price_node_at(lat: float, lon: float, region: int, voltage_kv: float) -> dict | None:
+    """The price node *of the substation the site connects to*, or None.
+
+    Decided 30 Oct 2026 (COST_PLAN §1.10): a site takes a node's price only
+    where the schedule's node was matched by name to that very substation
+    (``how`` name or group); otherwise the area figure. The place-name and
+    code placements and the "nearest placed node" are no longer used for
+    pricing. The connection substation is the nearest at this voltage's levels."""
+    voltage = {33.0: "33 kV", 132.0: "132 kV"}.get(float(voltage_kv))
+    if voltage is None:
+        return None
+    c = candidates(lat, lon, voltage, region)
+    if c.empty:
+        return None
+    sub = c.iloc[0]
+    n = price_nodes()
+    n = n[(n.region == region) & (n.kind == "network") & (n.voltage_kv == voltage_kv) & n.how.isin(["name", "group"])]
+    if n.empty:
+        return None
+    d = km(sub.lat, sub.lon, n.lat.to_numpy(), n.lon.to_numpy())
+    n = n.assign(at_km=d).sort_values("at_km")
+    r = n.iloc[0]
+    if r.at_km > NODE_AT_SUBSTATION_KM:
+        return None
+    return {"node_id": r.node_id, "label": r.label, "how": r.how, "straight_km": float(sub.straight_km),
+            "substation": sub["name"], "local_GBP_per_kVA": float(r.local_GBP_per_kVA),
+            "remote_GBP_per_kVA": float(r.remote_GBP_per_kVA)}
+
+
 def nearest_price_node(lat: float, lon: float, region: int, voltage_kv: float,
                        group: str | None = None) -> dict | None:
-    """The located price node nearest the site at this voltage (COST_PLAN §1.9:
-    the nearest node beats distance-weighting; stay inside the site's group
-    when one is known and the nearest node is outside it)."""
+    """The located price node nearest the site at this voltage — the method of
+    29 Oct 2026, kept for the calibration script (``calibrate_ehv_charges``),
+    which needs every listed site paired with a node. Pricing a run uses
+    ``price_node_at`` since 30 Oct 2026."""
     n = price_nodes()
     n = n[(n.region == region) & (n.kind == "network") & (n.voltage_kv == voltage_kv)]
     if n.empty:

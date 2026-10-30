@@ -33,7 +33,8 @@ Effort: XS < 1 h, S ≈ half a day, M ≈ 1–2 days, L > 2 days.
 | 1.9 A–D Site connection | done 29 Oct — substation register (10,829 substations, 8,432 price nodes), cable route from the site, spare-capacity flag, site-specific 33/132 kV charges | `substations.py`, `ehv_charges.py`, `scripts/build_substation_register.py` |
 | 1.9 E Build prices by area | done 29 Oct — eleven areas on their own 2026 statements, POA rows on the publishers' median (stand-in), NGED's substations kept and flagged low | `connection_cost.py`, `tests/test_connection_prices_by_area.py` |
 | 1.9 H Voltage rule and ceiling | done 29 Oct — published rule as floor, area's substation capacities above it; ceiling 1 / 0.70 (FES load factor) instead of 1.5 assumed | `substations.voltage_with_room`, `network_charges.connection_voltage(site=)`, `sites.py` |
-| 1.9 G Chain check | run 29 Oct — 14 areas x 3 sizes, 42/42 solved, 21 checks pass; found and fixed the band floor sitting on the boundary (one kVA above now) | `scripts/check_connection_chain.py`, `optimisation_outputs/connection_chain.csv` |
+| 1.9 G Chain check | run 29 Oct — 14 areas x 3 sizes, 42/42 solved, 21 checks pass; found and fixed the band floor sitting on the boundary (one kVA above now). Re-run 30 Oct on the complete register: 42/42, 21 pass | `scripts/check_connection_chain.py`, `optimisation_outputs/connection_chain.csv` |
+| 1.10 R1–R6 Live capacity register and availability map | built 30 Oct — 39 portal datasets fetched by id and dated; every company's standard capacity data with basis and date on each row (primaries 76–100 %, London 1 % -> 80 %, SSEN 100 %); contracted demand, headroom to 2050, the connection queue, 364 grid-supply-point records; "where can this size connect" ranked by cost and carbon; chain and both-ways re-run | `scripts/fetch_register_sources.py`, `scripts/register_capacity.py`, `optimisation/availability.py`, `scripts/availability_map.py`, page 2 |
 
 The rest of §1–§5 is open. The table below describes the state before these.
 
@@ -386,6 +387,123 @@ IT the model's default tier
 (from the 257 MW ceiling) is the expensive one; the page's both-ways option
 should be the default for sizes in the uncertain band, or the tier should be
 chosen by the LP (CONNECTION_TIER_PLAN.md: a tier variable is the next step).
+
+### 1.10 A live, complete substation capacity register, and the availability map (plan, 30 Oct 2026)
+
+*Why.* The register reads the weakest capacity dataset each company has:
+derived figures (rating minus peak) for UK Power Networks and SP Energy
+Networks, partial heatmaps for National Grid and Northern Powergrid, nothing
+for the 275/400 kV layer, and all of it files pulled by hand on 29 Oct. The
+portal survey of 30 Oct 2026 (scratch `survey_capacity*.py`) found every
+company now publishes the standard LTDS capacity heatmap — one row per
+primary and bulk supply point with firm capacity, maximum demand, available
+demand capacity, constraint colour and coordinates — plus headroom by year,
+the connection queue, and grid-supply-point import limits. All API-backed.
+
+*Decisions taken 30 Oct.* Location + headroom is the backbone; names are
+used only to join a company's own datasets to its own site list. The
+nodal-price matching (decoder, "nearest placed node") stays only where a node
+matched by name directly; otherwise the area add-on plus the area's median
+local price — the pilot showed the node price moves the charge by a few per
+cent at most. Every row carries `headroom_basis` (firm minus peak / net of
+contracted / scenario year) and `headroom_as_of` (the portal's own modified
+date); a per-area "as of" is honest, not a defect.
+
+| Step | What | Datasets (portal ids) | Buys | Effort |
+|---|---|---|---|---|
+| **R1 Refresh** | `scripts/fetch_register_sources.py`: pull every dataset the builder reads by id, with the keys in `.env` (SSEN's CKAN needs none); stamp each file with the portal's modified date; skip unchanged; builder reads the stamped files; cache keyed on that date, not fetched per run | all below, plus the ones the builder reads now | one command refreshes the register to whatever the companies have published | ½ day |
+| **R2 Standard heatmaps** | replace derived/partial capacity with each company's LTDS heatmap and tables; add `headroom_basis`, `headroom_as_of`, `source_dataset` | UKPN `ukpn-capacity-heatmap` (967 primaries) + `ltds-table-3a-load-data-observed-transposed` (980 substations, firm capacity and peak, all filled); SPEN `distribution-capacity-heatmaps-spd` (390) and `-spm` (724 primaries + 147 BSPs); NGED `nged-network-capacity` (940 primaries + 242 BSPs, connected **and contracted** headroom) and `network-opportunity-map-headroom`; NPG `heatmapdatatable` (551 primaries, 78 BSPs, 41 GSPs); ENWL `enwl-pry/bsp-heatmap` (as now); SSEN LTDS tables May 2025 (`sepd/shepd_long_term_development_statement`, CKAN) | capacity on essentially every substation below 132 kV, each row saying what it means and how old it is; London from 1 % to full | 1 day |
+| **R3 Queue and forward view** | contracted-but-unbuilt connections and headroom by year to 2050; expose "room today" and "room in year N net of contracted" | NGED `demand-data` (2,015 projects > 1 MW, 993 contracted) and contracted headroom; UKPN `ukpn-ltds-table-6-interest-connections` (933) and `ukpn-dfes-network-headroom-report` (grid and primary, four scenarios to 2050 — the only UKPN source for grid substations); NPG `npg_ndp_demand_headroom` (every BSP and primary, 2026–2050); ENWL `ndp-pry-bsp-headroom`; SSEN Network Scenario Headroom Reports 2024–26 and `ssen-connections-reform-queue` | the difference between spare transformer rating and a connection offer | 1 day |
+| **R4 Grid supply points** | import limits and headroom at the transmission interface; replaces "unknown" on every transmission run | SSEN `technicallimits` (seasonal import limits per GSP); SPEN `gsp-overview` (technical import limits winter/summer, reinforcement dates); ENWL `enwl-gsp-heatmap` (connected, accepted, awaiting-assessment MW); NPG and NGED heatmap GSP rows; UKPN `ukpn-gsp-insights`. NESO publishes no demand headroom | a capacity number on the 275/400 kV layer for five of six companies | ½ day |
+| **R5 Availability map** | for a given size, list every substation with room (today, or in year N net of contracted), price each through the existing chain without solving (charges, losses, build cost, cable), rank by cost and carbon, solve the optimiser for the top few; the page gets "where can this connect" beside "what does this site cost" | the register | the deliverable the register exists for: a ranked list of connectable places with cost and carbon behind each | 1 day |
+| **R6 Re-check** | re-run `check_substation_register`, `check_connection_chain` (14 x 3) and `run_both_tiers` on the new register; records | — | nothing already built regresses | ½ day |
+
+Order: R1, R2, then R3 (the queue data is keyed by the names R2 brings in),
+R4 any time after R1, R5 only once R2 is in (a map of half the country is
+not a map). Minimum worth doing: R1 + R2.
+
+**Built 30 Oct 2026, all six steps.**
+- *R1* `scripts/fetch_register_sources.py`: 39 datasets from the six portals
+  (opendatasoft CSV exports, National Grid's and SSEN's CKAN), each stamped
+  with the portal's own modified date in `api/manifest.json`; unchanged
+  datasets are skipped. `build_substation_register.py --capacity-only` then
+  redoes the capacity layer over the register on disk in about a minute, so a
+  refresh is two commands. The name-and-location layer (OpenStreetMap, CIM
+  models, SSEN's locations) stays on the hand-pulled files.
+- *R2* `scripts/register_capacity.py`: every row carries `headroom_basis`,
+  `headroom_as_of`, `source_dataset`, and `demand_contracted_mw` /
+  `headroom_net_of_contracted_mw` where published (NGED, Northern Powergrid,
+  SSEN; accepted offers for UKPN and SP Energy Networks). Coverage of
+  substations with a published headroom (`capacity_coverage.csv`): primaries
+  76–100 % in every area (London 80 %, from 1 %); bulk supply points 50–100 %
+  except NGED's four areas (16–50 %: their location list carries 938 33 kV
+  switching stations, which publish nothing) and Northern Powergrid (61–68 %);
+  grid supply points 100 % in both SSEN areas and the North East, 57 % in
+  London, 0 in NGED's areas (they publish none). SSEN's Headroom Dashboard
+  (CKAN, March 2026 — found via the fork's survey of other projects on 30 Oct)
+  gives every SSEN primary, BSP and GSP with contracted demand, so SSEN is
+  100 % and no longer depends on the hand-pulled map export. Dates run from
+  March 2025 (UKPN's grid areas) to 30 Oct 2026 (ENWL's GSP heatmap); the
+  bulk of rows are April–October 2026.
+- *R3* `headroom_by_year.csv.gz` (278,040 rows: UKPN, Northern Powergrid, ENWL
+  and SSEN to 2050/51) and `connection_queue.csv` (3,362 rows: NGED's 611
+  contracted projects, 8.0 GW; SSEN's 849 substations with 6.0 GW contracted;
+  UKPN's offers by status; Northern Powergrid's budget/quoted/accepted).
+  `substations.with_year_headroom(year)` joins the forward view by id, name or
+  location. SSEN's "connections reform queue" turned out to be a generation
+  queue and is not used.
+- *R4* `grid_supply_points.csv`: 364 records, 363 located, 155 with a headroom,
+  146 with an import limit or firm capacity — SSEN (import limits for 35
+  Southern GSPs; N-1 nameplate minus peak elsewhere, derived and flagged),
+  Northern Powergrid (41, heatmap), ENWL (16, materiality headroom), SP Energy
+  Networks (7 of 98 with a technical limit set), UKPN (peak only), NGED
+  (location only). 161 of the 376 transmission-layer substations take the
+  nearest record's capacity within 3 km.
+- *R5* `optimisation/availability.py`, `scripts/availability_map.py`, and the
+  page's "Where could this size connect?" panel. First runs (central case,
+  flat load at the 1.43x ceiling, grid alone): **5 MW IT** — 70 to 374
+  substations with room in every area, cheapest £9.0–9.6 m/yr (£171/MWh);
+  **60 MW IT** (103 MW connection) — 51 substations in 8 areas, cheapest the
+  two SHEPD grid supply points with room (£103 m/yr) then Northern Powergrid's
+  GSPs and Yorkshire bulk points (£107 m); **150 MW IT** (257 MW, national
+  grid) — 6 substations with a known room (Bradford West, Elland, Creyke Beck,
+  East Claydon, Fleet, Ealing), £267–278 m/yr. In 2030 (central scenario)
+  only 4 substations keep room for 103 MW; net of contracted demand, 31. The
+  ranking by cost is nearly flat (±5 %): room, not price, is what separates
+  places.
+- *R6* `check_substation_register` 0 problems (8,423 substations). The both-ways
+  150 MW run is unchanged in substance: the local network is £6.5–11.5 m/yr
+  cheaper in all six areas (Brighton −9.41, Cardiff −6.46, Exeter −11.49,
+  London −7.29, Manchester −8.32, Nottingham −8.31). Chain check (14 areas x
+  3 sizes): 42/42 solved, all 21 checks pass; with the fuller register the
+  voltage now steps up in 7 runs (was 4: Inverness 5 MW 11->33 kV; Manchester,
+  Newcastle, Bangor, Norwich, Southampton and Brighton 60 MW 33->132 kV),
+  shortfalls are flagged in 19 runs (was 8) because far more substations now
+  publish a figure, and only 2 of 16 EHV runs are priced on a node (was 11),
+  as the name-match-only decision intends. Import price £134–149/MWh,
+  unchanged. Tests: `tests/test_register_capacity.py`,
+  `tests/test_availability.py`; the whole suite passes (572).
+- *Decision applied*: a 33/132 kV site takes a price node only where the
+  schedule's node was matched by name to its connection substation
+  (`substations.price_node_at`); otherwise the area figure. Place-name and
+  code placements are still built and reported, no longer used for pricing.
+
+Other projects doing the same thing (fork survey, 30 Oct 2026): the open-source
+`rhystheblob/gb-grid-map` (same six portals and dataset ids, normalised to the
+LTDS heatmap schema; no licence stated, so read for endpoints only), the
+commercial GB Grid Data (UKPN demand headroom 2 % in the public data as they
+read it — the Table 3a and scenario-report route here is the way round that)
+and GridCapacity API (19 UK sources), and Gailani and Taylor (2025) for
+industrial sites. None prices the connection or trades it against on-site
+assets; that layer is this model's own.
+
+Caveats that survive: "available capacity" is firm minus peak in most
+companies but net of contracted in National Grid's and Electricity North
+West's (hence `headroom_basis`); dates differ by company (NGED Sept 2025,
+SPEN June 2026, UKPN and ENWL Oct 2026, SSEN's own demand heatmaps 2023 —
+hence `headroom_as_of`); the forward headroom is the companies' scenario
+forecast, not a commitment; the published voltage rules still cap what one
+site can take at a substation with room.
 
 ## 2. Carbon is charged and cost is free
 

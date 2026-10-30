@@ -1281,6 +1281,54 @@ are kept but flagged; unlocated network nodes mostly carry no location price
 of a site's own costs a median 0-9 % of the band-4 capacity charge in nine areas,
 18-35 % in East England, Northern Powergrid and the South West.
 
+### The register's capacity layer, fetched by dataset id (30 Oct 2026)
+`scripts/fetch_register_sources.py` (R1) pulls every portal dataset below into
+`connection sources/3 DUoS/site-specific EHV charges/api/` and stamps each in
+`manifest.json` with the portal's own modified date; `scripts/register_capacity.py`
+(R2–R4) lays them over the builder's name-and-location layer
+(`build_substation_register.py --capacity-only` redoes just that, about a
+minute). Every substation row carries `headroom_basis` (what the figure is),
+`headroom_as_of` (the portal's date) and `source_dataset`. COST_PLAN §1.10.
+Decision of 30 Oct 2026: location plus headroom is the backbone; a name joins a
+company's datasets to its own site list only (site id first — functional
+location, mRID, substation number — then the normalised name at a compatible
+level, then the nearest row within 300 m at that level); a capacity row that
+matches nothing becomes a row of its own.
+
+| Company | Dataset (portal id) | Portal date | What it gives | Basis of `demand_headroom_mw` |
+|---|---|---|---|---|
+| UK Power Networks | `ukpn-capacity-heatmap` (967 primaries) | 2026-10-19 | firm capacity, maximum demand, available capacity, RAG, accepted offers | LTDS heatmap: firm minus maximum demand |
+| | `ltds-table-3a-load-data-observed-transposed` (980 substations, winter 2025/26 rows) | 2026-06-01 | firm capacity and observed peak, a grid site's 11 kV and 33 kV sides as separate rows | Table 3a: firm minus observed winter peak 2024/25 |
+| | `ukpn-grid-postcode-area` (177 grid sites, 158 with figures) | 2025-03-31 | winter/summer firm capacity, demand, RAG | firm minus demand |
+| | `ukpn-dfes-network-headroom-report` (demand rows only, 59,280) | 2026-10-19 | headroom MW by grid and primary substation, four scenarios, 2024–2050 | R3 table |
+| | `ukpn-ltds-table-6-interest-connections` (933) | 2026-09-21 | connection interest and offers by substation | R3 queue |
+| | `ukpn-gsp-insights` (58 GSPs) | 2026-09-10 | connection point peak and GB peak by year; no import limit | R4 (peak only) |
+| Northern Powergrid | `ltds-capacity-heatmap` (551 primaries, 78 BSPs, 41 GSPs) | 2026-05-29 | firm, maximum, **contracted**, available, RAG | LTDS heatmap; net of contracted derived |
+| | `npg_ndp_demand_headroom` (every BSP and primary) | 2026-04-24 | headroom MW 2026–2050, three scenarios | R3 table |
+| | `ltds-appendix-8` (476) | 2025-11-29 | interest in connections: budget, quoted, accepted demand kVA | R3 queue |
+| Electricity North West | `enwl-pry-heatmap` (377), `enwl-bsp-heatmap` (70) | 2026-10-29 | firm and non-firm demand headroom by substation number | capacity heatmap: firm demand headroom |
+| | `enwl-gsp-heatmap` (20) | 2026-10-30 | connected, accepted, materiality headroom, awaiting assessment MW | R4 |
+| | `ndp-pry-bsp-headroom` | 2026-06-16 | firm and non-firm headroom MVA by scenario and year to 2051 | R3 table |
+| SP Energy Networks | `distribution-capacity-heatmaps-spd` (390 primaries), `-spm` (724 primaries + 147 BSPs) | 2026-06-09 / 06-12 | firm, maximum, available, RAG, accepted offers | capacity heatmap: firm minus maximum demand (replaces the derived figure) |
+| | `gsp-overview` (98 GSP rows) | 2026-10-09 | technical import limits winter/summer where set (13 GSPs), reinforcement dates | R4 |
+| National Grid | `network-opportunity-map-headroom` (940 primaries, 242 BSPs) | 2026-04-02 | **connected and contracted** demand headroom MW, RAGs | Network Opportunity Map: headroom on connected demand; net of contracted published |
+| | `ltds-capacity-heatmap` (four areas, 1,182) | 2026-07-27 | firm, maximum, available | fills firm and maximum where the map leaves them blank |
+| | `demand-data` (2,015 projects > 1 MW; 993 contracted) | 2026-10-05 | substation, voltage, import kW, status, date | R3 queue |
+| SSEN | `generation-availability-and-network-capacity` / Headroom Dashboard Data (CKAN, no key; 819 primaries, 80 BSPs, 99 GSPs) | 2026-03-11 | coordinates, transformer nameplate ratings, observed and **contracted** demand (BESS separately), SSEN's estimated demand headroom (primaries and BSPs), RAG, constraint, reinforcement works and dates; the same figures sit behind SSEN's public ArcGIS "Centralised Network View" services (`services8.arcgis.com/euGIHHXuAe1iLVSR`, Jan 2026 layers) | Headroom Dashboard: SSEN's estimated demand headroom; GSP rows derived as N-1 nameplate minus maximum observed demand |
+| | heatmap export (May 2026; their map application) | 2026-05 | firm, maximum, available, contracted (Demands list) | second source: fills rows the dashboard lacks |
+| UK Power Networks | `ukpn-grid-supply-points` (58) | 2026 | the GSP list with functional locations; its point is the supply area's centroid, so the OpenStreetMap 275/400 kV site of that name is preferred | R4 (locations) |
+| | `technicallimits` (35 Southern GSPs) | 2026-04-02 | approved import and export limits, winter and summer | R4: limit minus the heatmap's maximum demand |
+| | `sepd` / `shepd_network_development_report`, Network Scenario Headroom Report 2026 | 2026-05-01 | winter demand headroom MVA 2027–2050 by scenario, grid reference, outstanding contracted demand | R3 table and queue |
+| | `ssen-connections-reform-queue` | 2026-10-29 | a generation queue (transmission entry capacity) — read, not used | — |
+
+The transmission layer (OpenStreetMap 275/400 kV substations) takes the capacity of the nearest
+grid-supply-point record within 3 km (`grid_supply_points.csv`): SSEN's import limits less peak,
+SP Energy Networks' import limits (no peak published, so a limit without a headroom), ENWL's
+materiality headroom, Northern Powergrid's heatmap GSP rows; UK Power Networks publish a peak and
+no limit, National Grid nothing at GSP level. NESO publishes no demand headroom. The "central"
+scenario for the R3 view is each company's own: Holistic Transition (UKPN, Northern Powergrid),
+Best View (ENWL), HT (SSEN) — a choice, recorded in ASSUMPTIONS.
+
 ### Site connection: cable route, spare capacity, site-specific EHV charges (29 Oct 2026)
 `substations.py`, `ehv_charges.py`, `scripts/calibrate_ehv_charges.py` -> `ehv_calibration.csv`.
 COST_PLAN §1.9 parts B, C and D, on the substation register above.
@@ -1291,7 +1339,7 @@ COST_PLAN §1.9 parts B, C and D, on the substation register above.
 | Cable route | straight line x **1.3** (`ROUTE_FACTOR_ASSUMED`) | **assumed** | no UK route-to-straight-line figure found (COST_PLAN §1.9); replaces the flat 2 km |
 | Spare capacity | the substation's published demand headroom against the connection; a shortfall is flagged with both routes round it (next substation with room; reinforcement, which a demand customer pays only above £1,720/kVA) | transcribed | the companies' capacity heatmaps; Ofgem Access SCR final decision (3 May 2022) |
 | EDCM formula | capacity p/kVA/day = local charge 1 x 100/365 + A; super-red p/kWh = remote charge 1 / super-red hours x 100 + B; fixed = band residual + sole-use charge | transcribed | DCUSA Schedule 18 v17.5 §6.3, §19.4-19.6 (Schedule 17 the same with the FCP charge 1) |
-| Nodal prices | local and remote charge 1 of the located node nearest the site at its voltage | transcribed | each area's 2026/27 "Nodal prices" sheet, via the register |
+| Nodal prices | local and remote charge 1 of the node matched **by name to the connection substation itself** (`substations.price_node_at`, since 30 Oct 2026); where no node was, the area figure. Until 30 Oct the nearest located node of any placement | transcribed | each area's 2026/27 "Nodal prices" sheet, via the register |
 | A, B (area-wide parts, unpublished) | NGED: median over listed sites tied to their nodes of capacity - local/365 (33 kV: South Wales 2.76, West Midlands 1.80, East Midlands 1.12, South West 0.80 p/kVA/day; quartiles give low/high); other areas: median listed capacity less the area's node median (within 0.1-0.4 p/kVA/day of the paired method on NGED) | **derived** | each area's Annex 2 import sites and nodal prices |
 | Check | Maxwell House Data Centre (East Midlands): predicted £4,088/MW/yr against £4,855 published; Vantage (South Wales, placed at Imperial Park): £10,329 against £12,008; both inside the area's quartile range. Cardiff Data Centre's location is unknown | — | NGED Annex 2, 2026/27 |
 | Not applied | SSEN's two areas charged outside the EDCM for 2026/27: listed-site medians kept | transcribed | SSEN request to Ofgem, 24 Jan 2025, and direction |

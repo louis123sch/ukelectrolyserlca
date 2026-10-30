@@ -75,18 +75,34 @@ def test_the_rule_is_the_floor_not_overruled_by_a_primary_with_room():
     assert S.voltage_with_room(*MANCHESTER, "33 kV", 5.0, region=3)[0] == "33 kV"
 
 
-def test_too_few_published_headrooms_leave_the_rule_standing():
-    """London: 2 of 117 bulk supply points publish a headroom; Norwich 3 of 31."""
+def test_the_half_published_threshold_and_what_the_capacity_layer_changed():
+    """Until 30 Oct 2026 London (2 of 117 bulk supply points publishing) and
+    Norwich (3 of 31) kept the rule for want of data. With the companies'
+    standard heatmaps in, London's bulk points publish and three have room for
+    103 MW, so it keeps 33 kV *with room*; Norwich's all publish and none has
+    room, so it steps up to 132 kV. The threshold itself is checked wherever an
+    area is still under it."""
     v, why = S.voltage_with_room(*LONDON, "33 kV", 102.9, region=13)
-    assert v == "33 kV" and "under the 50%" in why
-    assert S.voltage_with_room(*NORWICH, "33 kV", 102.9, region=10)[0] == "33 kV"
+    assert v == "33 kV" and "have room for 103 MW" in why
+    v, why = S.voltage_with_room(*NORWICH, "33 kV", 102.9, region=10)
+    assert v == "132 kV" and "stepped up from 33 kV" in why
+    for lat, lon, region in ((50.72, -3.53, 11), (51.4816, -3.1791, 7), (52.489, -1.898, 8)):
+        c = S.candidates(lat, lon, "33 kV", region)
+        share = c.demand_headroom_mw.notna().mean()
+        v, why = S.voltage_with_room(lat, lon, "33 kV", 102.9, region)
+        if share < S.MIN_PUBLISHED_SHARE:
+            assert v == "33 kV" and "under the 50%" in why
+        else:
+            assert "under the 50%" not in why
 
 
 def test_scotland_tops_out_at_33kv_and_reaches_the_grid_supply_point():
     v, why = S.voltage_with_room(*HIGHLAND, "33 kV", 102.9, region=1)
     assert v == "33 kV"
     p = S.connection_point(*HIGHLAND, "33 kV", 102.9, region=1)
-    assert p["found"] and p["level"] == "gsp" and p["headroom_status"] == "unknown"
+    assert p["found"] and p["level"] == "gsp"
+    # since 30 Oct 2026 SSEN's grid supply points carry a derived N-1 figure (Headroom Dashboard)
+    assert p["headroom_status"] in ("room", "shortfall") and "N-1 nameplate" in p["headroom_basis"]
     assert S.levels_for("33 kV", 1) == ("bulk", "gsp") and S.levels_for("33 kV", 3) == ("bulk",)
 
 
@@ -119,9 +135,10 @@ def test_ukpn_132_11kv_grid_sites_are_not_33kv_points():
     assert len(g) and (g.level_std == "gsp").all()
     assert (u[u.level == "132kV Switching Station"].level_std == "gsp").all()
     assert (u[u.level == "Grid Substation"].level_std == "bulk").all()
-    # every 132/11 kV grid site's 11 kV board is also a primary
+    # every 132/11 kV grid site's 11 kV board is also a primary (a handful of
+    # boards are merged with a primary of the same name by the capacity layer)
     boards = u[(u.level_std == "primary") & u.source.str.contains("132/11", na=False)]
-    assert set(boards.name) == set(g.name)
+    assert len(set(boards.name) & set(g.name)) >= 0.95 * len(g)
     for v in ("33 kV",):
         c = S.candidates(51.5074, -0.1278, v, region=13)
         assert not c.name.str.contains(r"\b11KV$", na=False).any()
@@ -135,16 +152,33 @@ def test_the_connection_ceiling_is_one_over_the_fes_load_factor():
     assert "set by the caller" in sites.max_connection_mw(100.0, 1.5)[1]
 
 
+def _named_node(region=9, vkv=33.0):
+    """A 33 kV price node matched by name to its substation, in the East Midlands."""
+    n = S.price_nodes()
+    n = n[(n.kind == "network") & n.how.isin(["name", "group"]) & (n.voltage_kv == vkv) & (n.region == region)]
+    for r in n.itertuples():
+        if S.price_node_at(r.lat, r.lon, region, vkv) is not None:
+            return r
+    pytest.skip("no named node in the register")
+
+
 def test_site_specific_charge_is_node_price_plus_area_addon():
-    s = E.site_charges(*MAXWELL_HOUSE, 9, "33 kV", "EHV4")
-    assert s["how"] == "site-specific" and s["node"]["local_GBP_per_kVA"] == 0.0
+    """Since 30 Oct 2026 a site takes a node's price only where the schedule's
+    node was matched by name to the substation it connects to; Maxwell House's
+    nearest bulk supply point has no such node, so it takes the area figure."""
+    m = E.site_charges(*MAXWELL_HOUSE, 9, "33 kV", "EHV4")
+    assert m["how"] == "area median" and "30 Oct 2026" in m["note"]
+    r = _named_node()
+    s = E.site_charges(r.lat, r.lon, 9, "33 kV", "EHV4")
+    assert s["how"] == "site-specific" and s["node"]["node_id"] == r.node_id
+    assert s["node"]["local_GBP_per_kVA"] == pytest.approx(r.local_GBP_per_kVA)
     a, b, _ = E.addon(9, 33.0, "central")
-    assert s["capacity_p_per_kva_day"] == pytest.approx(a)                   # local 0 -> the add-on alone
-    assert s["super_red_p_per_kwh"] == pytest.approx(b)
-    # published 1.33 p/kVA/day (NGED East Midlands Annex 2) within the area's range
-    lo = E.site_charges(*MAXWELL_HOUSE, 9, "33 kV", "EHV4", "low")["capacity_p_per_kva_day"]
-    hi = E.site_charges(*MAXWELL_HOUSE, 9, "33 kV", "EHV4", "high")["capacity_p_per_kva_day"]
-    assert lo <= 1.33 <= hi
+    assert s["capacity_p_per_kva_day"] == pytest.approx(max(0.0, r.local_GBP_per_kVA * 100 / 365 + a))
+    assert s["super_red_p_per_kwh"] == pytest.approx(max(0.0, r.remote_GBP_per_kVA / s["super_red_hours"] * 100 + b))
+    # the central figure sits inside the area's quartile range
+    lo = E.site_charges(r.lat, r.lon, 9, "33 kV", "EHV4", "low")["capacity_p_per_kva_day"]
+    hi = E.site_charges(r.lat, r.lon, 9, "33 kV", "EHV4", "high")["capacity_p_per_kva_day"]
+    assert lo <= s["capacity_p_per_kva_day"] <= hi
 
 
 def test_ssen_areas_keep_the_listed_site_median():
@@ -156,7 +190,8 @@ def test_ssen_areas_keep_the_listed_site_median():
 def test_duos_charges_switch_to_site_specific_when_a_site_is_given():
     import pandas as pd
     idx = pd.date_range("2027-01-04", periods=48, freq="30min")
+    r = _named_node()
     area = D.charges(idx, 9, "EHV4")
-    site = D.charges(idx, 9, "EHV4", site=MAXWELL_HOUSE, connection_voltage="33 kV")
+    site = D.charges(idx, 9, "EHV4", site=(r.lat, r.lon), connection_voltage="33 kV")
     assert "site-specific" in site["tariff"] and "site-specific" not in area["tariff"]
     assert site["fixed_GBP_per_year"] == area["fixed_GBP_per_year"]          # the fixed charge keeps the band quartiles
