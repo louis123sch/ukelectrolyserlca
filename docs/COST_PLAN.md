@@ -34,7 +34,7 @@ Effort: XS < 1 h, S ≈ half a day, M ≈ 1–2 days, L > 2 days.
 | 1.9 E Build prices by area | done 29 Oct — eleven areas on their own 2026 statements, POA rows on the publishers' median (stand-in), NGED's substations kept and flagged low | `connection_cost.py`, `tests/test_connection_prices_by_area.py` |
 | 1.9 H Voltage rule and ceiling | done 29 Oct — published rule as floor, area's substation capacities above it; ceiling 1 / 0.70 (FES load factor) instead of 1.5 assumed | `substations.voltage_with_room`, `network_charges.connection_voltage(site=)`, `sites.py` |
 | 1.9 G Chain check | run 29 Oct — 14 areas x 3 sizes, 42/42 solved, 21 checks pass; found and fixed the band floor sitting on the boundary (one kVA above now). Re-run 30 Oct on the complete register: 42/42, 21 pass | `scripts/check_connection_chain.py`, `optimisation_outputs/connection_chain.csv` |
-| 1.11 S1–S6 The optimiser chooses the grid, voltage and band | built 30 Oct — one switch per price list (binaries in HiGHS), one import series per voltage group, room / cap / single modes; both-ways check passes in six areas (switched = cheaper forced run to 1e-5 on the two lists, cheaper again with every list); chain re-run in every mode; solve time ~3.5x on the June week for London, 1.7-1.9x across the 14-area chain; chain on the final code: single and cap 42/42, room 37/42 with Inverness (all sizes) and Cardiff (60, 150 MW) stopping on "no room found nearby" | `connection_options.py`, `dc_model.ConnectionOption`, `dc_inputs.with_connection_options`, `scripts/run_both_tiers.py`, `scripts/time_connection_modes.py`, page 2 |
+| 1.11 S1–S6 The optimiser chooses the grid, voltage and band | built 30 Oct — one switch per price list (binaries in HiGHS), one import series per voltage group, room / cap / single modes; both-ways check passes in six areas (switched = cheaper forced run to 1e-5 on the two lists, cheaper again with every list); chain re-run in every mode; solve time ~3.5x on the June week for London, 1.7-1.9x across the 14-area chain, but ~10x on the full year (batch only until the lists are pruned); chain on the final code: single and cap 42/42, room 37/42 with Inverness (all sizes) and Cardiff (60, 150 MW) stopping on "no room found nearby" | `connection_options.py`, `dc_model.ConnectionOption`, `dc_inputs.with_connection_options`, `scripts/run_both_tiers.py`, `scripts/time_connection_modes.py`, page 2 |
 | 1.10 R1–R6 Live capacity register and availability map | built 30 Oct — 39 portal datasets fetched by id and dated; every company's standard capacity data with basis and date on each row (primaries 76–100 %, London 1 % -> 80 %, SSEN 100 %); contracted demand, headroom to 2050, the connection queue, 364 grid-supply-point records; "where can this size connect" ranked by cost and carbon; chain and both-ways re-run | `scripts/fetch_register_sources.py`, `scripts/register_capacity.py`, `optimisation/availability.py`, `scripts/availability_map.py`, page 2 |
 
 The rest of §1–§5 is open. The table below describes the state before these.
@@ -650,10 +650,24 @@ machine): single 42 of 42 solved, 28 s median per frontier; cap 42 of 42,
 1.7x, and the other five (Inverness at every size, Cardiff at 60 and 150 MW)
 stop with the explicit "no room found nearby" answer instead of a connection.
 Full year (London 150 MW IT, hourly, three-point frontier): one fixed list
-2,252 s over eight solves (mean 282 s, max 1,271 s); the room and cap
-frontiers were still running when this was committed and write their rows to
-`optimisation_outputs/connection_mode_timing_room.csv` and `_cap.csv`
-(`scripts/time_connection_modes.py --modes room --out ...`).
+2,252 s over eight solves (mean 282 s, max 1,271 s); cap mode with 11 lists
+22,911 s over eight solves (mean 2,864 s, max 4,606 s), about 10x, on a
+machine also running the chain and the test suite for part of that time.
+**So the full year fails the 5x test the week passed**: the binaries cost
+little on 336 steps and a great deal on 8,676. The week and the chain stand
+as the page's interactive use; a full-year run in the room or cap mode is a
+batch job until the lists are pruned (COST_PLAN *Open* vii: choose the list
+on the week or on the relaxed problem, then fix it for the year). The answer
+itself argues for the switch: the cheapest full year is £141.24 m on
+132 kV EHV4 at 157.6 MW against £146.39 m on the fixed national-grid list at
+240 MW, 3.5 % less. Room mode with 10 lists: 22,963 s, £147.55 m on the
+national-grid list at Ealing, 240 MW — dearer than the fixed list because
+London's twelve nearer 275/400 kV substations publish no figure, so rule (b)
+skips them for Ealing (15.2 km route against 4.4 km, a longer cable in money
+and carbon), and the 132 kV options are capped by their published room. Rows
+in `optimisation_outputs/connection_mode_timing.csv` (the room and cap rows
+rebuilt from the run logs on 31 Oct; their min-carbon and knee columns were
+lost to a clean-up slip and are blank).
 
 *Added the same day, at the user's request: the register update check.*
 A run never fetches from the portals; it reads the register on disk. So each
@@ -704,7 +718,10 @@ and earliest-connection years on the options, add a "reinforced" option at
 the nearest substation priced at the high-cost cap above today's room and
 capped at the transformer rating (a proxy), and later a two-period run; a
 flexible (curtailable) connection once a company publishes its curtailment
-hours.
+hours. (vii) The full year is ~10x slower with a choice of lists (S5, 31 Oct):
+prune before the year — choose the list on the week or on the relaxed problem
+(switches continuous), keep the two or three cheapest, then fix for the year;
+or carry the week's choice into the page's full-year run.
 
 ## 2. Carbon is charged and cost is free
 

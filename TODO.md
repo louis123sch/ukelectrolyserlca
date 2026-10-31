@@ -250,7 +250,14 @@ No public source found. Revisit if the item becomes load-bearing in a result.
       the two lists; cheaper again with every list), chain re-run in every
       mode on the final code (single and cap 42/42; room 37/42, the other five
       stop on "no room found nearby"), solve time ~3.5x on the June week for
-      London and 1.7-1.9x across the chain. **Still open:** the national
+      London and 1.7-1.9x across the chain, but ~10x on the full year (cap
+      mode, 11 lists: 6.4 h for a three-point frontier against 38 min fixed), so
+      a full-year run with a choice of lists is a batch job until the lists are
+      pruned (pick the list on the week or the relaxed problem, then fix it for
+      the year). The year's own answer favours the switch in cap mode: £141.24 m
+      on 132 kV against £146.39 m on the fixed national-grid list; in room mode
+      London lands at Ealing (£147.55 m) because its twelve nearer national-grid
+      substations publish no figure. **Still open:** the national
       grid option starts at the company's top (a lower floor is one line);
       11 kV vs above still by the published rule; a one-week window makes the
       grid look optional (headlines from full-year runs only); future-year and
