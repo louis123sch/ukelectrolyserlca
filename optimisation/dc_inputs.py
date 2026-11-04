@@ -108,7 +108,8 @@ def build_series(site, start: str, end: str, size_mw_it: float,
                  ccl_under_cca: bool | None = None,
                  shortfall_route: str = "upgrade",
                  connection_mode: str | None = None,
-                 grid: bool = True) -> dc_model.Series:
+                 grid: bool = True,
+                 network_charges_scale: float | None = None) -> dc_model.Series:
     """Aligned half-hourly inputs for one site and window.
 
     ``site`` is anything ``sites.get`` accepts — a ``Site``, a ``(lat, lon)``
@@ -143,6 +144,15 @@ def build_series(site, start: str, end: str, size_mw_it: float,
     reach has room — it raises ``connection_options.ConnectionUnavailable``
     rather than inventing a connection; ``grid=False`` (an islanded
     architecture) skips the options altogether.
+
+    ``network_charges_scale`` multiplies the yearly network charges for a sweep
+    (``optimisation/sensitivity.py``; the supervisor's +/-50 % test of 4 Nov
+    2026): the per-MW charges (national locational and local capacity), the
+    fixed charges (national residual and local fixed) and the local network's
+    per-MWh unit rates inside the import price. The balancing charge, losses
+    and levies are not scaled. It sits here, not in ``build_tech``, because the
+    per-MWh part is in the series; the meta then carries every scaled figure,
+    so ``build_tech`` cannot apply half of it. None keeps the published charges.
     """
     from optimisation import connection_options as CO
     from optimisation import network_charges as nc
@@ -153,6 +163,9 @@ def build_series(site, start: str, end: str, size_mw_it: float,
     if mode_requested not in CO.MODES:
         raise ValueError(f"connection_mode must be one of {CO.MODES}, got {connection_mode!r}")
     mode = mode_requested
+    ncs = 1.0 if network_charges_scale is None else float(network_charges_scale)
+    if not (np.isfinite(ncs) and ncs >= 0.0):
+        raise ValueError(f"network_charges_scale must be a non-negative number, got {network_charges_scale!r}")
 
     # One default PUE for every entry point that does not choose its own:
     # Zhang's, the facility the inventory describes. It used to be 1.15 here,
@@ -224,8 +237,9 @@ def build_series(site, start: str, end: str, size_mw_it: float,
     # until 28 Oct 2026; losses were the carbon side's ecoinvent factor.
     loss = levies.loss_series(index, conn_voltage, site.carbon_api_region).to_numpy()
     lev = levies.import_levies(index, under_cca=ccl_under_cca)
+    duos_ref = charges["duos_GBP_per_MWh"].to_numpy() * ncs
     price = ((df["price_GBP_per_MWh"].to_numpy() + charges["bsuos_GBP_per_MWh"].to_numpy()) * loss
-             + charges["duos_GBP_per_MWh"].to_numpy()
+             + duos_ref
              + lev["levies_GBP_per_MWh"].to_numpy())
     if T.active():
         T.cost("cost.wholesale.mean_per_MWh", float(df["price_GBP_per_MWh"].mean()), "GBP per MWh",
@@ -233,7 +247,7 @@ def build_series(site, start: str, end: str, size_mw_it: float,
                cites=[("elexon_market_index", f"provider APXMIDP, half-hourly, {start} to {end}")],
                note="Real prices for the solved window, not a forecast")
         _trace_price("cost.import_price.reference", df["price_GBP_per_MWh"].to_numpy(),
-                     charges["bsuos_GBP_per_MWh"].to_numpy(), loss, charges["duos_GBP_per_MWh"].to_numpy(),
+                     charges["bsuos_GBP_per_MWh"].to_numpy(), loss, duos_ref,
                      lev["levies_GBP_per_MWh"].to_numpy(), price,
                      f"cost.losses.r{site.carbon_api_region}.{conn_voltage}", charges["components"]["trace"]["duos"],
                      f"The import price on the single price list the load's size gives ({conn_voltage}, {tdr_band})")
@@ -258,19 +272,20 @@ def build_series(site, start: str, end: str, size_mw_it: float,
             for g in sorted({o["group"] for o in options}):
                 rep = CO.representative(options, g, load_mw)
                 loss_g = levies.loss_series(index, g, site.carbon_api_region).to_numpy()
-                price_g = (wholesale_plus_bsuos * loss_g + duos_by_key[rep["key"]].to_numpy()
+                duos_g = duos_by_key[rep["key"]].to_numpy() * ncs
+                price_g = (wholesale_plus_bsuos * loss_g + duos_g
                            + lev["levies_GBP_per_MWh"].to_numpy())
                 if T.active():
                     _trace_price(f"cost.import_price.group.{g}", df["price_GBP_per_MWh"].to_numpy(),
                                  charges["bsuos_GBP_per_MWh"].to_numpy(), loss_g,
-                                 duos_by_key[rep["key"]].to_numpy(), lev["levies_GBP_per_MWh"].to_numpy(), price_g,
+                                 duos_g, lev["levies_GBP_per_MWh"].to_numpy(), price_g,
                                  f"cost.losses.r{site.carbon_api_region}.{g}", rep["network_charges"]["trace"]["duos"],
                                  f"The import price every {g} price list pays: unit rates of {rep['key']}")
                 gwp_g = grid_lca.delivered(df["grid_generation_kgco2e_per_kwh"].to_numpy(), rep["delivery_voltage"])
                 groups[g] = {"price_per_mwh": price_g, "gwp_per_mwh": gwp_g * 1000.0,
                              "representative": rep["key"], "delivery_voltage": rep["delivery_voltage"],
                              "loss_gross_up_mean": float(np.mean(loss_g)),
-                             "duos_mean_GBP_per_MWh": float(duos_by_key[rep["key"]].mean()),
+                             "duos_mean_GBP_per_MWh": float(np.mean(duos_g)),
                              "price_mean_GBP_per_MWh": float(np.mean(price_g)),
                              "gwp_mean_kgco2e_per_kwh": float(np.mean(gwp_g))}
         if len(options) == 1:
@@ -318,11 +333,12 @@ def build_series(site, start: str, end: str, size_mw_it: float,
         grid_groups=({g: {"price_per_mwh": d["price_per_mwh"], "gwp_per_mwh": d["gwp_per_mwh"]}
                       for g, d in groups.items()} if len(options) > 1 else None),
     )
-    meta["network_charges"] = charges["components"]
+    meta["network_charges"] = _scaled_network_charges(charges["components"], ncs)
+    meta["network_charges_scale"] = ncs
     meta["levies"] = {**lev["components"], "loss_gross_up_mean": float(np.mean(loss)),
                       "connection_voltage": conn_voltage}
-    meta["capacity_GBP_per_MW_year"] = charges["capacity_GBP_per_MW_year"]
-    meta["fixed_GBP_per_year"] = charges["fixed_GBP_per_year"]
+    meta["capacity_GBP_per_MW_year"] = charges["capacity_GBP_per_MW_year"] * ncs
+    meta["fixed_GBP_per_year"] = charges["fixed_GBP_per_year"] * ncs
     meta["tdr_band"] = tdr_band
     meta["tdr_band_note"] = tdr_note
     # With more than one option the limit and floor the callers hand the LP
@@ -340,7 +356,7 @@ def build_series(site, start: str, end: str, size_mw_it: float,
                                     "user (substation picked)" if pinned else
                                     "optimiser" if len(options) > 1 else
                                     "rule")
-    meta["connection_options"] = [_option_record(o) for o in options]
+    meta["connection_options"] = [_option_record(o, ncs) for o in options]
     meta["connection_options_dropped"] = [{k: (None if isinstance(v, float) and not np.isfinite(v) else v)
                                            for k, v in d.items()} for d in dropped]
     meta["connection_options_note"] = option_note
@@ -391,7 +407,17 @@ def _trace_price(key, wholesale, bsuos, loss, duos, levies, price, loss_key, duo
                 "the half-hourly series; the map shows means")
 
 
-def _option_record(o: dict) -> dict:
+def _scaled_network_charges(components: dict, scale: float) -> dict:
+    """The charge breakdown at ``build_series``'s ``network_charges_scale``. The
+    balancing charge is not a network charge and stays as it is."""
+    if scale == 1.0:
+        return components
+    keys = ("tnuos_locational_GBP_per_MW_year", "duos_capacity_GBP_per_MW_year", "tnuos_tdr_GBP_per_year",
+            "duos_fixed_GBP_per_year", "duos_mean_GBP_per_MWh")
+    return {**components, **{k: components[k] * scale for k in keys}}
+
+
+def _option_record(o: dict, network_charges_scale: float = 1.0) -> dict:
     """One connection option as plain values for the meta (JSON-safe; no series)."""
     p = o["point"]
     return {
@@ -404,8 +430,9 @@ def _option_record(o: dict) -> dict:
         "headroom_basis": p.get("headroom_basis"), "headroom_as_of": p.get("headroom_as_of"),
         "contracted_mw": p.get("contracted_mw"), "room_net_of_contracted_mw": p.get("room_net_of_contracted_mw"),
         "skipped": list(p.get("skipped") or []), "point_note": p.get("note", ""),
-        "capacity_GBP_per_MW_year": o["capacity_GBP_per_MW_year"], "fixed_GBP_per_year": o["fixed_GBP_per_year"],
-        "network_charges": o["network_charges"],
+        "capacity_GBP_per_MW_year": o["capacity_GBP_per_MW_year"] * network_charges_scale,
+        "fixed_GBP_per_year": o["fixed_GBP_per_year"] * network_charges_scale,
+        "network_charges": _scaled_network_charges(o["network_charges"], network_charges_scale),
     }
 
 
@@ -528,7 +555,9 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
                batt_tx_x_eff: float | None = None,
                fc_tx_x_eff: float | None = None,
                fc_tx_energised: bool | None = None,
-               cutoff: str | None = None) -> dc_model.Tech:
+               cutoff: str | None = None,
+               connection_build_scale: float | None = None,
+               cost_cutoff: str | None = None) -> dc_model.Tech:
     """Resolve every coefficient the LP needs. Touches Brightway only via caches.
 
     ``cutoff`` is the cut-off register's seam (``optimiser_lca/exclusions.py``,
@@ -608,6 +637,13 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
     count; the container count rescales only the container's share of the BoP
     carbon, which ``fuel_cell.decompose`` scores separately, so no inventory is
     rebuilt.
+
+    ``connection_build_scale`` multiplies the grid connection's one-off build
+    cost for a sweep (the annuity on the substation, cable and switchgear from
+    ``connection_cost``, per MW and fixed, on every price list). The carbon of
+    the connection is not touched. The yearly network charges have their own
+    knob, ``build_series(network_charges_scale=)``, which ``labels`` also
+    records from the meta. None keeps the published prices.
     """
     # Validated before anything is loaded, so a bad sweep value fails at once
     # rather than after the caches (and Brightway) have been read.
@@ -618,6 +654,9 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
                     ("fc_kw_per_container", fc_kw_per_container)):
         if v is not None and not (np.isfinite(v) and v > 0):
             raise ValueError(f"{name} must be a positive number, got {v!r}")
+    build_scale = 1.0 if connection_build_scale is None else float(connection_build_scale)
+    if not (np.isfinite(build_scale) and build_scale >= 0.0):
+        raise ValueError(f"connection_build_scale must be a non-negative number, got {connection_build_scale!r}")
     if batt_usable_fraction is not None and not 0.5 <= batt_usable_fraction <= 1.0:
         raise ValueError(f"batt_usable_fraction must be in [0.5, 1.0], "
                          f"got {batt_usable_fraction!r}")
@@ -672,6 +711,21 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
     crf_e = T.cost(f"{ek}.crf", batt.capital_recovery_factor(rate_e, float(ec.lifetime_years)), "per year",
                    "Capital recovery factor over the plant life", uses=["cost.electrolyser.discount_rate",
                                                                         f"{ek}.lifetime_years"])
+    # SOEC's heat in the gas_boiler scenario is bought fuel. In electric_boiler it
+    # is already in kwh_per_kg, paid at the hour's price; other types pass neither.
+    heat_gbp_per_kg, heat_uses = 0.0, []
+    heat_gas_kwh = ely.gas_boiler_fuel_kwh_per_kg(ely_row)
+    if heat_gas_kwh:
+        fuel = T.cost(f"{ek}.heat_fuel_kwh_per_kg", heat_gas_kwh, "kWh of gas (HHV) per kg H2",
+                      "Gas burned for the external heat", grade="derived",
+                      cites=[("element_energy_2018", "p. 95, auxiliary boiler efficiency 95 % (HHV)")],
+                      inputs={"boiler_efficiency": ely.GAS_BOILER_EFFICIENCY})
+        gas = T.cost("cost.gas_price_per_MWh", ely.LARGE_SITE_GAS_GBP_PER_MWH, "GBP per MWh (HHV)",
+                     "Gas delivered to a large site, including the levy, 2025", grade="transcribed",
+                     cites=[("desnz_nondomestic_prices", "table 3.4.2, annual, 2025, gas, large, 4.149 p/kWh")])
+        heat_gbp_per_kg = T.cost(f"{ek}.heat_per_kg", fuel * gas / 1000.0, "GBP per kg H2", "Bought heat per kg made",
+                                 uses=[f"{ek}.heat_fuel_kwh_per_kg", "cost.gas_price_per_MWh"])
+        heat_uses = [f"{ek}.heat_per_kg"]
 
     # grid: the HH locational tariff, split out to be charged on Triad demand
     tnuos_hh = float((meta.get("network_charges") or {}).get("tnuos_locational_GBP_per_MW_year", 0.0))
@@ -684,6 +738,8 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
                                             cost_case,
                                             connection_voltage=meta.get("connection_voltage"),
                                             route_km=(meta.get("connection_site") or {}).get("route_km"))
+    conn = {**conn, "per_MW_year_GBP": conn["per_MW_year_GBP"] * build_scale,
+            "fixed_per_year_GBP": conn["fixed_per_year_GBP"] * build_scale}
 
     # tank
     tank_row = h2s.traced(next(r for r in h2s.decompose() if r["design"] == tank_design))
@@ -945,19 +1001,20 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
         cost_solar=cstep("cost_solar", gen_cost("solar_pv"), "GBP per MWp per year", "Solar PV, per MWp built",
                          ["cost.solar_pv.annual_per_MWp"]),
         cost_batt_p=cstep("cost_batt_p", bcost["power_GBP_per_MW_year"], "GBP per MW per year",
-                          "Battery power conversion, per MW", ["cost.battery.power_per_kW", "cost.battery.annual_factor"]),
+                          "Battery power conversion, per MW", ["cost.battery.power_per_kW", "cost.battery.crf",
+                                                               "cost.battery.fixed_opex_per_kW_year"]),
         cost_batt_e=cstep("cost_batt_e", bcost["energy_GBP_per_MWh_year"], "GBP per MWh per year",
-                          "Battery energy capacity, per MWh", ["cost.battery.energy_per_kWh",
-                                                               "cost.battery.annual_factor"]),
+                          "Battery energy capacity, per MWh", ["cost.battery.energy_per_kWh", "cost.battery.crf",
+                                                               "cost.battery.fixed_opex_per_kWh_year"]),
         cost_ely=cstep("cost_ely", (float(ec.capex_GBP_per_kWe) * 1000.0 * (crf_e + float(ec.fixed_opex_frac))
                                     * stack_share), "GBP per MW per year",
                        f"{ely_tech.split()[0]} electrolyser, per MW of cap_ely: capital recovery and fixed opex "
                        "on the stack's share of the input", [f"{ek}.capex_per_kWe", f"{ek}.crf", f"{ek}.fixed_opex_frac",
                                                               "electrolyser.stack_share"]),
-        # NESO's variable opex: stack replacement and water, per kg made
-        cost_ely_variable_per_kg=cstep("cost_ely_variable_per_kg", float(ec.variable_opex_GBP_per_kg),
-                                       "GBP per kg H2", "Electrolyser stacks and water, per kg made",
-                                       [f"{ek}.variable_opex_per_kg"]),
+        # Stack replacement and water per kg made, and SOEC's gas-raised heat
+        cost_ely_variable_per_kg=cstep("cost_ely_variable_per_kg", float(ec.variable_opex_GBP_per_kg) + heat_gbp_per_kg,
+                                       "GBP per kg H2", "Electrolyser stacks, water and bought heat, per kg made",
+                                       [f"{ek}.variable_opex_per_kg", *heat_uses]),
         cost_tank=cstep("cost_tank", float(tkc.annual_GBP_per_kg_year), "GBP per kg of capacity per year",
                         "Hydrogen tank, per kg it holds", ["cost.h2_tank.annual_per_kg"]),
         cost_fc=cstep("cost_fc", float(fcr.annual_GBP_per_MW_year), "GBP per MW per year",
@@ -995,6 +1052,10 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
         tank_leakage_per_hour=step("tank_leakage_per_hour", tank_row["leakage_frac_per_hour"],
                                    "fraction of stock per hour", "Tank standing loss",
                                    [f"tank.{tank_design}.leakage_per_hour"]),
+        tank_usable_fraction=step("tank_usable_fraction", h2s.usable_fraction(tank_design), "fraction of capacity",
+                                  "Share of the tank the fuel cell can draw, above its minimum feed pressure",
+                                  inputs={"min_pressure_bar": h2s.TANK_MIN_PRESSURE_BAR}, grade="derived",
+                                  source="Marocco et al. 2021, Table 5: 3 bar minimum"),
         batt_rte=batt.ROUND_TRIP_EFFICIENCY,
         batt_leakage_per_hour=batt.STANDING_LOSS_PER_HOUR,
         fc_kg_h2_per_mwh=d["h2_kg_per_MWh"],
@@ -1031,6 +1092,8 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
                 "wind_life_extension": wind_life_extension or ren.WIND_LIFE_EXTENSION,
                 "fc_stack_basis": fc_stack_basis or fc.STACK_BASIS,
                 "batt_cell_basis": batt_cell_basis or batt.CELL_BASIS,
+                "connection_build_scale": build_scale,
+                "network_charges_scale": float(meta.get("network_charges_scale", 1.0)),
                 "green_h2_grid_share": (
                     h2_prices._resolve_grid_share(green_h2_grid_share)
                     if "green" in (h2_colour, h2_colour_2) else None)},
@@ -1059,7 +1122,14 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
         tech, batt_standing_loss_per_hour=batt_standing_loss_per_hour,
         tank_leakage_per_hour=tank_leakage_per_hour)
     tech = with_cutoff(tech, cutoff)
-    return with_connection_options(tech, meta, sites.get(site).carbon_api_region, cost_case, tnuos_hh)
+    if cost_cutoff not in (None, "upper"):
+        raise ValueError(f"cost_cutoff must be None or 'upper', got {cost_cutoff!r}")
+    if cost_cutoff == "upper":       # rule 3 of optimisation/cost_exclusions.py
+        from dataclasses import replace
+        from optimisation import cost_exclusions
+        tech = replace(tech, **{f: getattr(tech, f) + v for f, v in cost_exclusions.upper_additions().items()},
+                       labels={**(tech.labels or {}), "cost_cutoff": "upper"})
+    return with_connection_options(tech, meta, sites.get(site).carbon_api_region, cost_case, tnuos_hh, build_scale)
 
 
 def _known(*keys) -> list:
@@ -1069,7 +1139,7 @@ def _known(*keys) -> list:
 
 
 def with_connection_options(tech: dc_model.Tech, meta: dict, region: int, cost_case: str,
-                            tnuos_hh: float | None = None) -> dc_model.Tech:
+                            tnuos_hh: float | None = None, build_scale: float = 1.0) -> dc_model.Tech:
     """``tech`` with ``connection_options`` from ``meta["connection_options"]``
     (COST_PLAN §1.11): each option's use-of-system charges from the series
     build plus its own build cost — the area's price list at the option's
@@ -1080,6 +1150,7 @@ def with_connection_options(tech: dc_model.Tech, meta: dict, region: int, cost_c
     MW; the zonal HH TNUoS tariff is the same for every option and stays on
     the winter-peak demand (``cost_grid_triad_per_mw_year``). The fixed term
     is the TDR, the DUoS fixed charge and the cable and switchgear.
+    ``build_scale`` is ``build_tech``'s ``connection_build_scale``.
     """
     from dataclasses import replace
     import re
@@ -1095,6 +1166,8 @@ def with_connection_options(tech: dc_model.Tech, meta: dict, region: int, cost_c
     for o in opts:
         ck = connection_cost.connection_costs(region, bool(o["transmission"]), cost_case,
                                               connection_voltage=o["voltage"], route_km=o.get("route_km"))
+        ck = {**ck, "per_MW_year_GBP": ck["per_MW_year_GBP"] * build_scale,
+              "fixed_per_year_GBP": ck["fixed_per_year_GBP"] * build_scale}
         slug = re.sub(r"\W+", "_", o["key"]).strip("_")
         nt = (o.get("network_charges") or {}).get("trace") or {}
         per_mw = T.cost(f"connection.{slug}.cost_per_MW_year",

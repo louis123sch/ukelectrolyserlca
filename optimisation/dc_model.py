@@ -250,6 +250,10 @@ class Tech:
     # so running the electrolyser hard costs something in cost as in carbon.
     # Defaulted to zero, which is the model before 28 Oct 2026.
     cost_ely_variable_per_kg: float = 0.0
+    # Share of cap_tank the fuel cell can draw: a fuel-cell feed needs a minimum
+    # pressure, so the last of the gas stays in the vessel. Both objectives pay for
+    # cap_tank, so both pay for it. 1.0 is the model before 4 Nov 2026.
+    tank_usable_fraction: float = 1.0
     # The HH locational TNUoS tariff, GBP per MW of Triad demand per year. It is
     # charged on triad_mw, the most the site imports in any Triad-candidate step,
     # not on cap_grid, so a battery covering the winter evening peak saves it.
@@ -514,7 +518,7 @@ def build_model(series: Series, assets: Assets, tech: Tech, *,
         V["tank"] - keep_h * V["tank"].roll(t=1)
         - kg_per_mwh_in * dt * V["p_ely"] - V["h2_buy"] - V["h2_buy_2"]
         + V["h2_fc"] == 0, name="tank_soc")
-    m.add_constraints(V["tank"] - V["cap_tank"] <= 0, name="tank_cap")
+    m.add_constraints(V["tank"] - tech.tank_usable_fraction * V["cap_tank"] <= 0, name="tank_cap")
 
     # --- (9) grid --------------------------------------------------------
     m.add_constraints(V["imp"] - V["cap_grid"] <= 0, name="import_cap")

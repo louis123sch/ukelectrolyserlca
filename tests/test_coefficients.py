@@ -281,13 +281,76 @@ def test_h2_capex_cases_are_ordered_and_every_assumption_is_noted():
     assert "OK" in hc.check(hc.fuel_cell_costs(), hc.tank_costs(), hc.electrolyser_costs())
 
 
-def test_soec_cost_is_flagged_as_having_no_source():
-    """SOEC carbon results are sound; SOEC cost results are not. Keep that visible."""
+def test_soec_cost_is_the_beis_annex_on_neso_pem():
+    """The annex's level is dated, so central is its ratio to PEM on NESO's PEM."""
     from optimisation import h2_capex as hc
     soec = hc.electrolyser_costs()
-    soec = soec[soec.asset == "electrolyser_soec"]
-    assert (soec.grade == "assumed").all()
-    assert soec.note.str.contains("NO SOURCE").all()
+    soec = soec[soec.asset == "electrolyser_soec"].set_index("case")
+    assert soec.note.str.contains("BEIS 2021 annex").all()
+    assert soec.loc["central", "capex_GBP_per_kWe"] == pytest.approx(2010.0 * 2.4603, rel=1e-3)
+    assert soec.loc["low", "capex_GBP_per_kWe"] == pytest.approx(1659.8, rel=1e-3)
+    assert soec.loc["central", "variable_opex_GBP_per_kg"] == pytest.approx(0.50, rel=1e-2)
+
+
+def test_cost_figures_on_uk_government_sources_are_pinned():
+    """Every central figure of COST_GOV_FIGURES_PLAN.md, in 2025 pounds."""
+    from optimisation import battery, h2_capex as hc, price_base as P, tech_costs as tc
+    assert P.factor(2023) == pytest.approx(103.6 / 96.3)
+    fc = hc.fuel_cell_cost("central")
+    assert fc["capex_GBP_per_kW"] == pytest.approx(2215.0)
+    assert fc["stack_cost_fraction"] == pytest.approx(1200.0 / 2642.0)
+    # maintenance and insurance come back out of the fraction
+    bop_per_kw = fc["capex_GBP_per_kW"] * (1.0 - fc["stack_cost_fraction"])
+    assert fc["fixed_opex_frac"] * bop_per_kw == pytest.approx(
+        48.0 * P.factor(2017) + hc.FC_INSURANCE_FRAC_OF_CAPITAL * 2215.0)
+    tank = hc.tank_cost("central")
+    assert tank["capex_GBP_per_kg_capacity"] == pytest.approx(182000 / 405 * P.factor(2017))
+    assert tank["fixed_opex_frac"] == pytest.approx(0.34 / 11.45)
+    comp = battery.cost_components()
+    assert comp["central"]["power_GBP_per_kW"] == pytest.approx(256.1, abs=0.1)
+    assert comp["central"]["energy_GBP_per_kWh"] == pytest.approx(158.6, abs=0.1)
+    assert comp["low"]["power_GBP_per_kW"] + comp["low"]["energy_GBP_per_kWh"] == pytest.approx(400.0)
+    assert (battery.system_capex_gbp_per_kw(4, "low") <= battery.system_capex_gbp_per_kw(4, "central")
+            <= battery.system_capex_gbp_per_kw(4, "high"))
+
+
+def test_battery_fit_is_within_two_percent_of_the_beis_exhibit():
+    from optimisation import battery, price_base as P
+    comp = battery.cost_components()["central"]
+    for hours, printed in battery.BEIS_CAPEX_GBP_PER_KW.items():
+        fitted = (comp["power_GBP_per_kW"] + comp["energy_GBP_per_kWh"] * hours) / P.factor(battery.BEIS_PRICE_YEAR)
+        assert fitted == pytest.approx(printed, rel=0.02)
+
+
+def test_generation_annuity_reproduces_the_desnz_lcoe():
+    """With build finance, on the report's own basis, against its published LCOE."""
+    from optimisation import tech_costs as tc
+    t = tc.annualised_table()
+    central = t[t.case == "central"].set_index("asset")
+    assert abs(central.loc["onshore_wind", "lcoe_delta_pct"]) < 1.0
+    assert abs(central.loc["solar_pv", "lcoe_delta_pct"]) < 1.0
+
+
+def test_generation_scope_land_rates_in_own_network_charges_out():
+    from optimisation import price_base as P, tech_costs as tc
+    a = tc.annual_cost("onshore_wind", "central")
+    expected = (a["annualised_capex_GBP_per_MW_year"] + (40.1 - 17.0 + 19.5 + 12.0) * 1000.0) * P.factor(2023)
+    assert a["total_annual_cost_GBP_per_MW_year"] == pytest.approx(expected)
+    s = tc.annual_cost("solar_pv", "central")
+    expected = (s["annualised_capex_GBP_per_MW_year"]
+                + (9.3 - 1.6 + 1.0 * 4.0 + 1.8) * 1000.0) * P.factor(2023)
+    assert s["total_annual_cost_GBP_per_MW_year"] == pytest.approx(expected)
+    # offshore keeps its line: its export system is recovered through it
+    o = tc.annual_cost("offshore_wind", "central")
+    assert o["total_annual_cost_GBP_per_MW_year"] == pytest.approx(
+        (o["annualised_capex_GBP_per_MW_year"] + 138.5 * 1000.0) * P.factor(2023))
+
+
+def test_tank_usable_fraction_follows_the_design():
+    from optimisation import h2_storage as h2s
+    assert h2s.usable_fraction("gandiglio_28bar") == pytest.approx(25.0 / 28.0)
+    with pytest.raises(ValueError):
+        h2s.usable_fraction("gandiglio_28bar", min_pressure_bar=28.0)
 
 
 # =============================================================================

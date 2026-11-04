@@ -4,7 +4,8 @@ Generation cost and technical assumptions — DESNZ/Arup 2024.
 
 Single source of truth for onshore wind, offshore wind and solar PV costs,
 transcribed from the two DESNZ/Arup "Cost of Electricity Report Update 2024"
-reports. All values are **2023 real prices**.
+reports. Every value transcribed here is in **2023 real prices**; the coefficient
+``annual_cost`` hands the LP is in 2025 pounds (``price_base``).
 
 Sources
 -------
@@ -49,6 +50,7 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+from optimisation import price_base as P  # noqa: E402
 from optimisation import trace as T  # noqa: E402
 PRICE_DIR = ROOT / "price_outputs"
 OUT_DIR = ROOT / "optimisation_outputs"
@@ -82,6 +84,10 @@ ONSHORE_WIND = [
     ("predevelopment_period", "years",              5.0,    8.0,    13.0),
     ("construction_period",   "years",              1.0,    2.0,     3.0),
     ("reported_lcoe",         "GBP_per_MWh",       27.2,   45.8,    90.6),
+    # Outside the report's LCOE and opex; asked separately (§3.8). Low and high
+    # are the published range, central the average. §5.8.1 and §5.8.2.
+    ("land",                  "kGBP_per_MW_year",   9.0,   19.5,    36.0),
+    ("business_rates",        "kGBP_per_MW_year",  10.0,   12.0,    24.0),
 ]
 
 OFFSHORE_WIND = [
@@ -117,7 +123,24 @@ SOLAR_PV = [
     ("predevelopment_period", "years",              1.0,    3.0,     4.0),
     ("construction_period",   "years",              1.0,    1.0,     1.0),
     ("reported_lcoe",         "GBP_per_MWh",       30.3,   46.5,    65.2),
+    # §6.8.1 per acre of land, so SOLAR_ACRES_PER_MWP turns it into a coefficient;
+    # §6.8.2 per MW, read here as per MWp.
+    ("land_per_acre",         "kGBP_per_acre_year", 0.8,    1.0,     1.0),
+    ("business_rates",        "kGBP_per_MWp_year",  1.0,    1.8,     2.5),
 ]
+
+# DESNZ, Land utilised by solar PV (Dec 2024): new sites about 4 acres per MW, read
+# here as per MWp; existing sites 5.6. The planning database's consented median is
+# 1.6 ha/MW, the same figure.
+SOLAR_ACRES_PER_MWP = 4.0
+
+# The report's prices are real 2023 (see the module docstring).
+PRICE_YEAR = 2023
+
+# Plant behind the data centre's meter, with export refused, pays no generator's
+# network charges (OBJECTIVE_AUDIT.md §3.1). Offshore keeps its line: its export
+# system is recovered through it (report footnote 6).
+BEHIND_THE_METER = ("onshore_wind", "solar_pv")
 
 TECHNOLOGIES = {
     "onshore_wind":  (ONSHORE_WIND,  ONSHORE_SOLAR_SOURCE,
@@ -141,6 +164,15 @@ def capital_recovery_factor(rate, lifetime_years):
     if rate == 0:
         return 1.0 / lifetime_years
     return rate * (1.0 + rate) ** lifetime_years / ((1.0 + rate) ** lifetime_years - 1.0)
+
+
+def building_finance_factor(rate, build_years):
+    """Capital at the end of the build per £1 spent, evenly over ``build_years``
+    and carrying the hurdle rate from mid-year. With it, the annuity reproduces
+    the report's own LCOE (``annualised_table``), which spreads spend over the
+    build."""
+    rate, years = float(rate), int(round(float(build_years)))
+    return sum((1.0 + rate) ** (years - i - 0.5) for i in range(years)) / years
 
 
 def long_table():
@@ -201,14 +233,62 @@ def annual_cost(tech: str, case: str) -> dict:
     crf = T.cost(f"cost.{tech}.crf", capital_recovery_factor(rate, life), "per year",
                  "Capital recovery factor: the yearly repayment of £1 over the life at the rate",
                  uses=[f"cost.{tech}.discount_rate", f"cost.{tech}.lifetime_years"])
-    ann_capex = capex_per_mw * crf
-    total_annual = T.cost(f"cost.{tech}.annual_per_{per}", ann_capex + opex_per_mw,
-                          f"GBP per {per} per year", "Capital repaid yearly plus the yearly operating cost",
-                          uses=[f"cost.{tech}.capex_per_kW", f"cost.{tech}.crf", f"cost.{tech}.opex_per_MW_year"],
-                          note="2023 prices as published; no land or business rates (TODO, generation cost scope)")
+    # Onshore and solar only: it brings them within 1 % of the report's LCOE, and
+    # takes offshore (out of scope, already 7 % above it) further away.
+    finance = 1.0
+    finance_uses = []
+    if tech in BEHIND_THE_METER:
+        build_years = T.cost(f"cost.{tech}.construction_years", _value(params, "construction_period", case), "years",
+                             "Construction period", grade="transcribed", cites=cite("construction period", case))
+        finance = T.cost(f"cost.{tech}.building_finance_factor", building_finance_factor(rate, build_years), "multiplier",
+                         "Capital carried at the hurdle rate over the build",
+                         uses=[f"cost.{tech}.discount_rate", f"cost.{tech}.construction_years"])
+        finance_uses = [f"cost.{tech}.building_finance_factor"]
+    ann_capex = capex_per_mw * finance * crf
+    # The report's own basis, kept for its LCOE cross-check
+    published_annual = ann_capex + opex_per_mw
+
+    site_kgbp = 0.0
+    site_uses = []
+    if tech in BEHIND_THE_METER:
+        uos = T.cost(f"cost.{tech}.own_network_charges", _value(params, "connection_and_uos", case),
+                     f"thousand GBP per {per} per year",
+                     "The generator's own connection and use-of-system line, taken out: plant behind the meter, "
+                     "export refused", grade="transcribed", cites=cite("connection and UoS", case))
+        site_kgbp -= uos
+        site_uses.append(f"cost.{tech}.own_network_charges")
+    if tech == "onshore_wind":
+        site_kgbp += T.cost(f"cost.{tech}.land", _value(params, "land", case), f"thousand GBP per {per} per year",
+                            "Land rent, outside the report's opex", grade="transcribed",
+                            cites=[(SOURCE_KEY[tech], f"§5.8.1, {case}")],
+                            note="Mostly Scottish sites, by the report's own account")
+        site_uses.append(f"cost.{tech}.land")
+    elif tech == "solar_pv":
+        per_acre = T.cost(f"cost.{tech}.land_per_acre", _value(params, "land_per_acre", case),
+                          "thousand GBP per acre per year", "Land rent, outside the report's opex",
+                          grade="transcribed", cites=[(SOURCE_KEY[tech], f"§6.8.1, {case}")])
+        acres = T.cost(f"cost.{tech}.acres_per_MWp", SOLAR_ACRES_PER_MWP, "acres per MWp", "Land taken per MWp",
+                       grade="transcribed", cites=[("desnz_solar_land_2024", "p. 2, new sites, about 4 acres per MW")])
+        site_kgbp += T.cost(f"cost.{tech}.land", per_acre * acres, f"thousand GBP per {per} per year",
+                            "Land rent per MWp", uses=[f"cost.{tech}.land_per_acre", f"cost.{tech}.acres_per_MWp"])
+        site_uses.append(f"cost.{tech}.land")
+    if tech in BEHIND_THE_METER:
+        section = "§5.8.2" if tech == "onshore_wind" else "§6.8.2"
+        site_kgbp += T.cost(f"cost.{tech}.business_rates", _value(params, "business_rates", case),
+                            f"thousand GBP per {per} per year", "Property and business rates, outside the report's opex",
+                            grade="transcribed", cites=[(SOURCE_KEY[tech], f"{section}, {case}")])
+        site_uses.append(f"cost.{tech}.business_rates")
+
+    inflate = P.to_2025(PRICE_YEAR)
+    total_annual = T.cost(f"cost.{tech}.annual_per_{per}", (ann_capex + opex_per_mw + site_kgbp * 1000.0) * inflate,
+                          f"GBP per {per} per year",
+                          "Capital repaid yearly plus the operating cost, on this site's scope, in 2025 pounds",
+                          uses=[f"cost.{tech}.capex_per_kW", *finance_uses, f"cost.{tech}.crf",
+                                f"cost.{tech}.opex_per_MW_year", f"price_base.{PRICE_YEAR}_to_2025", *site_uses])
     mwh_per_mw_yr = 8760.0 * _value(params, "net_load_factor", inv)
     return {"capex_GBP_per_MW": capex_per_mw, "opex_GBP_per_MW_year": opex_per_mw, "lifetime_years": life,
             "discount_rate": rate, "crf": crf, "annualised_capex_GBP_per_MW_year": ann_capex,
+            "published_basis_annual_GBP_per_MW_year": published_annual,
             "total_annual_cost_GBP_per_MW_year": total_annual,
             "net_load_factor": _value(params, "net_load_factor", inv), "MWh_per_MW_year": mwh_per_mw_yr,
             "source": source, "trace_key": f"cost.{tech}.annual_per_{per}"}
@@ -225,17 +305,19 @@ def annualised_table():
     the high-cost scenario takes the low values. ``INVERSE_CASE`` reproduces
     that pairing, which is what makes the LCOE cross-check meaningful.
 
-    The residual ``lcoe_delta_pct`` is methodological: this is a plain CRF
-    annuity over the operating life, whereas the report uses the DESNZ LCOE
-    calculator, which also spreads pre-development and construction spend
-    across the build period and discounts it. It is not a transcription error.
+    The cross-check is on the report's own basis: its prices and scope, the
+    annuity carrying the build's finance. The residual ``lcoe_delta_pct`` is what
+    is left against the DESNZ LCOE calculator, which also places pre-development
+    spend and generation year by year. The coefficient the LP charges differs
+    from this basis by design: 2025 pounds, land and rates in, own network
+    charges out (``annual_cost``).
     """
     rows = []
     with T.quiet():
         for tech, (params, source, note) in TECHNOLOGIES.items():
             for case in CASES:
                 a = annual_cost(tech, case)
-                lcoe = a["total_annual_cost_GBP_per_MW_year"] / a["MWh_per_MW_year"]
+                lcoe = a["published_basis_annual_GBP_per_MW_year"] / a["MWh_per_MW_year"]
                 reported = _value(params, "reported_lcoe", case)
                 rows.append({
                     "asset": tech, "case": case,
@@ -302,7 +384,7 @@ def run():
               f"{r.lifetime_years:>7.0f}{r.discount_rate:>8.1%}")
 
     print()
-    print("LCOE cross-check — plain CRF annuity vs the report's own calculator")
+    print("LCOE cross-check — annuity with build finance, report's basis, vs the report's own calculator")
     print("-" * 88)
     print(f"{'technology':<16}{'case':<9}{'this module':>14}{'report':>10}{'delta':>9}")
     for _, r in ann_df.iterrows():

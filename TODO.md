@@ -30,36 +30,28 @@ lines here like any other.
 
 Work where a number the study reports is not currently defensible.
 
-- [ ] **Fuel cell capex, and a per-replacement stack cost.** One job, not two —
-      a £/replacement figure fixes the duty-versus-calendar asymmetry at the
-      same time. Until then the cost axis of *every* hydrogen architecture is a
-      ~4× range with a known-direction bias, and cost-optimal builds over-run
-      the fuel cell for free. `h2_capex.py`, `fuel_cell.py`, `DATA_GAPS.md`.
-      BoP duty reached cost on 12 Oct (plan §1 step 1); step 2 — discount the
-      stack the same way and put fixed opex on full system capex — is part of
-      this job, since it moves every backup fuel cell (+12 % central).
-- [ ] **SOEC capex/opex.** Currently PEM × 1.2/1.5/2.0 with no source at all.
-      Try NESO Green Hydrogen Portal, then IEA. Carbon-only SOEC runs are a
-      defensible partial result meanwhile — cost-optimal SOEC is not.
-- [ ] **Electrolyser consumables cost.** SOEC's 5.24 kWh/kg external heat and
-      0.65 m³/kg water are charged in carbon and free in cost, so the cost
-      objective prefers SOEC partly for a reason that does not exist (except
-      in the electric-boiler scenarios, where the heat is bought power). The heat
-      is a gas boiler (Mehmeti 2018, `SOURCES.md`), so a gas tariff ÷ boiler
-      efficiency prices it. Availability is no longer a question: bought fuel,
-      not the data centre's waste heat (closed on the carbon side 14 Oct).
-- [ ] **Tank cost and tank carbon describe different vessels.** Default
-      `gandiglio_28bar` is 313 kg stainless/kg H₂ in carbon, but costed at the
-      €500–1,040/kg high-pressure range — ~3–10× low on its own shell mass.
-      Price it from `steel_kg_per_kg_h2` (Capital Equipment Cost Database).
-      Needs a decision on the default design. Plan §3 item 1, §6.3.
 
-- [ ] **Transmission loss multiplier: exact values** (29 Oct). Zonal TLFs are
-      in (`levies.TLF_ZONE_2026_27`) but READ FROM the 2026/27 report's charts
-      (±0.0005), and TLMO- is ASSUMED 0.011. When the Elexon Portal is back
-      (scripting key in .env as ELEXON_SCRIPTING_KEY), fetch TLFA-I009
-      (Adjusted Seasonal Zonal TLFs) and TLFA-I014 (indicative TLM/TLMO) for
-      BSC Year 2026/27 and replace both.
+- [ ] **Transmission loss multiplier: put the exact values in** (4 Nov). Read without a login from Elexon's public
+      report; saved in OneDrive `cost sources/5 prices and inflation`. Replace `levies.TLF_ZONE_2026_27`, and TLMO-
+      with Elexon's seasonal estimates (`docs/COST_BEST_SOURCE_PLAN.md`, *Filled*). The portal's TLFA-I014 is no longer needed.
+- [ ] **Government cost figures: built 4 Nov, to finish** (`docs/COST_GOV_FIGURES_PLAN.md`, *Built*). After the
+      connection sweeps end: regenerate `h2_prices_recommended.csv` (the deflator moved), rebuild and
+      republish both maps, re-run the reference cases and one ±50 % connection case on the new costs,
+      and rule 3 of the cost cut-off (`python -m optimisation.sensitivity cost_cutoff`).
+- [ ] **Discount rates: a government answer now exists, not applied** (4 Nov). CEPA for DESNZ (Oct 2025),
+      Table E.1: electrolyser 10.1 %, lithium batteries 8.9 %, onshore wind and solar 7.6 %, against the study's
+      6 %, 5 %, 5.8 % and 5 %. Moves everything, so its own run. `COST_GOV_FIGURES_PLAN.md` D4.
+- [ ] **Major-hazard compliance as a step charge** (4 Nov). HSE's per-site figures are in hand
+      (`cost_exclusions.py`); charging them on tonnes held needs an on/off switch in `dc_model`.
+- [ ] **Default tank vessel** (4 Nov). Cost prices Element Energy's bulk 50–80 bar vessel, carbon Gandiglio's small
+      28 bar stainless one (313 kg per kg). A stated mismatch; carbon's is the likelier outlier. An LCA job.
+- [ ] **Best source for each cost input: the plan to build** (4 Nov): `docs/COST_BEST_SOURCE_PLAN.md`. Sources swapped
+      where the UK one looks wrong or is absent, CEPA's discount rates. Land limits dropped: London is illustrative only.
+      Evidence in `docs/COST_SOURCES_NON_UK_2026-11-04.md`.
+- [ ] **Finish the one price base** (4 Nov). Network charges, levies and connection prices are 2026/27 money,
+      wholesale 2025, the rest real 2025.
+- [ ] **Wind and solar's own grid connection inside capital** (4 Nov). DESNZ's "infrastructure" (£303/kW, £112/kWp) runs
+      to the nearest grid point; behind our meter some is still needed. May overstate; no figure splits it.
 
 ## Cheap wins
 
@@ -79,13 +71,6 @@ Either the source is named and public, or no new sourcing is needed at all.
 - [ ] **MW of fuel cell per container** — 1 MW assumed in
       `optimiser_lca/fuel_cell.FC_KW_PER_CONTAINER`; sweep 0.5–2. 3.7 of the
       BoP's 44 t/MW.
-- [ ] **Battery fixed opex from BEIS 2022** *Benefits of Long Duration
-      Electricity Storage*. Public PDF, and what FES itself routes to. Replaces
-      the 2 %-of-capex proxy — the one battery input with no source.
-- [ ] **Check Marocco et al. 2020 (Energy Convers. Manag. 211:112768) for a tank
-      cost.** Gandiglio 2022 has none (read 22 Oct 2026: LCA only, and it points
-      to Marocco for the economics of the same Ginostra system), so Marocco is the
-      one source that would match the vessel actually modelled. Not held.
 - [ ] **Report the two big assumed scalars as bands, not points.**
       `green_h2_grid_share` and `transmission_connected` both already have
       override hooks on `build_tech()`. No sourcing — just run the sweep and
@@ -96,21 +81,12 @@ Either the source is named and public, or no new sourcing is needed at all.
       converted at the exchange rate only; the 6 % on H₂ assets has no source,
       and the Green Book 3.5 % marked closed in `DATA_GAPS.md` is used
       nowhere. Audit §4.
-- [ ] **Battery: the £100/kWh is not on the cited Modo page** (re-checked
-      30 Sep — it gives only "~£400/kW (1h)"), yet it sets 66–75 % of battery
-      capex. Also bound duration: an islanded solve builds 42 h of Li-ion.
-      Audit §3.2.
-- [ ] **Generation cost scope.** DESNZ opex includes the *generator's*
-      TNUoS/DUoS (+11.6 % on onshore) for plant behind our meter, and
-      excludes land and business rates (~21 % of `cost_wind`). Audit §3.1.
 - [ ] **Network tariffs over the asset's life** (28 Oct). Every charge is
       FY2025/26, applied to a connection annualised over 40 y. Run NESO's
       five-year TNUoS forecast as a sensitivity. `COST_PLAN.md` §1.7.
 - [ ] **Decommissioning and insurance, like for like** (28 Oct). Check which
       cost sources carry them (DESNZ generators believed to; H₂ assets are bare
       capex + an opex %). `COST_PLAN.md` §4.3.
-- [ ] **Tank heel.** `cap_tank` drains to zero; a 1–5 bar minimum for the FC
-      feed makes both objectives 4–22 % low per usable kg. Audit §3.3.
 
 - [ ] **Third source read, 23 Oct 2026** (`docs/SOURCE_RECHECK_2026-10-23.md`, *Outcome*):
       every finding decided and done by 26 Oct; the stale-docs list at its foot is left.

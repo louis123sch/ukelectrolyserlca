@@ -96,6 +96,19 @@ RECONSTRUCTION_TOLERANCE = 1e-4      # bw2calc solver noise; see electrolysers.p
 # all live with the inventory; this module reads them.
 from optimiser_lca.h2_tank import TANK_DESIGNS, TANK_DESIGN, capacity_kg, steel_kg_per_kg_h2  # noqa: E402,F401
 
+# The pressure a fuel-cell feed needs: below it the gas stays in the vessel.
+# Marocco et al. 2021, Table 5: 3 bar minimum on the same 28 bar Ginostra tank.
+TANK_MIN_PRESSURE_BAR = 3.0
+
+
+def usable_fraction(design: str, min_pressure_bar: float = TANK_MIN_PRESSURE_BAR) -> float:
+    """Share of a design's capacity the fuel cell can draw (gas ~ proportional to
+    pressure at these pressures). 0.89 on the 28 bar default."""
+    pressure = TANK_DESIGNS[design]["pressure_bar"]
+    if not 0.0 <= min_pressure_bar < pressure:
+        raise ValueError(f"minimum pressure {min_pressure_bar!r} bar must be under the design's {pressure} bar")
+    return 1.0 - min_pressure_bar / pressure
+
 
 def _gwp_method(bd):
     return next(m for m in bd.methods

@@ -155,6 +155,11 @@ SOEC_HEAT_DEFAULT = "gas_boiler"
 # Energy Agency, Technology Data, "Electric boilers"); not yet checked against
 # the sheet. At 0.99 the boiler adds 5.29 kWh/kg.
 ELECTRIC_BOILER_EFFICIENCY = 0.99
+# Element Energy for BEIS (2018), p. 95: auxiliary boiler, 95 % on HHV.
+GAS_BOILER_EFFICIENCY = 0.95
+# DESNZ, non-domestic prices, table 3.4.2, annual, 2025: gas, large consumers,
+# including the levy, 4.149 p/kWh. Bands of 27.8-278 GWh a year.
+LARGE_SITE_GAS_GBP_PER_MWH = 41.49
 MJ_PER_KWH = 3.6
 
 # NESO Green Hydrogen Data Portal, via electrolyser_costs_clean.csv.
@@ -288,6 +293,15 @@ def decompose_all(use_cache: bool = True, refresh: bool = False):
     CACHE_PATH.write_text(json.dumps(rows, indent=2), encoding="utf-8")
     _MEMO = rows
     return rows
+
+
+def gas_boiler_fuel_kwh_per_kg(row: dict) -> float:
+    """Gas burned per kg H2 (kWh, HHV) where the row's heat is the gas boiler, for
+    the cost side; zero otherwise. ``row`` is from ``with_heat_source``."""
+    if row.get("heat_source") != "gas_boiler":
+        return 0.0
+    heat = [c for c in row["_consumables"] if "heat" in c[0]]
+    return sum(c[1] for c in heat) / MJ_PER_KWH / GAS_BOILER_EFFICIENCY
 
 
 def with_heat_source(row: dict, source: str | None = None) -> dict:

@@ -201,8 +201,11 @@ the switch back on needs an offshore series first.
 
 ## 4. Cost basis
 
-DESNZ/Arup 2024 Cost of Electricity reports, **2023 real prices**, with each
-technology's own pre-tax real hurdle rate (onshore wind 5.8 %, offshore wind
+DESNZ/Arup 2024 Cost of Electricity reports, brought from 2023 to **2025 real prices**
+by the ONS GDP deflator (`price_base.py`), with land, business rates and building finance
+added for onshore wind and solar and their own generator network charges taken out, since
+4 Nov 2026 (SOURCES.md). **UK government sources are the first choice for every cost
+figure**, by the user's rule of that date. Each technology keeps its own pre-tax real hurdle rate (onshore wind 5.8 %, offshore wind
 6.2 %, solar PV 5.0 %) rather than a single project WACC. Set
 `optimisation.tech_costs.DISCOUNT_RATE_OVERRIDE` to impose one rate instead.
 
@@ -224,9 +227,20 @@ factor for the connection voltage and time period, times the offtaking
 transmission loss multiplier for its zone and season (1 + zonal TLF read from
 Elexon's 2026/27 report charts + an assumed national adjustment of 0.011).
 **Assumed**: the site holds no Climate Change Agreement (`CCL_UNDER_CCA`;
-with one, CCL falls from £7.75 to £0.62/MWh). Supplier margin is not included.
-The connection and UoS figures in the DESNZ tables are *generator*-side and
-are not a substitute.
+with one, CCL falls from £7.75 to £0.62/MWh). A supplier margin of £4.19/MWh is
+carried as an estimate since 4 Nov 2026. The connection and UoS figures in the DESNZ
+tables are *generator*-side and are not a substitute.
+
+**The cost side's cut-off test** is `optimisation/cost_exclusions.py`, on the carbon rule. A cost
+a source itemises is in; one no source itemises stays out only under 1 % of its coefficient, 5 %
+together, with no change to the best design. Failing means carried as an estimate (tank land, fuel
+cell insurance, supplier margin). Still open there: major-hazard compliance (a step on tonnes held),
+urban land, battery business rates, hydrogen compressor capital.
+
+**Land and area are a stated limit.** Every land figure charged is a rural rent, and the model has
+no area limit: a London run builds hundreds of MW of wind on no land, where the planning database
+shows 12.6 MW operating in London. Read the generation built at an urban site as what the prices
+want, not what the site can hold.
 
 **The national grid's location charge** (HH locational TNUoS) is charged on winter-evening demand, as the tariff is: the most the site imports in any weekday half-hour from 16:30 to 18:30, November to February, the window every Triad of the last seven winters fell in. A battery or fuel cell that covers that window saves it; the charge for the connection itself (DUoS capacity, connection capital) stays on the connection size.
 
@@ -240,6 +254,8 @@ too (`levies.LEVY_FY`) since 28 Oct 2026.
 **The connection voltage** of a distribution site is the lowest its area's DNO connects it at, by that DNO's own published rule where there is one (`network_charges.AREA_RULES`): 11 kV up to 12 MVA by default (15 in the North West, under 8 in London), then 33 kV (up to 120 MVA, and always in Scotland), then 132 kV up to 240 MVA (250 in the NGED areas). Where a DNO publishes nothing the default stands in, and says so. Since 29 Oct 2026 that rule is the **floor**: with the site's coordinates the area's own substation capacities decide above it — where every substation within 60 km at the rule's voltage that publishes a spare capacity is short of the connection, the site connects a voltage up (`substations.voltage_with_room`), provided at least half of them publish one (an **assumed** threshold). Sizes the rules leave open can be solved both ways — an option, not the default. An 11 kV site takes HV residual bands and its grid electricity at medium voltage; 33 and 132 kV sites take EHV bands and high voltage.
 
 **The connection ceiling** is 1 / 0.70 = **1.43x** the flat load (`sites.CONNECTION_HEADROOM_ASSUMED`): the 70 % data-centre load factor of the national energy scenarios (FES Pathway Assumptions 2025, as applied in NGED's Data Centre Impact Study, Nov 2025). Until 29 Oct 2026 it was 1.5x, assumed. The page's headroom box overrides it.
+
+**Two knobs on the connection's price** (4 Nov 2026, the supervisor's +/-50 % test; `sensitivity.CONNECTION_KNOBS`, central 1.0, swept at 0.5x and 1.5x). They multiply published figures for a sweep and change no default. `dc_inputs.build_tech(connection_build_scale=)` scales the **one-off build cost**: the annuity on the substation, cable and switchgear from `connection_cost.py`, per MW and fixed, on every price list. `dc_inputs.build_series(network_charges_scale=)` scales the **yearly network charges**: the national locational charge on winter-peak demand, the local capacity charge, the national residual and local fixed charges, and the local network's per-MWh unit rates inside the import price. It sits on the series because the per-MWh part is there; `build_tech` reads the rest from the meta, so it cannot be half applied. Both are recorded in `Tech.labels`. Not scaled: the balancing charge, which is not a network charge, losses, levies, and the connection's carbon. A national-grid site pays no local charges, so there the second knob moves only the winter-peak charge and the residual. Result on the costs of 4 Nov 2026: 35 of 36 points pass the cut-off rule's test and no technology appears or disappears; the size-free 132 kV connection moves -5.06 % at 1.5x build cost (`optimisation_outputs/connection_sensitivity.md`).
 
 **The substation register's capacity layer** (since 30 Oct 2026, `scripts/register_capacity.py`) takes each company's own published figure on the company's own basis, and says which: "firm capacity minus maximum demand" (the standard capacity heatmaps), "headroom on connected demand" (National Grid's opportunity map, which also publishes headroom net of contracted demand), with the portal's date on every row. Those bases are not identical across companies, and the dates run from March 2025 to October 2026 — the register reports this rather than levelling it. Joins between a company's datasets are by its own site id, then by name at a compatible level, then by location within **300 m** (assumed radius); a 275/400 kV substation takes the nearest grid-supply-point record within **3 km** (assumed). Where no company dataset covers a row the builder's own figure stands, marked "builder". The "central" scenario for room in a future year is the company's own — Holistic Transition (UK Power Networks, Northern Powergrid), Best View (Electricity North West), HT (SSEN) — a **choice**. The availability listing (`optimisation.availability`) prices every candidate for a flat load at the connection ceiling with the site at the substation, so the cable is the default **2 km** route and the wholesale price the 2025 mean: it ranks places by what the grid costs there, not by what the optimiser would build. **Price nodes** are used only where the schedule's node was matched by name to the connection substation itself (decision of 30 Oct 2026); place-name and code placements are still built and reported but no longer price a run. **Room is checked at the connecting substation only** (a known limitation, decided 30 Oct 2026): a primary with room may sit under a bulk or grid supply point that has none, so room is overstated for 11 kV sites (up to about 10 MW IT); sites of 30 MW IT and above connect at the bulk or grid supply point itself and are barely affected, and SSEN's figures already include the limit above. Checking the chain was judged not worth it yet: parents are named by every company, but the figures at the level above are patchy (none at National Grid's grid supply points).
 

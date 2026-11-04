@@ -228,8 +228,14 @@ def prune_options(series, assets, tech, *, keep_keys=(), ely_strategy: str = "fr
 def front(series, assets, tech, *, points: int = DEFAULT_POINTS,
           ely_strategy: str = "free", unserved_fraction: float = 0.0,
           gwp_target: float | None = None, progress=None,
-          keep_dispatch: bool = False, mip_rel_gap: float | None = None) -> dict:
+          keep_dispatch: bool = False, mip_rel_gap: float | None = None,
+          on_solution=None) -> dict:
     """Solve the exact cost/carbon frontier for one configuration.
+
+    ``on_solution(tag, V)`` is called after each solve with the point's tag (the
+    ``point`` column of the result) and its solved variables, for a caller that
+    wants more than the frontier row; a later call with the same tag replaces
+    an earlier one, as with ``keep_dispatch``.
 
     ``keep_dispatch`` also returns the half-hourly dispatch behind the three
     points the UI shows. It is off by default because it costs no solving but a
@@ -240,6 +246,8 @@ def front(series, assets, tech, *, points: int = DEFAULT_POINTS,
     frames: dict[str, pd.DataFrame] = {}
 
     def capture(tag, V):
+        if on_solution:
+            on_solution(tag, V)
         if keep_dispatch:
             # Later solves of the same tag are refinements of it (the anchor
             # tie-breaks), so the last one written is the one that is reported.

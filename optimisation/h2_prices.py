@@ -100,6 +100,7 @@ GAS_KWH_HHV_PER_M3 = 39.5 / 3.6
 # (kept as constants so this module runs without Brightway; verified against
 #  the activities by ``check_against_inventory()``)
 from optimiser_lca import registry as _R  # noqa: E402
+from optimisation import price_base as _price_base  # noqa: E402
 from optimisation import trace as T  # noqa: E402
 from optimiser_lca import hydrogen as _H  # noqa: E402
 INVENTORY = {
@@ -600,8 +601,9 @@ EHO_UK_2024_EUR_PER_KG = {
                                               "Grid fees and taxes": 0.0,
                                               "Other OPEX": 0.182},
 }
-# GDP deflator 2024 -> 2025, from the FES workbook's own rebasing table.
-DEFLATOR_2024_TO_2025 = 124.1 / 121.2
+# GDP deflator 2024 -> 2025: one series for the study (price_base.py). Was
+# 124.1 / 121.2 from the FES workbook's rebasing table until 4 Nov 2026.
+DEFLATOR_2024_TO_2025 = _price_base.factor(2024)
 
 
 def eho_gbp_per_kg(technology):

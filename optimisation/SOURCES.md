@@ -288,16 +288,16 @@ remains — smaller, and now in one place rather than two.
 
 | Input | Value | Grade | Source |
 |---|---|---|---|
-| CAPEX, 1-hour system | ~£400/kW today → ~£200/kW by 2040 | transcribed | Modo Energy, *BESS Cost and Technical Assumptions*, `docs.modoenergy.com/pages/jan-2026/uk-europe/model-assumptions/` (July 2026). Real 2025 GBP |
-| CAPEX, marginal hour | £100/kW per additional hour (2025) | transcribed | Same |
-| Power / energy split | £300/kW + £100/kWh | derived | The two above decompose cleanly: a 1-hour system is 1 kWh per kW, so the marginal hour *is* the energy component |
+| CAPEX, central | Li-ion at 1 / 2 / 4 / 6 / 9 h: £331 / 449 / 696 / 930 / 1,328 per kW, real 2019, 2030 capital; fitted (within 2 % of every row) and inflated ×1.277: **£256/kW + £159/kWh** in 2025 £ | derived | BEIS, *Benefits of Long Duration Electricity Storage* (Research Paper 2022/019), Exhibit 3.11, p. 30. UK government, and it covers the durations built. A 2022 forecast of 2030 prices: stated, not corrected. Since 4 Nov 2026 |
+| CAPEX, low case | ~£400/kW at 1 h + £100/kW per extra hour = £300/kW + £100/kWh | **assumed** (the £100) | Modo Energy, *BESS Cost and Technical Assumptions*, `docs.modoenergy.com/pages/jan-2026/uk-europe/model-assumptions/`. The page gives only the 1-hour figure (re-read 4 Nov 2026); the £100 was graded transcribed in error until then |
+| CAPEX, high case | central × 700/580 | derived | The top of Modo's 2024 survey over its average, below |
 | Cost spread | avg £580k/MW at 1.9 h; 2 h median £650k/MW; 68 % within £400–700k/MW | transcribed | Modo Energy BESS CapEx Survey 2024, 30 participants, 2.8 GW |
 | WACC | 5.0 % real (~7.1 % nominal) | transcribed | Modo model assumptions page |
 | Asset life | 15 years | transcribed | Same |
 | Degradation | ~67 % capacity remaining after 10,000 cycles (~12–15 y) | transcribed | Same |
 | Cycling limit | 1–2 per day, warranty-aligned | transcribed | Same |
 | Round-trip efficiency | 88 % | transcribed (weakly) | Modo's standard assumption, but **not** on the model-assumptions page itself — the least firmly sourced number in this module |
-| Fixed OPEX | 2 % of capex/year | **assumed** | Modo do not publish it. FES routes battery opex to BEIS 2022 *Benefits of Long Duration Electricity Storage* instead. Flagged `OPEX_IS_PROXY = True` |
+| Fixed OPEX | £5 / 7 / 10 / 11 / 13 per kW per year at 1 / 2 / 4 / 6 / 9 h, real 2019; fitted and inflated: **£6.35/kW + £1.23/kWh** | derived | BEIS 2022, Exhibit 3.11: the document FES 2025 itself uses for battery running costs. Was 2 % of capex, a convention, until 4 Nov 2026 |
 | Energy-term embodied carbon | **101.11 kg CO₂e per kWh nameplate** → **112.3 per usable kWh** (21 Oct 2026: Jasper's 43.9 t concrete block and Voß's in-China material legs restored; was 97.91) | derived | `battery foreground`, built by `optimiser_lca/bess.py` (below): Jasper et al. 2026's liquid-cooled LFP container around Voß et al. 2025's LFP cell, made in China, on ecoinvent 3.9.1 apos, IPCC 2021 GWP100. Pinned as `BESS_KGCO2E_PER_KWH_NAMEPLATE` |
 | Usable fraction | 0.90 of nameplate | **assumed** | `cap_batt_e` is the energy the LP can swing (`soc` runs 0..`cap_batt_e`) and Modo's costs are per usable kWh, while both sources report per kWh of cells. 0.90 is commercial operating practice; Jasper's 80 % depth of discharge would make it 122.2 |
 | PCS embodied carbon | 15,930.86 kg CO₂e/unit = 31.9 /kW | transcribed | ecoinvent 3.9.1 apos, `market for inverter, 500kW` [GLO]. Unchanged; Jasper's own 800 kg PCS is excluded from the energy term so it is not charged twice |
@@ -1410,29 +1410,58 @@ the check never fails a run. First run, 30 Oct 2026: 39 of 39 current.
 `h2_capex.electrolyser_costs` → `Tech.cost_ely_variable_per_kg`. NESO Green
 Hydrogen Data Portal variable opex, already in `price_outputs/electrolyser_costs_clean.csv`
 and previously dropped: PEM £0.003114/kWh HHV × 39.4 kWh/kg = **£0.123/kg**, AE
-£0.104/kg; SOEC takes PEM's as an **assumed** floor. Charged per kg made — the
+£0.104/kg; SOEC's is BEIS's since 4 Nov 2026 (below). Charged per kg made — the
 cost counterpart of the carbon side's duty-driven `ely_stack_units`.
 
 ---
 
-## Hydrogen-chain asset costs — the weakest numbers in the study
+## Hydrogen-chain asset costs
 `h2_capex.py`
 
-Three inputs the cost objective needs that **no UK source provides**. Every
-figure is graded `assumed` and given as low/central/high spanning the full
-published range rather than a point estimate with a nominal spread.
+On UK government sources since 4 Nov 2026 (`docs/COST_SOURCE_SEARCH_2026-11-04.md`,
+`docs/COST_GOV_FIGURES_PLAN.md`), real 2025 GBP, low / central / high. Thin evidence,
+stated row by row.
 
 | Input | Value (real 2025 GBP) | Grade | Source and why it is weak |
 |---|---|---|---|
-| Fuel cell capex | £780 / £1,795 / £3,512 per kW | assumed | DOE, *Technical Targets for 100 kW–3 MW Stationary CHP/DG Fuel Cell Systems Operating on Natural Gas*. These are **natural-gas** systems including a reformer this study does not have, so biased high; the low case is an aspirational 2020 target at 100 MW/yr volume, not a price |
-| H2 vessel capex | £427 / £658 / £889 per kg capacity | assumed | Range across the compressed-storage literature (EUR 500–1,040/kg; DOE 2005 status $1,100/kg at 430 bar). None is UK, none is recent, spread over 2x. **Gandiglio et al. 2022 supplies the inventory and should be checked for a cost too** |
-| SOEC capex | PEM × 1.2 / 1.5 / 2.0 | assumed | **No source at all.** A guess about a technology gap, not a measurement |
+| Fuel cell capex | £2,015 / £2,215 / £2,700 per kW | derived | Baringa for DESNZ, *Hydrogen to Power Costs and Barriers* (9 Dec 2025), §4.4, §5: over £2,500/kW installed for a pipeline-fed grid-scale system (low), the 80 MW Korean plant at about £2,700/kW (central, high), less about £485/kW of purification in low and central. Limited evidence by its own account |
+| Fuel cell maintenance | £42 / £48 / £48 per kW per year, taken as 2017 £ | transcribed | Element Energy for BEIS, *Hydrogen supply chain evidence base* (Nov 2018), p. 94, 1.4 MWe. Rests on Roland Berger 2015, converted to pounds, so inflating from 2017 may understate |
+| Fuel cell insurance | 0.23 % of capital | proxy | Onshore wind's ratio (DESNZ/Arup Table 3). An estimate carried because leaving it out fails the 1 % test (`cost_exclusions.py`) |
+| Stack share of capital | 45.4 % (£1,200 over £2,642) | derived | Element Energy p. 93 (chart read) over p. 94, 1.4 MWe, one unit. A replacement cost, which is what the LP charges. Was 17.2 %, frozen from a carbon split. Not government: Battelle 2016 16–30 %, 22–41 % without fuel processor and heat recovery; Roland Berger 34 % |
+| H2 vessel capex | £392 / £599 / £889 per kg capacity | derived | Central: Element Energy p. 109, £182k installed per 95 m³ vessel holding ~405 kg at 50–80 bar, a supplier's quote, taken as 2017 £. No UK range: low is Rozzi et al. 2024's 30 bar, 50 t row × 1.3 installed; high is the older literature's €1,040/kg. **Not the vessel the carbon side inventories** (Gandiglio, 28 bar, 313 kg stainless per kg): a stated mismatch |
+| H2 vessel running | 2.97 % of capital | derived | Element Energy p. 112, medium pressure: £0.34 fixed on £11.45 per kWh stored |
+| H2 vessel land | £2.09 per kg per year | proxy | Element Energy p. 110, 0.20 m²/kWh (high-pressure tubes, the only footprint it gives), at DESNZ's rural solar rent. Carried because leaving it out fails the 1 % test |
+| H2 vessel usable share | 89 % (`tank_usable_fraction`) | derived | 3 bar minimum feed on 28 bar: Marocco et al. 2021, Table 5. Not government. Moves carbon too |
+| SOEC capex | £1,660 / £4,945 / £4,945 per kWe | derived | BEIS, *Hydrogen Production Costs 2021*, annex, commissioning 2025. Low: its level inflated from 2020, dated (its PEM is a third of NESO's). Central: its 2.46× ratio to PEM per kWe, on NESO's PEM; above every non-government range read (top about £3,300). High equals central: no government figure sits above it. Assumes a mature plant |
+| SOEC fixed | £63 / £67 / £70 per kWe per year | derived | Same annex, inflated |
+| SOEC stacks | £0.34 / £0.50 / £0.86 per kg | derived | Same annex, variable opex; stacks 60 % of capital, replaced every 7 y |
+| SOEC heat, `gas_boiler` | 5.24 kWh ÷ 0.95 × £41.49/MWh = £0.23/kg | derived | Boiler: Element Energy p. 95. Gas: DESNZ table 3.4.2, annual, 2025, large consumers, including the levy. `electric_boiler` already pays it through `kwh_per_kg` |
+| SOEC life | 25 y | assumed | PEM's, kept to match the carbon side; the annex says 30 |
 
-For a 7.31 MW backup chain the fuel cell dominates below 22 t of storage and the
-tank above it — so across the whole plausible range, hydrogen's cost is set by two
-numbers with no UK source and spreads of 4.5x and 2x. **The carbon side of these
-same architectures is fully sourced. Rank hydrogen options on carbon with
-confidence, and on cost only with the caveat attached.**
+For a 7.31 MW backup chain the fuel cell dominates below about 20 t of storage and
+the tank above it, so hydrogen's cost is set by these two figures, each on thin
+government evidence.
+
+## Inflation
+`price_base.py`: ONS GDP deflator, series YBGB, 2015–2025, the same method FES 2025
+uses. `scripts/check_price_base.py` compares it with the live series.
+
+## Wind and solar scope since 4 Nov 2026
+`tech_costs.annual_cost`, DESNZ/Arup 2024 throughout, then ×1.076 from 2023 to 2025 pounds.
+
+| Input | Value (2023 £) | Grade | Source |
+|---|---|---|---|
+| Wind land | £9.0 / 19.5 / 36.0k per MW per year | transcribed | §5.8.1; mostly Scottish sites |
+| Wind rates | £10.0 / 12.0 / 24.0k per MW per year | transcribed | §5.8.2 |
+| Solar land | £0.8 / 1.0 / 1.0k per acre per year × 4 acres per MWp | transcribed | §6.8.1; DESNZ, *Land utilised by solar PV* (Dec 2024), new sites, per MW read as per MWp |
+| Solar rates | £1.0 / 1.8 / 2.5k per MW per year | transcribed | §6.8.2 |
+| Own network charges | taken out, onshore and solar | transcribed | The tables' *connection and UoS* line. Offshore keeps its line: its export system is recovered through it |
+| Finance during building | hurdle rate over the construction period | derived | Brings the annuity to £45.94/MWh against the report's £45.80 (wind) and £46.16 against £46.50 (solar). Offshore is left without: it moves it further from its published figure |
+
+## Supplier margin
+`levies.flat_components`: 2.0 % (CMA, *Profitability of retail energy supply*, 2015,
+Table 1, industrial and commercial, FY09–13) × £209.27/MWh (DESNZ table 3.4.1, annual, 2025,
+extra large, excluding CCL) = **£4.19/MWh**, grade proxy. Carried because it fails the 1 % test.
 
 ---
 

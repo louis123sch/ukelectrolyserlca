@@ -791,7 +791,14 @@ flexible (curtailable) connection once a company publishes its curtailment
 hours. (vii) The full year is ~10x slower with a choice of lists (S5, 31 Oct):
 prune before the year — choose the list on the week or on the relaxed problem
 (switches continuous), keep the two or three cheapest, then fix for the year;
-or carry the week's choice into the page's full-year run.
+or carry the week's choice into the page's full-year run. (viii) The
+connection's price at +/-50 % (4 Nov 2026, the supervisor's test; build cost and
+network charges scaled separately, full year, three cases): no redesign, 35 of
+36 points pass the cut-off rule's test and no technology appears or disappears;
+the one failure is the size-free 132 kV connection at -5.06 %. Closed for now,
+but the runs fix the price list, so the list choice itself was only checked by
+comparing two lists (`optimisation_outputs/connection_sensitivity.md`), and they
+predate the government cost figures: repeat if those move the design much.
 
 ## 2. Carbon is charged and cost is free
 

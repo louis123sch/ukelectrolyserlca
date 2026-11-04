@@ -95,7 +95,8 @@ def dispatch(series: M.Series, tech: M.Tech, caps: dict,
     eta_bt, eta_ft = 1.0 - lf["battery"], 1.0 - lf["fc"]
 
     soc = initial_soc_frac * cap_be
-    tank = initial_tank_frac * cap_tank
+    tank_max = tech.tank_usable_fraction * cap_tank     # as the LP's tank_cap
+    tank = initial_tank_frac * tank_max
     out = {k: np.zeros(n) for k in
            ("direct", "ch", "dis", "soc", "p_ely", "tank", "p_fc", "h2_buy",
             "imp", "unserved", "curtailed")}
@@ -118,7 +119,7 @@ def dispatch(series: M.Series, tech: M.Tech, caps: dict,
             surplus -= ch / eta_bt
         p_ely = 0.0
         if surplus > 0 and cap_ely > 0 and cap_tank > 0:
-            room_kg = cap_tank - tank
+            room_kg = tank_max - tank
             p_ely = min(surplus, cap_ely, room_kg / kg_per_mwh_in / dt)
             tank += p_ely * kg_per_mwh_in * dt
             surplus -= p_ely

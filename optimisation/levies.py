@@ -85,8 +85,12 @@ TLM     offtaking TLM = 1 + TLF(zone, season) + TLMO- (Elexon, *Guidance
         Until 29 Oct 2026 the TLM was a flat 1.011 for every site; until 28
         Oct 2026 losses were the carbon side's ecoinvent factor (x1.0338).
 
-Not charged: the ESC and EMR settlement-cost levies (negligible per MWh),
-supplier margin (commercial, unpublished), and the Green Gas Levy (gas only).
+Supplier margin, since 4 Nov 2026: unpublished for a site this size, so an
+estimate, the CMA's 2.0 % on industrial and commercial supply of DESNZ's price to
+extra large consumers (cost_exclusions.py: it fails the 1 % test if left out).
+
+Not charged: the ESC and EMR settlement-cost levies (negligible per MWh) and the
+Green Gas Levy (gas only).
 A data centre is not an Energy Intensive Industry, so no EII exemption applies.
 
 Run:  python optimisation/levies.py
@@ -127,6 +131,8 @@ NUCLEAR_RAB_ILR = (("2026-04-01", 4.683), ("2026-07-01", 4.488),
                    ("2026-10-01", 3.754), ("2027-01-01", 3.676))
 NUCLEAR_RAB_OPERATIONAL_GBP_PER_MWH = 0.0063
 
+SUPPLIER_EBIT_MARGIN = 0.020                    # CMA 2015, Table 1, industrial and commercial, FY09-13
+EXTRA_LARGE_PRICE_GBP_PER_MWH = 209.27          # DESNZ table 3.4.1, annual, 2025, electricity, extra large, excl. CCL
 CM_SUPPLIER_CHARGE_GBP = 3_474_489_734.79       # Delivery Year 2026/27
 CM_PEAK_DEMAND_MWH = 11_291_571.95
 CM_MONTHS = (11, 12, 1, 2)
@@ -208,6 +214,7 @@ def flat_components(under_cca: bool | None = None) -> dict:
         "AAHEDC": AAHEDC_P_PER_KWH * 10.0,
         "Nuclear RAB": nuclear_rab_gbp_per_mwh(),
         "CCL": ccl_gbp_per_mwh(under_cca),
+        "Supplier margin": SUPPLIER_EBIT_MARGIN * EXTRA_LARGE_PRICE_GBP_PER_MWH,
     }
 
 
@@ -314,10 +321,15 @@ def _record_levies(flat: dict, cm: pd.Series, series: pd.Series, under_cca: bool
     T.cost("cost.levy.CM_mean", float(cm.mean()), "GBP per MWh",
            "Capacity Market, mean over the window on a flat load", uses=["cost.levy.CM_in_window"],
            inputs={"share_of_half_hours_in_window": float((cm > 0).mean())})
+    T.cost("cost.levy.supplier_margin", flat["Supplier margin"], "GBP per MWh",
+           "Supplier margin: an estimate that fails the 1 % test if left out", grade="proxy",
+           inputs={"ebit_margin": SUPPLIER_EBIT_MARGIN, "price_GBP_per_MWh": EXTRA_LARGE_PRICE_GBP_PER_MWH},
+           cites=[("cma_retail_profitability_2015", "Table 1, industrial and commercial, 2.0 %, FY09-13"),
+                  ("desnz_nondomestic_prices", "table 3.4.1, annual, 2025, electricity, extra large")])
     T.cost("cost.levy.mean_per_MWh", float(series.mean()), "GBP per MWh",
-           "Every policy levy on metered imports, mean over the window",
+           "Every policy levy and the supplier margin on metered imports, mean over the window",
            uses=["cost.levy.RO", "cost.levy.FiT", "cost.levy.CfD", "cost.levy.AAHEDC", "cost.levy.Nuclear_RAB",
-                 "cost.levy.CCL", "cost.levy.CM_mean"])
+                 "cost.levy.CCL", "cost.levy.supplier_margin", "cost.levy.CM_mean"])
 
 
 def import_levies(index: pd.DatetimeIndex, under_cca: bool | None = None) -> dict:
