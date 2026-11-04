@@ -28,12 +28,14 @@ shell). Out: end-of-life, delivery to site, and the hydrogen itself (leakage is
 the LP's ``H2 leaked from tank`` term). Valves, pipework and compressor hardware
 are unsourced and sit on the cut-off register (``optimiser_lca/exclusions.py``).
 
-**Two designs.** ``gandiglio_28bar`` is the paper's low-pressure buffer, heavy
-per kg because at 28 bar the steel is set by volume, not hoop stress; a Type I
-seamless cylinder at 200 bar reaches ~1 wt%, three times lighter, and needs
-2.5 kWh/kg of compression (charged in the dispatch, not here). ``TANK_DESIGN``
-picks which is built; the paper's is the default because it has a published
-inventory behind it.
+**Three designs.** ``bulk_carbon_steel_28bar`` (the default since 4 Nov 2026) is
+a bulk carbon-steel vessel at 28 bar sized by the thin-wall formula, about 161 kg
+of steel per kg of hydrogen, the class of vessel the cost side prices.
+``gandiglio_28bar`` is the paper's small stainless buffer, 313 kg per kg: heavy
+because a 21.6 m³ vessel is set by its minimum plate, not hoop stress; it was the
+default until 4 Nov 2026 and stays as the sensitivity. A Type I seamless cylinder
+at 200 bar reaches ~1 wt%, and needs 2.5 kWh/kg of compression (charged in the
+dispatch, not here). ``TANK_DESIGN`` picks which is built.
 """
 from __future__ import annotations
 
@@ -46,20 +48,38 @@ from optimiser_lca.common import Activity, Inventory, Process
 # Parameters
 # =============================================================================
 TANK_DESIGNS = {
+    # The default since 4 Nov 2026 (evening): a bulk carbon-steel pressure vessel
+    # at the study's 28 bar, DERIVED by the standard thin-wall cylinder formula
+    # (SA-516 Gr 70 plate, 138 MPa allowable, design pressure 110 % of working,
+    # 3 mm corrosion allowance, hemispherical heads, 7,850 kg/m3): 161-167 kg of
+    # steel per kg of hydrogen for vessels of 95-500 m3, and the same at 50 and
+    # 80 bar, because hoop stress and gas density both scale with pressure. The
+    # cost side prices Element Energy's 95 m3 vessel of this class, so cost and
+    # carbon now describe one vessel. Replaces Gandiglio's small stainless buffer
+    # as the default under the cut-off rule's substitution clause (a stated
+    # physical check: 313 kg of stainless per kg is a 21.6 m3 vessel, not a bulk
+    # store); Gandiglio's stays as the sensitivity. docs/COST_BEST_SOURCE_PLAN.md.
+    "bulk_carbon_steel_28bar": {
+        "steel_process": "steel_low_alloyed_hr", "forming_process": "sheet_rolling_steel",
+        "steel_kg_per_kg_h2": 161.2, "pressure_bar": 28.0, "volume_m3": 200.0,
+        "note": "DERIVED - bulk carbon-steel vessel at 28 bar, thin-wall formula on a 200 m3 shell; "
+                "the cost side's vessel class",
+    },
     # TRANSCRIBED - Gandiglio et al. 2022 Table 5, the vessel at Ginostra.
     "gandiglio_28bar": {
-        "steel_process": "steel_chromium_188",
+        "steel_process": "steel_chromium_188", "forming_process": "sheet_rolling_cr_steel",
         "steel_kg": 15_652.0, "volume_m3": 21.6, "pressure_bar": 28.0,
-        "note": "Gandiglio et al. 2022, Table 5 - 21.6 m3 stainless vessel at 28 bar",
+        "note": "Gandiglio et al. 2022, Table 5 - 21.6 m3 stainless vessel at 28 bar (the sensitivity since "
+                "4 Nov 2026)",
     },
     # ASSUMED - a Type I all-steel cylinder at ~1 wt% gravimetric capacity.
     "type1_200bar": {
-        "steel_process": "steel_low_alloyed_hr",
+        "steel_process": "steel_low_alloyed_hr", "forming_process": "sheet_rolling_steel",
         "steel_kg_per_kg_h2": 100.0, "pressure_bar": 200.0,
         "note": "Type I seamless cylinder, ~1 wt% H2 - typical industrial stationary bottle",
     },
 }
-TANK_DESIGN = "gandiglio_28bar"
+TANK_DESIGN = "bulk_carbon_steel_28bar"
 if TANK_DESIGN not in TANK_DESIGNS:
     raise ValueError(f"TANK_DESIGN must be one of {list(TANK_DESIGNS)}")
 
@@ -96,8 +116,9 @@ def h2_kg_per_m3(design: dict) -> float:
 
 
 def capacity_kg(design: dict) -> float | None:
-    """kg of H2 a design holds, from its own volume and pressure; None for a per-kg design."""
-    if "steel_kg_per_kg_h2" in design:
+    """kg of H2 a design holds, from its own volume and pressure; None for a per-kg
+    design that states no vessel volume."""
+    if "volume_m3" not in design:
         return None
     return h2_kg_per_m3(design) * design["volume_m3"]
 
@@ -108,9 +129,11 @@ def steel_kg_per_kg_h2(design: dict) -> float:
     return design["steel_kg"] / capacity_kg(design)
 
 
-def pad_m3_per_m3_vessel() -> float:
-    """Concrete per m3 of vessel volume, from the reference vessel's geometry."""
-    v = _REF["volume_m3"]
+def pad_m3_per_m3_vessel(design: dict | None = None) -> float:
+    """Concrete per m3 of vessel volume, from the vessel's own geometry where the
+    design states a volume (a pad scales with footprint, so a bulk vessel needs
+    less per m3), else the reference vessel's."""
+    v = (design or {}).get("volume_m3", _REF["volume_m3"])
     d = (4.0 * v / (math.pi * VESSEL_L_OVER_D)) ** (1.0 / 3.0)
     length = VESSEL_L_OVER_D * d
     area = (length + 2 * PAD_CLEARANCE_M) * (d + 2 * PAD_CLEARANCE_M)
@@ -119,7 +142,7 @@ def pad_m3_per_m3_vessel() -> float:
 
 def foundations_per_kg_h2(design: dict) -> dict:
     """Concrete (m3), rebar (kg) and frame steel (kg) per kg of H2 capacity."""
-    concrete = pad_m3_per_m3_vessel() / h2_kg_per_m3(design)
+    concrete = pad_m3_per_m3_vessel(design) / h2_kg_per_m3(design)
     return {"concrete_m3": concrete,
             "rebar_kg": concrete * REBAR_KG_PER_M3_CONCRETE,
             "frame_kg": FRAME_STEEL_FRACTION_OF_SHELL * steel_kg_per_kg_h2(design)}
@@ -152,7 +175,10 @@ def check() -> str:
 # =============================================================================
 # Processes
 # =============================================================================
-processes = {
+# Every process any design can use; ``processes`` below is the as-built design's
+# subset (the build's static check wants every declared process on a row), and
+# ``optimisation.h2_storage`` scores all designs from this full table.
+ALL_PROCESSES = {
     "steel_chromium_188": Process(
         identity=("market for steel, chromium steel 18/8", "GLO"),
         query="market for steel chromium steel 18/8 GLO",
@@ -160,8 +186,12 @@ processes = {
     "sheet_rolling_cr_steel": Process(
         identity=("market for sheet rolling, chromium steel", "GLO", "sheet rolling, chromium steel"),
         query="market for sheet rolling chromium steel GLO",
-        why="forming of the shell plate; the lower of the two forming factors the cut-off plan tested "
+        why="forming of a stainless shell plate; the lower of the two forming factors the cut-off plan tested "
             "(average metal working for chromium steel is the upper, kept as the sensitivity)"),
+    "sheet_rolling_steel": Process(
+        identity=("market for sheet rolling, steel", "GLO", "sheet rolling, steel"),
+        query="market for sheet rolling steel GLO",
+        why="forming of a carbon-steel shell plate, the same step as the stainless one for its own steel"),
     "steel_low_alloyed_hr": Process(
         identity=("market for steel, low-alloyed, hot rolled", "GLO"),
         query="market for steel low-alloyed hot rolled GLO",
@@ -175,6 +205,9 @@ processes = {
         identity=("market for reinforcing steel", "GLO", "reinforcing steel"),
         query="market for reinforcing steel GLO"),
 }
+processes = {k: v for k, v in ALL_PROCESSES.items()
+             if k in (DESIGN["steel_process"], DESIGN["forming_process"],
+                      "steel_low_alloyed_hr", "concrete_normal", "reinforcing_steel")}
 flows = {}
 
 # =============================================================================
@@ -186,17 +219,18 @@ activities = [
         name=f"Hydrogen storage tank, steel vessel, per kg capacity ({TANK_DESIGN})",
         reference_product="hydrogen storage capacity",
         unit="kilogram", location="GLO",
-        comment="One kg of hydrogen storage capacity: Gandiglio et al. 2022 Table 5's vessel (15,652 kg "
-                "chromium steel 18/8, 21.6 m3, 28 bar, 50.0 kg of H2) per kg stored, the forming of that "
-                f"steel (ADDED), and a frame and reinforced pad from the vessel's geometry (ASSUMED). Design "
-                f"{TANK_DESIGN!r}: {TANK_STEEL_KG_PER_KG_H2:.1f} kg steel per kg H2 at {DESIGN['pressure_bar']:g} bar. "
-                "Amortised over TANK_LIFETIME_YEARS (dc_config). Out: valves, pipework, compressor hardware "
-                "(cut-off register), end-of-life, delivery to site.",
+        comment=f"One kg of hydrogen storage capacity, design {TANK_DESIGN!r}: {DESIGN['note']}; "
+                f"{TANK_STEEL_KG_PER_KG_H2:.1f} kg steel per kg H2 at {DESIGN['pressure_bar']:g} bar, the forming "
+                "of that steel (sheet rolling, ADDED 22 Oct 2026), and a frame and reinforced pad from the "
+                "reference vessel's geometry (ASSUMED). Gandiglio et al. 2022 Table 5's vessel (15,652 kg chromium "
+                "steel 18/8, 21.6 m3, 28 bar, 50.0 kg of H2) is the 'gandiglio_28bar' design. Amortised over "
+                "TANK_LIFETIME_YEARS (dc_config). Out: valves, pipework, compressor hardware (cut-off register), "
+                "end-of-life, delivery to site.",
         technosphere=[
             (DESIGN["steel_process"], TANK_STEEL_KG_PER_KG_H2, "kilogram",
-             f"Gandiglio Table 5 — vessel steel, {TANK_DESIGN}, {DESIGN['pressure_bar']:g} bar"),
-            ("sheet_rolling_cr_steel", TANK_STEEL_KG_PER_KG_H2, "kilogram",
-             "ADDED — forming of the shell: sheet rolling, chromium steel, on the shell mass (22 Oct 2026)"),
+             f"vessel steel, {TANK_DESIGN}, {DESIGN['pressure_bar']:g} bar: {DESIGN['note']}"),
+            (DESIGN["forming_process"], TANK_STEEL_KG_PER_KG_H2, "kilogram",
+             "ADDED — forming of the shell: sheet rolling of its own steel, on the shell mass (22 Oct 2026)"),
             ("steel_low_alloyed_hr", TANK_FOUNDATIONS["frame_kg"], "kilogram",
              f"ASSUMED — saddles and frame, {FRAME_STEEL_FRACTION_OF_SHELL:.0%} of the shell mass"),
             ("concrete_normal", TANK_FOUNDATIONS["concrete_m3"], "cubic meter",
@@ -209,7 +243,7 @@ activities = [
 
 
 def inventory() -> Inventory:
-    return Inventory(name="hydrogen tank (Gandiglio 2022)", database=R.H2_STORAGE_DB,
+    return Inventory(name=f"hydrogen tank ({TANK_DESIGN})", database=R.H2_STORAGE_DB,
                      processes=processes, flows=flows, activities=activities)
 
 

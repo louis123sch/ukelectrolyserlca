@@ -1,4 +1,4 @@
-# built_at,2026-10-26T12:14:58+00:00
+# built_at,2026-11-04T19:21:23+00:00
 # cost_case,central
 asset,capacity_unit,capital_kgco2e_per_capacity_unit,calendar_lifetime_years,duty_lifetime_hours,variable_kgco2e_per_unit,variable_output_unit,throughput_kgco2e_per_MWh,source,grade,note
 onshore_wind,MW,839249.7977028491,35.0,,,,0.13103363686519515,"ecoinvent 3.9.1 apos capital exchange, decomposed; DESNZ/Arup 2024 lifetime",derived,
@@ -12,5 +12,6 @@ electrolyser_soec,MW,552772.6786463119,25.0,,1.6319028250178174,kg H2,,"Hermesma
 fuel_cell_bop,MW,50807.314220137574,20.0,80000.0,,,,Usai 2021 loops + 500 kW inverter + container; DOE MW-class duty life,assumed,calendar life 20 y ASSUMED (Nedstack-indicative) — sweep 15/20/25 y; see DATA_GAPS.md
 fuel_cell_stack,MW,97431.28734467816,10.0,30000.0,,,,Babatunde et al. 2024 Table S1; stack life their §3.4,assumed,calendar life 10 y ASSUMED — sweep 5/10/15 y; Gramc 2025 stack is the sensitivity basis; see DATA_GAPS.md
 fuel_cell_maintenance,MW,0.0,,,,,0.0032037756522448986,"Usai 2021 air filter + coolant per 8,000 h",derived,pure throughput term
-h2_tank_gandiglio_28bar,kg H2,2004.5797021574642,25.0,,,,,Gandiglio et al. 2022 Table 5,transcribed,0.0 kWh/kg charging compression; standing loss 0/h ASSUMED
-h2_tank_type1_200bar,kg H2,357.2931791527809,25.0,,,,,derived from a ~1 wt% Type I cylinder,assumed,1.2 kWh/kg charging compression; standing loss 0/h ASSUMED
+h2_tank_bulk_carbon_steel_28bar,kg H2,555.518020923113,25.0,,,,,Gandiglio et al. 2022 Table 5,transcribed,0.0 kWh/kg charging compression; standing loss 0/h ASSUMED
+h2_tank_gandiglio_28bar,kg H2,2004.5797021574642,25.0,,,,,derived from a ~1 wt% Type I cylinder,assumed,0.0 kWh/kg charging compression; standing loss 0/h ASSUMED
+h2_tank_type1_200bar,kg H2,332.9593242687275,25.0,,,,,derived from a ~1 wt% Type I cylinder,assumed,1.2 kWh/kg charging compression; standing loss 0/h ASSUMED

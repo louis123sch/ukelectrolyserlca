@@ -274,8 +274,8 @@ def energy_section(gap_ids=lambda *k: []):
       model="tank[t] ≤ cap_tank (kg), cyclic. Fed by the electrolyser and by bought hydrogen; "
             "drained by the fuel cell. Drains to zero (no heel).",
       loss=f"leakage {h2s.LEAKAGE_FRAC_PER_HOUR:g} /h by default (swept); leaked H₂ is charged at GWP 11.6",
-      lp="cap_tank (kg), tank[t]", term="Hydrogen tank (Gandiglio 28 bar vessel)",
-      source="Gandiglio et al. 2022", gaps=("tank", "leakage"))
+      lp="cap_tank (kg), tank[t]", term=f"Hydrogen tank ({h2_tank.TANK_DESIGN})",
+      source=h2_tank.DESIGN["note"], gaps=("tank", "leakage"))
 
     # ================================================================ hydrogen used
     n("fc_stack", "Fuel cell stack — PEM", 6, 1.0, "component", route=R + ("bought",),

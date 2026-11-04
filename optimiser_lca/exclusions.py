@@ -163,7 +163,17 @@ def _switchgear(life_years: float, kg_per_unit: float = SWITCHGEAR_KG_PER_MW) ->
 
 _WIND_TX_FACTORY = _tx_factory_energy(2_823.43, 35.0)       # Leng's box units, kg per MW
 _GRID_TX_FACTORY = _tx_factory_energy(2 * 714.586, 40.0)    # Leng's main unit, 2 MVA per MW (N-1)
-_TANK_STEEL_KG_PER_KG_H2_YEAR = 313.1 / 25.0                # Gandiglio's 28 bar vessel over the tank's life
+# The as-built vessel's steel over the tank's life (h2_tank.TANK_DESIGN): 161.2 kg
+# of carbon steel per kg since 4 Nov 2026 (evening); Gandiglio's 313.1 kg of
+# stainless before. The forming and fittings rows follow the design's own steel.
+from optimiser_lca import h2_tank as _h2_tank  # noqa: E402
+_TANK_STEEL_KG_PER_KG_H2_YEAR = _h2_tank.TANK_STEEL_KG_PER_KG_H2 / 25.0
+_TANK_IS_STAINLESS = _h2_tank.DESIGN["steel_process"] == "steel_chromium_188"
+# Scored 4 Nov 2026 on ecoinvent 3.9.1 apos: sheet rolling of steel 0.3919, low-alloyed hot-rolled steel 2.5013
+_TANK_FORMING = (("market for sheet rolling, chromium steel", "GLO", "sheet rolling, chromium steel"), 0.64) \
+    if _TANK_IS_STAINLESS else (("market for sheet rolling, steel", "GLO", "sheet rolling, steel"), 0.3919)
+_TANK_STEEL = (("market for steel, chromium steel 18/8", "GLO", "steel, chromium steel 18/8"), 5.10) \
+    if _TANK_IS_STAINLESS else (("market for steel, low-alloyed, hot rolled", "GLO", "steel, low-alloyed, hot rolled"), 2.5013)
 
 # =============================================================================
 # The register
@@ -220,24 +230,24 @@ REGISTER: list[Exclusion] = [
         "hydrogen tank", "forming of the vessel steel (rolling, welding)",
         "cutoff", status="included_inventory", method="mass_x_factor",
         amount_central=_TANK_STEEL_KG_PER_KG_H2_YEAR, amount_upper=_TANK_STEEL_KG_PER_KG_H2_YEAR,
-        factor_identity=("market for sheet rolling, chromium steel", "GLO", "sheet rolling, chromium steel"),
-        factor_unit="kilogram", factor=0.64,
+        factor_identity=_TANK_FORMING[0], factor_unit="kilogram", factor=_TANK_FORMING[1],
         factor_identity_upper=("market for metal working, average for chromium steel product manufacturing", "GLO",
                                "metal working, average for chromium steel product manufacturing"),
-        factor_upper=2.71, scored_on="2026-10-20",
-        source="Gandiglio et al. 2022 Table 5 count the steel only; a pressure vessel is rolled and welded",
-        basis="313.1 kg of chromium steel per kg of H2 capacity over 25 years; sheet rolling as the lower bound, "
-              "average metal working for chromium steel as the upper. Built as a row in h2_tank.py on "
-              "22 Oct 2026 (sheet rolling); metal working stays the sensitivity.",
+        factor_upper=2.71, scored_on="2026-11-04",
+        source="the steel line counts the steel only; a pressure vessel is rolled and welded",
+        basis=f"{_h2_tank.TANK_STEEL_KG_PER_KG_H2:.1f} kg of the design's steel per kg of H2 capacity over 25 years; "
+              "sheet rolling of that steel as the lower bound, average metal working for chromium steel as the "
+              "upper (a stand-in for carbon steel, conservative). Built as a row in h2_tank.py on 22 Oct 2026 "
+              "(sheet rolling); metal working stays the sensitivity.",
         where=("h2_tank", "TANK_SCOPE", "forming")),
     Exclusion(
         "hydrogen tank", "valves, pipework and fittings",
         "cutoff", status="included_estimate", method="mass_x_factor",
         amount_central=0.01 * _TANK_STEEL_KG_PER_KG_H2_YEAR, amount_upper=0.02 * _TANK_STEEL_KG_PER_KG_H2_YEAR,
-        factor_identity=("market for steel, chromium steel 18/8", "GLO", "steel, chromium steel 18/8"),
-        factor_unit="kilogram", factor=5.10, scored_on="2026-10-20",
-        source="no source: Gandiglio et al. 2022 count the shell only",
-        basis="1 % (central) to 2 % (upper) of the shell mass in chromium steel, ASSUMED, over the tank's 25 years.",
+        factor_identity=_TANK_STEEL[0], factor_unit="kilogram", factor=_TANK_STEEL[1], scored_on="2026-11-04",
+        source="no source: the vessel's inventory is the shell only",
+        basis="1 % (central) to 2 % (upper) of the shell mass in the design's own steel, ASSUMED, over the tank's "
+              "25 years.",
         where=("h2_tank", "TANK_SCOPE", "valves_pipework_compressor")),
     Exclusion(
         "hydrogen tank", "compressor hardware",

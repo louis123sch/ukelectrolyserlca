@@ -180,12 +180,13 @@ def decompose(use_cache: bool = True, refresh: bool = False):
     # once per unit and applied per design. The forming is sheet rolling of
     # chromium steel on the shell mass, as the inventory carries it; the 200 bar
     # low-alloy design takes the same per-kg factor as a stand-in (ASSUMED).
-    unit = {k: H.run_lca_score(H.resolve_exact(*h2_tank.processes[k].identity), method)
-            for k in ("steel_low_alloyed_hr", "concrete_normal", "reinforcing_steel", "sheet_rolling_cr_steel")}
+    unit = {k: H.run_lca_score(H.resolve_exact(*h2_tank.ALL_PROCESSES[k].identity), method)
+            for k in ("steel_low_alloyed_hr", "concrete_normal", "reinforcing_steel", "sheet_rolling_cr_steel",
+                      "sheet_rolling_steel")}
 
     rows = []
     for name, design in TANK_DESIGNS.items():
-        proc = h2_tank.processes[design["steel_process"]]
+        proc = h2_tank.ALL_PROCESSES[design["steel_process"]]
         proc_name = proc.identity[0]
         steel = H.resolve_exact(*proc.identity)
         per_kg_steel = H.run_lca_score(steel, method)
@@ -194,7 +195,7 @@ def decompose(use_cache: bool = True, refresh: bool = False):
         foundations = (f["frame_kg"] * unit["steel_low_alloyed_hr"]
                        + f["concrete_m3"] * unit["concrete_normal"]
                        + f["rebar_kg"] * unit["reinforcing_steel"])
-        forming = intensity * unit["sheet_rolling_cr_steel"]
+        forming = intensity * unit[design.get("forming_process", "sheet_rolling_cr_steel")]
         per_kg_cap = per_kg_steel * intensity + forming + foundations
 
         # Filled in by the caller, which is the only place that knows which
@@ -206,6 +207,7 @@ def decompose(use_cache: bool = True, refresh: bool = False):
             "design": name,
             "pressure_bar": design["pressure_bar"],
             "steel_process": proc_name,
+            "forming_process": design.get("forming_process", "sheet_rolling_cr_steel"),
             "steel_kg_per_kg_h2": intensity,
             "capacity_kg_h2": capacity_kg(design),
             "kgco2e_per_kg_steel": per_kg_steel,
@@ -243,15 +245,17 @@ def traced(row: dict) -> dict:
            f"The vessel per kg it holds: {row['steel_process']} at "
            f"{row['steel_kg_per_kg_h2']:.1f} kg per kg H2, its forming, and its frame and pad",
            uses=[tank] if row["is_as_built"] else
-                [T.ecoinvent(*h2_tank.processes[TANK_DESIGNS[row["design"]]["steel_process"]].identity)],
+                [T.ecoinvent(*h2_tank.ALL_PROCESSES[TANK_DESIGNS[row["design"]]["steel_process"]].identity)],
            scores=tank if row["is_as_built"] else None,
            inputs={"steel_kg_per_kg_h2": row["steel_kg_per_kg_h2"],
                    "kgco2e_per_kg_steel": row["kgco2e_per_kg_steel"],
                    "forming": row["forming_kgco2e_per_kg_capacity"],
                    "foundations": row["foundations_kgco2e_per_kg_capacity"]},
-           grade="transcribed" if row["is_as_built"] else "assumed",
-           source="Gandiglio et al. 2022 Table 5" if row["is_as_built"]
-                  else "derived from a ~1 wt% Type I cylinder")
+           grade={"gandiglio_28bar": "transcribed", "bulk_carbon_steel_28bar": "derived"}.get(row["design"], "assumed"),
+           source={"gandiglio_28bar": "Gandiglio et al. 2022 Table 5",
+                   "bulk_carbon_steel_28bar": "the thin-wall cylinder formula on a 200 m3 carbon-steel shell at 28 bar "
+                                              "(h2_tank.TANK_DESIGNS), the cost side's vessel class; 4 Nov 2026"}
+                  .get(row["design"], "derived from a ~1 wt% Type I cylinder"))
     T.step(f"{k}.lifetime_years", row["lifetime_years"], "years", "Tank life (dc_config)",
            grade="assumed")
     T.step(f"{k}.per_kg_capacity_year", row["kgco2e_per_kg_capacity_year"],

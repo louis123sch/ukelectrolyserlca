@@ -205,9 +205,20 @@ DESNZ/Arup 2024 Cost of Electricity reports, brought from 2023 to **2025 real pr
 by the ONS GDP deflator (`price_base.py`), with land, business rates and building finance
 added for onshore wind and solar and their own generator network charges taken out, since
 4 Nov 2026 (SOURCES.md). **UK government sources are the first choice for every cost
-figure**, by the user's rule of that date. Each technology keeps its own pre-tax real hurdle rate (onshore wind 5.8 %, offshore wind
-6.2 %, solar PV 5.0 %) rather than a single project WACC. Set
-`optimisation.tech_costs.DISCOUNT_RATE_OVERRIDE` to impose one rate instead.
+figure**, by the user's rule of that date. Every asset is annualised at CEPA's 2025 hurdle rates for DESNZ (Table E.1,
+pre-tax real at 50 % gearing): wind and solar 7.6 %, battery 8.9 %, electrolyser,
+fuel cell and tank 10.1 %, one method across the study since 4 Nov 2026
+(evening), with construction finance carried at the rate over each asset's
+published build time. The reports' own hurdle rates (5.8 / 6.2 / 5.0 %) stay for
+the LCOE cross-check only. Set `optimisation.tech_costs.DISCOUNT_RATE_OVERRIDE`
+to impose one rate instead. **Where a UK government figure looks wrong** (its
+method does not fit the use, or several independent authoritative sources
+contradict it) or none exists, an authoritative alternative stands in and says so:
+solid-oxide capital (Danish Energy Agency), the fuel cell's stack share (Clean
+Hydrogen Partnership), the tank's range and the battery's range
+(`docs/COST_BEST_SOURCE_PLAN.md`). **The tank's carbon describes the same bulk
+carbon-steel vessel class the cost side prices** (161 kg of steel per kg, derived
+by the thin-wall formula); Gandiglio's stainless buffer is the sensitivity.
 
 *One asymmetry, deliberate*: generation step-up transformers
 (`transformers.py`) are charged in **carbon and not in cost**. The DESNZ/Arup
@@ -451,9 +462,9 @@ ceiling. A flow that fails is included (status below). Register:
 | battery | container switchgear (MV, one per container) | cutoff | included_estimate | 102 | 186 | kg CO2e per MW per year | 1.70% | included (estimate) |
 | fuel cell | container switchgear (MV, one per container) | cutoff | included_estimate | 76.2 | 139 | kg CO2e per MW per year, calendar replacements | 1.06% | included (estimate) |
 | fuel cell | balance-of-plant assembly energy | cutoff | excluded | 50.8 | 127 | kg CO2e per MW per year, calendar replacements | 0.97% | pass |
-| hydrogen tank | forming of the vessel steel (rolling, welding) | cutoff | included_inventory | 8.02 | 33.9 | kg CO2e per kg of capacity per year | — | in the inventory |
-| hydrogen tank | valves, pipework and fittings | cutoff | included_estimate | 0.639 | 1.28 | kg CO2e per kg of capacity per year | 1.58% | included (estimate) |
-| hydrogen tank | compressor hardware | cutoff | excluded | 0.01 | 0.03 | kg CO2e per kg of capacity per year | 0.04% | pass |
+| hydrogen tank | forming of the vessel steel (rolling, welding) | cutoff | included_inventory | 2.53 | 17.5 | kg CO2e per kg of capacity per year | — | in the inventory |
+| hydrogen tank | valves, pipework and fittings | cutoff | included_estimate | 0.161 | 0.323 | kg CO2e per kg of capacity per year | 1.44% | included (estimate) |
+| hydrogen tank | compressor hardware | cutoff | excluded | 0.01 | 0.03 | kg CO2e per kg of capacity per year | 0.13% | pass |
 | wind | step-up switchgear (turbine MV switchgear) | cutoff | excluded | 43.6 | 79.6 | kg CO2e per MW per year (turbine + step-ups) | 0.32% | pass |
 | wind | step-up transformer replacement rate | cutoff | excluded | 0 | 98.2 | kg CO2e per MW per year (turbine + step-ups) | 0.40% | pass |
 | wind | Leng's electrical installation beyond its four printed rows | cutoff | excluded | 0 | 125 | kg CO2e per MW per year (turbine + step-ups) | 0.51% | pass |
@@ -475,7 +486,7 @@ ceiling. A flow that fails is included (status below). Register:
 | solar | 2.41e+04 | kg CO2e/MWp/yr | 1 | 1 | 0.30% | pass |
 | battery | 3.27e+03 | kg CO2e/MW/yr (p) and per usable MWh/yr (e) | 3 | 2 | 0.82% | pass |
 | electrolyser | 1.98e+04 | kg CO2e/MW/yr | 1 | 0 | 0.00% | n/a |
-| hydrogen tank | 80.8 | kg CO2e per kg capacity/yr | 3 | 1 | 0.04% | pass |
+| hydrogen tank | 22.4 | kg CO2e per kg capacity/yr | 3 | 1 | 0.13% | pass |
 | fuel cell | 1.31e+04 | kg CO2e/MW/yr, calendar replacements | 2 | 1 | 0.97% | pass |
 | grid connection | 305 | kg CO2e/MW/yr | 3 | 0 | 0.00% | n/a |
 | grid electricity | — | kg CO2e/kWh (series mean; no entries) | 0 | 0 | 0.00% | n/a |
