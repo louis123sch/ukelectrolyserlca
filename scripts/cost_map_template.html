@@ -1,0 +1,867 @@
+<meta charset="utf-8">
+<title>Data Centre Cost Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one full-height workbench — toolbar on top, the process graph on a pannable
+   drafting canvas, and a datasheet panel docked right (a bottom sheet on phones). */
+:root {
+  --bg: #eef1ef;           /* drafting ground, a grey with a green bias */
+  --surface: #ffffff;
+  --surface-2: #f6f8f7;    /* background-dataset cards */
+  --ink: #16201e;
+  --muted: #5a6763;
+  --line: #c9d2ce;
+  --grid: #dfe5e2;
+  --accent: #0d6670;       /* petrol: selection, focus, controls */
+  --accent-ink: #ffffff;
+  --link: #9fb0ab;
+  --g-transcribed: #2867c9;
+  --g-derived: #7446c4;
+  --g-assumed: #b07800;
+  --g-proxy: #cf4f25;
+  --g-background: #87928e;
+  --g-biosphere: #23845a;
+  --g-source: #0d6670;
+  --gap-open: #c22d47;
+  --gap-closed: #23845a;
+  --gap-known: #b07800;
+  --gap-absent: #87928e;
+  --c-sun: #c48a00; --c-wind: #3a86b8; --c-dc: #c4432a; --c-lv: #2867c9; --c-mv: #0d6670;
+  --c-hv: #6a3fb8; --c-h2: #1d8a68; --c-gas: #8a5a2b; --c-off: #9aa5a1;
+  --shadow: 0 1px 2px rgb(22 32 30 / 0.08), 0 4px 14px rgb(22 32 30 / 0.06);
+  --font-ui: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-node: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111716; --surface: #1a2220; --surface-2: #151c1b; --ink: #e3ebe8; --muted: #93a29d;
+    --line: #2f3b38; --grid: #1c2523; --accent: #4bb7bf; --accent-ink: #06201f; --link: #4a5955;
+    --g-transcribed: #6a9cf0; --g-derived: #a688e8; --g-assumed: #e0aa35; --g-proxy: #ee7a52;
+    --g-background: #7d8a86; --g-biosphere: #4fbf86; --g-source: #4bb7bf; --gap-open: #f0647b; --gap-closed: #4fbf86;
+    --gap-known: #e0aa35; --gap-absent: #7d8a86;
+    --c-sun: #e6b43c; --c-wind: #6fb3e0; --c-dc: #ef7a5e; --c-lv: #6a9cf0; --c-mv: #4bb7bf;
+    --c-hv: #a688e8; --c-h2: #4fc79d; --c-gas: #c69563; --c-off: #5d6a66;
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 4px 14px rgb(0 0 0 / 0.3);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111716; --surface: #1a2220; --surface-2: #151c1b; --ink: #e3ebe8; --muted: #93a29d;
+  --line: #2f3b38; --grid: #1c2523; --accent: #4bb7bf; --accent-ink: #06201f; --link: #4a5955;
+  --g-transcribed: #6a9cf0; --g-derived: #a688e8; --g-assumed: #e0aa35; --g-proxy: #ee7a52;
+  --g-background: #7d8a86; --g-biosphere: #4fbf86; --g-source: #4bb7bf; --gap-open: #f0647b; --gap-closed: #4fbf86;
+  --gap-known: #e0aa35; --gap-absent: #7d8a86;
+  --c-sun: #e6b43c; --c-wind: #6fb3e0; --c-dc: #ef7a5e; --c-lv: #6a9cf0; --c-mv: #4bb7bf;
+  --c-hv: #a688e8; --c-h2: #4fc79d; --c-gas: #c69563; --c-off: #5d6a66;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 4px 14px rgb(0 0 0 / 0.3);
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-ui); font-size: 14px;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+button, input { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ---------------------------------------------------------------- toolbar */
+.bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px;
+  padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--surface);
+  position: relative; z-index: 3;
+}
+.brand { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.brand h1 {
+  margin: 0; font-family: var(--font-node); font-weight: 600; font-size: 18px;
+  letter-spacing: 0.01em; text-wrap: balance;
+}
+.brand .sub { font-size: 12px; color: var(--muted); }
+.stats { display: flex; gap: 14px; flex-wrap: wrap; font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+.stats b { color: var(--ink); font-weight: 500; font-variant-numeric: tabular-nums; }
+.stats .open b { color: var(--gap-open); }
+.tools { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; align-items: center; }
+.btn {
+  border: 1px solid var(--line); background: var(--surface); padding: 5px 10px; border-radius: 6px;
+  cursor: pointer; font-size: 13px; white-space: nowrap;
+}
+.btn:hover { border-color: var(--accent); color: var(--accent); }
+.btn.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.search { position: relative; }
+.search input {
+  width: min(280px, 70vw); padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--bg);
+}
+.results {
+  position: absolute; top: calc(100% + 4px); right: 0; width: min(440px, 92vw); max-height: 60vh;
+  overflow-y: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+  box-shadow: var(--shadow); z-index: 10;
+}
+.results button {
+  display: block; width: 100%; text-align: left; padding: 8px 12px; border: 0; background: none;
+  cursor: pointer; border-bottom: 1px solid var(--grid);
+}
+.results button:hover, .results button:focus-visible { background: var(--bg); }
+.results .r-name { font-family: var(--font-node); font-size: 14px; }
+.results .r-path { font-size: 11px; color: var(--muted); margin-top: 2px; overflow-wrap: anywhere; }
+
+/* ---------------------------------------------------------------- canvas */
+.work { flex: 1; display: flex; min-height: 0; position: relative; }
+.canvas { flex: 1; min-width: 0; position: relative; }
+svg#tree { width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; }
+svg#tree:active { cursor: grabbing; }
+.link { fill: none; stroke: var(--link); }
+.card rect.body { fill: var(--surface); stroke: var(--line); stroke-width: 1; }
+.card.k-ecoinvent rect.body, .card.k-pointer rect.body { fill: var(--surface-2); }
+.card.k-biosphere rect.body { fill: var(--surface-2); stroke-dasharray: 4 3; }
+.card.k-group rect.body, .card.k-root rect.body { fill: var(--surface); stroke: var(--ink); stroke-width: 1.2; }
+.card.k-term rect.body { stroke: var(--ink); stroke-width: 1.2; }
+.card.k-step .name { font-weight: 500; }
+.card.k-more rect.body { fill: none; stroke-dasharray: 3 3; }
+.card.k-jump rect.body { stroke: var(--accent); stroke-dasharray: 5 3; }
+.card.k-fu rect.body { fill: var(--surface); stroke: var(--ink); stroke-width: 2; }
+.card.k-fu .name { font-weight: 600; }
+.card.k-stage rect.body { fill: var(--surface); stroke: var(--ink); stroke-width: 1.2; }
+.card.k-stage .name { font-weight: 500; }
+.card.k-part rect.body { fill: var(--surface); }
+.card.s-not rect.body { fill: var(--bg); stroke: var(--muted); stroke-dasharray: 5 4; }
+.card.s-not .name { fill: var(--muted); }
+.card.selected rect.body { stroke: var(--accent); stroke-width: 2.5; }
+.card { cursor: pointer; }
+.card:hover rect.body { stroke: var(--accent); }
+.card .kind { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.06em; fill: var(--muted); text-transform: uppercase; }
+.card .name { font-family: var(--font-node); font-size: 12.5px; fill: var(--ink); }
+.card.k-root .name, .card.k-group .name, .card.k-term .name { font-weight: 600; }
+.card .val { font-family: var(--font-mono); font-size: 10.5px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+.card .val.big { fill: var(--ink); }
+.card .count { font-family: var(--font-mono); font-size: 10px; fill: var(--muted); }
+.card .gapbadge rect { fill: var(--gap-open); }
+.card .gapbadge text { fill: #fff; font-family: var(--font-mono); font-size: 9.5px; font-weight: 500; }
+.toggle circle { fill: var(--surface); stroke: var(--ink); stroke-width: 1; }
+.toggle text { font-family: var(--font-mono); font-size: 11px; fill: var(--ink); text-anchor: middle; dominant-baseline: central; }
+
+.legend {
+  position: absolute; left: 16px; bottom: 16px; background: var(--surface); border: 1px solid var(--line);
+  border-radius: 8px; padding: 10px 12px; font-size: 12px; box-shadow: var(--shadow); max-width: calc(100% - 32px);
+  display: grid; gap: 6px;
+}
+.legend { border: 1px solid var(--line); }
+.legend > summary { cursor: pointer; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink); }
+.legend:not([open]) { padding: 6px 10px; }
+.legend h2 { margin: 0; font-size: 11px; font-family: var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+.legend .row { display: flex; flex-wrap: wrap; gap: 6px 12px; }
+.legend .sw { display: inline-flex; align-items: center; gap: 6px; }
+.legend .sw i { width: 12px; height: 12px; border-radius: 2px; display: inline-block; }
+.legend .note { color: var(--muted); font-size: 11.5px; max-width: 44ch; }
+.hint { position: absolute; right: 16px; bottom: 16px; font-size: 12px; color: var(--muted); background: var(--surface); border: 1px solid var(--line); padding: 6px 10px; border-radius: 6px; }
+
+/* ---------------------------------------------------------------- datasheet */
+.panel {
+  width: min(440px, 42vw); border-left: 1px solid var(--line); background: var(--surface);
+  overflow-y: auto; padding: 16px 18px 40px; display: flex; flex-direction: column; gap: 14px; min-width: 0;
+}
+.panel h2 { margin: 0; font-family: var(--font-node); font-size: 20px; font-weight: 600; line-height: 1.2; text-wrap: balance; overflow-wrap: anywhere; }
+.panel .crumbs { font-size: 11.5px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 2px 6px; }
+.panel .crumbs button { border: 0; background: none; padding: 0; color: var(--muted); cursor: pointer; text-decoration: underline; text-decoration-color: var(--line); }
+.panel .crumbs button:hover { color: var(--accent); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-family: var(--font-mono); font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 1px solid currentColor; letter-spacing: 0.03em; }
+.panel section { display: grid; gap: 6px; }
+.panel h3 { margin: 0; font-size: 11px; font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); font-weight: 500; }
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; font-size: 13px; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.mono { font-family: var(--font-mono); font-size: 12.5px; }
+.prose { font-size: 13.5px; line-height: 1.5; overflow-wrap: anywhere; max-width: 68ch; }
+.prose p { margin: 0 0 8px; }
+.prose code, .md code { font-family: var(--font-mono); font-size: 12px; background: var(--bg); padding: 0 3px; border-radius: 3px; }
+.bars { display: grid; gap: 4px; }
+.barrow { display: grid; grid-template-columns: 1fr 64px; gap: 8px; align-items: center; font-size: 12.5px; }
+.barrow button { text-align: left; border: 0; background: none; padding: 0; cursor: pointer; min-width: 0; }
+.barrow .bn { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-node); }
+.barrow .bt { height: 5px; border-radius: 3px; background: var(--grid); margin-top: 3px; overflow: hidden; }
+.barrow .bt i { display: block; height: 100%; background: var(--accent); }
+.barrow .bt i.neg { background: var(--g-biosphere); }
+.barrow .bv { font-family: var(--font-mono); font-size: 11.5px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+.gapcard { border: 1px solid var(--line); border-left: 4px solid var(--gap-open); border-radius: 6px; padding: 8px 10px; display: grid; gap: 6px; }
+.gapcard .gt { font-weight: 600; font-size: 13.5px; }
+.gapcard .gb { font-size: 12.5px; line-height: 1.45; color: var(--ink); overflow-wrap: anywhere; }
+.gapcard button { justify-self: start; }
+details { border: 1px solid var(--line); border-radius: 6px; }
+details > summary { cursor: pointer; padding: 7px 10px; font-size: 13px; font-weight: 500; }
+details > div { padding: 0 12px 10px; }
+.md { font-size: 12.5px; line-height: 1.5; overflow-wrap: anywhere; }
+.md h4 { margin: 10px 0 4px; font-size: 13px; }
+.md p { margin: 0 0 8px; }
+.md ul { margin: 0 0 8px; padding-left: 18px; }
+.md .tw { overflow-x: auto; margin-bottom: 8px; }
+.md table { border-collapse: collapse; font-size: 11.5px; }
+.md th, .md td { border: 1px solid var(--line); padding: 4px 6px; vertical-align: top; text-align: left; min-width: 80px; }
+.md th { background: var(--bg); }
+.md a, .prose a { color: var(--accent); }
+pre.doc { white-space: pre-wrap; font-family: var(--font-mono); font-size: 11.5px; line-height: 1.45; margin: 0; overflow-wrap: anywhere; }
+.empty { color: var(--muted); font-size: 13px; }
+.close { display: none; }
+
+.tabs { display: flex; gap: 2px; padding: 0 16px; background: var(--surface); border-bottom: 1px solid var(--line); }
+.tabs button {
+  border: 0; background: none; padding: 9px 14px 8px; cursor: pointer; font-family: var(--font-node);
+  font-size: 15px; font-weight: 500; color: var(--muted); border-bottom: 3px solid transparent;
+}
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs button:hover { color: var(--accent); }
+svg#flow { width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; }
+.lanehead { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; fill: var(--muted); text-anchor: middle; }
+.laneband { fill: var(--grid); opacity: 0.45; }
+.rowlabel { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; fill: var(--muted); }
+.fnode rect.body { fill: var(--surface); stroke: var(--line); stroke-width: 1; }
+.fnode.s-not rect.body { fill: var(--bg); stroke-dasharray: 5 4; stroke: var(--muted); }
+.fnode.s-inside rect.body { fill: var(--surface-2); }
+.fnode.s-option rect.body { stroke-dasharray: 8 3; }
+.fnode.k-source rect.body { stroke: var(--ink); }
+.fnode.k-storage rect.body { stroke: var(--ink); stroke-width: 2; }
+.fnode.k-load rect.body { fill: var(--surface); stroke: var(--ink); stroke-width: 1.5; }
+.fnode.k-bus rect.body { fill: var(--ink); stroke: var(--ink); }
+.fnode.k-bus .fname, .fnode.k-bus .frate { fill: var(--surface); }
+.fnode.selected rect.body { stroke: var(--accent); stroke-width: 2.5; }
+.fnode { cursor: pointer; }
+.fnode:hover rect.body { stroke: var(--accent); }
+.fnode .fkind { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.06em; fill: var(--muted); }
+.fnode .fname { font-family: var(--font-node); font-size: 12.5px; font-weight: 600; fill: var(--ink); }
+.fnode .frate { font-family: var(--font-mono); font-size: 9.5px; fill: var(--muted); }
+.fnode .flp { font-family: var(--font-mono); font-size: 9.5px; fill: var(--accent); }
+.fedge path.line { fill: none; stroke-width: 2.6; }
+.fedge path.hit { fill: none; stroke: transparent; stroke-width: 14; cursor: pointer; }
+.fedge.st-not path.line { stroke-dasharray: 7 5; }
+.fedge.st-inside path.line { stroke-dasharray: 2 4; }
+.fedge.st-option path.line { stroke-dasharray: 10 4; }
+.fedge.st-off path.line { stroke-dasharray: 1 5; stroke: var(--c-off) !important; }
+.fedge text { font-family: var(--font-mono); font-size: 9.5px; fill: var(--ink); paint-order: stroke; stroke: var(--bg); stroke-width: 4px; stroke-linejoin: round; pointer-events: none; }
+.dim { opacity: 0.12; }
+.fedge.hl path.line { stroke-width: 4.2; }
+.routes {
+  position: absolute; left: 16px; top: 12px; right: 16px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+  pointer-events: none;
+}
+.routes > * { pointer-events: auto; }
+.routes .lbl { font-family: var(--font-mono); font-size: 11px; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; background: var(--surface); padding: 3px 6px; border-radius: 4px; }
+.flowlegend .ln { display: inline-flex; align-items: center; gap: 6px; }
+.flowlegend svg { width: 28px; height: 8px; }
+@media (max-width: 760px) {
+  .panel {
+    position: absolute; left: 0; right: 0; bottom: 0; width: auto; max-height: 62%;
+    border-left: 0; border-top: 1px solid var(--line); box-shadow: var(--shadow); z-index: 4;
+    padding-bottom: calc(40px + env(safe-area-inset-bottom, 0px));
+  }
+  .close { display: inline-block; align-self: flex-end; }
+  .legend { bottom: auto; top: 12px; }
+  .hint { display: none; }
+  .brand .sub { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+.card.k-study rect.body, .card.k-chain rect.body, .card.k-database rect.body { fill: var(--surface); stroke: var(--ink); stroke-width: 1.2; }
+.card.k-study .name, .card.k-chain .name, .card.k-term .name, .card.k-database .name { font-weight: 600; }
+.card.k-step rect.body, .card.k-coefficient rect.body, .card.k-constant rect.body { fill: var(--surface); }
+.card.k-coefficient rect.body { stroke: var(--ink); }
+.card.shared rect.body { stroke-width: 1.6; }
+.card .shared-mark { font-family: var(--font-mono); font-size: 9px; fill: var(--accent); }
+.edge { fill: none; stroke: var(--link); }
+.edge.cross { stroke-dasharray: 4 3; }
+pre.code { margin: 0; padding: 8px 10px; background: var(--bg); border: 1px solid var(--grid); border-radius: 6px;
+  font-family: var(--font-mono); font-size: 12px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+.where { font-family: var(--font-mono); font-size: 12px; color: var(--accent); }
+.problems { border: 1px solid var(--gap-open); border-left: 4px solid var(--gap-open); border-radius: 6px; padding: 8px 10px; font-size: 12.5px; }
+.problems li { margin: 2px 0; }
+.ok { color: var(--gap-closed); font-size: 12.5px; }
+.barrow .sub2 { display: block; font-size: 11px; color: var(--muted); white-space: normal; overflow-wrap: anywhere; }
+.card.k-source rect.body { fill: var(--surface-2); }
+.card.chosen rect.body { stroke: var(--accent); stroke-width: 2; }
+.srcview { flex: 1; min-width: 0; overflow: auto; padding: 16px; display: flex; flex-direction: column; gap: 18px; }
+.srcview > * { flex: none; min-width: 0; }
+[hidden] { display: none !important; }
+.srcview h2 { margin: 0; font-family: var(--font-node); font-size: 18px; font-weight: 600; }
+.srcview .prose { color: var(--muted); }
+.srctable { border-collapse: collapse; width: 100%; font-size: 12.5px; background: var(--surface); }
+.srctable th, .srctable td { border-bottom: 1px solid var(--grid); padding: 7px 8px; text-align: left; vertical-align: top; }
+.srctable th { position: sticky; top: 0; background: var(--surface); font-family: var(--font-mono); font-size: 11px;
+  letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); font-weight: 500; z-index: 1; }
+.srctable tr.unused td { color: var(--muted); }
+.srctable td.num { font-family: var(--font-mono); text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.srctable a { color: var(--accent); overflow-wrap: anywhere; }
+.srctable button.go { border: 0; background: none; padding: 0; color: var(--ink); cursor: pointer; text-align: left;
+  font: inherit; font-family: var(--font-node); font-size: 13.5px; text-decoration: underline; text-decoration-color: var(--line); }
+.srctable button.go:hover { color: var(--accent); }
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
+.filters { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.nolink { color: var(--g-proxy); font-size: 11.5px; }
+.cites { display: grid; gap: 6px; }
+.cite { border: 1px solid var(--line); border-left: 4px solid var(--g-source); border-radius: 6px; padding: 6px 9px; font-size: 12.5px; display: grid; gap: 3px; }
+.cite button { border: 0; background: none; padding: 0; text-align: left; cursor: pointer; font: inherit; font-weight: 600; color: var(--ink); }
+.cite button:hover { color: var(--accent); }
+.cite .at { color: var(--muted); }
+.cases { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.cases div { border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; font-size: 12px; }
+.cases div.cur { border-color: var(--accent); }
+.cases b { display: block; font-family: var(--font-mono); font-weight: 500; font-size: 12.5px; }
+</style>
+
+<header class="bar">
+  <div class="brand">
+    <h1>Data Centre Cost Map</h1>
+    <div class="sub" id="sub"></div>
+  </div>
+  <div class="stats" id="stats"></div>
+  <div class="tools">
+    <div class="search tree-only">
+      <input id="q" type="search" placeholder="Find a cost, step, term or source" autocomplete="off" aria-label="Search the map">
+      <div class="results" id="results" hidden></div>
+    </div>
+    <button class="btn tree-only" id="expand" title="Open every box under the selected one by one more level">Open level</button>
+    <button class="btn tree-only" id="collapse" title="Close everything below the top levels">Collapse</button>
+    <button class="btn" id="fit">Fit</button>
+  </div>
+</header>
+
+<nav class="tabs" role="tablist" aria-label="Map views">
+  <button role="tab" id="tab-tree" aria-selected="true" aria-controls="view-tree">Cost graph</button>
+  <button role="tab" id="tab-flow" aria-selected="false" aria-controls="view-flow">Sources</button>
+</nav>
+<div class="work">
+  <div class="canvas" id="view-tree" role="tabpanel" aria-labelledby="tab-tree">
+    <svg id="tree" role="img" aria-label="Cost graph, top-down"></svg>
+    <details class="legend" id="legend" open>
+      <summary>Legend</summary>
+      <h2>Provenance</h2>
+      <div class="row">
+        <span class="sw"><i style="background:var(--g-transcribed)"></i>Transcribed</span>
+        <span class="sw"><i style="background:var(--g-derived)"></i>Derived</span>
+        <span class="sw"><i style="background:var(--g-assumed)"></i>Assumed</span>
+        <span class="sw"><i style="background:var(--g-proxy)"></i>Proxy</span>
+        <span class="sw"><i style="background:var(--g-source)"></i>Source</span>
+      </div>
+      <div class="note">Each number is one box, made from the boxes below it, down to the document or data feed it was read from. A box used in several places has several lines into it; a dashed line joins a box already open elsewhere. Terms show the pounds per year they came to in the reference run; line weight is their share of the bill.</div>
+    </details>
+    <div class="hint">Click a box to open it · drag to pan · scroll to zoom</div>
+  </div>
+  <div class="srcview" id="view-flow" role="tabpanel" aria-labelledby="tab-flow" hidden></div>
+  <aside class="panel" id="panel" aria-live="polite"></aside>
+</div>
+
+<script id="cost-data" type="application/json">__DATA__</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dagre/0.8.5/dagre.min.js"></script>
+<script>
+(() => {
+"use strict";
+const DATA = JSON.parse(document.getElementById("cost-data").textContent);
+const GAPS = DATA.gaps || {};
+const CARD_W = 196, CARD_H = 66, PAGE = 12;
+
+// ------------------------------------------------------------- the model: nodes and edges as built
+const byId = new Map();
+for (const [id, n] of Object.entries(DATA.nodes)) { n.id = id; n.kids = []; n.parents = []; byId.set(id, n); }
+for (const [p, c, d] of DATA.edges) {
+  const P = byId.get(p), C = byId.get(c);
+  if (!P || !C) continue;
+  const e = { p: P, c: C, ...d };
+  P.kids.push(e); C.parents.push(e);
+}
+for (const n of byId.values()) {
+  if (n.kids.some(e => e.contribution !== undefined)) n.kids.sort((a, b) => Math.abs(b.contribution || 0) - Math.abs(a.contribution || 0));
+}
+const ROOT = byId.get(DATA.root);
+const all = [...byId.values()];
+const gapNodeById = new Map();
+
+const open = new Set();
+const shownAll = new Set();
+let showBackground = true;
+let selected = ROOT;
+
+const isBackground = n => n.kind === "ecoinvent" || n.kind === "biosphere";
+function kidsOf(n) {
+  let k = n.kids;
+  if (!showBackground) k = k.filter(e => !isBackground(e.c));
+  return k;
+}
+
+// Visible graph: from the root through every open box, each box once. A box
+// reached twice keeps one place and gains a second line (dashed past the first).
+function visible() {
+  const nodes = new Map(), edges = [];
+  const queue = [ROOT]; nodes.set(ROOT.id, ROOT);
+  while (queue.length) {
+    const n = queue.shift();
+    if (!open.has(n.id)) continue;
+    const ks = kidsOf(n);
+    const shown = ks.length > PAGE && !shownAll.has(n.id) ? ks.slice(0, PAGE) : ks;
+    for (const e of shown) {
+      const seen = nodes.has(e.c.id);
+      edges.push({ e, cross: seen });
+      if (!seen) { nodes.set(e.c.id, e.c); queue.push(e.c); }
+    }
+    if (shown.length < ks.length) {
+      const m = { id: n.id + "::more", kind: "more", name: `Show ${ks.length - shown.length} more`, parentRef: n, kids: [], parents: [] };
+      nodes.set(m.id, m); edges.push({ e: { p: n, c: m }, cross: false });
+    }
+  }
+  return { nodes, edges };
+}
+
+// ------------------------------------------------------------- formatting
+const fmt = (x) => {
+  if (x === null || x === undefined || Number.isNaN(x)) return "–";
+  const a = Math.abs(x);
+  if (a === 0) return "0";
+  if (a >= 1e6) return (x / 1e6).toFixed(2) + "M";
+  if (a >= 1e4) return Math.round(x).toLocaleString("en-GB");
+  if (a >= 100) return x.toFixed(0);
+  if (a >= 1) return x.toFixed(2);
+  if (a >= 0.001) return x.toFixed(4);
+  return x.toExponential(2);
+};
+const money = (x) => (x < 0 ? "−£" : "£") + fmt(Math.abs(x));
+const pct = (x) => (Math.abs(x * 100) >= 10 ? (x * 100).toFixed(0) : (x * 100).toFixed(1)) + "%";
+const GRADE_COLOR = { transcribed: "var(--g-transcribed)", derived: "var(--g-derived)", assumed: "var(--g-assumed)", proxy: "var(--g-proxy)" };
+const STATUS_COLOR = { "closed": "var(--gap-closed)", "open-source-known": "var(--gap-known)", "open-no-source": "var(--gap-open)", "confirmed-absent": "var(--gap-absent)", "not-applicable": "var(--gap-absent)" };
+const STATUS_LABEL = { "closed": "closed", "open-source-known": "open — source known", "open-no-source": "open — no public source", "confirmed-absent": "confirmed absent", "not-applicable": "not applicable" };
+const KIND_LABEL = { source: "source", study: "study", group: "group", chain: "technology", term: "LP cost term", coefficient: "LP coefficient", constant: "constant", step: "calculation step", database: "foreground database", foreground: "foreground activity", ecoinvent: "ecoinvent dataset", biosphere: "elementary flow", more: "" };
+function stripe(n) {
+  if (n.kind === "source") return "var(--g-source)";
+  if (n.kind === "ecoinvent") return "var(--g-background)";
+  if (n.kind === "biosphere") return "var(--g-biosphere)";
+  if (n.kind === "more") return "transparent";
+  if (["study", "group", "chain", "term", "database", "coefficient"].includes(n.kind)) return "var(--ink)";
+  return GRADE_COLOR[n.grade] || "var(--ink)";
+}
+function kindLine(n) {
+  if (n.kind === "foreground") return "FOREGROUND · " + (n.module || "").split("/").pop();
+  if (n.kind === "ecoinvent") return "ECOINVENT" + (n.location ? " · " + n.location : "");
+  if (n.kind === "step") return "STEP · " + (n.where || "").split("/").pop();
+  if (n.kind === "term") return "LP TERM · " + (n.side || "").replace("cost_", "");
+  if (n.kind === "source") return "SOURCE · " + (n.source_kind || "");
+  if (n.kind === "step" && n.chosen) return "STEP · CHOSEN · " + (n.where || "").split("/").pop();
+  return (KIND_LABEL[n.kind] || n.kind).toUpperCase();
+}
+function shortUnit(u) {
+  if (!u) return "";
+  return u.replace(/^GBP per /, "£/").replace(/^GBP$/, "£").replace(/ per year/, "/yr").replace(/\(.*\)/, "").slice(0, 24);
+}
+function valueLine(n) {
+  if (n.kind === "term") return n.score !== undefined && n.score !== null ? money(n.score) + "/yr · " + (n.expr || "") : (n.expr || "");
+  if (n.kind === "source") return [n.publisher, n.date].filter(Boolean).join(" · ");
+  if (["study", "chain", "group"].includes(n.kind) && n.score !== undefined && n.score !== null) return money(n.score) + " per year";
+  if (n.value !== undefined && n.value !== null) return fmt(n.value) + " " + shortUnit(n.unit);
+  if (n.score !== undefined && n.score !== null) return fmt(n.score) + " kg / " + (n.unit || "unit");
+  if (n.kind === "biosphere") return "CF " + fmt(n.cf || 0);
+  return n.kids.length ? n.kids.length + " inside" : "";
+}
+function wrap(text, max, lines) {
+  const words = String(text).split(/\s+/); const out = []; let cur = "";
+  for (const w of words) {
+    if ((cur + " " + w).trim().length <= max) cur = (cur + " " + w).trim();
+    else { out.push(cur); cur = w; if (out.length === lines) break; }
+  }
+  if (out.length < lines && cur) out.push(cur);
+  const used = out.join(" ").length;
+  if (used < String(text).length && out.length) out[out.length - 1] = out[out.length - 1].replace(/.{0,2}$/, "") + "…";
+  return out.slice(0, lines);
+}
+const GAP_IS_OPEN = s => s === "open-no-source" || s === "open-source-known";
+function subtreeGaps(n) { return (n.gaps || []).filter(id => GAPS[id] && GAP_IS_OPEN(GAPS[id].status)).length; }
+function gapHeading(n) {
+  const o = subtreeGaps(n), a = (n.gaps || []).filter(id => GAPS[id]).length;
+  return o ? `${o} open, ${a - o} settled` : `${a} settled, none open`;
+}
+function share(e) {
+  const base = e.p && e.p.score;
+  return (e.contribution === undefined || e.contribution === null || !base) ? null : e.contribution / base;
+}
+
+// ------------------------------------------------------------- drawing
+const svg = d3.select("#tree");
+const root = svg.append("g");
+const gLinks = root.append("g");
+const gNodes = root.append("g");
+const zoom = d3.zoom().scaleExtent([0.05, 2.5]).on("zoom", (e) => root.attr("transform", e.transform));
+svg.call(zoom).on("dblclick.zoom", null);
+const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+const T = reduce ? 0 : 280;
+let pos = new Map();
+
+function render(focus) {
+  const { nodes, edges } = visible();
+  const g = new dagre.graphlib.Graph({ multigraph: true });
+  g.setGraph({ rankdir: "TB", nodesep: 18, ranksep: 54, edgesep: 8, marginx: 20, marginy: 20 });
+  g.setDefaultEdgeLabel(() => ({}));
+  for (const n of nodes.values()) g.setNode(n.id, { width: CARD_W, height: CARD_H });
+  edges.forEach((v, i) => g.setEdge(v.e.p.id, v.e.c.id, {}, "e" + i));
+  dagre.layout(g);
+  pos = new Map([...nodes.keys()].map(id => [id, g.node(id)]));
+  const line = d3.line().x(p => p.x).y(p => p.y).curve(d3.curveBasis);
+
+  const sel = gLinks.selectAll("path").data(edges.map((v, i) => ({ ...v, pts: g.edge({ v: v.e.p.id, w: v.e.c.id, name: "e" + i }).points })));
+  sel.exit().remove();
+  sel.enter().append("path").merge(sel)
+    .attr("class", v => "edge" + (v.cross ? " cross" : ""))
+    .attr("stroke-width", v => { const s = share(v.e); return s === null ? 1.2 : Math.max(1, Math.min(9, 1 + Math.sqrt(Math.abs(s)) * 9)); })
+    .attr("d", v => line(v.pts));
+
+  const card = gNodes.selectAll("g.card").data([...nodes.values()], d => d.id);
+  card.exit().remove();
+  const enter = card.enter().append("g").attr("tabindex", 0).attr("role", "button")
+    .on("click", (e, d) => onClick(d))
+    .on("keydown", (e, d) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(d); } });
+  enter.append("rect").attr("class", "body");
+  enter.append("rect").attr("class", "stripe");
+  enter.append("text").attr("class", "kind");
+  enter.append("text").attr("class", "name");
+  enter.append("text").attr("class", "val");
+  enter.append("text").attr("class", "shared-mark");
+  enter.append("g").attr("class", "gapbadge");
+  enter.append("g").attr("class", "toggle");
+  const cards = enter.merge(card);
+  cards.attr("class", d => `card k-${d.kind}` + (d === selected ? " selected" : "") + (d.parents.length > 1 ? " shared" : "") + (d.chosen ? " chosen" : ""))
+    .attr("aria-label", d => d.name)
+    .attr("transform", d => { const p = pos.get(d.id); return `translate(${p.x},${p.y})`; });
+  cards.select("rect.body").attr("x", -CARD_W / 2).attr("y", -CARD_H / 2).attr("width", CARD_W).attr("height", CARD_H).attr("rx", 5);
+  cards.select("rect.stripe").attr("x", -CARD_W / 2).attr("y", -CARD_H / 2).attr("width", 5).attr("height", CARD_H).attr("rx", 2).attr("fill", d => stripe(d));
+  cards.select("text.kind").attr("x", -CARD_W / 2 + 12).attr("y", -CARD_H / 2 + 13).text(d => d.kind === "more" ? "" : kindLine(d).slice(0, 36));
+  cards.select("text.name").each(function (d) {
+    const t = d3.select(this).attr("x", -CARD_W / 2 + 12).attr("y", -CARD_H / 2 + 29);
+    t.selectAll("tspan").remove();
+    wrap(d.name, 31, 2).forEach((ln, i) => t.append("tspan").attr("x", -CARD_W / 2 + 12).attr("dy", i ? 14 : 0).text(ln));
+  });
+  cards.select("text.val").attr("x", -CARD_W / 2 + 12).attr("y", CARD_H / 2 - 7).classed("big", d => d.kind === "term" || d.kind === "step")
+    .text(d => d.kind === "more" ? "" : wrap(valueLine(d), 36, 1)[0] || "");
+  cards.select("text.shared-mark").attr("x", CARD_W / 2 - 8).attr("y", CARD_H / 2 - 7).attr("text-anchor", "end")
+    .text(d => d.parents.length > 1 ? "used ×" + d.parents.length : "");
+  cards.select("g.gapbadge").each(function (d) {
+    const g2 = d3.select(this); g2.selectAll("*").remove();
+    const k = subtreeGaps(d); if (!k) return;
+    const label = k + (k === 1 ? " gap" : " gaps"); const w = 12 + label.length * 6;
+    g2.attr("transform", `translate(${CARD_W / 2 - w - 6},${-CARD_H / 2 + 5})`);
+    g2.append("rect").attr("width", w).attr("height", 15).attr("rx", 7.5);
+    g2.append("text").attr("x", w / 2).attr("y", 11).attr("text-anchor", "middle").text(label);
+  });
+  cards.select("g.toggle").each(function (d) {
+    const g2 = d3.select(this); g2.selectAll("*").remove();
+    const k = d.kind === "more" ? 0 : kidsOf(d).length; if (!k) return;
+    g2.attr("transform", `translate(0,${CARD_H / 2})`);
+    g2.append("circle").attr("r", 9);
+    g2.append("text").text(open.has(d.id) ? "−" : "+");
+    if (!open.has(d.id)) g2.append("text").attr("x", 22).attr("y", 1).attr("class", "count").style("text-anchor", "start").text(k);
+  });
+  if (focus) centerOn(focus);
+}
+
+function centerOn(n) {
+  const p = pos.get(n.id); if (!p) return;
+  const box = svg.node().getBoundingClientRect(); if (!box.width) return;
+  const k = Math.max(d3.zoomTransform(svg.node()).k, 0.8);
+  const t = d3.zoomIdentity.translate(box.width / 2 - p.x * k, Math.min(box.height * 0.3, 150) - p.y * k).scale(k);
+  svg.transition().duration(T * 1.4).call(zoom.transform, t);
+}
+function fit(animate = true) {
+  const b = gNodes.node().getBBox(); const box = svg.node().getBoundingClientRect();
+  if (!b.width || !box.width) return;
+  const k = Math.min(1.1, 0.92 * Math.min(box.width / (b.width + 40), box.height / (b.height + 40)));
+  const t = d3.zoomIdentity.translate(box.width / 2 - (b.x + b.width / 2) * k, box.height / 2 - (b.y + b.height / 2) * k).scale(k);
+  if (animate) svg.transition().duration(T * 1.4).call(zoom.transform, t); else svg.call(zoom.transform, t);
+}
+
+function onClick(n) {
+  if (n.kind === "more") { shownAll.add(n.parentRef.id); render(); return; }
+  if (kidsOf(n).length) { if (open.has(n.id) && selected === n) closeFrom(n); else open.add(n.id); }
+  select(n); render(n);
+}
+function closeFrom(n) {
+  open.delete(n.id);
+  const { nodes } = visible();
+  for (const id of [...open]) if (!nodes.has(id)) open.delete(id);
+}
+function select(n) { selected = n; panel(n); gNodes.selectAll("g.card").classed("selected", d => d === n); }
+function pathTo(n) {
+  // Shortest route from the study down to n, so it can be opened box by box.
+  const prev = new Map([[ROOT.id, null]]); const q = [ROOT];
+  while (q.length) {
+    const x = q.shift(); if (x === n) break;
+    for (const e of x.kids) if (!prev.has(e.c.id)) { prev.set(e.c.id, x); q.push(e.c); }
+  }
+  const chain = []; let p = prev.get(n.id);
+  while (p) { chain.unshift(p); p = prev.get(p.id); }
+  return chain;
+}
+function reveal(n) {
+  const chain = pathTo(n);
+  chain.forEach(a => open.add(a.id));
+  if (!showBackground && isBackground(n)) toggleBackground();
+  chain.forEach((a, i) => { const next = chain[i + 1] || n; const ks = kidsOf(a); if (ks.findIndex(e => e.c === next) >= PAGE) shownAll.add(a.id); });
+  select(n); render(n);
+}
+
+// ------------------------------------------------------------- datasheet
+const esc = (s) => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+function inline(s) {
+  return esc(s)
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*([^*\s][^*]*)\*/g, "<em>$1</em>")
+    .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+}
+function md(text) {
+  const lines = String(text).split("\n"); let out = ""; let i = 0;
+  while (i < lines.length) {
+    const l = lines[i];
+    if (/^\|/.test(l)) {
+      const rows = []; while (i < lines.length && /^\|/.test(lines[i])) { rows.push(lines[i]); i++; }
+      const cells = r => r.trim().replace(/^\||\|$/g, "").split(" | ").map(c => c.trim());
+      const body = rows.filter(r => !/^\|[-\s|:]+\|?\s*$/.test(r));
+      out += '<div class="tw"><table>' + body.map((r, j) => "<tr>" + cells(r).map(c => (j ? "<td>" : "<th>") + inline(c) + (j ? "</td>" : "</th>")).join("") + "</tr>").join("") + "</table></div>";
+      continue;
+    }
+    if (/^#{1,4} /.test(l)) { out += "<h4>" + inline(l.replace(/^#+ /, "")) + "</h4>"; i++; continue; }
+    if (/^\s*[-*] /.test(l)) {
+      out += "<ul>"; while (i < lines.length && /^\s*[-*] /.test(lines[i])) { out += "<li>" + inline(lines[i].replace(/^\s*[-*] /, "")) + "</li>"; i++; }
+      out += "</ul>"; continue;
+    }
+    if (!l.trim()) { i++; continue; }
+    const para = []; while (i < lines.length && lines[i].trim() && !/^(\||#{1,4} |\s*[-*] )/.test(lines[i])) { para.push(lines[i]); i++; }
+    out += "<p>" + inline(para.join(" ")) + "</p>";
+  }
+  return out;
+}
+function chip(text, color) { return `<span class="chip" style="color:${color}">${esc(text)}</span>`; }
+function kv(rows) {
+  const r = rows.filter(([, v]) => v !== undefined && v !== null && v !== "");
+  return r.length ? `<dl class="kv">${r.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join("")}</dl>` : "";
+}
+const mono = (s) => `<span class="mono">${esc(s)}</span>`;
+function crumbs(n) {
+  const chain = pathTo(n);
+  return `<nav class="crumbs" aria-label="Path">${chain.map(c => `<button data-go="${esc(c.id)}">${esc(c.name.length > 38 ? c.name.slice(0, 36) + "…" : c.name)}</button>`).join("<span>›</span>")}</nav>`;
+}
+function gapCard(g) {
+  const color = STATUS_COLOR[g.status] || "var(--gap-open)";
+  const text = (g.cells || []).filter(Boolean).join(" — ");
+  return `<div class="gapcard" style="border-left-color:${color}"><div class="gt">${esc(g.name)}</div>
+    <div class="chips">${chip(STATUS_LABEL[g.status] || g.section, color)}</div><div class="gb md">${md(text)}</div></div>`;
+}
+function edgeRow(e, other, base) {
+  const s = base && e.contribution !== undefined && e.contribution !== null ? e.contribution / base : null;
+  const amount = e.amount !== undefined ? `${fmt(e.amount)} ${e.unit || ""}` : "";
+  const sub = [amount, e.note, e.why ? "Why this dataset: " + e.why : ""].filter(Boolean).join(" · ");
+  const w = s === null ? 0 : Math.min(100, Math.abs(s) * 100);
+  return `<div class="barrow"><button data-go="${esc(other.id)}"><span class="bn">${esc(other.name)}</span>` +
+    (s !== null ? `<span class="bt"><i class="${s < 0 ? "neg" : ""}" style="width:${w}%"></i></span>` : "") +
+    (sub ? `<span class="sub2">${esc(sub)}</span>` : "") +
+    `</button><span class="bv">${s !== null ? esc(pct(s)) : esc(other.kind === "step" || other.kind === "term" ? valueLine(other).split(" ")[0] : "")}</span></div>`;
+}
+
+function panel(n) {
+  const el = document.getElementById("panel");
+  if (n === ROOT) return studyPanel(el);
+  const chips = [chip(KIND_LABEL[n.kind] || n.kind, "var(--muted)")];
+  if (n.grade) chips.push(chip(n.grade, GRADE_COLOR[n.grade] || "var(--muted)"));
+  if (n.variant) chips.push(chip("variant: " + n.variant, "var(--accent)"));
+  if (n.parents.length > 1) chips.push(chip("used in " + n.parents.length + " places", "var(--accent)"));
+  if (n.drilled) chips.push(chip("opened one level", "var(--g-background)"));
+  let h = `<button class="btn close" id="closep">Close</button>${crumbs(n)}<h2>${esc(n.name)}</h2><div class="chips">${chips.join("")}</div>`;
+
+  if (n.kind === "term") {
+    h += `<section><h3>In the LP</h3><pre class="code">${esc(n.expr)}</pre>` +
+      kv([["In the reference run", n.score !== undefined && n.score !== null ? mono(money(n.score) + " per year") + (ROOT.score ? " · " + esc(pct(n.score / ROOT.score)) + " of the bill" : "") : null],
+          ["Objective part", esc((n.side || "").replace("cost_", ""))], ["LP key", mono(n.key)],
+          ["Decision variables", (n.variables || []).length ? mono(n.variables.join(", ")) : null],
+          ["Series", (n.series || []).length ? mono(n.series.join(", ")) + " — the half-hourly import price, shown below by its mean" : null]]) +
+      `<div class="prose">Read from <span class="mono">dc_model.objective_terms</span>, the function the LP is built with.</div></section>`;
+  }
+  if (n.kind === "step" || n.kind === "coefficient" || n.kind === "constant") {
+    h += `<section><h3>Value</h3>${kv([["Value", mono(fmt(n.value)) + " " + esc(n.unit || "")],
+      ["Rescored", n.rescored !== undefined ? mono(fmt(n.rescored)) + " from its Brightway activity" + (Math.abs(n.rescored - n.value) <= 1e-3 * Math.abs(n.rescored) ? ' <span class="ok">· matches</span>' : "") : null],
+      ["Trace key", n.key ? mono(n.key) : null],
+      ["In the reference run", n.chosen ? "the price list the optimiser chose" : null]])}</section>`;
+    if (n.cases) h += `<section><h3>Cost cases</h3><div class="cases">${["low", "central", "high"].map(c => `<div class="${c === "central" ? "cur" : ""}">${c}<b>${n.cases[c] === null || n.cases[c] === undefined ? "–" : esc(fmt(n.cases[c]))}</b></div>`).join("")}</div><div class="prose" style="color:var(--muted)">The map shows the central case; low and high are the same code run with <span class="mono">cost_case</span> set.</div></section>`;
+    if ((n.cites || []).length) h += `<section><h3>Read from</h3><div class="cites">${n.cites.map(c => { const s = (DATA.sources || {})[c.source] || {};
+      return `<div class="cite"><button data-go="src:${esc(c.source)}">${esc(s.title || c.source)}</button><span class="at">${esc([s.publisher, s.date].filter(Boolean).join(" · "))}</span>${c.at ? `<span>${esc(c.at)}</span>` : ""}${s.link ? `<a href="${esc(s.link)}" target="_blank" rel="noopener">${esc(s.link)}</a>` : '<span class="nolink">no link recorded</span>'}</div>`; }).join("")}</div></section>`;
+    if (n.where) h += `<section><h3>Computed in</h3><div class="where">${esc(n.where)}${n.function ? " · " + esc(n.function) + "()" : ""}</div>${n.code ? `<pre class="code">${esc(n.code)}</pre>` : ""}</section>`;
+    const ins = Object.entries(n.inputs || {});
+    if (ins.length) h += `<section><h3>Computed with</h3>${kv(ins.map(([k, v]) => [k, typeof v === "number" ? mono(fmt(v)) : esc(v)]))}</section>`;
+  }
+  if (n.kind === "source") {
+    h += `<section><h3>The source</h3>${kv([["Title", esc(n.name)], ["Publisher", esc(n.publisher || "")], ["Date", esc(n.date || "")],
+      ["Kind", esc(n.source_kind || "")], ["Link", n.link ? `<a href="${esc(n.link)}" target="_blank" rel="noopener">${esc(n.link)}</a>` : '<span class="nolink">no link recorded</span>'],
+      ["Kept at", n.held ? esc(n.held) : null], ["Price basis", n.basis ? esc(n.basis) : null], ["Register key", mono(n.key)]])}</section>`;
+  }
+  if (["foreground", "ecoinvent", "biosphere", "database"].includes(n.kind)) {
+    h += `<section><h3>Identity</h3>${kv([["Module", n.module ? mono(n.module) : null], ["Database", n.database ? mono(n.database) : null],
+      ["Code", n.code ? mono(n.code) : null], ["Location", n.location ? esc(n.location) : null], ["Product", n.product ? esc(n.product) : null],
+      ["Unit", n.unit ? esc(n.unit) : null], ["Compartment", n.compartment ? esc(n.compartment) : null],
+      ["Inventoried per", n.production_amount ? mono(fmt(n.production_amount)) + " " + esc(n.unit || "") + "; inputs below are per 1" : null]])}</section>`;
+    const c = kv([["Carbon per unit", n.score !== undefined && n.score !== null ? mono(fmt(n.score)) + " kg CO₂e per " + esc(n.unit || "unit") + (n.kind === "ecoinvent" ? ", its whole supply chain" : "") : null],
+      ["Characterisation", n.cf !== undefined ? mono(fmt(n.cf)) + " kg CO₂e per " + esc(n.unit || "kg") : null],
+      ["Not drawn", n.uncharacterised_flows ? n.uncharacterised_flows + " elementary flows with no GWP factor" : null]]);
+    if (c) h += `<section><h3>Carbon</h3>${c}</section>`;
+  }
+  const prov = [];
+  if (n.source) prov.push(`<div class="prose md">${md(n.source)}</div>`);
+  if (n.comment) prov.push(`<div class="prose"><strong>Activity comment.</strong> ${inline(n.comment)}</div>`);
+  if (n.note) prov.push(`<div class="prose md">${md(n.note)}</div>`);
+  if (prov.length) h += `<section><h3>Provenance</h3>${prov.join("")}</section>`;
+  if (n.gaps && n.gaps.length) h += `<section><h3>Data gaps touching this (${gapHeading(n)})</h3>${n.gaps.map(id => GAPS[id]).filter(Boolean).sort((a, b) => GAP_IS_OPEN(b.status) - GAP_IS_OPEN(a.status)).map(gapCard).join("")}</section>`;
+
+  if (n.kids.length) {
+    const base = n.score;
+    const title = n.kind === "step" || n.kind === "coefficient" ? "Made from" : (n.kind === "chain" || n.kind === "group" ? "Contains, by share of the bill" : "Contains");
+    h += `<section><h3>${title} (${n.kids.length})</h3><div class="bars">${n.kids.map(e => edgeRow(e, e.c, base)).join("")}</div></section>`;
+  }
+  if (n.parents.length) {
+    h += `<section><h3>${n.kind === "source" ? "Numbers read from it" : "Used by"} (${n.parents.length})</h3><div class="bars">${n.parents.map(e => edgeRow(e, e.p, e.p.score)).join("")}</div></section>`;
+  }
+  finishPanel(el, h);
+}
+function studyPanel(el) {
+  const m = DATA.meta, me = DATA.method || {}, so = m.solve || {}, c = so.connection || {};
+  const probs = DATA.problems || [];
+  const build = Object.entries(so.build || {}).filter(([k, v]) => Math.abs(v) > 1e-6 && !/^cap_conn_/.test(k)).map(([k, v]) => `${k.replace("cap_", "")} ${fmt(v)}`).join(", ");
+  let h = `<button class="btn close" id="closep">Close</button><h2>${esc(ROOT.name)}</h2>
+    <div class="prose">${inline(ROOT.note || "")}</div>
+    <section><h3>The reference run</h3>${kv([["Cost", mono(money(so.cost_GBP_per_year) + " per year")],
+      ["Per MWh served", so.GBP_per_MWh_served ? mono(money(so.GBP_per_MWh_served)) : null],
+      ["Price list chosen", c.key ? esc(c.key) + ` · ${fmt(c.cap_mw)} MW` : null],
+      ["Built (MW, MWh, kg)", build ? mono(build) : null],
+      ["Solved", so.seconds !== undefined ? mono(`${so.step_hours || 0.5} h steps, ${so.seconds} s`) : null]])}</section>
+    <section><h3>How this map is made</h3><div class="prose md">${md(
+      "Nothing here is written by hand. `scripts/build_cost_map.py` reads four things from the model:\n\n" +
+      "- **The LP's cost terms**, by evaluating `dc_model.objective_terms` on symbols, grouped by `dc_model.CHAINS`. With the optimiser choosing the grid's price list, the grid terms run over every price list it could pick.\n" +
+      "- **How each number is made**: `build_series` and `build_tech` run inside `optimisation.trace.recording()`, and every `T.cost(...)` the cost modules call is a box, with the file, line and expression that computed it.\n" +
+      "- **Where each number was read**: every citation is a key of `optimisation/source_register.py`, drawn as a box of its own and listed in the Sources tab.\n" +
+      "- **One solve** of the run above, so each term shows the pounds it came to.\n\n" +
+      `Variants recorded beside the default: ${(m.variants || []).join(", ")}. A step whose number differs in a variant has its own box, labelled with it. The low and high cost cases are on each box's datasheet.`)}</div></section>
+    <section><h3>Checks at build time</h3>${probs.length ? `<div class="problems"><strong>${probs.length} disagreement${probs.length > 1 ? "s" : ""} with the model:</strong><ul>${probs.map(p => `<li>${esc(p)}</li>`).join("")}</ul></div>`
+      : `<div class="ok">Every cost coefficient equals the trace that makes it, every link resolves, every citation is a registered source, every transcribed number cites one, the import price's parts add back to it, and the solved terms add to the solve's total.</div>`}</section>
+    <section><h3>Price basis</h3><div class="prose">${esc(me.price_basis || "")}</div></section>
+    <section><h3>This build</h3>${kv([["Generated", esc(m.generated)], ["Boxes", mono(m.nodes.toLocaleString("en-GB"))], ["Links", mono(m.edges.toLocaleString("en-GB"))],
+      ["Steps", mono(m.steps)], ["Sources cited", mono(`${m.sources_cited} of ${m.sources_registered} registered`)],
+      ["Run shown", esc(`${m.run.site}, ${m.run.start} to ${m.run.end}, ${m.run.size_mw_it} MW IT, ${m.run.h2_colour} hydrogen bought, ${m.run.objective}, connection mode ${m.run.connection_mode}`)]])}</section>
+    <section><h3>Assumptions register (ASSUMPTIONS.md)</h3>${Object.entries(me.assumptions || {}).map(([k, v]) => `<details><summary>${esc(k)}</summary><div class="md">${md(v)}</div></details>`).join("")}</section>`;
+  finishPanel(el, h);
+}
+function finishPanel(el, h) {
+  el.innerHTML = h; el.scrollTop = 0;
+  el.querySelectorAll("[data-go]").forEach(b => b.addEventListener("click", () => { const t = byId.get(b.dataset.go); if (t) reveal(t); }));
+  const c = document.getElementById("closep"); if (c) c.addEventListener("click", () => { el.hidden = true; });
+  el.hidden = false;
+}
+
+// ------------------------------------------------------------- search
+const q = document.getElementById("q"), res = document.getElementById("results");
+q.addEventListener("input", () => {
+  const s = q.value.trim().toLowerCase();
+  if (s.length < 2) { res.hidden = true; return; }
+  const hits = [];
+  for (const n of all) {
+    const hay = [n.name, n.code, n.key, n.publisher, n.where].filter(Boolean).join(" ").toLowerCase();
+    if (hay.includes(s)) { hits.push(n); if (hits.length >= 40) break; }
+  }
+  res.innerHTML = hits.length ? hits.map(n => `<button data-go="${esc(n.id)}"><div class="r-name">${esc(n.name)}</div><div class="r-path">${esc(KIND_LABEL[n.kind] || n.kind)}${n.where ? " · " + esc(n.where) : n.database ? " · " + esc(n.database) : ""}</div></button>`).join("") : `<div class="empty" style="padding:10px 12px">Nothing matches “${esc(q.value)}”.</div>`;
+  res.hidden = false;
+  res.querySelectorAll("[data-go]").forEach(b => b.addEventListener("click", () => { res.hidden = true; reveal(byId.get(b.dataset.go)); }));
+});
+document.addEventListener("click", (e) => { if (!e.target.closest(".search")) res.hidden = true; });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") res.hidden = true; });
+
+// ------------------------------------------------------------- controls
+document.getElementById("fit").addEventListener("click", () => { if (currentTab === "tree") fit(); });
+document.getElementById("expand").addEventListener("click", () => {
+  const { nodes } = visible();
+  const frontier = [selected];
+  for (const e of kidsOf(selected)) if (nodes.has(e.c.id)) frontier.push(e.c);
+  frontier.forEach(x => { if (kidsOf(x).length) open.add(x.id); });
+  render(selected);
+});
+document.getElementById("collapse").addEventListener("click", () => {
+  open.clear(); shownAll.clear(); initialOpen(); select(ROOT); render(); setTimeout(fit, T + 20);
+});
+function toggleBackground() {}
+
+(function stats() {
+  const m = DATA.meta; let open_ = 0;
+  for (const g of Object.values(GAPS)) if (GAP_IS_OPEN(g.status)) open_++;
+  const probs = (DATA.problems || []).length;
+  document.getElementById("stats").innerHTML =
+    `<span><b>${m.nodes.toLocaleString("en-GB")}</b> boxes</span>` +
+    `<span><b>${money((m.solve || {}).cost_GBP_per_year || 0)}</b> a year</span>` +
+    `<span><b>${m.steps}</b> steps</span>` +
+    `<span><b>${m.sources_cited}</b> sources</span>` +
+    `<span><b>${all.filter(n => n.kind === "step" && n.side === "cost" && n.grade === "assumed").length}</b> assumed</span>` +
+    `<span class="open"><b>${open_}</b> open gaps</span>` +
+    (probs ? `<span class="open"><b>${probs}</b> disagreements</span>` : `<span>checks <b>pass</b></span>`);
+  document.getElementById("sub").textContent = "Generated from the model's code · " + m.generated;
+})();
+function findTerm(name) {
+  return all.find(x => x.kind === "term" && x.name === name)
+    || all.find(x => x.kind === "chain" && name.toLowerCase().startsWith(x.name.toLowerCase().split(" ")[0]));
+}
+
+// ============================================================= the sources tab
+const SRC = DATA.sources || {};
+let srcFilter = "used";
+function nodeOf(key) { return byId.get("step:" + key); }
+function drawSources() {
+  const el = document.getElementById("view-flow");
+  const rows = Object.values(SRC).filter(s => srcFilter === "all" || (srcFilter === "used" ? s.used_by.length : !s.link && s.used_by.length))
+    .sort((a, b) => b.used_by.length - a.used_by.length || a.key.localeCompare(b.key));
+  const nUsed = Object.values(SRC).filter(s => s.used_by.length).length;
+  const nNoLink = Object.values(SRC).filter(s => s.used_by.length && !s.link).length;
+  const assumed = all.filter(n => n.kind === "step" && n.side === "cost" && n.grade === "assumed" && !n.variant);
+  const proxy = all.filter(n => n.kind === "step" && n.side === "cost" && n.grade === "proxy" && !n.variant);
+  const btn = (k, label) => `<button class="btn${srcFilter === k ? " on" : ""}" data-filter="${k}">${label}</button>`;
+  const grades = s => ["transcribed", "derived", "proxy", "assumed"].filter(g => s.grades[g]).map(g => `<span style="color:${GRADE_COLOR[g]}">${s.grades[g]} ${g}</span>`).join(" · ");
+  const stepRow = n => `<tr><td><button class="go" data-go="${esc(n.id)}">${esc(n.name)}</button><div class="mono" style="color:var(--muted);font-size:11px">${esc(n.key)}</div></td>
+    <td class="num">${esc(fmt(n.value))} ${esc(shortUnit(n.unit))}</td><td>${inline(n.note || n.source || "")}</td><td class="mono" style="font-size:11px">${esc(n.where || "")}</td></tr>`;
+  el.innerHTML = `
+    <div><h2>Sources</h2><div class="prose">Every document and data feed the cost objective reads, from <span class="mono">optimisation/source_register.py</span>. ${nUsed} are cited by the run shown; ${nNoLink} of those have no public link recorded yet. Click a source to see it on the graph with every number read from it.</div></div>
+    <div class="filters">${btn("used", `Cited in this run (${nUsed})`)}${btn("nolink", `No link recorded (${nNoLink})`)}${btn("all", `Whole register (${Object.keys(SRC).length})`)}</div>
+    <div class="tablewrap"><table class="srctable"><thead><tr><th>Source</th><th>Publisher · date</th><th>Kind</th><th>Numbers</th><th>Link · kept at</th></tr></thead><tbody>
+    ${rows.map(s => `<tr class="${s.used_by.length ? "" : "unused"}"><td>${s.used_by.length ? `<button class="go" data-go="src:${esc(s.key)}">${esc(s.title)}</button>` : esc(s.title)}${s.note ? `<div style="color:var(--muted);font-size:11.5px;margin-top:3px">${esc(s.note)}</div>` : ""}</td>
+      <td>${esc(s.publisher)}<br><span style="color:var(--muted)">${esc(s.date)}</span>${s.basis ? `<br><span style="color:var(--muted)">${esc(s.basis)}</span>` : ""}</td><td>${esc(s.kind)}</td>
+      <td class="num">${s.used_by.length}${s.used_by.length ? `<div style="font-size:11px">${grades(s)}</div>` : ""}</td>
+      <td>${s.link ? `<a href="${esc(s.link)}" target="_blank" rel="noopener">${esc(s.link)}</a>` : '<span class="nolink">no link recorded</span>'}${s.held ? `<div style="color:var(--muted);font-size:11.5px;margin-top:3px">${esc(s.held)}</div>` : ""}</td></tr>`).join("")}
+    </tbody></table></div>
+    <div><h2>Numbers with no published source (${assumed.length})</h2><div class="prose">Graded <em>assumed</em>: a study choice or a placeholder. Each says why in its note. These are where a cost result is least defensible.</div></div>
+    <div class="tablewrap"><table class="srctable"><thead><tr><th>Number</th><th>Value</th><th>Why</th><th>Set in</th></tr></thead><tbody>${assumed.map(stepRow).join("")}</tbody></table></div>
+    <div><h2>Stand-ins (${proxy.length})</h2><div class="prose">Graded <em>proxy</em>: a published number standing in for the one the model needs — another company's price where this one prints none, a convention where no figure is published.</div></div>
+    <div class="tablewrap"><table class="srctable"><thead><tr><th>Number</th><th>Value</th><th>Why</th><th>Set in</th></tr></thead><tbody>${proxy.map(stepRow).join("")}</tbody></table></div>`;
+  el.querySelectorAll("[data-filter]").forEach(b => b.addEventListener("click", () => { srcFilter = b.dataset.filter; drawSources(); }));
+  el.querySelectorAll("[data-go]").forEach(b => b.addEventListener("click", () => { const t = byId.get(b.dataset.go); if (t) { showTab("tree"); reveal(t); } }));
+}
+
+// ------------------------------------------------------------- tabs
+let currentTab = "tree";
+function showTab(which) {
+  currentTab = which;
+  document.getElementById("view-tree").hidden = which !== "tree";
+  document.getElementById("view-flow").hidden = which !== "flow";
+  document.getElementById("tab-tree").setAttribute("aria-selected", which === "tree");
+  document.getElementById("tab-flow").setAttribute("aria-selected", which === "flow");
+  document.querySelectorAll(".tools .tree-only").forEach(x => x.hidden = which !== "tree");
+  document.getElementById("fit").hidden = which !== "tree";
+  document.getElementById("panel").hidden = which !== "tree";
+  if (which === "flow") drawSources(); else panel(selected);
+}
+document.getElementById("tab-tree").addEventListener("click", () => showTab("tree"));
+document.getElementById("tab-flow").addEventListener("click", () => showTab("flow"));
+if (location.hash === "#sources") setTimeout(() => showTab("flow"), 0);
+
+
+function initialOpen() { open.add(ROOT.id); open.add("lp"); }
+initialOpen();
+if (window.matchMedia("(max-width: 760px)").matches) document.getElementById("legend").open = false;
+render();
+panel(ROOT);
+fit(false);
+})();
+</script>
