@@ -98,9 +98,13 @@ def _coefficient_identity() -> dict:
     return out
 
 
+CONNECTION_SOLVES = ("full", "loose", "pruned")
+
+
 def run_one(scenario: A.Scenario, *, site, start: str, end: str,
             connection_headroom: float | None = None,
             connection_mode: str | None = None,
+            connection_solve: str = "full",
             size_mw_it: float, pue: float, resample_hours: float | None,
             points: int, cost_case: str, horizon_years: float,
             unserved_fraction: float, out_root: Path,
@@ -144,6 +148,12 @@ def run_one(scenario: A.Scenario, *, site, start: str, end: str,
         # How the price list is chosen (COST_PLAN §1.11): None is the default
         # mode, which is hashed by name below once the series says what it was.
         "connection_mode": connection_mode,
+        # How the switches are solved when there are several price lists (4
+        # Nov 2026): "full" is the tight gap over every list; "loose" stops at
+        # 0.1 %; "pruned" prices each list on its own at both ends, keeps the
+        # ones within 2 % of the best at either end, then solves the frontier
+        # over them at the tight gap. Hashed: a cheap answer is not the full one.
+        "connection_solve": connection_solve,
         "gwp_target_kg_per_year": gwp_target_kg_per_year,
         # In the hash, not just in build_tech's arguments: the share moves both
         # the price and the burden of bought green hydrogen, so a cached run at
@@ -222,11 +232,23 @@ def run_one(scenario: A.Scenario, *, site, start: str, end: str,
         assets = _replace(assets, buy_h2=False)
     if scenario.h2_colour_2 is None and assets.buy_h2_2:
         assets = _replace(assets, buy_h2_2=False)
+    if connection_solve not in CONNECTION_SOLVES:
+        raise ValueError(f"connection_solve must be one of {CONNECTION_SOLVES}, got {connection_solve!r}")
+    n_lists = len(meta.get("connection_options") or [])
+    prune_report = None
+    if connection_solve == "pruned" and n_lists > 1:
+        ref = (meta.get("connection_reference") or {}).get("key")
+        # The pruning pass's many small solves go to the stage line, not the
+        # progress count, which was sized for the frontier's solves.
+        tech, prune_report = P.prune_options(series, assets, tech, keep_keys=[k for k in (ref,) if k],
+                                             ely_strategy=scenario.strategy, unserved_fraction=unserved_fraction,
+                                             progress=(notice if notice else None))
+    gap = M.LOOSE_MIP_REL_GAP if connection_solve == "loose" and n_lists > 1 else None
     result = P.front(series, assets, tech, points=points,
                      ely_strategy=scenario.strategy,
                      unserved_fraction=unserved_fraction,
                      gwp_target=gwp_target_kg_per_year,
-                     progress=progress, keep_dispatch=save_dispatch)
+                     progress=progress, keep_dispatch=save_dispatch, mip_rel_gap=gap)
 
     folder.mkdir(parents=True, exist_ok=True)
     (folder / "config.json").write_text(json.dumps(cfg, indent=2, default=str), encoding="utf-8")
@@ -281,6 +303,12 @@ def run_one(scenario: A.Scenario, *, site, start: str, end: str,
         "connection_options_note": meta.get("connection_options_note"),
         "connection_reference": meta.get("connection_reference"),
         "connection_groups": meta.get("connection_groups"),
+        # The cheap run (4 Nov 2026): which solve, the gap used, and what the
+        # pruning pass kept and dropped (None when nothing was pruned).
+        "connection_solve": connection_solve if n_lists > 1 else "full",
+        "mip_rel_gap": (M.MIP_REL_GAP if gap is None else gap) if n_lists > 1 else None,
+        "connection_prune": prune_report,
+        "connection_options_solved": [o.key for o in (M.connection_options_of(tech) or [])],
         "register_freshness": meta.get("register_freshness"),
         # Points whose connection sits on its band's floor: a lower band would
         # probably be cheaper, so re-run with the ceiling just below the floor.

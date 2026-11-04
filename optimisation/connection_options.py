@@ -177,6 +177,8 @@ def option_table(site, load_mw: float, annual_mwh: float, *, mode: str = DEFAULT
             rows = [dict(r, band=pinned) for r in rows if r["transmission"]]
         else:
             rows = [r for r in rows if r["band"] == pinned]
+    if getattr(site, "connection_substation", None):
+        return _pinned_options(site, rows, load_mw, mode, cap_mw)
     options, dropped = [], []
     for r in rows:
         v = r["voltage"]
@@ -221,8 +223,71 @@ def option_table(site, load_mw: float, annual_mwh: float, *, mode: str = DEFAULT
     return options, dropped
 
 
+def _pinned_options(site, rows: list[dict], load_mw: float, mode: str, cap_mw: float | None):
+    """The one option at the substation the user picked (connection wizard,
+    4 Nov 2026): the size ranges at that voltage, capped at its published room
+    (room mode) or at the size the user typed (cap mode, via the site's
+    connection limit), folded to the one band the load falls in — or the
+    largest that fits — so the run is the single-price-list model at the old
+    speed; with ``Site.connection_band_optimised`` every band at that voltage
+    stays an option and the optimiser picks the band with the size. Nothing at
+    all when the room is zero or unpublished and no size was typed: the page
+    then asks for one."""
+    v = str(site.connection_substation_voltage or "")
+    if v not in S.VOLTAGE_LEVELS:
+        raise ValueError(f"connection_substation_voltage must be one of {tuple(S.VOLTAGE_LEVELS)}, got {v!r}")
+    p = S.pinned_point(site.lat, site.lon, v, site.connection_substation, site.carbon_api_region)
+    rows = [r for r in rows if r["voltage"] == v]
+    if p is None:
+        return [], [dict(r, why=f"no {v} substation named {site.connection_substation!r} in the register near the site")
+                    for r in rows]
+    options, dropped = [], []
+    for r in rows:
+        if mode == "room":
+            if p["room_mw"] is None or p["room_mw"] <= TOL_MW:
+                dropped.append(dict(r, substation=p["substation"], room_mw=p["room_mw"], which=p["which"],
+                                    why=(f"no room: {p['substation']} publishes "
+                                         + ("no figure" if p["room_mw"] is None else f"{p['room_mw']:,.1f} MW")
+                                         + " - set your own size to connect here anyway")))
+                continue
+            ceiling = min(r["ceiling_mw"], float(p["room_mw"]))
+        else:
+            ceiling = min(r["ceiling_mw"], float(cap_mw))
+        if ceiling < r["floor_mw"] - TOL_MW:
+            dropped.append(dict(r, substation=p["substation"], room_mw=p["room_mw"], which=p["which"],
+                                why=(f"{'room' if mode == 'room' else 'the size set'} {ceiling:,.1f} MW is below the "
+                                     f"band's floor {r['floor_mw']:,.3f} MW")))
+            continue
+        tier = "national grid" if r["transmission"] else "local network"
+        above = mode != "room" and p["room_mw"] is not None and float(cap_mw) > p["room_mw"] + TOL_MW
+        options.append({
+            **r, "ceiling_mw": float(ceiling), "tier": tier, "group": v, "mode": mode,
+            "cap_basis": ("published room at the substation picked" if mode == "room" else
+                          f"the size set at the substation picked ({float(cap_mw):,.1f} MW"
+                          + (", above its published room" if above else "") + ")"),
+            "point": dict(p, headroom_status=(None if p["room_mw"] is None else
+                                              ("room" if p["room_mw"] >= ceiling - TOL_MW else "shortfall"))),
+            "key": f"{tier} | {v} | {r['band']} | {p['substation']} | picked",
+            "delivery_voltage": nc.delivery_voltage(r["transmission"], r["band"]),
+        })
+    if len(options) > 1 and not getattr(site, "connection_band_optimised", False):
+        keep = representative(options, v, load_mw)
+        dropped.extend(dict(o, why=f"folded: the band the load falls in is {keep['band']}")
+                       for o in options if o is not keep)
+        options = [keep]
+    return options, dropped
+
+
 def no_room_message(site, load_mw: float, dropped: list[dict], mode: str) -> str:
     """The one-paragraph answer when no price list survives."""
+    if getattr(site, "connection_substation", None):
+        p = next((d for d in dropped if d.get("substation")), None)
+        room = (p or {}).get("room_mw")
+        return (f"No room published at {site.connection_substation} ({site.connection_substation_voltage}) for a "
+                f"{load_mw:,.1f} MW load at {getattr(site, 'name', site)}: it publishes "
+                + ("no figure" if room is None else f"{room:,.1f} MW")
+                + ". Set your own connection size to connect here anyway (which assumes the company provides it), "
+                  "pick another substation, or run the site islanded.")
     by_v = {}
     for d in dropped:
         by_v.setdefault(d["voltage"], d["why"])

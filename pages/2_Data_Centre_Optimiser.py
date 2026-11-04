@@ -29,6 +29,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import altair as alt
+import numpy as np
 import pandas as pd
 import streamlit as st
 
@@ -457,129 +458,253 @@ with mi:
             "point — a coordinate this far offshore has no postcode, so the "
             "reverse geocode below will fail or land somewhere unintended.")
 
-# How the connection's price list is chosen (COST_PLAN §1.11, 30 Oct 2026).
-# Room and cap let the optimiser pick the grid (national or local), the
-# voltage and the charging band together with the connection size; single is
-# the model before that date, one list fixed from the ceiling. A cap entered
-# above is the cap mode with that cap (decision of 30 Oct 2026).
-from optimisation import connection_options as _CO
-_MODE_LABELS = {
-    "room": "Let the optimiser choose, each option capped by the room at its substation (default)",
-    "cap": "Let the optimiser choose, every option capped at the ceiling or the cap entered",
-    "single": "One price list fixed from the ceiling before solving (the model before 30 Oct 2026)",
-}
-conn_mode = st.radio(
-    "How the grid connection's price list is chosen", list(_MODE_LABELS), index=0, horizontal=False,
-    format_func=_MODE_LABELS.get, key="dc_conn_mode", disabled=conn_set,
-    help="The price list is the grid it joins (national grid or the local network), the voltage "
-         "and the residual charging band. Until 30 Oct 2026 it was fixed before solving from 1.43x "
-         "the load, which forced connections into the wrong band (the band floor bound in 29 of 42 "
-         "chain runs, and a 150 MW IT site was put on the national grid when the local network was "
-         "£6.5–11.5 m a year cheaper). Now every list the site could be on is an option with a size "
-         "range, its own substation, cable and charges, and the optimiser picks the option and the "
-         "connection size together, comparing the whole site cost and carbon. In the room mode each "
-         "option is capped by today's published room at its nearest substation that publishes one "
-         "(room is a hard limit; where the nearest is short, the next with room is a second option "
-         "at a longer cable). In the cap mode every option is capped at the ceiling and room is only "
-         "reported. A connection cap entered above is the cap mode with that cap.")
-if conn_set:
-    conn_mode = "cap"
+# --- the connection wizard (4 Nov 2026) ------------------------------------
+# Two paths, cheapest first. "Pick a substation": the list of every substation
+# within reach at each voltage, with its published room; a pick runs with that
+# one connection capped at its room (the one-option case: the model before
+# 30 Oct 2026, at the old speed), or at a size the user sets here, which
+# ignores room (the reinforcement assumption, labelled). "Let the optimiser
+# choose": every option in reach, the room mode of COST_PLAN §1.11, over the
+# window the user set — never swapped for a shorter one; the time warning
+# says what to expect. The modes single and cap stay in the model for the
+# scripts; the page no longer offers them by name (a cap entered above is the
+# cap mode on the second path).
+from dataclasses import replace as _replace
+from optimisation import connection_options as _CO, substations as _S
 
 try:
-    site = sites.resolve(lat, lon, tdr_band=(None if tdr == TDR_AUTO else tdr),
-                         connection_limit_mw=(conn or None))
+    site = sites.resolve(lat, lon, tdr_band=(None if tdr == TDR_AUTO else tdr))
 except Exception as exc:
     st.error(f"Could not resolve that coordinate: {exc}")
     st.stop()
 
-# What the settings above actually resolve to. The chain is load -> connection
-# ceiling -> band -> tariff, and each link used to be settable independently of
-# the others, so the page could show a 300 MW site being charged a 7 MW band.
 _load_preview = size_mw * pue          # both set in section 1, above
-_tier_uncertain = False
-_no_room, run_islanded = False, False   # set by the preview when nothing in reach has room
-if _load_preview > 0:
-    from optimisation import network_charges as _nc
-    _cmw, _cnote = ((float(conn), "") if conn else
-                    sites.max_connection_mw(_load_preview, headroom))
-    # The same call dc_inputs.build_series makes, so the preview cannot disagree
-    # with the run.
-    _trans, _ = _nc.is_transmission_connected(_cmw, site.carbon_api_region,
-                                              site.transmission_connected)
-    _band = tdr if tdr != TDR_AUTO else _nc.tdr_band_for(
-        _cmw, _load_preview * 8760.0, region=site.carbon_api_region,
-        transmission_connected=_trans)[0]
-    _mismatch = tdr != TDR_AUTO and (_trans != _band.startswith("T-Demand"))
-    _rule_line = (f"{'transmission' if _trans else 'distribution'}-connected"
-                  f"{'' if _trans else ' at ' + _nc.connection_voltage(_cmw, site.carbon_api_region, False)} → "
-                  f"band **{_band}**")
-    if conn_mode == "single":
-        st.caption(
-            f"**Resolves to:** {_load_preview:,.1f} MW load → "
-            f"{_cmw:,.1f} MW connection ceiling "
-            f"({f'derived at {headroom:g}x' if not conn else 'as entered'}) → " + _rule_line
-            + (f"  ·  _{_cnote}_" if _cnote else ""))
+_tier_uncertain = False                # the single mode's both-ways run is no longer on the page
+both_tiers = False
+_no_room, run_islanded = False, False  # set below when nothing in reach has room
+conn_mode = "room"
+conn_solve = "full"
+_opts, _dropped = [], []
+problems_conn = []
+_SOLVE_LABELS = {
+    "full": "Full run — every list, solved to one part in ten million (the check-grade answer; hours on a year)",
+    "loose": "Loose gap — every list, the solver stops once nothing can beat the answer by more than 0.1 % "
+             "(the cost is within 0.1 %; where two lists sit within 0.1 % of each other it may return either)",
+    "pruned": "Prune first — each list priced on its own at both ends (plain linear solves, about two minutes "
+              "a list on a year), the lists within 2 % of the best at either end kept, then the full-precision "
+              "frontier over those (exact at both ends; could miss a list that is best only in between)",
+}
+
+st.markdown("#### The grid connection")
+_PATHS = {
+    "pick": "Pick a substation from the list",
+    "choose": "Let the optimiser choose among every option in reach",
+}
+conn_path = st.radio(
+    "How the grid connection is decided", list(_PATHS), index=0, horizontal=True,
+    format_func=_PATHS.get, key="dc_conn_path",
+    help="**Pick a substation**: the list shows every substation within reach at each voltage "
+         "(5 km at 11 kV, 15 km at 33 kV, 40 km at 132 kV, 60 km for the national grid) with the "
+         "room its company publishes today. Pick one and the run connects there, up to that room, "
+         "and builds the rest on site — the same problem as before 30 Oct 2026, at the old speed. "
+         "Rows with no room are greyed but can still be picked: you then set your own size, which "
+         "assumes the company provides it. **Let the optimiser choose**: every substation, voltage "
+         "and charging band in reach is an option with its own cable and charges, each capped by "
+         "its published room, and the optimiser picks the option and the size together. Under a "
+         "minute on a week; hours on a year. The run always goes over the window you set.")
+
+
+@st.cache_data(show_spinner=False)
+def _sub_list(lat_: float, lon_: float, region: int) -> pd.DataFrame:
+    return _S.substation_list(lat_, lon_, region)
+
+
+def _preview_options(site_, mode, cap):
+    """The same call dc_inputs.build_series makes, so the preview cannot disagree with the run."""
+    try:
+        return _CO.option_table(site_, _load_preview, _load_preview * 8760.0, mode=mode, cap_mw=cap)
+    except Exception as _exc:          # the preview must never stop the page
+        st.caption(f"Could not list the connection options: {_exc}")
+        return [], []
+
+
+_cmw, _cnote = ((float(conn), "") if conn else sites.max_connection_mw(_load_preview, headroom))
+if _load_preview <= 0:
+    pass
+elif conn_path == "pick":
+    _subs = _sub_list(site.lat, site.lon, site.carbon_api_region)
+    if _subs.empty:
+        st.warning("No substation of any voltage within reach of this point is in the register.")
+        problems_conn = ["No substation in reach: move the site or let the optimiser choose."]
     else:
-        try:
-            _opts, _dropped = _CO.option_table(site, _load_preview, _load_preview * 8760.0, mode=conn_mode,
-                                               cap_mw=_cmw)
-        except Exception as _exc:          # the preview must never stop the page
-            _opts, _dropped = [], []
-            st.caption(f"Could not list the connection options: {_exc}")
-        _cap_words = ("the published room at each option's substation" if conn_mode == "room"
-                      else f"{_cmw:,.1f} MW ({'as entered' if conn else f'derived at {headroom:g}x'})")
-        _no_room = not _opts
-        if _no_room:
-            st.warning("**No room found nearby.** " + _CO.no_room_message(site, _load_preview, _dropped, conn_mode)
-                       .split("(" + conn_mode + " mode). ", 1)[-1]
-                       + f" The rule alone would have given: {_rule_line} — a connection the data does not support.")
-            run_islanded = st.checkbox(
-                "Run islanded — no grid connection", value=False, key="dc_islanded",
-                help="The site is built with no connection at all: every hour is served from what is "
-                     "built on site (wind, solar, battery, hydrogen), with no standby generator. Over a "
-                     "full year that is a demanding build; over a summer week it looks cheap.")
-        if conn_mode == "room":
-            from optimisation import substations as _S
-            _fresh = _S.freshness()
-            (st.caption if _fresh.get("ok") else st.warning)(
-                f"Room figures against the companies' portals (checked {str(_fresh.get('checked', ''))[:16]}, "
-                f"once a day): {_fresh.get('note')}")
-        if _opts:
-            st.caption(
-                f"**Resolves to:** {_load_preview:,.1f} MW load → the grid, voltage and charging band are "
-                f"**chosen by the optimiser** among **{len(_opts)} price lists**, each capped by {_cap_words}. "
-                f"The rule alone would give: {_rule_line}.")
-            with st.expander(f"The {len(_opts)} price lists the optimiser may choose between"):
-                st.dataframe(pd.DataFrame([{
-                    "grid": o["tier"], "voltage": o["voltage"], "band": o["band"],
-                    "smallest (MW)": round(o["floor_mw"], 3), "largest (MW)": round(o["ceiling_mw"], 1),
-                    "substation": o["point"].get("substation"), "cable (km)": o["point"].get("route_km"),
-                    "room (MW)": o["point"].get("room_mw"), "room basis": o["point"].get("headroom_basis"),
-                    "as of": o["point"].get("headroom_as_of"), "which": o["point"].get("which"),
-                    "skipped (no figure)": len(o["point"].get("skipped") or []),
-                } for o in _opts]), hide_index=True, use_container_width=True)
-                if _dropped:
-                    st.caption("Not available: " + "; ".join(
-                        f"{d['voltage']} {d['band']} ({d['why']})" for d in _dropped[:12])
-                        + (" …" if len(_dropped) > 12 else ""))
-    _tier_uncertain = (site.transmission_connected is None
-                       and _nc.tier_is_uncertain(_cmw, site.carbon_api_region)
-                       and conn_mode == "single")
-    if _tier_uncertain:
-        _r = _nc.area_rule(site.carbon_api_region)
+        _show = pd.DataFrame({
+            "voltage": _subs["voltage"], "substation": _subs["substation"],
+            "distance (km)": _subs["straight_km"].round(1), "cable (km)": _subs["route_km"].round(1),
+            "room (MW)": _subs["room_mw"].round(1),
+            "status": np.where(_subs["has_room"], "room",
+                               np.where(_subs["has_figure"], "no room", "no figure")),
+            "company": _subs["company"], "room as of": _subs["headroom_as_of"],
+        })
+        _grey = _subs["has_room"].to_numpy()
+
+        def _row_style(row):
+            return [""] * len(row) if _grey[row.name] else ["color: #9a9a9a"] * len(row)
+
         st.caption(
-            f"At {_cmw:,.0f} MW this site could connect either to the local network "
-            f"or straight to the national grid — in {_r.area} the published sources "
-            f"leave {_r.uncertain_from:g}–{_r.dno_max:g} MW open. Tick *Also run the "
-            "other connection type* below the Optimise button to see both.")
-    if _mismatch:
+            f"{len(_subs)} substations within reach: {int(_subs['has_room'].sum())} with room, "
+            f"{int((_subs['has_figure'] & ~_subs['has_room']).sum())} full, "
+            f"{int((~_subs['has_figure']).sum())} with no published figure. Click a row to pick it; "
+            "greyed rows have no room today and need a size of your own.")
+        _ev = st.dataframe(_show.style.apply(_row_style, axis=1), hide_index=True, use_container_width=True,
+                           height=300, on_select="rerun", selection_mode="single-row", key="dc_sub_list",
+                           column_config={
+                               "distance (km)": st.column_config.NumberColumn(format="%.1f"),
+                               "cable (km)": st.column_config.NumberColumn(format="%.1f"),
+                               "room (MW)": st.column_config.NumberColumn(format="%.1f"),
+                           })
+        _rows = list(getattr(getattr(_ev, "selection", None), "rows", []) or [])
+        if not _rows:
+            st.info("Pick a substation from the list to run with that connection.")
+            problems_conn = ["Pick a substation from the list, or let the optimiser choose."]
+        else:
+            _r = _subs.iloc[int(_rows[0])]
+            _room = None if pd.isna(_r["room_mw"]) else float(_r["room_mw"])
+            c1_, c2_, c3_ = st.columns([2, 1, 1])
+            with c1_:
+                st.markdown(
+                    f"**{_r['substation']}** at **{_r['voltage']}**, {_r['straight_km']:.1f} km away "
+                    f"({_r['route_km']:.1f} km of cable), {_r['company']}. Published room: "
+                    + ("**no figure**" if _room is None else f"**{_room:,.1f} MW**")
+                    + (f" ({_r['headroom_basis']}, as of {_r['headroom_as_of']})" if _room is not None else "")
+                    + ".")
+            with c2_:
+                _size_set = st.checkbox(
+                    "Set my own connection size (MW)", value=(_room is None or _room <= 0.0), key="dc_pick_size_set",
+                    help="Unticked, the connection is capped at the published room and the optimiser decides "
+                         "how much of it to take. Ticked, the run connects here at the size you set, ignoring "
+                         "the room: that assumes the company reinforces to provide it.")
+                _size = st.number_input(
+                    "Connection size (MW)", 0.1, 10_000.0,
+                    float(_room) if _room and _room > 0 else float(round(_cmw, 1)), step=1.0,
+                    key="dc_pick_size", disabled=not _size_set, label_visibility="collapsed")
+            with c3_:
+                _band_opt = st.radio(
+                    "Charging band", ["set", "optimised"], index=0, key="dc_pick_band",
+                    format_func={"set": "Set from the load", "optimised": "Let the optimiser choose"}.get,
+                    help="**Set**: the one band the load falls in by the published rules, so the connection is "
+                         "sized inside that band's range — one price list, the old speed. **Let the optimiser "
+                         "choose**: every band at this voltage is an option, each a size range with its own "
+                         "fixed and per-MW charges, and the optimiser picks the band with the size; it may take a "
+                         "smaller connection in a cheaper band and build more on site. A few on/off switches, "
+                         "not the twenty of the open choice.") == "optimised"
+            if conn_set:
+                st.caption("The connection cap entered in section 1 is not used on this path; set the size here.")
+            if _size_set:
+                site = _replace(site, connection_substation=str(_r["substation"]),
+                                connection_substation_voltage=str(_r["voltage"]), connection_limit_mw=float(_size),
+                                connection_band_optimised=_band_opt)
+                conn_mode, _cmw = "cap", float(_size)
+                if _room is not None and _size > _room:
+                    st.warning(f"{_size:,.1f} MW is above the {_room:,.1f} MW published at {_r['substation']}: "
+                               "the run assumes the company reinforces to provide it, priced at the connection "
+                               "charges and the cable, not the reinforcement itself.")
+                elif _room is None:
+                    st.warning(f"{_r['substation']} publishes no room figure: the run assumes the company "
+                               f"provides {_size:,.1f} MW there.")
+            else:
+                site = _replace(site, connection_substation=str(_r["substation"]),
+                                connection_substation_voltage=str(_r["voltage"]), connection_limit_mw=None,
+                                connection_band_optimised=_band_opt)
+                conn_mode = "room"
+            _opts, _dropped = _preview_options(site, conn_mode, _cmw if conn_mode == "cap" else None)
+            _no_room = not _opts
+            if _no_room:
+                st.warning("**No room here.** " + _CO.no_room_message(site, _load_preview, _dropped, conn_mode))
+                problems_conn = []      # the islanded tick below, or a size of your own, clears it
+            elif len(_opts) == 1:
+                _o = _opts[0]
+                st.caption(
+                    f"**Resolves to:** {_load_preview:,.1f} MW load → connection at {_o['tier']}, {_o['voltage']}, "
+                    f"band **{_o['band']}**, {_o['floor_mw']:,.3f}–{_o['ceiling_mw']:,.1f} MW "
+                    f"({_o['cap_basis']}); the optimiser sizes it inside that range and builds the rest on site.")
+                problems_conn = []
+            else:
+                _o = _opts[0]
+                st.caption(
+                    f"**Resolves to:** {_load_preview:,.1f} MW load → connection at {_o['tier']}, {_o['voltage']}, "
+                    f"the band **chosen by the optimiser** among {len(_opts)}: "
+                    + ", ".join(f"{o['band']} ({o['floor_mw']:,.3f}–{o['ceiling_mw']:,.1f} MW)" for o in _opts)
+                    + f" ({_o['cap_basis']}); it may take a smaller connection in a cheaper band and build more on site.")
+                problems_conn = []
+else:
+    conn_mode = "cap" if conn else "room"
+    _opts, _dropped = _preview_options(site, conn_mode, _cmw)
+    _no_room = not _opts
+    problems_conn = []
+    if _opts:
+        _cap_words = ("the published room at each option's substation" if conn_mode == "room"
+                      else f"{_cmw:,.1f} MW (the cap entered in section 1)")
+        st.caption(
+            f"**Resolves to:** {_load_preview:,.1f} MW load → the grid, voltage and charging band are "
+            f"**chosen by the optimiser** among **{len(_opts)} price lists**, each capped by {_cap_words}.")
+        with st.expander(f"The {len(_opts)} price lists the optimiser may choose between"):
+            st.dataframe(pd.DataFrame([{
+                "grid": o["tier"], "voltage": o["voltage"], "band": o["band"],
+                "smallest (MW)": round(o["floor_mw"], 3), "largest (MW)": round(o["ceiling_mw"], 1),
+                "substation": o["point"].get("substation"), "cable (km)": o["point"].get("route_km"),
+                "room (MW)": o["point"].get("room_mw"), "room basis": o["point"].get("headroom_basis"),
+                "as of": o["point"].get("headroom_as_of"), "which": o["point"].get("which"),
+                "skipped (no figure)": len(o["point"].get("skipped") or []),
+            } for o in _opts]), hide_index=True, use_container_width=True)
+            if _dropped:
+                st.caption("Not available: " + "; ".join(
+                    f"{d['voltage']} {d['band']} ({d['why']})" for d in _dropped[:12])
+                    + (" …" if len(_dropped) > 12 else ""))
+        try:
+            _days = (pd.Timestamp(end) - pd.Timestamp(start)).days
+        except Exception:
+            _days = None
+        _when = ("a year" if _days is not None and _days > 200 else
+                 f"{_days} days" if _days is not None else "the window set")
+        (st.warning if _days is None or _days > 60 else st.info)(
+            f"**Solve time.** With {len(_opts)} price lists to choose between, expect about 3x a fixed "
+            f"connection's time on a week and about 10x on a year: London 150 MW IT took 38 minutes "
+            f"fixed and 6.4 hours with 11 lists for a three-point frontier over a year. This run goes "
+            f"over {_when} as set in section 1; shorten the window there if that is too long."
+            + (" Pick a substation instead for the old speed, or choose a cheaper solve below."
+               if _days is not None and _days > 60 else ""))
+        if _days is None or _days > 60:
+            conn_solve = st.radio(
+                "How to solve the choice of list", list(_SOLVE_LABELS), index=0, key="dc_conn_solve",
+                format_func=_SOLVE_LABELS.get,
+                help="Offered when the window is over two months, where the full run takes hours. The "
+                     "full run is the default and is what every check-grade number comes from. The two "
+                     "cheaper runs trade precision for time in different ways, said on each; the result "
+                     "page records which was used. Measured 4 Nov 2026 on a London June week: the loose "
+                     "gap returned a list 0.07 % dearer than the full run's in room mode and the same list "
+                     "in cap mode; the pruning pass keeps every list on a week, where they are all within "
+                     "1 % of each other, and matters on a year.")
+
+if _load_preview > 0 and _no_room:
+    run_islanded = st.checkbox(
+        "Run islanded — no grid connection", value=False, key="dc_islanded",
+        help="The site is built with no connection at all: every hour is served from what is "
+             "built on site (wind, solar, battery, hydrogen), with no standby generator. Over a "
+             "full year that is a demanding build; over a summer week it looks cheap.")
+if _load_preview > 0 and conn_mode == "room":
+    _fresh = _S.freshness()
+    (st.caption if _fresh.get("ok") else st.warning)(
+        f"Room figures against the companies' portals (checked {str(_fresh.get('checked', ''))[:16]}, "
+        f"once a day): {_fresh.get('note')}")
+if _load_preview > 0 and tdr != TDR_AUTO:
+    from optimisation import network_charges as _nc
+    _trans, _ = _nc.is_transmission_connected(_cmw, site.carbon_api_region, site.transmission_connected)
+    if _trans != tdr.startswith("T-Demand"):
         st.warning(
-            f"**The band you picked does not match the connection.** "
-            f"{_band} is a "
-            f"{'transmission' if _band.startswith('T-Demand') else 'distribution'}"
-            f" band, but a {_cmw:,.0f} MW connection is "
-            f"{'transmission' if _trans else 'distribution'}-connected. Set the "
-            f"band to Auto unless you know the site's actual agreed band.")
+            f"**The band you picked does not match the connection.** {tdr} is a "
+            f"{'transmission' if tdr.startswith('T-Demand') else 'distribution'} band, but a "
+            f"{_cmw:,.0f} MW connection is {'transmission' if _trans else 'distribution'}-connected. "
+            "Set the band to Auto unless you know the site's actual agreed band.")
 
 try:
     _hh, _ = _tnuos()
@@ -819,8 +944,11 @@ if "green" in buy_colours:
 
 # --- what this combination can and cannot do --------------------------------
 problems, warnings = [], []
+if _load_preview > 0:
+    problems.extend(problems_conn)
 if _no_room and not run_islanded:
-    problems.append("No room found nearby: tick 'Run islanded' above, move the site, or choose the cap mode.")
+    problems.append("No room at the connection: tick 'Run islanded' above, set your own size, pick another "
+                    "substation, or move the site.")
 if (f_tank or f_fc) and not any_hydrogen:
     warnings.append(
         "**Hydrogen storage and/or fuel cell ticked with no hydrogen source.** "
@@ -909,16 +1037,10 @@ with c1:
 with c2:
     refresh = st.checkbox("Ignore cache", value=False, disabled=job_running)
 with c3:
-    both_tiers = st.checkbox(
-        "Also run the other connection type", value=False, disabled=job_running or conn_mode != "single",
-        help="Only in the single-price-list mode: with the price list chosen by the optimiser "
-             "both grids are already compared in one solve. "
-             "Only does anything when the site's size is one where the network "
-             "companies' published rules leave it open whether it connects to the "
-             "local network or straight to the national grid (the note under "
-             "*Resolves to* says so). The run is then solved twice, once each way, "
-             "and the two are compared below the results. It roughly doubles the "
-             "solve time. Off by default.")
+    # The single mode's "also run the other connection type" left the page on
+    # 4 Nov 2026: both grids are options of the second path, and a picked
+    # substation fixes the grid. scripts/run_both_tiers.py keeps the check.
+    pass
 
 if launch:
     dc_job.start(
@@ -930,7 +1052,7 @@ if launch:
         cost_case=cost_case, horizon_years=horizon,
         unserved_fraction=unserved, gwp_target_kg_per_year=gwp_target,
         green_h2_grid_share=green_share,
-        connection_headroom=headroom, connection_mode=conn_mode, refresh=refresh,
+        connection_headroom=headroom, connection_mode=conn_mode, connection_solve=conn_solve, refresh=refresh,
         # Always: it is a few MB, and a run whose dispatch was not kept cannot
         # be asked about later without solving it again.
         save_dispatch=True)
@@ -1088,6 +1210,24 @@ else:
     if summary.get("connection_chosen_by") == "none (islanded)":
         st.info("**Run islanded:** no grid connection was available nearby, and the site was built "
                 "without one at your request. Every hour is served from what is built on site.")
+    if str(summary.get("connection_chosen_by", "")).startswith("user (substation picked)"):
+        st.subheader("The grid connection you picked")
+        _o1 = (summary.get("connection_options") or [{}])[0]
+        if len(summary.get("connection_options") or []) > 1:
+            st.caption("The band was left to the optimiser: " + ", ".join(
+                f"{o.get('band')} ({o.get('floor_mw', 0):,.3f}–{o.get('ceiling_mw', 0):,.1f} MW)"
+                for o in summary["connection_options"]) + ".")
+        st.caption(
+            f"Connected at **{_o1.get('substation')}** ({_o1.get('tier')}, {_o1.get('voltage')}, band "
+            f"{_o1.get('band')}), {_o1.get('route_km') or 0:.1f} km of cable; the connection was allowed "
+            f"{_o1.get('floor_mw', 0):,.3f}–{_o1.get('ceiling_mw', 0):,.1f} MW "
+            f"({_o1.get('cap_basis')}); published room there "
+            + ("no figure" if _o1.get("room_mw") is None else f"{_o1.get('room_mw'):,.1f} MW") + ".")
+        _rows = [{"point": _name, "connection built (MW)": round((summary.get(_key) or {}).get("cap_grid", float("nan")), 1),
+                  "band": (summary.get(_key) or {}).get("connection_band") or _o1.get("band")}
+                 for _key, _name in POINTS_SHOWN if summary.get(_key)]
+        if _rows:
+            st.dataframe(pd.DataFrame(_rows), hide_index=True, use_container_width=True)
     if summary.get("connection_chosen_by") == "optimiser":
         st.subheader("The grid connection the optimiser chose")
         _n_opt = len(summary.get("connection_options") or [])
@@ -1126,6 +1266,29 @@ else:
                     "fixed charges (£/yr)": round(o.get("fixed_GBP_per_year", 0)),
                     "capacity charges (£/MW/yr)": round(o.get("capacity_GBP_per_MW_year", 0)),
                 } for o in summary["connection_options"]]), hide_index=True, use_container_width=True)
+        _solve = summary.get("connection_solve")
+        if _solve and _solve != "full":
+            _pr = summary.get("connection_prune") or {}
+            st.info(
+                f"**Solved as a cheap run ({'loose gap' if _solve == 'loose' else 'pruned first'}).** "
+                + (f"Gap {summary.get('mip_rel_gap'):g}: the cost is within that fraction of the best; where two "
+                   "lists sit that close the list may differ from the full run's."
+                   if _solve == "loose" else
+                   f"Each list was priced on its own at both ends and {len(_pr.get('kept') or [])} of "
+                   f"{len(_pr.get('kept') or []) + len(_pr.get('dropped') or [])} kept (within {_pr.get('margin', 0):.0%} "
+                   "of the best at either end); the frontier was then solved over those at full precision. "
+                   "Exact at both ends; a list that is best only between them could be missed.")
+                + " Re-run as a full run for a check-grade answer.")
+            if _pr.get("per_list"):
+                with st.expander("Every list priced on its own (the pruning pass)"):
+                    _bc = min(v["cost"] for v in _pr["per_list"].values())
+                    _bg = min(v["gwp"] for v in _pr["per_list"].values())
+                    st.dataframe(pd.DataFrame([{
+                        "list": k, "kept": k in (_pr.get("kept") or []),
+                        "least cost (£m/yr)": round(v["cost"] / 1e6, 3), "vs best": f"+{(v['cost'] / _bc - 1) * 100:.2f} %",
+                        "least carbon (t/yr)": round(v["gwp"] / 1e3), "vs cleanest": f"+{(v['gwp'] / _bg - 1) * 100:.2f} %",
+                    } for k, v in sorted(_pr["per_list"].items(), key=lambda kv: kv[1]["cost"])]),
+                        hide_index=True, use_container_width=True)
         _fresh = summary.get("register_freshness")
         if _fresh:
             (st.caption if _fresh.get("ok") else st.warning)(

@@ -362,6 +362,7 @@ def build_model(series: Series, assets: Assets, tech: Tech, *,
                 objective: str = "cost",
                 gwp_limit: float | None = None,
                 cost_limit: float | None = None,
+                relax_switches: bool = False,
                 unserved_fraction: float = 0.0,
                 ely_strategy: str = "free",
                 islanded_baseload_uses_cf_floor: bool = True):
@@ -547,7 +548,13 @@ def build_model(series: Series, assets: Assets, tech: Tech, *,
             if not (np.isfinite(o.ceiling_mw) and o.ceiling_mw >= o.floor_mw >= 0.0):
                 raise ValueError(f"connection option {o.key!r} needs 0 <= floor <= a finite ceiling, "
                                  f"got {o.floor_mw}..{o.ceiling_mw}")
-            V[f"on_{i}"] = m.add_variables(binary=True, name=f"on_{i}")
+            # relax_switches (4 Nov 2026, the cheap run's pruning pass): the
+            # on/off switch may take any value between 0 and 1, so the problem
+            # is a linear programme again. Meaningless as a design — a site
+            # "40 % on one list" — but a list with no share here is one the
+            # whole-number solve would almost never pick; dc_pareto.prune_options.
+            V[f"on_{i}"] = (m.add_variables(lower=0.0, upper=1.0, name=f"on_{i}") if relax_switches
+                            else m.add_variables(binary=True, name=f"on_{i}"))
             V[f"cap_conn_{i}"] = m.add_variables(lower=0.0, name=f"cap_conn_{i}")
             m.add_constraints(V[f"cap_conn_{i}"] - o.floor_mw * V[f"on_{i}"] >= 0, name=f"option_floor_{i}")
             m.add_constraints(V[f"cap_conn_{i}"] - o.ceiling_mw * V[f"on_{i}"] <= 0, name=f"option_ceiling_{i}")
@@ -1016,6 +1023,12 @@ def intensities(cost: float, gwp: float, unserved_mwh: float,
 # HiGHS stops at 0.01 % by default, which is £1,000 a year on a £10 m site and
 # enough to break the frontier's tie-breaks (dc_pareto.LEX_TOL is 1e-6).
 MIP_REL_GAP = 1e-7
+# The cheap run's gap (4 Nov 2026): the solver stops once no design can beat
+# the one in hand by more than 0.1 % of the bill, instead of proving it to one
+# part in ten million. The returned cost is within 0.1 % of the best; the
+# design can differ where two sit within 0.1 % of each other. Not for the
+# checks that compare a switched answer to a forced one to 1e-5.
+LOOSE_MIP_REL_GAP = 1e-3
 
 
 def solve(m, solver="highs", **kw):

@@ -334,8 +334,12 @@ def build_series(site, start: str, end: str, size_mw_it: float,
     meta["connection_site"] = conn_point
     meta["connection_mode"] = mode
     meta["connection_mode_requested"] = mode_requested
+    pinned = bool(getattr(site, "connection_substation", None))
     meta["connection_chosen_by"] = ("none (islanded)" if not grid else
-                                    "optimiser" if len(options) > 1 else "rule")
+                                    "user (substation picked), band by the optimiser" if pinned and len(options) > 1 else
+                                    "user (substation picked)" if pinned else
+                                    "optimiser" if len(options) > 1 else
+                                    "rule")
     meta["connection_options"] = [_option_record(o) for o in options]
     meta["connection_options_dropped"] = [{k: (None if isinstance(v, float) and not np.isfinite(v) else v)
                                            for k, v in d.items()} for d in dropped]

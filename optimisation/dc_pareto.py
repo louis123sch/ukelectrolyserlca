@@ -173,10 +173,62 @@ def _tie_break(solve_one, series, anchor, progress, *, first, second, capture=No
     return anchor
 
 
+PRUNE_MARGIN = 0.02
+
+
+def prune_options(series, assets, tech, *, keep_keys=(), ely_strategy: str = "free",
+                  unserved_fraction: float = 0.0, progress=None, margin: float = PRUNE_MARGIN):
+    """The cheap run's first pass (4 Nov 2026): price each list on its own.
+
+    Exactly one list is on in any design, so the best design on a given list
+    is an ordinary linear programme with that list fixed, and the cost minimum
+    over every list is the true cost minimum — no tree search. This solves
+    that programme for each list at both anchors (least cost, least carbon)
+    and keeps every list within ``margin`` of the best at either anchor, plus
+    ``keep_keys`` (the rule's own list). The frontier is then solved properly
+    over the survivors. What it can miss: a list that is poor at both anchors
+    but best at a point between them; the margin is there for that.
+
+    Returns ``(tech, report)``: a Tech carrying only the survivors (the same
+    Tech when nothing is pruned) and each list's cost and carbon when taken
+    whole. An earlier version (same day, morning) kept the lists with a share
+    in a relaxed solve; on a London week that dropped the true optimum, because
+    a relaxation pays fixed charges by the fraction and so favours the smallest
+    list. This one cannot drop the anchors' optima.
+    """
+    from dataclasses import replace as _replace
+    opts = M.connection_options_of(tech)
+    if not opts or len(opts) < 2:
+        return tech, {"pruned": False, "kept": [o.key for o in (opts or [])], "dropped": [], "per_list": {}}
+    per_list = {o.key: {} for o in opts}
+    for objective in ("cost", "gwp"):
+        for i, o in enumerate(opts):
+            if progress:
+                progress(f"prune_{objective}_{i}")
+            one = _replace(tech, connection_options=[o])
+            m, V, _ = M.build_model(series, assets, one, objective=objective, relax_switches=True,
+                                    unserved_fraction=unserved_fraction, ely_strategy=ely_strategy)
+            try:
+                M.solve(m)
+            except RuntimeError:                       # this list cannot serve the load at all
+                per_list[o.key][objective] = float("inf")
+                continue
+            per_list[o.key][objective] = float(m.objective.value)
+    keep = set(keep_keys) & set(per_list)
+    for objective in ("cost", "gwp"):
+        best = min(v[objective] for v in per_list.values())
+        keep |= {k for k, v in per_list.items() if v[objective] <= best * (1.0 + margin) + 1e-9}
+    kept = [o for o in opts if o.key in keep]
+    dropped = [o.key for o in opts if o.key not in keep]
+    report = {"pruned": bool(dropped), "kept": [o.key for o in kept], "dropped": dropped,
+              "per_list": per_list, "margin": margin}
+    return (tech if not dropped else _replace(tech, connection_options=kept)), report
+
+
 def front(series, assets, tech, *, points: int = DEFAULT_POINTS,
           ely_strategy: str = "free", unserved_fraction: float = 0.0,
           gwp_target: float | None = None, progress=None,
-          keep_dispatch: bool = False) -> dict:
+          keep_dispatch: bool = False, mip_rel_gap: float | None = None) -> dict:
     """Solve the exact cost/carbon frontier for one configuration.
 
     ``keep_dispatch`` also returns the half-hourly dispatch behind the three
@@ -198,7 +250,8 @@ def front(series, assets, tech, *, points: int = DEFAULT_POINTS,
                                   gwp_limit=gwp_limit, cost_limit=cost_limit,
                                   unserved_fraction=unserved_fraction,
                                   ely_strategy=ely_strategy)
-        M.solve(m)
+        # mip_rel_gap None: dc_model's tight default when the model has switches.
+        M.solve(m, **({} if mip_rel_gap is None else {"mip_rel_gap": float(mip_rel_gap)}))
         return V, obj
 
     # Both anchors get the same lexicographic treatment, for the same reason and

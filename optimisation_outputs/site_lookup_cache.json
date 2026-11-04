@@ -239,6 +239,14 @@
     "region_name": "North East England",
     "tnuos_zone": 3
   },
+  "55.3,-2.0": {
+    "carbon_api_region": 4,
+    "outcode": "NE65",
+    "place": "Northumberland",
+    "postcode": "NE65 7LW",
+    "region_name": "North East England",
+    "tnuos_zone": 3
+  },
   "55.3,-4.08": {
     "carbon_api_region": 2,
     "outcode": "DG4",

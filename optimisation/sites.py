@@ -204,6 +204,19 @@ class Site:
     # inferring it decides the TDR band — in 2026/27, £2.08 m a year for EHV4
     # against £7.60 m for T-Demand4 — on a rule rather than a connection offer.
     transmission_connected: bool | None = None
+    # The substation the user picked from the page's list (4 Nov 2026, the
+    # connection wizard): its register name and the voltage it was listed at
+    # ("11 kV", "33 kV", "132 kV" or "transmission"). The option table then
+    # offers that one substation only — capped at its published room, or at
+    # connection_limit_mw when the user typed a size (which ignores room).
+    connection_substation: str | None = None
+    connection_substation_voltage: str | None = None
+    # With a substation picked: False folds the connection to the one charging
+    # band the load falls in (the model before 30 Oct 2026, one price list);
+    # True keeps every band at that voltage as an option, so the optimiser
+    # picks the band with the size — a few switches, not the twenty of the
+    # open choice (4 Nov 2026).
+    connection_band_optimised: bool = False
     key: str = ""
 
     @property
@@ -316,7 +329,10 @@ def resolve(lat: float, lon: float, *, name: str | None = None,
             connection_limit_mw: float | None = None,
             transmission_connected: bool | None = None,
             tdr_band: str | None = DEFAULT_TDR_BAND,
-            carbon_api_region: int | None = None) -> Site:
+            carbon_api_region: int | None = None,
+            connection_substation: str | None = None,
+            connection_substation_voltage: str | None = None,
+            connection_band_optimised: bool = False) -> Site:
     """Build a Site from a coordinate, deriving its region and TNUoS zone.
 
     ``carbon_api_region`` overrides the lookup, for a boundary case you have
@@ -338,6 +354,9 @@ def resolve(lat: float, lon: float, *, name: str | None = None,
         outcode=info.get("outcode", ""),
         tdr_band=tdr_band, connection_limit_mw=connection_limit_mw,
         transmission_connected=transmission_connected,
+        connection_substation=connection_substation,
+        connection_substation_voltage=connection_substation_voltage,
+        connection_band_optimised=bool(connection_band_optimised),
         key=f"r{info['carbon_api_region']}_{float(lat):.4f}_{float(lon):.4f}",
     )
 

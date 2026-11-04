@@ -299,6 +299,55 @@ def room_points(lat: float, lon: float, voltage: str, need_mw: float,
     return out
 
 
+def substation_list(lat: float, lon: float, region: int | None = None,
+                    reach: dict | None = None) -> pd.DataFrame:
+    """Every substation within reach of the site at each voltage, nearest
+    first within a voltage: the list the page's connection wizard shows (4 Nov
+    2026). ``has_figure`` says the company publishes a room figure for it,
+    ``has_room`` that the figure is above zero. Reach is REACH_KM per voltage."""
+    reach = dict(REACH_KM, **(reach or {}))
+    cols = ["voltage", "substation", "company", "level", "straight_km", "route_km", "room_mw",
+            "has_figure", "has_room", "headroom_basis", "headroom_as_of", "reach_km"]
+    frames = []
+    for v in VOLTAGE_LEVELS:
+        if v not in reach:
+            continue
+        c = candidates(lat, lon, v, region, within_km=float(reach[v]))
+        if c.empty:
+            continue
+        head = pd.to_numeric(c["demand_headroom_mw"], errors="coerce")
+        frames.append(pd.DataFrame({
+            "voltage": v, "substation": c["name"].astype(str), "company": c["company"],
+            "level": c["level_std"], "straight_km": c["straight_km"].astype(float),
+            "route_km": c["straight_km"].astype(float) * ROUTE_FACTOR_ASSUMED,
+            "room_mw": head, "has_figure": head.notna(), "has_room": head.fillna(0.0) > 0.0,
+            "headroom_basis": c["headroom_basis"] if "headroom_basis" in c else None,
+            "headroom_as_of": c["headroom_as_of"] if "headroom_as_of" in c else None,
+            "reach_km": float(reach[v]),
+        }))
+    if not frames:
+        return pd.DataFrame(columns=cols)
+    return pd.concat(frames, ignore_index=True)[cols]
+
+
+def pinned_point(lat: float, lon: float, voltage: str, name: str, region: int | None = None) -> dict | None:
+    """The option point for a substation the user picked by name at a voltage
+    (the nearest row of that name, within the register's search radius), or
+    None when the register has no such substation at that voltage."""
+    c = candidates(lat, lon, voltage, region, within_km=SEARCH_KM)
+    c = c[c["name"].astype(str) == str(name)]
+    if c.empty:
+        return None
+    row = c.iloc[0]
+    head = row.get("demand_headroom_mw", np.nan)
+    return {"substation": str(row["name"]), "company": row.company, "level": row.level_std,
+            "straight_km": float(row.straight_km), "route_km": float(row.straight_km * ROUTE_FACTOR_ASSUMED),
+            "room_mw": None if pd.isna(head) else float(head),
+            "headroom_basis": None if pd.isna(row.get("headroom_basis", np.nan)) else str(row["headroom_basis"]),
+            "headroom_as_of": None if pd.isna(row.get("headroom_as_of", np.nan)) else str(row["headroom_as_of"]),
+            "which": "picked by the user", "skipped": []}
+
+
 def voltage_with_room(lat: float, lon: float, rule_voltage: str, conn_mw: float,
                       region: int) -> tuple[str, str]:
     """The connection voltage once the area's own substation capacities are

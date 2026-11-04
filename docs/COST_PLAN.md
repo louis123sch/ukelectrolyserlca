@@ -34,7 +34,7 @@ Effort: XS < 1 h, S ≈ half a day, M ≈ 1–2 days, L > 2 days.
 | 1.9 E Build prices by area | done 29 Oct — eleven areas on their own 2026 statements, POA rows on the publishers' median (stand-in), NGED's substations kept and flagged low | `connection_cost.py`, `tests/test_connection_prices_by_area.py` |
 | 1.9 H Voltage rule and ceiling | done 29 Oct — published rule as floor, area's substation capacities above it; ceiling 1 / 0.70 (FES load factor) instead of 1.5 assumed | `substations.voltage_with_room`, `network_charges.connection_voltage(site=)`, `sites.py` |
 | 1.9 G Chain check | run 29 Oct — 14 areas x 3 sizes, 42/42 solved, 21 checks pass; found and fixed the band floor sitting on the boundary (one kVA above now). Re-run 30 Oct on the complete register: 42/42, 21 pass | `scripts/check_connection_chain.py`, `optimisation_outputs/connection_chain.csv` |
-| 1.11 S1–S6 The optimiser chooses the grid, voltage and band | built 30 Oct — one switch per price list (binaries in HiGHS), one import series per voltage group, room / cap / single modes; both-ways check passes in six areas (switched = cheaper forced run to 1e-5 on the two lists, cheaper again with every list); chain re-run in every mode; solve time ~3.5x on the June week for London, 1.7-1.9x across the 14-area chain, but ~10x on the full year (batch only until the lists are pruned); chain on the final code: single and cap 42/42, room 37/42 with Inverness (all sizes) and Cardiff (60, 150 MW) stopping on "no room found nearby" | `connection_options.py`, `dc_model.ConnectionOption`, `dc_inputs.with_connection_options`, `scripts/run_both_tiers.py`, `scripts/time_connection_modes.py`, page 2 |
+| 1.11 S1–S6 The optimiser chooses the grid, voltage and band | built 30 Oct; connection wizard on page 2 4 Nov (pick a substation from the list, or let it choose) — one switch per price list (binaries in HiGHS), one import series per voltage group, room / cap / single modes; both-ways check passes in six areas (switched = cheaper forced run to 1e-5 on the two lists, cheaper again with every list); chain re-run in every mode; solve time ~3.5x on the June week for London, 1.7-1.9x across the 14-area chain, but ~10x on the full year (batch only until the lists are pruned); chain on the final code: single and cap 42/42, room 37/42 with Inverness (all sizes) and Cardiff (60, 150 MW) stopping on "no room found nearby" | `connection_options.py`, `dc_model.ConnectionOption`, `dc_inputs.with_connection_options`, `scripts/run_both_tiers.py`, `scripts/time_connection_modes.py`, page 2 |
 | 1.10 R1–R6 Live capacity register and availability map | built 30 Oct — 39 portal datasets fetched by id and dated; every company's standard capacity data with basis and date on each row (primaries 76–100 %, London 1 % -> 80 %, SSEN 100 %); contracted demand, headroom to 2050, the connection queue, 364 grid-supply-point records; "where can this size connect" ranked by cost and carbon; chain and both-ways re-run | `scripts/fetch_register_sources.py`, `scripts/register_capacity.py`, `optimisation/availability.py`, `scripts/availability_map.py`, page 2 |
 
 The rest of §1–§5 is open. The table below describes the state before these.
@@ -703,6 +703,76 @@ route, two circuits, 40 years (`ConnectionOption.gwp_fixed_per_year`; the
 single-list model's `Tech.gwp_grid_fixed_per_year` on a fixed `grid_on`
 variable so the map reads it as a term): 8.7 t CO₂e per km per year, a proxy
 from an overhead-line dataset. New map term "grid connection cable".
+
+*The connection wizard (4 Nov 2026).* Page 2 no longer offers the modes by
+name. Clicking a site shows every substation within reach at each voltage
+(`substations.substation_list`: name, distance, cable, published room, the
+register's freshness) as a clickable list, and two paths. *Pick a substation*:
+rows with room are live, rows with none are greyed but can be picked; a pick
+pins the substation on the site (`Site.connection_substation` and
+`connection_substation_voltage`) and the option table offers that one
+substation only, capped at its published room and folded to the band the
+load falls in (`connection_options._pinned_options`) — the single-price-list
+model at the old speed, `connection_chosen_by = "user (substation picked)"`.
+A size of the user's own beside the list is `connection_limit_mw`, so the cap
+mode at that size, labelled as the reinforcement assumption when it is above
+the room; a greyed pick needs one. *Let it choose*: the room mode as built
+(the cap entered in section 1 makes it the cap mode), over the window set —
+never swapped for the week — with the solve-time warning from S5. "Run
+islanded" stays beside either path when nothing has room. The single mode's
+both-ways tick left the page (`scripts/run_both_tiers.py` keeps the check).
+Checked 4 Nov on London 150 MW IT, June week: a pick at LEICESTER SQ 11KV
+(132 kV) resolves to EHV4, 20–48.2 MW on the room, 20–200 MW with a size of
+200, same cost either way (£88.93 m, 44.4 MW built), about a minute a solve.
+Tests: `tests/test_connection_wizard.py`.
+
+*The band choice at a picked substation (4 Nov 2026, afternoon).* Beside the
+size box a second control: the charging band *set* from the load (the fold
+above, one price list) or *left to the optimiser*, in which case every band
+at the picked voltage stays an option (`Site.connection_band_optimised`;
+`connection_chosen_by = "user (substation picked), band by the optimiser"`)
+and the optimiser may take a smaller connection in a cheaper band and build
+more on site. Two to four switches, not the twenty of the open choice. The
+cap (room or a size of the user's own) is a ceiling on either setting.
+Timed 4 Nov on a London year at LEICESTER SQ 11KV (132 kV), one cost-minimum
+solve: 98 s with the band set, 97 s with the band left to the optimiser (three
+switches); the two answers are identical term by term (the £2.35 m that looked
+like a gap was the fixed charge, a constant outside the solver's objective
+with one list and a term on the switches with several). So the band choice is
+free, and a picked substation is always the old speed.
+
+*The cheap run (4 Nov 2026, afternoon).* On the open path over a window
+longer than two months the page offers three ways to solve the choice of
+list, the full run first and default (`dc_runner.run_one(connection_solve=)`,
+hashed, recorded on the summary with the gap and the pruning report):
+**full**, every list at the tight gap (1e-7); **loose**, every list at a gap of
+0.1 % (`dc_model.LOOSE_MIP_REL_GAP`): the cost is within 0.1 % of the best,
+the list may differ where two sit that close; **pruned**, each list priced on
+its own at both ends by a plain linear solve with the switches relaxed and
+that one list fixed (`dc_pareto.prune_options`; exactly one list is ever on,
+so the best of those is the true cost minimum), the lists within 2 % of the
+best at either end kept plus the rule's own, then the frontier over the
+survivors at the tight gap — exact at both ends, could miss a list that is
+best only between them. A first pruning that kept the lists with a share in
+a relaxed solve of the whole choice was tried the same morning and dropped:
+on the London week it gave the smallest 11 kV list the whole share (a
+relaxation pays fixed charges by the fraction) and lost the true optimum,
+0.8–0.9 % dearer. Measured on the London June week, three-point frontiers:
+full 31 s, loose 29 s (room mode: 0.07 % dearer on EHV2 at 11 MW instead of
+EHV3 at 20 MW; cap mode: identical), pruned 105 s with nothing pruned (every
+list within 1 % of the best on a week, where the connection hardly matters)
+and the per-list pass agreeing with the full run's cost minimum exactly.
+On the London year in cap mode (11 lists, hourly): the loose gap's one
+cost-minimum solve took 815 s against a mean of 2,864 s tight, and returned
+the full run's answer to the pound (£141.24 m, 157.6 MW on 132 kV EHV4); the
+pruning pass priced all 11 lists at both ends in 1,858 s (about 85 s a list,
+two runs sharing the machine), kept 3 (EHV4 at Leicester Square, the
+national grid at City Road, 33 kV EHV4 at Duke Street; the eight dropped were
+86–105 % dearer) and its cheapest list is the full run's exactly. The
+frontier over the three survivors at the tight gap was stopped unmeasured
+after 12 minutes to keep the day moving; the pass alone is the measured
+figure, and the frontier over three lists cannot be slower than the full one
+over eleven.
 
 *Open after this.* (i) The national grid option starts at the company's
 largest local connection, so a national-grid connection below 240/250 MVA

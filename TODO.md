@@ -220,6 +220,31 @@ No public source found. Revisit if the item becomes load-bearing in a result.
       expensive one at that size. Decide: both-ways by default in the
       uncertain band, or a tier choice inside the LP. Northern Powergrid has
       no placed 33 kV price node, so its 33 kV sites take the area median.
+- [x] **Connection wizard on page 2** (agreed and built 4 Nov 2026; `COST_PLAN.md` §1.11, `tests/test_connection_wizard.py`):
+      clicking the site shows the substations within reach (name, voltage,
+      distance, published room, register freshness) as a clickable list, and two
+      paths. (1) *Pick a substation*: rows with room are live, rows with none
+      are greyed but still clickable; a live pick runs with that one connection
+      capped at its room (the one-option case, old speed, 38 min a year), with
+      an optional typed size beside it (room shown; typing above the room is the
+      reinforcement assumption, labelled); a greyed pick asks for a size ("no
+      room published here, set your own size") and runs ignoring room, labelled
+      as assuming the company provides it; "run islanded" sits beside the list
+      when nothing has room. (2) *Let it choose*: the room mode as built, over
+      the window the user picks — never default a year to the week; show the
+      time estimate (about 3x a week, about 10x a year) as a warning and let it
+      run. No "closest substation" mode. Model side: a site setting that pins
+      the substation (one new override), the typed size is `connection_limit_mw`;
+      the rest is page work (the preview table becomes the list; the mode radio
+      and the islanded tick move behind it). **Band choice added the same
+      afternoon:** at a picked substation the band is set from the load (one
+      list) or left to the optimiser (every band at that voltage, a few
+      switches; `Site.connection_band_optimised`; timed free on a London
+      year). **Cheap run** (same afternoon): on the open path over two months
+      the page offers full / loose gap (0.1 %) / prune first (each list priced
+      alone at both ends, survivors within 2 %, then the tight frontier), full
+      the default; `dc_runner.run_one(connection_solve=)`. The relaxed-share
+      pruning was tried and dropped (lost the optimum on a week).
 - [ ] **Cost map** (agreed 30 Oct 2026, for a fresh chat after the §1.11 commit):
       the LCA map's twin for the cost objective, as **one map with a side
       switch** (carbon / cost) so each technology's two coefficients sit on one

@@ -1,9 +1,11 @@
 {
- "checked": "2026-10-30T17:37:26+00:00",
+ "checked": "2026-11-04T10:47:49+00:00",
  "stale": [],
- "errors": [],
+ "errors": [
+  "ssen_gsp_limits: HTTPError: 403 Client Error: Forbidden for url: https://ckan-prod.sse.datopian.com/api/3/action/package_show?id=technicallimits"
+ ],
  "skipped": [],
  "rebuild_needed": false,
  "ok": true,
- "note": "the register matches what the companies publish"
+ "note": "1 portal(s) could not be checked"
 }
