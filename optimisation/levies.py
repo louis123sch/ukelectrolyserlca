@@ -147,27 +147,33 @@ CCL_MAIN_GBP_PER_KWH = 0.00801
 CCA_DISCOUNT = 0.92
 CCL_UNDER_CCA = False                # ASSUMED: no Climate Change Agreement
 
-TLMO_OFFTAKING_ASSUMED = 0.011
+# Offtaking share of transmission losses (TLMO-), 2026/27, by season (spring,
+# summer, autumn, winter): Elexon's Estimated Transmission Loss Adjustment
+# values, approved for use from 1 April 2026. Indicative, for reporting; the
+# settlement figures sit behind the BSC Portal. Was an assumed flat 0.011
+# until 4 Nov 2026 (evening).
+TLMO_OFFTAKING_2026_27 = (0.00948, 0.01068, 0.00991, 0.00671)
 # Adjusted Seasonal Zonal TLFs, BSC Year 2026/27, by Elexon TLF zone (= GSP
-# group): (spring, summer, autumn, winter). Read from the report's charts.
-# Spring is 1 Apr - 31 May and 1 - 31 Mar; summer Jun-Aug; autumn Sep-Nov;
-# winter Dec-Feb. Zone 7's spring bar is under 0.001 (the text: "a small
-# positive TLF") and is taken as 0.
+# group): (spring, summer, autumn, winter). Read to five decimals from Elexon's
+# public interactive TLF report on 4 Nov 2026 (zone and season filters, the
+# "TLF Value" card); until then read from the analysis report's charts, every
+# value within 0.0005 of these. Spring is 1 Apr - 31 May and 1 - 31 Mar;
+# summer Jun-Aug; autumn Sep-Nov; winter Dec-Feb.
 TLF_ZONE_2026_27 = {
-    1: (0.0051, 0.0044, 0.0084, 0.0117),       # _A Eastern
-    2: (0.0091, 0.0067, 0.0094, 0.0124),       # _B East Midlands
-    3: (0.0182, 0.0176, 0.0225, 0.0312),       # _C London
-    4: (0.0072, 0.0016, 0.0025, 0.0021),       # _D Merseyside and North Wales
-    5: (0.0170, 0.0134, 0.0165, 0.0216),       # _E Midlands
-    6: (-0.0085, -0.0072, -0.0101, -0.0121),   # _F Northern
-    7: (0.0, -0.0042, -0.0047, -0.0032),       # _G North Western
-    8: (0.0161, 0.0155, 0.0215, 0.0305),       # _H Southern
-    9: (0.0087, 0.0088, 0.0131, 0.0227),       # _J South Eastern
-    10: (0.0163, 0.0169, 0.0165, 0.0255),      # _K South Wales
-    11: (0.0182, 0.0174, 0.0230, 0.0323),      # _L South Western
-    12: (-0.0008, -0.0030, -0.0040, -0.0046),  # _M Yorkshire
-    13: (-0.0117, -0.0063, -0.0096, -0.0160),  # _N South Scotland
-    14: (-0.0320, -0.0197, -0.0301, -0.0493),  # _P North Scotland
+    1: (0.00490, 0.00440, 0.00831, 0.01150),       # _A Eastern
+    2: (0.00902, 0.00667, 0.00923, 0.01210),       # _B East Midlands
+    3: (0.01816, 0.01760, 0.02240, 0.03071),       # _C London
+    4: (0.00715, 0.00148, 0.00246, 0.00206),       # _D Merseyside and North Wales
+    5: (0.01692, 0.01335, 0.01639, 0.02151),       # _E Midlands
+    6: (-0.00882, -0.00755, -0.01052, -0.01243),   # _F Northern
+    7: (0.00005, -0.00448, -0.00502, -0.00364),    # _G North Western
+    8: (0.01607, 0.01547, 0.02139, 0.03020),       # _H Southern
+    9: (0.00851, 0.00878, 0.01309, 0.02235),       # _J South Eastern
+    10: (0.01629, 0.01677, 0.01642, 0.02508),      # _K South Wales
+    11: (0.01818, 0.01731, 0.02287, 0.03191),      # _L South Western
+    12: (-0.00124, -0.00330, -0.00429, -0.00509),  # _M Yorkshire
+    13: (-0.01192, -0.00664, -0.00993, -0.01641),  # _N South Scotland
+    14: (-0.03234, -0.02004, -0.03045, -0.04943),  # _P North Scotland
 }
 # CI region -> Elexon TLF zone (both are GSP groups; report p. 5)
 CI_REGION_TO_TLF_ZONE = {1: 14, 2: 13, 3: 7, 4: 6, 5: 12, 6: 4, 7: 10, 8: 5, 9: 2,
@@ -246,8 +252,9 @@ def llf_period(index: pd.DatetimeIndex, region: int = 13) -> np.ndarray:
 def tlm_series(index: pd.DatetimeIndex, region: int) -> pd.Series:
     """Offtaking TLM for every step: 1 + the zone's TLF for the season + TLMO-."""
     tlf = np.asarray(TLF_ZONE_2026_27[CI_REGION_TO_TLF_ZONE[region]])
+    tlmo = np.asarray(TLMO_OFFTAKING_2026_27)
     season = np.vectorize(_TLF_SEASON.get)(np.asarray(_uk_clock(index).month))
-    return pd.Series(1.0 + tlf[season] + TLMO_OFFTAKING_ASSUMED, index=index, name="tlm")
+    return pd.Series(1.0 + tlf[season] + tlmo[season], index=index, name="tlm")
 
 
 def loss_series(index: pd.DatetimeIndex, connection_voltage: str, region: int) -> pd.Series:
@@ -266,16 +273,18 @@ def loss_series(index: pd.DatetimeIndex, connection_voltage: str, region: int) -
                cites=[] if connection_voltage == "transmission" else
                [(llf_src, f"Annex 5, generic demand LLFs, {connection_voltage} row, by time period")],
                note="1.0 for a transmission site: no distribution loss")
-        T.cost("cost.losses.tlmo_offtaking", TLMO_OFFTAKING_ASSUMED, "fraction",
-               "Offtaking share of transmission losses (TLMO-)", grade="assumed",
-               cites=[("elexon_tlf_guidance", "worked example: TLM of 1.011")],
-               note="Set per settlement period from metered data; the guidance example's figure stands in")
+        T.cost("cost.losses.tlmo_offtaking", float(np.mean(TLMO_OFFTAKING_2026_27)), "fraction",
+               "Offtaking share of transmission losses (TLMO-), Elexon's 2026/27 estimates by season, mean of the four",
+               grade="transcribed", inputs={s: v for s, v in zip(("spring", "summer", "autumn", "winter"),
+                                                                 TLMO_OFFTAKING_2026_27)},
+               cites=[("elexon_etlmo_2026_27", "ETLMOj- by season, approved for use from 1 April 2026")],
+               note="Indicative values for reporting; the settlement figures are behind the BSC Portal")
         T.cost(f"cost.losses.tlm_zone{zone}_mean", float(tlm.mean()), "multiplier",
-               f"Transmission loss multiplier, TLF zone {zone}: 1 + seasonal zonal TLF + TLMO-, mean over the window",
+               f"Transmission loss multiplier, TLF zone {zone}: 1 + seasonal zonal TLF + seasonal TLMO-, mean over the window",
                uses=["cost.losses.tlmo_offtaking"],
-               cites=[("elexon_tlf_report_2026_27", f"pp. 7-8 charts, zone {zone}: "
-                                                    f"{', '.join(f'{v:+.4f}' for v in TLF_ZONE_2026_27[zone])} "
-                                                    "(spring, summer, autumn, winter)")])
+               cites=[("elexon_tlf_public_report", f"TLF Value card, zone {zone}, BSC year 26-27: "
+                                                   f"{', '.join(f'{v:+.5f}' for v in TLF_ZONE_2026_27[zone])} "
+                                                   "(spring, summer, autumn, winter)")])
         T.cost(f"{k}.mean", float((llf * tlm).mean()), "multiplier",
                f"Energy bought per MWh metered at {connection_voltage}: LLF x TLM, mean over the window",
                uses=[f"{k}.llf_mean", f"cost.losses.tlm_zone{zone}_mean"],

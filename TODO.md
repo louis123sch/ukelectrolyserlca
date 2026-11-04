@@ -31,23 +31,15 @@ lines here like any other.
 Work where a number the study reports is not currently defensible.
 
 
-- [ ] **Transmission loss multiplier: put the exact values in** (4 Nov). Read without a login from Elexon's public
-      report; saved in OneDrive `cost sources/5 prices and inflation`. Replace `levies.TLF_ZONE_2026_27`, and TLMO-
-      with Elexon's seasonal estimates (`docs/COST_BEST_SOURCE_PLAN.md`, *Filled*). The portal's TLFA-I014 is no longer needed.
 - [ ] **Government cost figures: built 4 Nov, to finish** (`docs/COST_GOV_FIGURES_PLAN.md`, *Built*). After the
       connection sweeps end: regenerate `h2_prices_recommended.csv` (the deflator moved), rebuild and
       republish both maps, re-run the reference cases and one ±50 % connection case on the new costs,
       and rule 3 of the cost cut-off (`python -m optimisation.sensitivity cost_cutoff`).
-- [ ] **Discount rates: a government answer now exists, not applied** (4 Nov). CEPA for DESNZ (Oct 2025),
-      Table E.1: electrolyser 10.1 %, lithium batteries 8.9 %, onshore wind and solar 7.6 %, against the study's
-      6 %, 5 %, 5.8 % and 5 %. Moves everything, so its own run. `COST_GOV_FIGURES_PLAN.md` D4.
 - [ ] **Major-hazard compliance as a step charge** (4 Nov). HSE's per-site figures are in hand
       (`cost_exclusions.py`); charging them on tonnes held needs an on/off switch in `dc_model`.
-- [ ] **Default tank vessel** (4 Nov). Cost prices Element Energy's bulk 50–80 bar vessel, carbon Gandiglio's small
-      28 bar stainless one (313 kg per kg). A stated mismatch; carbon's is the likelier outlier. An LCA job.
-- [ ] **Best source for each cost input: the plan to build** (4 Nov): `docs/COST_BEST_SOURCE_PLAN.md`. Sources swapped
-      where the UK one looks wrong or is absent, CEPA's discount rates. Land limits dropped: London is illustrative only.
-      Evidence in `docs/COST_SOURCES_NON_UK_2026-11-04.md`.
+- [ ] **Best-source build: finish the runs** (4 Nov, evening; `docs/COST_BEST_SOURCE_PLAN.md`, *Built*). Code and
+      records done; left: both maps republished, the reference cases and the ±50 % test at North Norfolk
+      (`norfolk_grid`, `norfolk_150_room`), `sensitivity cost_cutoff` on the new costs, and the assumption sweep.
 - [ ] **Finish the one price base** (4 Nov). Network charges, levies and connection prices are 2026/27 money,
       wholesale 2025, the rest real 2025.
 - [ ] **Wind and solar's own grid connection inside capital** (4 Nov). DESNZ's "infrastructure" (£303/kW, £112/kWp) runs

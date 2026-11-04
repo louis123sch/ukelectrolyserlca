@@ -19,6 +19,8 @@ whole frontier instead and the knee is reported beside the anchors.
 
 Run:  python -m optimisation.sensitivity carbon
       python -m optimisation.sensitivity connection london_150_single
+      python -m optimisation.sensitivity cost_cutoff          # the cost cut-off's rule 3
+      python -m optimisation.sensitivity assumptions          # the cost side's assumptions at their ranges
 """
 from __future__ import annotations
 
@@ -101,6 +103,17 @@ CASES = {
         series_kwargs={"connection_mode": "cap"},
         site_kwargs={"connection_substation": "LEICESTER SQ 11KV",
                      "connection_substation_voltage": "132 kV"}),
+    # North Norfolk, the reference site for conclusions (user, 4 Nov 2026): a
+    # central-London run is illustrative only. The same coordinate as the
+    # islanded reference case, grid-connected, the optimiser choosing the price
+    # list with each option capped at its substation's published room.
+    "norfolk_grid": Case(
+        name="norfolk_grid", site=(52.85, 1.04), architecture="res_h2_grid",
+        series_kwargs={"connection_mode": "room"}),
+    "norfolk_150_room": Case(
+        name="norfolk_150_room", site=(52.85, 1.04), architecture="custom",
+        flags=_EVERY_ASSET, size_mw_it=150.0, pue=1.2,
+        series_kwargs={"connection_mode": "room"}),
 }
 
 
@@ -317,7 +330,8 @@ CONNECTION_KNOBS = {
 }
 
 
-CONNECTION_CASES = ("london_150_single", "london_150_leicester_sq", "london_150_leicester_sq_cap")
+CONNECTION_CASES = ("london_150_single", "london_150_leicester_sq", "london_150_leicester_sq_cap",
+                    "norfolk_150_room")
 
 
 def connection(cases=CONNECTION_CASES, points: int = 3, resume: bool = True):
@@ -326,6 +340,24 @@ def connection(cases=CONNECTION_CASES, points: int = 3, resume: bool = True):
     process per case; a stopped run carries on where it left off."""
     return pd.concat([run(c, one_at_a_time(CONNECTION_KNOBS), name=f"connection_{c}",
                           points=points, resume=resume) for c in cases], ignore_index=True)
+
+
+# The cost side's assumptions with no sourced figure behind them, each at its
+# stated range (docs/COST_BEST_SOURCE_PLAN.md, *The gaps: filled, or assumed*):
+# the cost cases carry the tank's price level, the battery's current price and
+# the fuel cell's stack share and capital; the tank design is the carbon side's
+# vessel substitution; the fuel cell's calendar life its weakest input.
+ASSUMPTION_KNOBS = {
+    "cost_case": ["low", "high"],
+    "tank_design": ["gandiglio_28bar"],
+    "fc_bop_calendar_years": [15.0, 25.0],
+}
+
+
+def assumptions(cases=("islanded_h2", "norfolk_grid")):
+    """Every cost-side assumption at its range, one at a time, on the reference cases."""
+    return pd.concat([run(c, one_at_a_time(ASSUMPTION_KNOBS), name=f"assumptions_{c}") for c in cases],
+                     ignore_index=True)
 
 
 def carbon(cases=("islanded_h2", "london_grid"), knobs=None):
@@ -357,9 +389,11 @@ if __name__ == "__main__":
     elif what == "cost_cutoff":
         # Rule 3 of optimisation/cost_exclusions.py: the same frontier with every
         # cost left out added back at its upper estimate.
-        for c in cases or ("islanded_h2", "london_grid"):
+        for c in cases or ("islanded_h2", "norfolk_grid"):
             run(c, [{}, {"cost_cutoff": "upper"}], name=f"cost_cutoff_{c}")
     elif what == "connection":
         connection(cases or CONNECTION_CASES)
+    elif what == "assumptions":
+        assumptions(cases or ("islanded_h2", "norfolk_grid"))
     else:
-        raise SystemExit(f"unknown sweep {what!r}; try: carbon, cutoff, connection")
+        raise SystemExit(f"unknown sweep {what!r}; try: carbon, cutoff, cost_cutoff, connection, assumptions")

@@ -41,7 +41,10 @@ DC_CACHE = OUT_DIR / "dc_facility_decomposition_v3_cache.json"   # v3: IT normal
 from optimisation import dc_model, sites
 from optimisation import trace as T
 
-DISCOUNT_RATE = 0.06        # ASSUMED, unsourced; one discount-rate policy is a TODO (audit §4)
+# CEPA for DESNZ (2025), Table E.1: hydrogen electrolyser 10.10 % pre-tax real.
+# Was an unsourced 6 % until 4 Nov 2026 (evening).
+DISCOUNT_RATE = 0.101
+ELECTROLYSER_BUILD_YEARS = 3    # BEIS Hydrogen Production Costs 2021 annex: construction period 3 years
 
 
 def data_centre_coefficients(refresh: bool = False) -> dict:
@@ -706,11 +709,17 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
     ec = pd.Series(hc.electrolyser_cost(ely_key, cost_case))
     ek = f"cost.electrolyser_{ely_key}"
     rate_e = T.cost("cost.electrolyser.discount_rate", DISCOUNT_RATE, "fraction per year",
-                    "The study's discount rate for the electrolyser", grade="assumed",
-                    note="Unsourced; one discount-rate policy is a TODO (audit §4)")
+                    "The electrolyser's discount rate: CEPA's hurdle rate for hydrogen electrolysers",
+                    grade="transcribed", cites=[("cepa_hurdle_rates_2025", "Table E.1, hydrogen electrolyser, 10.10 %")])
     crf_e = T.cost(f"{ek}.crf", batt.capital_recovery_factor(rate_e, float(ec.lifetime_years)), "per year",
                    "Capital recovery factor over the plant life", uses=["cost.electrolyser.discount_rate",
                                                                         f"{ek}.lifetime_years"])
+    build_e = T.cost("cost.electrolyser.construction_years", ELECTROLYSER_BUILD_YEARS, "years", "Construction period",
+                     grade="transcribed", cites=[("beis_h2_costs_2021", "Technical and cost assumptions, construction "
+                                                                         "period 3 years, every electrolyser")])
+    finance_e = T.cost(f"{ek}.building_finance_factor", tc.building_finance_factor(rate_e, build_e), "multiplier",
+                       "Capital carried at the rate over the build",
+                       uses=["cost.electrolyser.discount_rate", "cost.electrolyser.construction_years"])
     # SOEC's heat in the gas_boiler scenario is bought fuel. In electric_boiler it
     # is already in kwh_per_kg, paid at the hour's price; other types pass neither.
     heat_gbp_per_kg, heat_uses = 0.0, []
@@ -1006,11 +1015,12 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
         cost_batt_e=cstep("cost_batt_e", bcost["energy_GBP_per_MWh_year"], "GBP per MWh per year",
                           "Battery energy capacity, per MWh", ["cost.battery.energy_per_kWh", "cost.battery.crf",
                                                                "cost.battery.fixed_opex_per_kWh_year"]),
-        cost_ely=cstep("cost_ely", (float(ec.capex_GBP_per_kWe) * 1000.0 * (crf_e + float(ec.fixed_opex_frac))
+        cost_ely=cstep("cost_ely", (float(ec.capex_GBP_per_kWe) * 1000.0 * (finance_e * crf_e + float(ec.fixed_opex_frac))
                                     * stack_share), "GBP per MW per year",
-                       f"{ely_tech.split()[0]} electrolyser, per MW of cap_ely: capital recovery and fixed opex "
-                       "on the stack's share of the input", [f"{ek}.capex_per_kWe", f"{ek}.crf", f"{ek}.fixed_opex_frac",
-                                                              "electrolyser.stack_share"]),
+                       f"{ely_tech.split()[0]} electrolyser, per MW of cap_ely: capital recovery (carrying the build's "
+                       "finance) and fixed opex on the stack's share of the input",
+                       [f"{ek}.capex_per_kWe", f"{ek}.crf", f"{ek}.building_finance_factor", f"{ek}.fixed_opex_frac",
+                        "electrolyser.stack_share"]),
         # Stack replacement and water per kg made, and SOEC's gas-raised heat
         cost_ely_variable_per_kg=cstep("cost_ely_variable_per_kg", float(ec.variable_opex_GBP_per_kg) + heat_gbp_per_kg,
                                        "GBP per kg H2", "Electrolyser stacks, water and bought heat, per kg made",

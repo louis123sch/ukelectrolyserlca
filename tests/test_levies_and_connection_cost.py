@@ -61,24 +61,25 @@ def test_llf_periods_follow_lpn_annex_5(when, period):
 
 def test_losses_are_llf_times_tlm():
     """LPN Annex 5 '132kV generic' night 1.002, HV network winter peak 1.036;
-    offtaking TLM = 1 + London's (zone 3) winter TLF 0.0312 + TLMO- 0.011."""
+    offtaking TLM = 1 + London's (zone 3) winter TLF 0.03071 + winter TLMO- 0.00671."""
     s = lv.loss_series(pd.DatetimeIndex(["2026-01-07 03:00"]), "132 kV", 13)
-    assert s.iloc[0] == pytest.approx(1.002 * (1 + 0.0312 + 0.011))
+    assert s.iloc[0] == pytest.approx(1.002 * (1 + 0.03071 + 0.00671))
     s = lv.loss_series(pd.DatetimeIndex(["2026-01-07 17:00"]), "11 kV", 13)
-    assert s.iloc[0] == pytest.approx(1.036 * (1 + 0.0312 + 0.011))
+    assert s.iloc[0] == pytest.approx(1.036 * (1 + 0.03071 + 0.00671))
 
 
-@pytest.mark.parametrize("region, when, tlf", [
-    (1, "2027-01-06 12:00", -0.0493),   # North Scotland, winter: the most negative
-    (1, "2026-07-01 12:00", -0.0197),   # North Scotland, summer ("-0.02 ... to -0.05", p. 9)
-    (11, "2027-01-06 12:00", 0.0323),   # South West, winter: the largest
-    (13, "2026-07-01 12:00", 0.0176),   # London, summer: "marginally the largest"
-    (3, "2027-03-03 12:00", 0.0),       # North West, spring: under 0.001
+@pytest.mark.parametrize("region, when, tlf, tlmo", [
+    (1, "2027-01-06 12:00", -0.04943, 0.00671),   # North Scotland, winter: the most negative
+    (1, "2026-07-01 12:00", -0.02004, 0.01068),   # North Scotland, summer
+    (11, "2027-01-06 12:00", 0.03191, 0.00671),   # South West, winter: the largest
+    (13, "2026-07-01 12:00", 0.01760, 0.01068),   # London, summer: "marginally the largest"
+    (3, "2027-03-03 12:00", 0.00005, 0.00948),    # North West, spring: the report's "small positive"
 ])
-def test_tlm_is_one_plus_zonal_tlf_plus_tlmo(region, when, tlf):
-    """Elexon TLF Analysis Report 2026/27, pp. 7-9; TLMO- assumed 0.011."""
+def test_tlm_is_one_plus_zonal_tlf_plus_tlmo(region, when, tlf, tlmo):
+    """Elexon's public TLF report (exact zonal values, 4 Nov 2026) and its 2026/27
+    seasonal ETLMO estimates."""
     t = lv.tlm_series(pd.DatetimeIndex([when]), region).iloc[0]
-    assert t == pytest.approx(1 + tlf + lv.TLMO_OFFTAKING_ASSUMED)
+    assert t == pytest.approx(1 + tlf + tlmo)
 
 
 def test_tlf_rankings_match_the_reports_text():

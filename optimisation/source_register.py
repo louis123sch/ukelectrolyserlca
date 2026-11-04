@@ -88,14 +88,15 @@ _FIXED = [
            "August 2021", "workbook",
            link="https://assets.publishing.service.gov.uk/media/611a706ed3bf7f63a7b29216/Hydrogen_Production_Cost_2021_Annex.xlsx",
            basis="real 2020 £",
-           note="'Technical and cost assumptions', 10 MW, commissioning 2025. Assumes a mature solid-oxide plant and "
-                "heat at no cost. Its PEM is a third of NESO's 2025 figure, so the level is dated and the ratio is used"),
+           note="'Technical and cost assumptions', 10 MW, commissioning 2025, construction period 3 years. Assumes a "
+                "mature solid-oxide plant and heat at no cost. Its PEM is a third of NESO's 2025 figure, so its level is "
+                "the low case and its ratio to PEM the high; the central is the Danish Energy Agency's"),
     Source("beis_ldes_2022", "Benefits of Long Duration Electricity Storage (Research Paper 2022/019)",
            "AFRY for BEIS", "July 2022", "document",
            link="https://www.gov.uk/government/publications/benefits-of-long-duration-electricity-storage",
            basis="real 2019 £, 2030 capital",
-           note="Exhibit 3.11, p. 30: Li-ion at 1, 2, 4, 6 and 9 hours. A 2022 forecast of 2030 prices; the document "
-                "FES 2025 uses for storage running costs"),
+           note="Exhibit 3.11, p. 30: Li-ion at 1, 2, 4, 6 and 9 hours, build time 1 year. A 2022 forecast of 2030 "
+                "prices; the document FES 2025 uses for storage running costs"),
     Source("desnz_solar_land_2024", "Land utilised by solar PV", "DESNZ", "19 December 2024", "document",
            link="https://assets.publishing.service.gov.uk/media/6762f0efcdb5e64b69e307d5/Land_utilised_by_solar_PV__September_2024.pdf",
            note="New sites about 4 acres (1.6 ha) per MW, existing 5.6; per MW, read here as per MWp"),
@@ -108,18 +109,74 @@ _FIXED = [
            "document", link="https://assets.publishing.service.gov.uk/media/55070c2040f0b613e6000015/Profitability_of_retail_energy_supply.pdf",
            note="Table 1: EBIT margin on industrial and commercial supply 2.0 %, FY09–13, six largest firms. Ofgem's "
                 "2023 non-domestic review gives −3.6 % to +4.2 %, 2019–22"),
-    Source("rozzi_2024", "Techno-economic dataset for hydrogen storage-based microgrids, Data in Brief 56:110795, and "
-           "its dataset (Zenodo 12784516)", "Rozzi, Minuto and Lanzini", "2024", "workbook",
-           link="https://zenodo.org/records/12784516", basis="€ of each row's estimation year, uninstalled",
-           note="Not government. H2_tank_raw: 30 bar, 50 t, €207–289/kg (2020). CC BY-NC-ND"),
     Source("ons_gdp_deflator", "Gross domestic product at market prices: Implied deflator: SA (series YBGB)", "ONS",
            "release of 30 September 2026", "data feed",
            link="https://www.ons.gov.uk/economy/grossdomesticproductgdp/timeseries/ybgb/qna",
            note="2024 = 100; optimisation/price_base.py holds it, scripts/check_price_base.py compares it"),
-    Source("h2_vessel_literature",
-           "Above-ground compressed hydrogen storage costs across the literature (€1,040 per kg of capacity)",
-           "various", "2005–2022", "document", basis="€",
-           note="The tank's high case only. Not one document, and not government"),
+    Source("worldbank_us_gdp_deflator", "GDP deflator, United States (NY.GDP.DEFL.ZS)", "World Bank",
+           "fetched 4 November 2026", "data feed",
+           link="https://api.worldbank.org/v2/country/USA/indicator/NY.GDP.DEFL.ZS?format=json",
+           note="2020 = 100. Inflates US figures in their own currency before the FES cross-rate"),
+    Source("eurostat_ea_gdp_deflator", "GDP and main components, price index (nama_10_gdp, EA20, PD15_EUR)", "Eurostat",
+           "fetched 4 November 2026", "data feed",
+           link="https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/nama_10_gdp?geo=EA20&unit=PD15_EUR&na_item=B1GQ",
+           note="2015 = 100. Inflates euro figures in their own currency before the FES cross-rate"),
+    # --- authoritative alternatives, where no UK government figure exists or it looks wrong (4 Nov 2026)
+    Source("cepa_hurdle_rates_2025", "Hurdle rate estimates for electricity sector technologies (final report)",
+           "CEPA for DESNZ", "30 June 2025, published October 2025", "document",
+           link="https://assets.publishing.service.gov.uk/media/68cd1d818c44a661b4995d9f/cepa-desnz-hurdle-rates-electricity.pdf",
+           basis="pre-tax real (CPI), 50 % gearing, whole-life, 31 December 2024",
+           note="Table E.1: solar PV and onshore wind 7.60 %, offshore wind 8.90 %, lithium batteries 8.90 %, hydrogen "
+                "electrolyser 10.10 %, hydrogen to power (emerging) and novel long-duration storage 10.10 %. No fuel cell "
+                "or hydrogen storage row: they take 10.10 %"),
+    Source("dea_renewable_fuels_2026", "Technology Data for Renewable Fuels, data sheet 80 SOEC 10 MW (v0019, DNV)",
+           "Danish Energy Agency and Energinet", "August 2026", "workbook",
+           link="https://ens.dk/media/6444/download", basis="2025 € for the electrolysis chapters (Intro sheet)",
+           note="Solid-oxide 10 MW, 2025 column: specific investment €2,959/kW of input electricity (range 2,851–3,067), "
+                "fixed O&M 7 % (4–10) excluding stacks, stack replacement every 25,000 h, 20 y. A government agency NESO "
+                "itself cites"),
+    Source("dea_energy_storage_2025", "Technology Data for Energy Storage, chapter 151 hydrogen storage tanks",
+           "Danish Energy Agency and Energinet", "chapter 2019–2020; catalogue updated to July 2026", "document",
+           link="https://ens.dk/media/6588/download", basis="2020 €",
+           note="Table 6: 15 Type I steel tanks in a rack at 200 bar holding 500 kg, €600/kg; piping, power electronics and "
+                "manhours about €150,000 per 500 kg system; compressor €500,000; 25 years"),
+    Source("clean_hydrogen_sria_kpis", "Clean Hydrogen Joint Undertaking Strategic Research and Innovation Agenda 2021–2027, "
+           "key performance indicators", "Clean Hydrogen Partnership (EU)", "2022", "document",
+           link="https://www.clean-hydrogen.europa.eu/knowledge-management/strategy-map-and-key-performance-indicators/clean-hydrogen-ju-sria-key-performance-indicators-kpis_en",
+           basis="€, price year not stated",
+           note="Table 21, PEM stationary fuel cells 51–500 kWe, 2020 state of the art: system €1,900/kW (excluding power "
+                "conversion and site), stack production cost €400/kWe. Table 11, above-ground storage: €750/kg at 1.1 t "
+                "(2020), €600/kg at 20 t (2030 target), including compression to 120 bar and purification"),
+    Source("nlr_tp_91146", "Cost Analysis of Heavy-Duty Vehicle Proton Exchange Membrane Fuel Cell Stationary Power Plants "
+           "(NLR/TP-5400-91146)", "National Laboratory of the Rockies (US)", "February 2026", "document",
+           link="https://www.osti.gov/biblio/3018256", basis="2022 US $",
+           note="Table 18, 100 MW plant: total overnight cost $1,352/kW, of which sales tax $143.17/kW and transmission "
+                "and interconnection $100/kW; Table 12: construction period 3 years, stack durability 25,000 h"),
+    Source("nrel_atb_2025", "Annual Technology Baseline 2025, utility-scale battery storage", "National Laboratory of the "
+           "Rockies (US)", "v1.0.0, September 2026", "data feed",
+           link="https://oedi-data-lake.s3.amazonaws.com/ATB/electricity/parquet/2025/v1.0.0/ATBe.parquet",
+           basis="2023 US $",
+           note="Moderate scenario, 2026, total capital by duration: 2 h $908/kW, 4 h $1,344, 6 h $1,781, 8 h $2,218, "
+                "10 h $2,655. All-in: transformer, substation, spur line, developer costs, US sales tax"),
+    Source("ember_bess_2025", "How cheap is battery storage?", "Ember", "11 December 2025", "document",
+           link="https://ember-energy.org/latest-insights/how-cheap-is-battery-storage/", basis="US $, October 2025",
+           note="All-in capital about $125/kWh for projects of 4 hours and more outside China and the United States: about "
+                "$75/kWh equipment and $50/kWh to install and connect; assumes cheap land"),
+    Source("elexon_tlf_public_report", "Transmission Loss Factor analysis, interactive report (BSC Year 2026/27)", "Elexon",
+           "read 4 November 2026", "data feed",
+           link="https://www.elexon.co.uk/bsc/operational/transmission-losses/transmission-loss-factors-analysis/",
+           held="OneDrive, DC optimiser/cost sources/5 prices and inflation",
+           note="Adjusted seasonal zonal TLFs to five decimals, all 14 zones and 4 seasons, read from the report's "
+                "TLF Value card; no login. Their mean reproduces the report's all-zone 0.00524"),
+    Source("elexon_etlmo_2026_27", "Estimated Transmission Loss Adjustment values for 2026/27", "Elexon",
+           "13 January 2026", "document",
+           link="https://www.elexon.co.uk/bsc/article/new-2026-2027-estimated-transmission-losses-adjustment-values-published/",
+           note="Offtaking ETLMOj-: spring 0.00948, summer 0.01068, autumn 0.00991, winter 0.00671. Approved by the "
+                "Imbalance Settlement Group for use from 1 April 2026; indicative, for reporting"),
+    Source("mott_macdonald_storage_2018", "Storage cost and technical assumptions for BEIS", "Mott MacDonald for BEIS",
+           "August 2018", "document",
+           link="https://assets.publishing.service.gov.uk/government/uploads/system/uploads/attachment_data/file/910261/storage-costs-technical-assumptions-2018.pdf",
+           note="Table 53: hydrogen storage system build time 1 year"),
     Source("fes_2025_workbook",
            "Future Energy Scenarios 2025 Data Workbook V006 (cross-rates, gas price CP1, carbon price CP2)",
            "NESO", "2025", "workbook", basis="real 2025 £",

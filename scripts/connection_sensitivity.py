@@ -34,6 +34,8 @@ CASES = {
                                    "size free up to 1.43x the load (room ignored)",
     "london_150_leicester_sq": "London, 150 MW of computing, connected at LEICESTER SQ 11KV at 132 kV, "
                                "capped at the room it publishes",
+    "norfolk_150_room": "North Norfolk, 150 MW of computing, the optimiser choosing the price list, each "
+                        "capped at the room its substation publishes (the reference site for conclusions)",
 }
 
 

@@ -63,6 +63,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from optimisation import price_base as P  # noqa: E402
+from optimisation import tech_costs as tc  # noqa: E402
 from optimisation import trace as T  # noqa: E402
 
 PRICE_DIR = ROOT / "price_outputs"
@@ -70,8 +71,8 @@ OUT_DIR = ROOT / "optimisation_outputs"
 
 CASES = ("low", "central", "high")
 
-# FES 2025 Data Workbook cross-rate, as h2_prices.py uses.
-EUR_PER_GBP_2025 = 1.17
+# FES 2025 Data Workbook cross-rate, as h2_prices.py uses (price_base holds it).
+EUR_PER_GBP_2025 = P.EUR_PER_GBP_2025
 
 # Hydrogen's higher heating value, to turn NESO's per-kWh-HHV variable opex into
 # per kg. 39.4 kWh/kg is the standard figure (141.8 MJ/kg).
@@ -86,29 +87,47 @@ ELEMENT_ENERGY_PRICE_YEAR = 2017
 # Baringa for DESNZ, 2025 pounds, installed. The report's "exceed £2,500/kW" is a
 # floor for a pipeline-fed grid-scale system; the 80 MW Korean plant is its one
 # real project; purification is what pipeline hydrogen needs and this site's does not.
-FC_INSTALLED_FLOOR_GBP_PER_KW = 2_500.0
 FC_KOREAN_PLANT_GBP_PER_KW = 2_700.0
 FC_PURIFICATION_GBP_PER_KW = 485.0
+# The low case (4 Nov 2026) is the US national laboratory's modelled 100 MW
+# plant, NLR/TP-5400-91146 Table 18, 2022 dollars, less the US sales tax and
+# transmission interconnection it carries; Baringa's floor was the same document
+# as its central, so no real range. Inflated in dollars, then the FES cross-rate.
+NLR_TOTAL_OVERNIGHT_USD_PER_KW = 1_352.08
+NLR_SALES_TAX_USD_PER_KW = 143.17
+NLR_TRANSMISSION_USD_PER_KW = 100.0
+NLR_PRICE_YEAR = 2022
 FC_GBP_PER_KW = {
-    "low": FC_INSTALLED_FLOOR_GBP_PER_KW - FC_PURIFICATION_GBP_PER_KW,
+    "low": P.usd_to_gbp_2025(NLR_TOTAL_OVERNIGHT_USD_PER_KW - NLR_SALES_TAX_USD_PER_KW - NLR_TRANSMISSION_USD_PER_KW,
+                             NLR_PRICE_YEAR),
     "central": FC_KOREAN_PLANT_GBP_PER_KW - FC_PURIFICATION_GBP_PER_KW,
     "high": FC_KOREAN_PLANT_GBP_PER_KW,
 }
 # Element Energy p. 94, 1.4 MWe, annual maintenance: 500 and 1 units per manufacturer.
 FC_MAINTENANCE_GBP_PER_KW_YEAR = {"low": 42.0, "central": 48.0, "high": 48.0}
-FC_DISCOUNT_RATE = 0.06         # as sizing.Electrolyser, for consistency
+# CEPA for DESNZ (2025), Table E.1: hydrogen to power (emerging) and novel
+# long-duration storage, 10.10 %; there is no fuel cell or hydrogen store row.
+FC_DISCOUNT_RATE = 0.101
+# Capital carried at the rate over the build (tech_costs.building_finance_factor):
+# NLR Table 12 gives 3 years for the plant; Mott MacDonald for BEIS (2018) Table 53
+# gives 1 year for a hydrogen storage system.
+FC_BUILD_YEARS = 3
+TANK_BUILD_YEARS = 1
 # Insurance, which the maintenance figure does not carry, at the ratio DESNZ's
 # onshore wind gives (£3.6k/MW/yr on £1,588/kW). Estimate: cost_exclusions.py.
 FC_INSURANCE_FRAC_OF_CAPITAL = 3.6 / 1_588.0
-# Stack's share of fuel-cell capital, since 4 Nov 2026: Element Energy's stack
-# replacement over its fully installed cost at 1.4 MWe, one unit: about £1,200
-# (read off the chart, p. 93) over £2,642 (p. 94). A replacement cost is what the
-# LP charges with it. 17.2 % until then, frozen from a carbon split. Cross-checks,
-# not government: Battelle 22-41 % once the fuel processor and heat recovery are
-# out; Roland Berger 34 % of a 1 MW gas unit.
-FC_STACK_REPLACEMENT_GBP_PER_KW = 1_200.0
-FC_INSTALLED_FOR_STACK_SHARE_GBP_PER_KW = 2_642.0
-FC_STACK_COST_FRACTION = FC_STACK_REPLACEMENT_GBP_PER_KW / FC_INSTALLED_FOR_STACK_SHARE_GBP_PER_KW
+# Stack's share of fuel-cell capital, since 4 Nov 2026 (evening): the Clean
+# Hydrogen Partnership's state-of-the-art KPIs for 51-500 kWe PEM stationary
+# units, Table 21: stack production cost €400/kWe on a €1,900/kW system. The UK
+# figure (Element Energy's £1,200 replacement over £2,642 installed, 45 %) was
+# read off a chart and sat above every other share read (Battelle 22-41 % with
+# the fuel processor out; Roland Berger 34 %; NLR's module 17 %), so it is the
+# high case of a sweep, not the central. 17.2 % until 4 Nov, frozen from a
+# carbon split.
+CH_STACK_EUR_PER_KWE = 400.0
+CH_SYSTEM_EUR_PER_KW = 1_900.0
+FC_STACK_COST_FRACTION = CH_STACK_EUR_PER_KWE / CH_SYSTEM_EUR_PER_KW
+FC_STACK_COST_FRACTION_UK_HIGH = 1_200.0 / 2_642.0
 
 # -----------------------------------------------------------------------------
 # Hydrogen vessel
@@ -117,12 +136,18 @@ FC_STACK_COST_FRACTION = FC_STACK_REPLACEMENT_GBP_PER_KW / FC_INSTALLED_FOR_STAC
 # factor (the US DoE's H2A), and the hydrogen one holds.
 TANK_VESSEL_INSTALLED_GBP = 182_000.0
 TANK_VESSEL_KG = 405.0
-TANK_INSTALLATION_FACTOR = 1.3
-# Not government: no UK range exists. Rozzi's dataset, 30 bar, 50 t, 2020 euros
-# and uninstalled; the older literature's top.
-TANK_LOW_EUR_PER_KG = 289.0
-TANK_LOW_PRICE_YEAR = 2020
-TANK_HIGH_EUR_PER_KG = 1_040.0
+# No UK range exists (4 Nov 2026, evening). Low: the Clean Hydrogen Partnership's
+# KPI for above-ground storage at 20 t, €600/kg, a 2030 target that includes
+# compression to 120 bar and purification, so a floor for a bare vessel; price
+# year not stated, taken as is. High: the Danish Energy Agency's 200 bar rack of
+# Type I tanks, Table 6: €600/kg for the tanks plus about €150,000 of piping,
+# power electronics and manhours per 500 kg system, 2020 euros.
+TANK_LOW_EUR_PER_KG = 600.0
+DEA_TANK_EUR_PER_KG = 600.0
+DEA_TANK_PIPING_EUR_PER_SYSTEM = 150_000.0
+DEA_TANK_SYSTEM_KG = 500.0
+DEA_TANK_PRICE_YEAR = 2020
+TANK_HIGH_EUR_PER_KG = DEA_TANK_EUR_PER_KG + DEA_TANK_PIPING_EUR_PER_SYSTEM / DEA_TANK_SYSTEM_KG
 # Element Energy p. 112, medium pressure: £0.34 fixed on £11.45 capital per kWh stored
 TANK_FIXED_OPEX_FRAC = 0.34 / 11.45
 # Land, an estimate: Element Energy p. 110's footprint for its high-pressure tubes
@@ -136,10 +161,18 @@ RURAL_LAND_PRICE_YEAR = 2023
 # -----------------------------------------------------------------------------
 # SOEC
 # -----------------------------------------------------------------------------
+# Central capital since 4 Nov 2026 (evening): the Danish Energy Agency's Renewable
+# Fuels data sheet "80 SOEC 10 MW" (DNV, Aug 2026), 2025 column, in 2025 euros:
+# the one current, technology-specific government figure. The BEIS 2021 annex's
+# own level (dated: its PEM is a third of NESO's) is the low case and its ratio
+# to PEM on NESO's PEM the high: 2.46x, above every other range read.
+DEA_SOEC_EUR_PER_KWE = 2_959.1368842714164
+DEA_SOEC_EUR_PER_KWE_RANGE = (2_850.9642857142853, 3_067.3094828285475)
 # BEIS 2021 annex, "Technical and cost assumptions", commissioning 2025, real 2020
 # pounds. Capital and fixed cost per kW of hydrogen (HHV), so the electrical
 # conversion (kWh in per kWh of hydrogen, medium) brings them to per kWe.
 SOE_PRICE_YEAR = 2020
+SOE_BUILD_YEARS = 3
 SOE_CAPEX_GBP_PER_KW_H2 = 1_304.19      # medium; low 891.09, high 2,081.32
 SOE_KWH_IN_PER_KWH_H2 = 0.95885
 PEM_CAPEX_GBP_PER_KW_H2 = 730.29        # the same sheet's PEM, medium
@@ -175,24 +208,41 @@ def fuel_cell_cost(case: str, bop_calendar_years: float | None = None) -> dict:
                   "years", "Balance-of-plant calendar life, the same life the carbon side replaces it on",
                   grade="assumed", note="fuel_cell.BOP_CALENDAR_LIFETIME_YEARS")
     rate = T.cost("cost.h2_assets.discount_rate", FC_DISCOUNT_RATE, "fraction per year",
-                  "Discount rate for the fuel cell and tank", grade="assumed",
-                  note="As the electrolyser's 6 %, for consistency; one discount-rate policy is open (audit §4)")
+                  "Discount rate for the fuel cell and tank: CEPA's hydrogen-to-power and novel storage rate",
+                  grade="transcribed", cites=[("cepa_hurdle_rates_2025", "Table E.1, hydrogen CCHT/OCHT emerging and "
+                                                                          "novel LDES, 10.10 %")],
+                  note="No fuel cell or hydrogen store row in the table; the nearest two agree")
     crf = T.cost("cost.fuel_cell.crf", capital_recovery_factor(rate, life), "per year",
                  "Capital recovery factor over the balance-of-plant life",
                  uses=["cost.h2_assets.discount_rate", "cost.fuel_cell.bop_life_years"])
-    baringa = T.cost(f"cost.fuel_cell.baringa_installed_{case}_per_kW",
-                     FC_KOREAN_PLANT_GBP_PER_KW if case != "low" else FC_INSTALLED_FLOOR_GBP_PER_KW, "GBP per kW",
-                     "Installed capital of a PEM fuel cell plant on pipeline hydrogen", grade="transcribed",
-                     cites=[("baringa_h2p_2025", "§4.4, the 80 MW Korean plant, c. £2,700/kW" if case != "low"
-                             else "§5, total installed CAPEX estimated to exceed £2,500/kW")])
-    purification = T.cost("cost.fuel_cell.purification_per_kW", FC_PURIFICATION_GBP_PER_KW, "GBP per kW",
-                          "Hydrogen purification for pipeline supply", grade="transcribed",
-                          cites=[("baringa_h2p_2025", "§5, additional CAPEX of around £485/kW")])
-    capex = T.cost("cost.fuel_cell.capex_per_kW", FC_GBP_PER_KW[case], "GBP per kW",
-                   "Installed capital in 2025 £" + (", purification kept" if case == "high"
-                                                     else ", less purification: this hydrogen is not pipeline-supplied"),
-                   uses=[f"cost.fuel_cell.baringa_installed_{case}_per_kW", "cost.fuel_cell.purification_per_kW"],
-                   inputs={"baringa": baringa, "purification": purification})
+    if case == "low":
+        T.cost("cost.fuel_cell.nlr_overnight_USD_per_kW", NLR_TOTAL_OVERNIGHT_USD_PER_KW, "US $ per kW",
+               "Total overnight cost of a modelled 100 MW PEM plant, 2022 dollars", grade="transcribed",
+               cites=[("nlr_tp_91146", "Table 18, total overnight cost")],
+               inputs={"sales_tax": NLR_SALES_TAX_USD_PER_KW, "transmission": NLR_TRANSMISSION_USD_PER_KW})
+        P.record_fx()
+        capex = T.cost("cost.fuel_cell.capex_per_kW", FC_GBP_PER_KW[case], "GBP per kW",
+                       "Installed capital in 2025 £, less US sales tax and grid spur, inflated in dollars",
+                       uses=["cost.fuel_cell.nlr_overnight_USD_per_kW", P.record_foreign("usd", NLR_PRICE_YEAR),
+                             "fx.usd_per_gbp_2025"],
+                       note="Modelled and unbuilt, on vehicle modules; the report says a data-centre build costs more")
+    else:
+        baringa = T.cost("cost.fuel_cell.baringa_installed_per_kW", FC_KOREAN_PLANT_GBP_PER_KW, "GBP per kW",
+                         "Installed capital of a PEM fuel cell plant on pipeline hydrogen", grade="transcribed",
+                         cites=[("baringa_h2p_2025", "§4.4, the 80 MW Korean plant, c. £2,700/kW")])
+        purification = T.cost("cost.fuel_cell.purification_per_kW", FC_PURIFICATION_GBP_PER_KW, "GBP per kW",
+                              "Hydrogen purification for pipeline supply", grade="transcribed",
+                              cites=[("baringa_h2p_2025", "§5, additional CAPEX of around £485/kW")])
+        capex = T.cost("cost.fuel_cell.capex_per_kW", FC_GBP_PER_KW[case], "GBP per kW",
+                       "Installed capital in 2025 £" + (", purification kept" if case == "high"
+                                                         else ", less purification: this hydrogen is not pipeline-supplied"),
+                       uses=["cost.fuel_cell.baringa_installed_per_kW", "cost.fuel_cell.purification_per_kW"],
+                       inputs={"baringa": baringa, "purification": purification})
+    build = T.cost("cost.fuel_cell.construction_years", FC_BUILD_YEARS, "years", "Construction period",
+                   grade="transcribed", cites=[("nlr_tp_91146", "Table 12, construction period 3 years")])
+    finance = T.cost("cost.fuel_cell.building_finance_factor", tc.building_finance_factor(rate, build), "multiplier",
+                     "Capital carried at the rate over the build",
+                     uses=["cost.h2_assets.discount_rate", "cost.fuel_cell.construction_years"])
     # Split capital between stack and balance of plant on FC_STACK_COST_FRACTION.
     #
     # It matters because the stack wears out on *duty* while BoP runs to
@@ -200,12 +250,12 @@ def fuel_cell_cost(case: str, bop_calendar_years: float | None = None) -> dict:
     # running the fuel cell hard free in cost while still costing carbon, so
     # the two objectives were pricing different physics for one machine.
     stack_frac = T.cost("cost.fuel_cell.stack_cost_fraction", fc_stack_cost_fraction(), "fraction",
-                        "Stack share of the fuel cell's capital: stack replacement over installed cost, 1.4 MWe",
-                        grade="derived", cites=[("element_energy_2018", "p. 93 chart, about £1,200/kWe; p. 94, £2,642/kWe")],
-                        inputs={"replacement": FC_STACK_REPLACEMENT_GBP_PER_KW,
-                                "installed": FC_INSTALLED_FOR_STACK_SHARE_GBP_PER_KW},
-                        note="Read off a chart; natural-gas data with the reformer removed. Battelle's cost-based "
-                             "share, not government, is 22-41 %")
+                        "Stack share of the fuel cell's capital: stack production cost over system cost, 51-500 kWe",
+                        grade="derived", cites=[("clean_hydrogen_sria_kpis", "Table 21, 2020 state of the art: stack "
+                                                                             "€400/kWe, system €1,900/kW")],
+                        inputs={"stack_EUR_per_kWe": CH_STACK_EUR_PER_KWE, "system_EUR_per_kW": CH_SYSTEM_EUR_PER_KW},
+                        note="Units up to 500 kWe. The UK figure, Element Energy's 45 %, read off a chart, is the high "
+                             "case of a sweep (FC_STACK_COST_FRACTION_UK_HIGH); other shares read: 11-41 %")
     maintenance = T.cost("cost.fuel_cell.maintenance_per_kW_year", FC_MAINTENANCE_GBP_PER_KW_YEAR[case],
                          "GBP per kW per year", "Annual maintenance of a 1.4 MWe fuel cell, 2017 prices",
                          grade="transcribed", cites=[("element_energy_2018", "p. 94, annual maintenance, 1.4 MWe")],
@@ -228,11 +278,13 @@ def fuel_cell_cost(case: str, bop_calendar_years: float | None = None) -> dict:
     # CRF on the shortened life. Charging the annuity alone made BoP
     # replacements free in cost above 2,400 h/yr — up to 39 % low on
     # the fuel cell line at 8,760 h. REVIEW_RESPONSE_PLAN.md §1.
-    annual = T.cost("cost.fuel_cell.annual_per_MW", capex * 1000.0 * (1.0 - stack_frac) * (crf + opex - 1.0 / life),
-                    "GBP per MW per year", "Balance of plant: capital recovery and opex, less the calendar "
-                    "replacement the LP charges per replacement",
+    annual = T.cost("cost.fuel_cell.annual_per_MW",
+                    capex * 1000.0 * (1.0 - stack_frac) * (finance * crf + opex - 1.0 / life),
+                    "GBP per MW per year", "Balance of plant: capital recovery (the first build carrying its "
+                    "finance) and opex, less the calendar replacement the LP charges per replacement",
                     uses=["cost.fuel_cell.capex_per_kW", "cost.fuel_cell.stack_cost_fraction", "cost.fuel_cell.crf",
-                          "cost.fuel_cell.fixed_opex_frac", "cost.fuel_cell.bop_life_years"])
+                          "cost.fuel_cell.building_finance_factor", "cost.fuel_cell.fixed_opex_frac",
+                          "cost.fuel_cell.bop_life_years"])
     bop = T.cost("cost.fuel_cell.bop_per_MW", capex * 1000.0 * (1.0 - stack_frac), "GBP per MW replaced",
                  "Balance of plant capital, charged per replacement",
                  uses=["cost.fuel_cell.capex_per_kW", "cost.fuel_cell.stack_cost_fraction"])
@@ -274,9 +326,8 @@ def tank_capex_gbp_per_kg(case: str) -> float:
     if case == "central":
         return TANK_VESSEL_INSTALLED_GBP / TANK_VESSEL_KG * P.factor(ELEMENT_ENERGY_PRICE_YEAR)
     if case == "low":
-        return (TANK_LOW_EUR_PER_KG * TANK_INSTALLATION_FACTOR / EUR_PER_GBP_2025
-                * P.factor(TANK_LOW_PRICE_YEAR))
-    return TANK_HIGH_EUR_PER_KG / EUR_PER_GBP_2025
+        return TANK_LOW_EUR_PER_KG / EUR_PER_GBP_2025
+    return P.eur_to_gbp_2025(TANK_HIGH_EUR_PER_KG, DEA_TANK_PRICE_YEAR)
 
 
 def _tank_capex_recorded(case: str) -> float:
@@ -293,24 +344,27 @@ def _tank_capex_recorded(case: str) -> float:
         inputs = {"price": price, "kg": kg}
     elif case == "low":
         eur = T.cost("cost.h2_tank.low_EUR_per_kg", TANK_LOW_EUR_PER_KG, "€ per kg of capacity",
-                     "Compressed vessel, 30 bar, 50 t, uninstalled, 2020", grade="transcribed",
-                     cites=[("rozzi_2024", "H2_tank_raw, 30 bar, 50,000 kg")], note="Not government: no UK range exists")
-        P.to_2025(TANK_LOW_PRICE_YEAR)
-        T.cost("cost.h2_tank.installation_factor", TANK_INSTALLATION_FACTOR, "multiplier", "Installed over equipment",
-               grade="transcribed", cites=[("element_energy_2018", "p. 109, 1.3, from the US DoE's H2A")])
-        T.cost("fx.eur_per_gbp_2025", EUR_PER_GBP_2025, "€ per £", "2025 cross-rate, £ to €",
-               grade="transcribed", cites=[("fes_2025_workbook", "cross-rates, 2025: £1 = €1.17")])
-        uses = ["cost.h2_tank.low_EUR_per_kg", "cost.h2_tank.installation_factor", "fx.eur_per_gbp_2025",
-                f"price_base.{TANK_LOW_PRICE_YEAR}_to_2025"]
+                     "Above-ground storage at 20 t, the EU partnership's 2030 target", grade="transcribed",
+                     cites=[("clean_hydrogen_sria_kpis", "Table 11, above-ground storage, 20 t, 2030: €600/kg")],
+                     note="A target, not a price, and it includes compression to 120 bar and purification, so a floor "
+                          "for a bare vessel. Price year not stated: taken as is. No UK range exists")
+        P.record_fx()
+        uses = ["cost.h2_tank.low_EUR_per_kg", "fx.eur_per_gbp_2025"]
         inputs = {"eur": eur}
     else:
+        tanks = T.cost("cost.h2_tank.dea_tanks_EUR_per_kg", DEA_TANK_EUR_PER_KG, "€ per kg of capacity",
+                       "Type I steel tanks in a 200 bar rack, 2020 euros", grade="transcribed",
+                       cites=[("dea_energy_storage_2025", "Table 6, hydrogen battery, €600/kg")])
+        piping = T.cost("cost.h2_tank.dea_piping_EUR_per_kg", DEA_TANK_PIPING_EUR_PER_SYSTEM / DEA_TANK_SYSTEM_KG,
+                        "€ per kg of capacity", "Piping, power electronics and manhours per kg of a 500 kg system",
+                        grade="derived", cites=[("dea_energy_storage_2025", "Table 6, ~€150,000 per system of 500 kg")])
         eur = T.cost("cost.h2_tank.high_EUR_per_kg", TANK_HIGH_EUR_PER_KG, "€ per kg of capacity",
-                     "The older literature's top", grade="assumed", cites=[("h2_vessel_literature", "€1,040/kg")],
-                     note="Not government, and not one document: no UK range exists")
-        T.cost("fx.eur_per_gbp_2025", EUR_PER_GBP_2025, "€ per £", "2025 cross-rate, £ to €",
-               grade="transcribed", cites=[("fes_2025_workbook", "cross-rates, 2025: £1 = €1.17")])
-        uses = ["cost.h2_tank.high_EUR_per_kg", "fx.eur_per_gbp_2025"]
-        inputs = {"eur": eur}
+                     "The Danish rack, installed, 2020 euros", uses=["cost.h2_tank.dea_tanks_EUR_per_kg",
+                                                                     "cost.h2_tank.dea_piping_EUR_per_kg"],
+                     note="200 bar and 0.5 t, so a fair top for a bulk low-pressure vessel. No UK range exists")
+        P.record_fx()
+        uses = ["cost.h2_tank.high_EUR_per_kg", P.record_foreign("eur", DEA_TANK_PRICE_YEAR), "fx.eur_per_gbp_2025"]
+        inputs = {"eur": eur, "tanks": tanks, "piping": piping}
     return T.cost("cost.h2_tank.capex_per_kg", tank_capex_gbp_per_kg(case), "GBP per kg of capacity",
                   "Vessel capital in real 2025 £", uses=uses, inputs=inputs)
 
@@ -322,8 +376,10 @@ def tank_cost(case: str) -> dict:
                   "Tank life: the plant's, never replaced", grade="assumed",
                   note="dc_config.TANK_LIFETIME_YEARS, Gandiglio's plant lifetime")
     rate = T.cost("cost.h2_assets.discount_rate", FC_DISCOUNT_RATE, "fraction per year",
-                  "Discount rate for the fuel cell and tank", grade="assumed",
-                  note="As the electrolyser's 6 %, for consistency; one discount-rate policy is open (audit §4)")
+                  "Discount rate for the fuel cell and tank: CEPA's hydrogen-to-power and novel storage rate",
+                  grade="transcribed", cites=[("cepa_hurdle_rates_2025", "Table E.1, hydrogen CCHT/OCHT emerging and "
+                                                                          "novel LDES, 10.10 %")],
+                  note="No fuel cell or hydrogen store row in the table; the nearest two agree")
     crf = T.cost("cost.h2_tank.crf", capital_recovery_factor(rate, life), "per year",
                  "Capital recovery factor over the tank's life",
                  uses=["cost.h2_assets.discount_rate", "cost.h2_tank.life_years"])
@@ -338,10 +394,15 @@ def tank_cost(case: str) -> dict:
                   grade="proxy", uses=[f"price_base.{RURAL_LAND_PRICE_YEAR}_to_2025"],
                   cites=[("element_energy_2018", "p. 110, 0.20 m²/kWh HHV, high-pressure storage"),
                          ("desnz_arup_2024_onshore_solar", "§6.8.1, about £1.0k per acre per year")])
-    annual = T.cost("cost.h2_tank.annual_per_kg", capex * (crf + opex) + land, "GBP per kg of capacity per year",
-                    "Capital recovery, fixed opex and land, per kg the tank holds",
-                    uses=["cost.h2_tank.capex_per_kg", "cost.h2_tank.crf", "cost.h2_tank.fixed_opex_frac",
-                          "cost.h2_tank.land_per_kg_year"])
+    build = T.cost("cost.h2_tank.construction_years", TANK_BUILD_YEARS, "years", "Construction period",
+                   grade="transcribed", cites=[("mott_macdonald_storage_2018", "Table 53, hydrogen storage system, 1 year")])
+    finance = T.cost("cost.h2_tank.building_finance_factor", tc.building_finance_factor(rate, build), "multiplier",
+                     "Capital carried at the rate over the build",
+                     uses=["cost.h2_assets.discount_rate", "cost.h2_tank.construction_years"])
+    annual = T.cost("cost.h2_tank.annual_per_kg", capex * (finance * crf + opex) + land, "GBP per kg of capacity per year",
+                    "Capital recovery (carrying the build's finance), fixed opex and land, per kg the tank holds",
+                    uses=["cost.h2_tank.capex_per_kg", "cost.h2_tank.crf", "cost.h2_tank.building_finance_factor",
+                          "cost.h2_tank.fixed_opex_frac", "cost.h2_tank.land_per_kg_year"])
     return {
         "asset": "h2_tank", "case": case,
         "capex_GBP_per_kg_capacity": capex,
@@ -393,6 +454,15 @@ def electrolyser_cost(tech: str, case: str, build_year=2025) -> dict:
         if case == "low":
             uses.append(f"price_base.{SOE_PRICE_YEAR}_to_2025")
             why = "The annex's level as printed, inflated: dated, its PEM is a third of NESO's 2025 figure"
+        elif case == "central":
+            T.cost(f"{k}.dea_capex_EUR_per_kWe", DEA_SOEC_EUR_PER_KWE, "€ per kW of input electricity",
+                   "Solid-oxide 10 MW, 2025, 2025 euros", grade="transcribed",
+                   cites=[("dea_renewable_fuels_2026", "sheet 80 SOEC 10 MW, specific investment, 2025 column")],
+                   inputs={"lower": DEA_SOEC_EUR_PER_KWE_RANGE[0], "upper": DEA_SOEC_EUR_PER_KWE_RANGE[1]})
+            P.record_fx()
+            uses = [f"{k}.dea_capex_EUR_per_kWe", "fx.eur_per_gbp_2025"]
+            why = ("The Danish Energy Agency's figure, current and specific to the technology, from a body NESO cites; "
+                   "the UK annex's method puts it 2.46x PEM, above every other range read, so that is the high case")
         else:
             pem = T.cost("cost.electrolyser_pem.capex_per_kWe", _neso_pem_capex(build_year)[case], "GBP per kWe",
                          "PEM electrolyser capital", grade="transcribed", cites=neso("capex_GBP_per_kWe"))
@@ -402,8 +472,8 @@ def electrolyser_cost(tech: str, case: str, build_year=2025) -> dict:
             T.cost(f"{k}.multiplier_of_pem", _soe_ratio_to_pem(), "multiplier", "Solid-oxide over PEM per kWe, in the annex",
                    uses=[*uses, f"{k}.annex_pem_per_kWe"], inputs={"soe_per_kWe": soe / soe_in, "neso_pem": pem})
             uses = ["cost.electrolyser_pem.capex_per_kWe", f"{k}.multiplier_of_pem"]
-            why = ("The annex's ratio to PEM on NESO's PEM, for consistency with the other types; assumes a mature "
-                   "plant, and sits above every non-government range read")
+            why = ("The annex's ratio to PEM on NESO's PEM: the high case, since it assumes a mature plant and sits "
+                   "above every other range read")
         T.cost(f"{k}.capex_per_kWe", float(r.capex_GBP_per_kWe), "GBP per kWe", "SOEC capital", uses=uses, note=why)
         T.cost(f"{k}.annex_fixed_per_kW_H2_year", SOE_FIXED_GBP_PER_KW_H2_YEAR[case], "GBP per kW H2 per year",
                "Solid-oxide fixed cost, real 2020", grade="transcribed", cites=annex(f"SOE fixed OPEX, {case}"))
@@ -441,10 +511,12 @@ def _soe_ratio_to_pem() -> float:
 
 
 def _soec_capex_gbp_per_kwe(case: str, build_year=2025) -> float:
-    """The annex's level inflated (low), or its ratio on NESO's PEM. No government
-    figure sits above the ratio, so high equals central."""
+    """Danish Energy Agency (central), the BEIS annex's level inflated (low), or
+    the annex's ratio on NESO's PEM (high)."""
     if case == "low":
         return SOE_CAPEX_GBP_PER_KW_H2 / SOE_KWH_IN_PER_KWH_H2 * P.factor(SOE_PRICE_YEAR)
+    if case == "central":
+        return DEA_SOEC_EUR_PER_KWE / EUR_PER_GBP_2025
     return _neso_pem_capex(build_year)[case] * _soe_ratio_to_pem()
 
 
@@ -488,8 +560,8 @@ def electrolyser_costs(build_year=2025):
             "variable_opex_GBP_per_kg": SOE_VARIABLE_GBP_PER_KWH_H2[case] * H2_HHV_KWH_PER_KG * inflate,
             "lifetime_years": 25.0,
             "grade": GRADE,
-            "note": "BEIS 2021 annex: " + ("its level, dated" if case == "low" else
-                                           f"{_soe_ratio_to_pem():.2f}x NESO's PEM") + "; assumes a mature plant",
+            "note": {"low": "BEIS 2021 annex's level, dated", "central": "Danish Energy Agency, 10 MW, 2025",
+                     "high": f"BEIS 2021 annex's {_soe_ratio_to_pem():.2f}x NESO's PEM, a mature plant"}[case],
         })
     return pd.DataFrame(rows)
 

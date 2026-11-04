@@ -73,9 +73,9 @@ def test_llf_periods_follow_each_areas_annex_5(region, when, period):
 
 def test_llfs_are_the_areas_own():
     s = lv.loss_series(pd.DatetimeIndex(["2027-01-06 17:00"]), "33 kV", 6)
-    assert s.iloc[0] == pytest.approx(1.02 * (1 + 0.0021 + 0.011))    # Manweb 33kV period 4; zone 4 winter TLF
+    assert s.iloc[0] == pytest.approx(1.02 * (1 + 0.00206 + 0.00671))   # Manweb 33kV period 4; zone 4 winter TLF + winter TLMO-
     s = lv.loss_series(pd.DatetimeIndex(["2027-01-06 17:00"]), "11 kV", 3)
-    assert s.iloc[0] == pytest.approx(1.038 * (1 - 0.0032 + 0.011))   # ENWL 11kV period 1; zone 7 winter TLF
+    assert s.iloc[0] == pytest.approx(1.038 * (1 - 0.00364 + 0.00671))  # ENWL 11kV period 1; zone 7 winter TLF
 
 
 @pytest.mark.parametrize("region, when, voltage, llf", [

@@ -134,13 +134,15 @@ def test_fuel_cell_bop_cost_increment_tracks_the_exact_annuity():
     from optimisation import h2_capex as hc
     _cached(fuel_cell)
     d = fuel_cell.decompose()
+    from optimisation import tech_costs as tc
     r, L, H = hc.FC_DISCOUNT_RATE, fuel_cell.BOP_CALENDAR_LIFETIME_YEARS, d["bop_duty_lifetime_hours"]
+    fin = tc.building_finance_factor(r, hc.FC_BUILD_YEARS)     # the first build carries its finance
     costs = hc.fuel_cell_costs()
     for _, row in costs.iterrows():
         A, o = row.bop_GBP_per_MW, row.fixed_opex_frac
         for h in (100, 1000, H / L, 3000, 4000, 6000, 8760):
             lp = row.annual_GBP_per_MW_year + A * max(1.0 / L, h / H)
-            exact = A * (hc.capital_recovery_factor(r, min(L, H / h)) + o)
+            exact = A * (fin * hc.capital_recovery_factor(r, min(L, H / h)) + o)
             if h <= H / L:
                 assert lp == pytest.approx(exact, rel=1e-9)
             else:
@@ -281,15 +283,18 @@ def test_h2_capex_cases_are_ordered_and_every_assumption_is_noted():
     assert "OK" in hc.check(hc.fuel_cell_costs(), hc.tank_costs(), hc.electrolyser_costs())
 
 
-def test_soec_cost_is_the_beis_annex_on_neso_pem():
-    """The annex's level is dated, so central is its ratio to PEM on NESO's PEM."""
+def test_soec_cost_is_danish_between_the_beis_annex_level_and_ratio():
+    """Central is the Danish Energy Agency's 2025 figure; the BEIS annex's dated
+    level is the low case and its ratio to PEM on NESO's PEM the high."""
     from optimisation import h2_capex as hc
     soec = hc.electrolyser_costs()
     soec = soec[soec.asset == "electrolyser_soec"].set_index("case")
-    assert soec.note.str.contains("BEIS 2021 annex").all()
-    assert soec.loc["central", "capex_GBP_per_kWe"] == pytest.approx(2010.0 * 2.4603, rel=1e-3)
+    assert soec.loc["central", "capex_GBP_per_kWe"] == pytest.approx(2959.14 / 1.17, rel=1e-3)
+    assert soec.loc["high", "capex_GBP_per_kWe"] == pytest.approx(2010.0 * 2.4603, rel=1e-3)
     assert soec.loc["low", "capex_GBP_per_kWe"] == pytest.approx(1659.8, rel=1e-3)
     assert soec.loc["central", "variable_opex_GBP_per_kg"] == pytest.approx(0.50, rel=1e-2)
+    assert soec.loc["central", "fixed_opex_frac"] * soec.loc["central", "capex_GBP_per_kWe"] == pytest.approx(
+        53.02 / 0.95885 * (103.6 / 84.9), rel=1e-3)
 
 
 def test_cost_figures_on_uk_government_sources_are_pinned():
@@ -298,20 +303,53 @@ def test_cost_figures_on_uk_government_sources_are_pinned():
     assert P.factor(2023) == pytest.approx(103.6 / 96.3)
     fc = hc.fuel_cell_cost("central")
     assert fc["capex_GBP_per_kW"] == pytest.approx(2215.0)
-    assert fc["stack_cost_fraction"] == pytest.approx(1200.0 / 2642.0)
+    assert fc["stack_cost_fraction"] == pytest.approx(400.0 / 1900.0)
     # maintenance and insurance come back out of the fraction
     bop_per_kw = fc["capex_GBP_per_kW"] * (1.0 - fc["stack_cost_fraction"])
     assert fc["fixed_opex_frac"] * bop_per_kw == pytest.approx(
         48.0 * P.factor(2017) + hc.FC_INSURANCE_FRAC_OF_CAPITAL * 2215.0)
+    # the US plant, less its sales tax and grid spur, inflated in dollars
+    assert hc.fuel_cell_cost("low")["capex_GBP_per_kW"] == pytest.approx(
+        (1352.08 - 143.17 - 100.0) * 122.4 / 112.0 / (1.17 / 0.913), rel=1e-4)
     tank = hc.tank_cost("central")
     assert tank["capex_GBP_per_kg_capacity"] == pytest.approx(182000 / 405 * P.factor(2017))
     assert tank["fixed_opex_frac"] == pytest.approx(0.34 / 11.45)
+    assert hc.tank_cost("low")["capex_GBP_per_kg_capacity"] == pytest.approx(600.0 / 1.17)
+    assert hc.tank_cost("high")["capex_GBP_per_kg_capacity"] == pytest.approx(900.0 * 128.705 / 107.183 / 1.17, rel=1e-4)
     comp = battery.cost_components()
     assert comp["central"]["power_GBP_per_kW"] == pytest.approx(256.1, abs=0.1)
     assert comp["central"]["energy_GBP_per_kWh"] == pytest.approx(158.6, abs=0.1)
     assert comp["low"]["power_GBP_per_kW"] + comp["low"]["energy_GBP_per_kWh"] == pytest.approx(400.0)
-    assert (battery.system_capex_gbp_per_kw(4, "low") <= battery.system_capex_gbp_per_kw(4, "central")
-            <= battery.system_capex_gbp_per_kw(4, "high"))
+    assert comp["low"]["energy_GBP_per_kWh"] == pytest.approx(125.0 / (1.17 / 0.913), rel=1e-4)
+    assert comp["high"]["energy_GBP_per_kWh"] == pytest.approx((2654.969563 - 907.617750) / 8 * 122.4 / 116.1
+                                                                / (1.17 / 0.913), rel=1e-4)
+    # the three cases keep their order at every duration the optimiser builds
+    for hours in (2, 4, 7, 10):
+        assert (battery.system_capex_gbp_per_kw(hours, "low") <= battery.system_capex_gbp_per_kw(hours, "central")
+                <= battery.system_capex_gbp_per_kw(hours, "high"))
+
+
+def test_discount_rates_are_cepa_s_on_every_asset():
+    """CEPA for DESNZ (2025), Table E.1, on every asset the study builds."""
+    from optimisation import battery, dc_inputs, h2_capex as hc, tech_costs as tc
+    assert tc.CEPA_HURDLE_RATE == {"onshore_wind": 0.076, "solar_pv": 0.076, "offshore_wind": 0.089}
+    assert tc.annual_cost("onshore_wind", "central")["discount_rate"] == 0.076
+    assert battery.WACC_REAL == 0.089
+    assert dc_inputs.DISCOUNT_RATE == 0.101
+    assert hc.FC_DISCOUNT_RATE == 0.101
+    # building finance: capital carried from mid-year of each build year
+    assert tc.building_finance_factor(0.1, 1) == pytest.approx(1.1 ** 0.5)
+    assert tc.building_finance_factor(0.1, 3) == pytest.approx((1.1 ** 2.5 + 1.1 ** 1.5 + 1.1 ** 0.5) / 3)
+
+
+def test_transmission_loss_factors_are_elexon_s_exact_values():
+    """Read from Elexon's public report: their mean is the report's all-zone 0.00524."""
+    from optimisation import levies
+    import numpy as np
+    assert all(len(v) == 4 for v in levies.TLF_ZONE_2026_27.values())
+    assert np.mean([v for z in levies.TLF_ZONE_2026_27.values() for v in z]) == pytest.approx(0.00524, abs=0.00003)
+    assert levies.TLF_ZONE_2026_27[3] == (0.01816, 0.01760, 0.02240, 0.03071)
+    assert levies.TLMO_OFFTAKING_2026_27 == (0.00948, 0.01068, 0.00991, 0.00671)
 
 
 def test_battery_fit_is_within_two_percent_of_the_beis_exhibit():

@@ -7,8 +7,10 @@ from optimisation import h2_capex as hc, levies
 
 
 class _Coefficients:
-    """The central coefficients the register tests against."""
-    cost_batt_e = 16_508.0
+    """The central coefficients the register tests against (battery: 4 Nov 2026, evening)."""
+    cost_batt_p = 39_312.0
+    cost_batt_e = 21_640.0
+    cost_ely = 277_000.0
     cost_fc = hc.fuel_cell_cost("central")["annual_GBP_per_MW_year"]
     cost_tank = hc.tank_cost("central")["annual_GBP_per_kg_year"]
 
@@ -40,7 +42,7 @@ def test_supplier_margin_is_carried_in_the_import_price():
 
 def test_upper_additions_only_touch_flows_still_left_out():
     added = X.upper_additions()
-    assert set(added) == {"cost_batt_e", "cost_fc"}
+    assert set(added) == {"cost_batt_e", "cost_fc"}      # battery rates are exempt to 2035: upper 0, not added
 
 
 def test_every_status_and_kind_is_known():

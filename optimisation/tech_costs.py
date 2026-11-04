@@ -28,9 +28,10 @@ Notes on the numbers
 * Offshore wind infrastructure cost **excludes** OFTO transmission assets;
   those are recovered through TNUoS inside the opex line instead (report
   footnote 6). Do not add a separate transmission capex on top.
-* Hurdle rates differ by technology (5.8 / 6.2 / 5.0 %) and are pre-tax real.
-  They are the report's own financing assumption, not necessarily the WACC
-  this study should use - see ``DISCOUNT_RATE_OVERRIDE``.
+* The report's hurdle rates (5.8 / 6.2 / 5.0 %, pre-tax real) are kept for
+  its LCOE cross-check. The coefficient itself is annualised at CEPA's 2025
+  rates for DESNZ (``CEPA_HURDLE_RATE``), the one method the study applies to
+  every asset - see ``DISCOUNT_RATE_OVERRIDE`` to impose a single rate.
 * "low/medium/high" are the report's own scenario labels. This module exposes
   them as low/central/high to match ``dc_config.COST_CASE``.
 
@@ -64,8 +65,14 @@ OFFSHORE_SOURCE = (
 )
 
 # Set to a number to use one project-wide discount rate for every technology
-# instead of each report's own hurdle rate. None = use the report hurdle rates.
+# instead of the rates below. None = use CEPA's.
 DISCOUNT_RATE_OVERRIDE = None
+
+# The rate the LP's coefficient is annualised at, since 4 Nov 2026 (evening):
+# CEPA for DESNZ, hurdle rate estimates for electricity sector technologies
+# (2025), Table E.1, pre-tax real, 50 % gearing. The report's own hurdle rates
+# (5.8 / 6.2 / 5.0 %) are kept for the LCOE cross-check only.
+CEPA_HURDLE_RATE = {"onshore_wind": 0.076, "solar_pv": 0.076, "offshore_wind": 0.089}
 
 
 # (parameter, unit, low, central, high)
@@ -220,13 +227,16 @@ def annual_cost(tech: str, case: str) -> dict:
     life = T.cost(f"cost.{tech}.lifetime_years", _value(params, "operating_lifetime", inv), "years",
                   "Operating life (the report pairs low cost with the high life)",
                   grade="transcribed", cites=cite("operating lifetime", inv))
+    report_rate = T.cost(f"cost.{tech}.report_hurdle_rate", _value(params, "hurdle_rate", case), "fraction per year",
+                         "The report's own hurdle rate, pre-tax real: the LCOE cross-check's", grade="transcribed",
+                         cites=cite("hurdle rate", case))
     if DISCOUNT_RATE_OVERRIDE is not None:
         rate = T.cost(f"cost.{tech}.discount_rate", DISCOUNT_RATE_OVERRIDE, "fraction per year",
                       "One project-wide discount rate (DISCOUNT_RATE_OVERRIDE)", grade="assumed")
     else:
-        rate = T.cost(f"cost.{tech}.discount_rate", _value(params, "hurdle_rate", case), "fraction per year",
-                      "The report's hurdle rate, pre-tax real", grade="transcribed",
-                      cites=cite("hurdle rate", case))
+        rate = T.cost(f"cost.{tech}.discount_rate", CEPA_HURDLE_RATE[tech], "fraction per year",
+                      "The rate the coefficient is annualised at: CEPA's whole-life hurdle rate, pre-tax real",
+                      grade="transcribed", cites=[("cepa_hurdle_rates_2025", f"Table E.1, {tech.replace('_', ' ')}")])
 
     capex_per_mw = capex_per_kw * 1000.0
     opex_per_mw = opex_kgbp * 1000.0
@@ -237,16 +247,18 @@ def annual_cost(tech: str, case: str) -> dict:
     # takes offshore (out of scope, already 7 % above it) further away.
     finance = 1.0
     finance_uses = []
+    build_years = _value(params, "construction_period", case)
     if tech in BEHIND_THE_METER:
-        build_years = T.cost(f"cost.{tech}.construction_years", _value(params, "construction_period", case), "years",
-                             "Construction period", grade="transcribed", cites=cite("construction period", case))
+        T.cost(f"cost.{tech}.construction_years", build_years, "years",
+               "Construction period", grade="transcribed", cites=cite("construction period", case))
         finance = T.cost(f"cost.{tech}.building_finance_factor", building_finance_factor(rate, build_years), "multiplier",
-                         "Capital carried at the hurdle rate over the build",
+                         "Capital carried at the rate over the build",
                          uses=[f"cost.{tech}.discount_rate", f"cost.{tech}.construction_years"])
         finance_uses = [f"cost.{tech}.building_finance_factor"]
     ann_capex = capex_per_mw * finance * crf
-    # The report's own basis, kept for its LCOE cross-check
-    published_annual = ann_capex + opex_per_mw
+    # The report's own basis, at its own rate, kept for its LCOE cross-check
+    report_finance = building_finance_factor(report_rate, build_years) if tech in BEHIND_THE_METER else 1.0
+    published_annual = capex_per_mw * report_finance * capital_recovery_factor(report_rate, life) + opex_per_mw
 
     site_kgbp = 0.0
     site_uses = []

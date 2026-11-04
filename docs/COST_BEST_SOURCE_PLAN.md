@@ -4,7 +4,7 @@
 **"Looks wrong"** here means one of two things, and nothing softer: its method does not fit the use, or several independent authoritative sources contradict it.
 "Government" includes NESO and reports departments commissioned. Follows `COST_GOV_FIGURES_PLAN.md` (built, uncommitted). Evidence: that file, `COST_SOURCE_SEARCH_2026-11-04.md`, `COST_SOURCES_NON_UK_2026-11-04.md`.
 
-**Nothing here is built.** After-figures are hand arithmetic, 2025 pounds, with the discount rates of step C unless a column says otherwise; step 1 of the build replaces them with the code's own.
+**Built 4 Nov 2026, evening (steps 1, A, C, D's losses and tank; B dropped), uncommitted at the time of writing; see *Built* at the foot.** After-figures below are hand arithmetic, 2025 pounds, with the discount rates of step C unless a column says otherwise; step 1 of the build replaces them with the code's own.
 
 Foreign figures: inflate in their own currency (US: World Bank deflator; euro area: Eurostat `nama_10_gdp`), then convert at the study's FES 2025 rate (£1 = €1.17 = $1.2815).
 

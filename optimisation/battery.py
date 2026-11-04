@@ -26,7 +26,14 @@ technical         docs.modoenergy.com/pages/jan-2026/uk-europe/model-assumptions
                   (July 2026). ~£400/kW for a 1-hour system today falling to
                   ~£200/kW by 2040. 15-year asset life, ~67 % capacity
                   remaining after 10,000 cycles (~12-15 years), 1-2 cycles per
-                  day, WACC 5.0 % real. Real 2025 GBP.
+                  day. Real 2025 GBP. Each further hour: Ember, "How cheap is
+                  battery storage?" (Dec 2025), about $125/kWh all-in.
+
+cost high case    US Annual Technology Baseline 2025, utility-scale battery,
+                  moderate, 2026, 2 to 10 hours, 2023 US $.
+
+discount rate     CEPA for DESNZ, hurdle rates (2025), Table E.1: lithium
+                  batteries 8.90 % pre-tax real.
 
 cost spread       Modo Energy BESS CapEx Survey 2024 (30 market participants,
                   2.8 GW at 1.9 h average): average £580k/MW, two-hour median
@@ -76,6 +83,12 @@ BEIS_CAPEX_GBP_PER_KW = {1: 331.0, 2: 449.0, 4: 696.0, 6: 930.0, 9: 1328.0}
 BEIS_OPEX_GBP_PER_KW_YEAR = {1: 5.0, 2: 7.0, 4: 10.0, 6: 11.0, 9: 13.0}
 
 
+def _finance_factor(rate: float, years: int) -> float:
+    """Capital at the end of the build per £1 spent evenly over it (tech_costs's)."""
+    from optimisation.tech_costs import building_finance_factor
+    return building_finance_factor(rate, years)
+
+
 def _fit_power_energy(rows: dict[int, float]) -> tuple[float, float]:
     """(per kW, per kWh) of the straight line through a figure by duration: a
     1-hour system is 1 kWh per kW, so the slope is per kWh. The capital fit is
@@ -84,18 +97,24 @@ def _fit_power_energy(rows: dict[int, float]) -> tuple[float, float]:
     return float(intercept), float(slope)
 
 
-# Low case, Modo Energy's GB model: ~400 GBP/kW at 1 hour, real 2025. The further
-# +100 GBP/kW an hour is not on the cited page (re-read 4 Nov 2026), which
-# gives only the 1-hour figure; it is what the study used until 4 Nov 2026, kept
-# as the low case because Modo's survey is the nearest thing to today's market.
+# Low case: Modo Energy's GB model, ~400 GBP/kW at 1 hour, real 2025, for the
+# 1-hour system, and Ember's all-in $125/kWh (October 2025, projects of 4 hours
+# and more outside China and the United States) for each further hour. Until
+# 4 Nov 2026 the further hour was £100/kW, a figure not on Modo's page.
 MODO_1H_GBP_PER_KW = 400.0
-MODO_MARGINAL_HOUR_GBP_PER_KW = 100.0
+EMBER_ALL_IN_USD_PER_KWH = 125.0
+EMBER_PRICE_YEAR = 2025
 
-# High case: Modo's 2024 survey tops out at 700 k/MW around a 580 k/MW average at
-# 1.9 h (68 % of projects), taken as a spread on the central figures.
-SURVEY_HIGH_MULTIPLIER = 700.0 / 580.0
+# High case: the US Annual Technology Baseline 2025 (moderate, 2026), all-in and
+# carrying US sales tax, 2023 dollars, 2 to 10 hours, fitted the same way as
+# BEIS and inflated in dollars.
+ATB_PRICE_YEAR = 2023
+ATB_2026_USD_PER_KW = {2: 907.617750, 4: 1344.455703, 6: 1781.293657, 8: 2218.131610, 10: 2654.969563}
 
-WACC_REAL = 0.050            # Modo: 5.0 % real (~7.1 % nominal). BEIS uses 7.3 %: plan D4
+# CEPA for DESNZ (2025), Table E.1: lithium batteries 8.90 %, pre-tax real.
+# Was Modo's 5.0 % real until 4 Nov 2026 (evening).
+WACC_REAL = 0.089
+BUILD_YEARS = 1              # BEIS 2022, Exhibit 3.11: build time 1 year at every duration
 ASSET_LIFE_YEARS = 15        # Modo: BESS asset lifetime
 
 # =============================================================================
@@ -229,9 +248,11 @@ def cost_components():
     inflate = P.factor(BEIS_PRICE_YEAR)
     power, energy = (v * inflate for v in _fit_power_energy(BEIS_CAPEX_GBP_PER_KW))
     run_power, run_energy = (v * inflate for v in _fit_power_energy(BEIS_OPEX_GBP_PER_KW_YEAR))
-    capex = {"low": (MODO_1H_GBP_PER_KW - MODO_MARGINAL_HOUR_GBP_PER_KW, MODO_MARGINAL_HOUR_GBP_PER_KW),
+    ember = P.usd_to_gbp_2025(EMBER_ALL_IN_USD_PER_KWH, EMBER_PRICE_YEAR)
+    atb_power, atb_energy = (P.usd_to_gbp_2025(v, ATB_PRICE_YEAR) for v in _fit_power_energy(ATB_2026_USD_PER_KW))
+    capex = {"low": (MODO_1H_GBP_PER_KW - ember, ember),
              "central": (power, energy),
-             "high": (power * SURVEY_HIGH_MULTIPLIER, energy * SURVEY_HIGH_MULTIPLIER)}
+             "high": (atb_power, atb_energy)}
     return {c: {"power_GBP_per_kW": capex[c][0], "energy_GBP_per_kWh": capex[c][1],
                 "fixed_opex_GBP_per_kW_year": run_power, "fixed_opex_GBP_per_kWh_year": run_energy}
             for c in CASES}
@@ -254,15 +275,21 @@ def annual_costs(case: str) -> dict:
     if case == "low":
         T.cost("cost.battery.modo_1h_per_kW", MODO_1H_GBP_PER_KW, "GBP per kW", "A 1-hour system's capital",
                grade="transcribed", cites=modo)
-        T.cost("cost.battery.modo_marginal_hour_per_kW", MODO_MARGINAL_HOUR_GBP_PER_KW, "GBP per kW",
-               "Each further hour of duration", grade="assumed",
-               note="Used since before 4 Nov 2026; not on the cited Modo page, which gives only the 1-hour figure")
-        capex_uses = ["cost.battery.modo_1h_per_kW", "cost.battery.modo_marginal_hour_per_kW"]
+        T.cost("cost.battery.ember_all_in_USD_per_kWh", EMBER_ALL_IN_USD_PER_KWH, "US $ per kWh",
+               "All-in capital of a 4-hour-plus project outside China and the US, October 2025", grade="transcribed",
+               cites=[("ember_bess_2025", "about $125/kWh: $75 equipment, $50 install and connect")],
+               note="Each further hour of duration in the low case; assumes cheap land")
+        P.record_fx()
+        capex_uses = ["cost.battery.modo_1h_per_kW", "cost.battery.ember_all_in_USD_per_kWh",
+                      P.record_foreign("usd", EMBER_PRICE_YEAR), "fx.usd_per_gbp_2025"]
     elif case == "high":
-        T.cost("cost.battery.survey_multiplier", SURVEY_HIGH_MULTIPLIER, "multiplier",
-               "Modo's survey top over its average, on both components", grade="derived",
-               cites=[("modo_capex_survey_2024", "£700k/MW over the £580k average")])
-        capex_uses.append("cost.battery.survey_multiplier")
+        T.cost("cost.battery.atb_capex_by_duration", ATB_2026_USD_PER_KW[4], "US $ per kW",
+               "A 4-hour system's all-in capital, 2026 moderate, 2023 dollars", grade="transcribed",
+               cites=[("nrel_atb_2025", "utility-scale battery, moderate, 2026, total capital")],
+               inputs={f"{h} h": v for h, v in ATB_2026_USD_PER_KW.items()})
+        P.record_fx()
+        capex_uses = ["cost.battery.atb_capex_by_duration", P.record_foreign("usd", ATB_PRICE_YEAR),
+                      "fx.usd_per_gbp_2025"]
     c = cost_components()[case]
     power = T.cost("cost.battery.power_per_kW", c["power_GBP_per_kW"], "GBP per kW",
                    "Power conversion capital: the fit's intercept against duration", uses=capex_uses)
@@ -273,17 +300,22 @@ def annual_costs(case: str) -> dict:
                        "Fixed running cost, power: the fit's intercept against duration", uses=run_uses)
     run_energy = T.cost("cost.battery.fixed_opex_per_kWh_year", c["fixed_opex_GBP_per_kWh_year"], "GBP per kWh per year",
                         "Fixed running cost, energy: the fit's slope against duration", uses=run_uses)
-    wacc = T.cost("cost.battery.wacc", WACC_REAL, "fraction per year", "Modo's real WACC",
-                  grade="transcribed", cites=[("modo_bess_assumptions", "WACC 5.0 % real")])
+    wacc = T.cost("cost.battery.wacc", WACC_REAL, "fraction per year", "CEPA's hurdle rate for lithium batteries",
+                  grade="transcribed", cites=[("cepa_hurdle_rates_2025", "Table E.1, lithium batteries, 8.90 %")])
+    build = T.cost("cost.battery.construction_years", BUILD_YEARS, "years", "Build time", grade="transcribed",
+                   cites=[("beis_ldes_2022", "Exhibit 3.11, build time 1 year")])
+    finance = T.cost("cost.battery.building_finance_factor", _finance_factor(wacc, build), "multiplier",
+                     "Capital carried at the rate over the build", uses=["cost.battery.wacc",
+                                                                         "cost.battery.construction_years"])
     life = T.cost("cost.battery.life_years", ASSET_LIFE_YEARS, "years", "Battery financial life",
                   grade="transcribed", cites=[("modo_bess_assumptions", "15-year asset lifetime"),
                                               ("beis_ldes_2022", "Exhibit 3.11, financial lifetime 15 years")])
     crf = T.cost("cost.battery.crf", capital_recovery_factor(wacc, life), "per year",
                  "Capital recovery factor at the WACC over the life",
                  uses=["cost.battery.wacc", "cost.battery.life_years"])
-    return {"power_GBP_per_MW_year": (power * crf + run_power) * 1000.0,
-            "energy_GBP_per_MWh_year": (energy * crf + run_energy) * 1000.0,
-            "power_GBP_per_kW": power, "energy_GBP_per_kWh": energy, "crf": crf}
+    return {"power_GBP_per_MW_year": (power * finance * crf + run_power) * 1000.0,
+            "energy_GBP_per_MWh_year": (energy * finance * crf + run_energy) * 1000.0,
+            "power_GBP_per_kW": power, "energy_GBP_per_kWh": energy, "crf": crf, "finance": finance}
 
 
 def system_capex_gbp_per_kw(duration_h, case="central"):
@@ -374,7 +406,7 @@ def builds_over_horizon(horizon_years):
 
 def cost_table(durations=(1, 2, 4, 8)):
     rows = []
-    crf = capital_recovery_factor(WACC_REAL, ASSET_LIFE_YEARS)
+    crf = capital_recovery_factor(WACC_REAL, ASSET_LIFE_YEARS) * _finance_factor(WACC_REAL, BUILD_YEARS)
     for case in CASES:
         comp = cost_components()[case]
         for d in durations:
@@ -504,7 +536,7 @@ def run():
     print(f"  survey average of 580 GBP/kW at the same duration.")
     print(f"  Two-hour: model {system_capex_gbp_per_kw(2,'central'):,.0f} vs survey median 650 GBP/kW.")
     print(f"  Central is a 2022 forecast of 2030 capital; the low case is Modo's 1-hour figure "
-          f"+ {MODO_MARGINAL_HOUR_GBP_PER_KW:,.0f} GBP/kW an hour.")
+          f"+ Ember's ${EMBER_ALL_IN_USD_PER_KWH:,.0f}/kWh an hour; the high the US technology baseline.")
     print(f"  Battery life {ASSET_LIFE_YEARS} y vs data centre 25 y -> "
           f"{builds_over_horizon(25):.2f} builds over the DC's life,")
     print(f"  which both cost and carbon must carry.")
