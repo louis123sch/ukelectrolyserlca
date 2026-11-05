@@ -101,6 +101,48 @@ def test_price_spread_of_one_is_the_identity():
     np.testing.assert_allclose(out.grid_price_per_mwh, s.grid_price_per_mwh)
 
 
+def _with_groups():
+    s = _series([10.0, 30.0, 50.0, 70.0], n=4)
+    s.grid_groups = {"11 kV": {"price_per_mwh": np.array([20.0, 40.0, 60.0, 80.0]),
+                               "gwp_per_mwh": np.array([5.0, 6.0, 7.0, 8.0])},
+                     "33 kV": {"price_per_mwh": np.array([0.0, 10.0, 20.0, 30.0]),
+                               "gwp_per_mwh": np.array([1.0, 2.0, 3.0, 4.0])}}
+    return s
+
+
+def test_price_spread_widens_each_voltage_group_around_its_own_mean():
+    """With connection options the objective prices imports from these series."""
+    _, out = T.apply(T.KNOBS["price_spread"], 2.0, _tech(), _with_groups())
+    assert out.grid_groups["11 kV"]["price_per_mwh"].tolist() == [-10.0, 30.0, 70.0, 110.0]   # mean 50
+    assert out.grid_groups["33 kV"]["price_per_mwh"].tolist() == [-15.0, 5.0, 25.0, 45.0]     # mean 15
+    assert out.grid_price_per_mwh.tolist() == [-20.0, 20.0, 60.0, 100.0]
+
+
+def test_price_spread_leaves_group_carbon_alone():
+    s = _with_groups()
+    _, out = T.apply(T.KNOBS["price_spread"], 3.0, _tech(), s)
+    for g in s.grid_groups:
+        np.testing.assert_array_equal(out.grid_groups[g]["gwp_per_mwh"], s.grid_groups[g]["gwp_per_mwh"])
+
+
+def test_price_spread_of_one_is_the_identity_on_groups():
+    s = _with_groups()
+    _, out = T.apply(T.KNOBS["price_spread"], 1.0, _tech(), s)
+    for g in s.grid_groups:
+        np.testing.assert_allclose(out.grid_groups[g]["price_per_mwh"], s.grid_groups[g]["price_per_mwh"])
+
+
+def test_price_spread_does_not_mutate_the_groups_it_was_given():
+    s = _with_groups()
+    T.apply(T.KNOBS["price_spread"], 5.0, _tech(), s)
+    assert s.grid_groups["11 kV"]["price_per_mwh"].tolist() == [20.0, 40.0, 60.0, 80.0]
+
+
+def test_price_spread_without_groups_leaves_them_none():
+    _, out = T.apply(T.KNOBS["price_spread"], 2.0, _tech(), _series([10.0, 30.0], n=2))
+    assert out.grid_groups is None
+
+
 def test_apply_is_pure():
     """Probes run in a loop over one prepared tech — mutation would compound."""
     tech, s = _tech(cost_ely=100.0), _series([10.0, 30.0])

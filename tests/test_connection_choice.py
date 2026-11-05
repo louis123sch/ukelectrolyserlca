@@ -184,3 +184,18 @@ def test_an_islanded_build_ignores_the_options():
     a = M.Assets(grid=False, wind=True, solar=True, battery=True, grid_limit_mw=0.0)
     m, V, obj = M.build_model(s, a, t, objective="cost", unserved_fraction=1.0)
     assert obj["options"] is None and "on_0" not in V
+
+
+def test_the_price_spread_threshold_moves_a_site_with_options():
+    """A wider spread must reach the series the objective reads: it pays a battery
+    to arbitrage, so the best cost falls. It used to stay put to the pound."""
+    from optimisation import thresholds as T
+    s = _series(7.31, GROUPS)
+    t = _tech(connection_options=(SMALL, LARGE))
+    a = M.Assets(grid=True, battery=True)
+    cost = {}
+    for k in (1.0, 4.0):
+        t_k, s_k = T.apply(T.KNOBS["price_spread"], k, t, s)
+        V, obj = _solve(s_k, t_k, a, objective="cost")
+        cost[k] = M.totals(obj)["cost_GBP_per_year"]
+    assert cost[4.0] < 0.999 * cost[1.0]

@@ -45,9 +45,9 @@ and the fuel cell's output more valuable at the same time, so it is not monotone
 and a bisection on it would converge on nothing meaningful. Spread is the knob
 that actually drives arbitrage; see ``PRICE_SPREAD_NOTE``.
 
-Every bracket is checked against its own sense before bisecting, so a knob that
-turns out non-monotone reports ``non_monotone`` rather than a confident wrong
-number.
+Every probe is checked against the knob's sense after the search
+(``_check_monotone``), so a knob that turns out non-monotone keeps its number but
+carries a warning that it is one step among several.
 
 Why "share of load" and not "capacity > 0"
 ------------------------------------------
@@ -114,7 +114,8 @@ PRICE_SPREAD_NOTE = (
     "arbitrage value from price level, which is the thing a level shift confounds. "
     "Network volumetric charges are already inside grid_price_per_mwh when the "
     "series is built, so they are widened too — a known overstatement of k, since "
-    "the DUoS element is banded by time of day rather than by price.")
+    "the DUoS element is banded by time of day rather than by price. With "
+    "connection options, each voltage's import price is widened around its own mean.")
 
 
 # --------------------------------------------------------------------------
@@ -217,9 +218,17 @@ def baseline_value(knob: Knob, tech: M.Tech) -> float:
 def apply(knob: Knob, value: float, tech: M.Tech, series: M.Series):
     """Return (tech, series) with this knob moved to ``value``. Pure."""
     if knob.fields == ("__price_spread__",):
-        p = np.asarray(series.grid_price_per_mwh, dtype=float)
-        mean = float(p.mean())
-        return tech, replace(series, grid_price_per_mwh=mean + value * (p - mean))
+        def wider(p):
+            p = np.asarray(p, dtype=float)
+            mean = float(p.mean())
+            return mean + value * (p - mean)
+        # With connection options the objective prices imports from these series,
+        # not grid_price_per_mwh, so a spread that stopped there moved nothing.
+        groups = (None if not series.grid_groups else
+                  {g: {**d, "price_per_mwh": wider(d["price_per_mwh"])}
+                   for g, d in series.grid_groups.items()})
+        return tech, replace(series, grid_price_per_mwh=wider(series.grid_price_per_mwh),
+                             grid_groups=groups)
     if knob.mode == "multiplier":
         return replace(tech, **{f: float(getattr(tech, f)) * value
                                 for f in knob.fields}), series
