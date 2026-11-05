@@ -44,6 +44,12 @@ sys.path.insert(0, str(ROOT))
 
 from optimisation import dc_model as M
 
+# The one price list the published rule gives. In the default mode a site with no
+# room nearby stops at build_series, and this audit's own site is one. So the audit
+# does not see the terms that exist only with a choice of lists (dc_model's cap_conn_i,
+# on_i and imp_*), and does not say whether the site has room.
+CONNECTION_MODE = "single"
+
 # A capacity may legitimately carry no embodied carbon only if it is not a
 # physical asset. Nothing currently qualifies, which is the point: the entry
 # exists so that adding one is a deliberate, reviewed act rather than an
@@ -485,7 +491,7 @@ def check_scale_response(site, start, end, sizes=(7.31, 50.0, 300.0)):
     from optimisation import dc_inputs as I
     rows = []
     for mw in sizes:
-        _, meta = I.build_series(site, start, end, mw, pue=1.2)
+        _, meta = I.build_series(site, start, end, mw, pue=1.2, connection_mode=CONNECTION_MODE)
         c = meta["network_charges"]
         rows.append({
             "size_MW_IT": mw,
@@ -522,7 +528,7 @@ def check_applicability(site, start, end, size_mw_it=300.0, pue=1.2):
     from optimisation import sites as S
 
     s = S.get(site)
-    _, meta = I.build_series(site, start, end, size_mw_it, pue=pue)
+    _, meta = I.build_series(site, start, end, size_mw_it, pue=pue, connection_mode=CONNECTION_MODE)
     c = meta["network_charges"]
     transmission = meta["transmission_connected"]
 
@@ -586,7 +592,7 @@ def check_geography(site, start, end, size_mw_it=300.0, pue=1.2):
     from optimisation import sites as S
 
     s_ = S.get(site)
-    _, meta = I.build_series(site, start, end, size_mw_it, pue=pue)
+    _, meta = I.build_series(site, start, end, size_mw_it, pue=pue, connection_mode=CONNECTION_MODE)
     rows = [
         ("wind / solar profile", f"lat {s_.lat:.4f}, lon {s_.lon:.4f}",
          "Renewables.ninja, queried on the coordinate", True),
@@ -674,7 +680,7 @@ def run(site=None, start="2025-01-01", end="2025-02-01",
     print("STRUCTURAL AUDIT — is the model well posed, and every input in range?")
     print("=" * 100)
 
-    series, meta = I.build_series(site, start, end, size_mw_it, pue=pue)
+    series, meta = I.build_series(site, start, end, size_mw_it, pue=pue, connection_mode=CONNECTION_MODE)
     series = I.resample(series, 1.0)
     # Bought hydrogen on, priced green, so the stream checks see it.
     tech = I.build_tech(site, meta, ely_tech="SOEC operation", cost_case="central",
