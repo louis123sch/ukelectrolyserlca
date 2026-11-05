@@ -808,13 +808,25 @@ the one failure is the size-free 132 kV connection at -5.06 %. Closed for now,
 but the runs fix the price list, so the list choice itself was only checked by
 comparing two lists (`optimisation_outputs/connection_sensitivity.md`), and they
 predate the government cost figures: repeat if those move the design much.
+*Repeated 5 Nov 2026 at North Norfolk* (`norfolk_150_room`: the reference site,
+150 MW of computing, every asset, the new cost sources, the lists priced alone per
+variant and the survivors left to the optimiser): all 12 points pass, no size moves
+by more than 0.006 %, cost by at most 0.53 %, carbon not at all, and every variant
+drops the same two 11 kV lists and chooses the same 33 kV list at Sall Grid. The
+connection sits on its 24.5 MW room limit at every point, which is why its price
+cannot reach the design. Closed; the three connection-price items on the worklist
+are deleted (`optimisation_outputs/connection_sensitivity.md`).
 
 ## 2. Carbon is charged and cost is free
+
+**Sections 2 to 5 reviewed 5 Nov 2026:** all closed or parked, with the outcome on
+each line (`docs/COST_BEST_SOURCE_PLAN.md`, *Review of what was left*). What is
+still open on the cost side is on `TODO.md`.
 
 Asymmetries that let the cost objective build or run something for nothing. Each
 one biases cost-optimal results in a known direction, so they come next.
 
-- [ ] **2.1 Electrolyser stack replacements** (S, **new as an asymmetry**). Since
+- [x] **2.1 Electrolyser stack replacements** (done: `cost_ely_variable_per_kg`, per kg, NESO). Since
       26 Oct the carbon side charges stacks by running hours
       (`ely_stack_units`). Cost charges `cost_ely × cap_ely` and nothing per
       replacement, so a cost solve runs the electrolyser hard for free. NESO's
@@ -824,48 +836,47 @@ one biases cost-optimal results in a known direction, so they come next.
       *Read NESO's variable opex* item. Decide whether to charge it per kg (as
       NESO does) or per replacement on `ely_stack_units` (as the fuel cell
       does). Doing both would double count.
-- [ ] **2.2 Electrolyser consumables** (S). On TODO (*Blocking*).
-- [ ] **2.3 Battery and fuel-cell step-up transformers** (XS to check,
-      **new**). Carbon has charged them since 15 Oct; cost has no line. Check
-      whether Modo's £/kW is a full-project figure that already includes the
-      grid transformer (it probably does) and whether the fuel-cell proxy does
-      (it is equipment, not installed cost, so probably not).
-- [ ] **2.4 Tank cost describes a different vessel** (M). On TODO (*Blocking*).
-- [ ] **2.5 Hydrogen compressor capital** (S). On TODO (*Balance of plant*).
+- [x] **2.2 Electrolyser consumables** (done 4 Nov, `DATA_GAPS.md`).
+- [x] **2.3 Battery and fuel-cell step-up transformers** (closed 5 Nov, no line:
+      read as inside BEIS's battery capital and Baringa's installed fuel cell
+      plant, `cost_exclusions.py`).
+- [x] **2.4 Tank cost describes a different vessel** (done 4 Nov: cost and carbon
+      on one bulk vessel class).
+- [x] **2.5 Hydrogen compressor capital** (closed 4 Nov, no line: already charged
+      inside `cap_ely`, zero on the default).
 
 ## 3. Headline capex with no source
 
 On TODO, in this order of how much they move a result:
 
-- [ ] **3.1 Fuel cell capex and per-replacement stack cost** (L). *Blocking*.
-- [ ] **3.2 SOEC capex/opex** (M). *Blocking*.
-- [ ] **3.3 Battery £/kWh and duration bound** (S). *Cheap wins*.
-- [ ] **3.4 Battery fixed opex from BEIS 2022** (S). *Cheap wins*.
-- [ ] **3.5 Marocco 2020 for a tank cost** (S). *Cheap wins*.
+- [x] **3.1 Fuel cell capex and per-replacement stack cost** (done 4 Nov).
+- [x] **3.2 SOEC capex/opex** (done 4 Nov).
+- [x] **3.3 Battery £/kWh and duration bound** (done 5 Nov: BEIS 2022's line kept,
+      stated as an extension past 9 hours and checked for shape to 24; no bound in
+      the model, a 9-hour cap in `sensitivity.assumptions`).
+- [x] **3.4 Battery fixed opex from BEIS 2022** (done 4 Nov).
+- [x] **3.5 A tank cost** (done 4 Nov: Element Energy, the formula and two ranges).
 
 ## 4. Cross-cutting
 
-- [ ] **4.1 One price base and one discount-rate policy** (M). On TODO. Today:
-      DESNZ at each technology's own rate, Modo 5.0 % real, H₂ assets 6 % with
-      no source, and the Green Book 3.5 % used nowhere. Do this before 1.3,
-      which needs a rate to annualise connection capital.
-- [ ] **4.2 Generation cost scope** (S). On TODO (generator-side TNUoS/DUoS
-      inside DESNZ opex; land and business rates missing).
-- [ ] **4.3 Decommissioning and insurance, consistently** (S, **new**). Carbon has
-      end-of-life out everywhere, by rule. On the cost side, check what each
-      source includes. DESNZ is believed to carry decommissioning and insurance
-      for generators, while the hydrogen assets are bare capex plus an
-      opex percentage. If only some technologies carry them, the comparison
-      between them is not like for like.
-- [ ] **4.4 VoLL** (XS). Assumed, no source. State it as a penalty that sets
-      reliability, not as a cost, and keep it out of the £/MWh reported.
+- [x] **4.1 One price base and one discount-rate policy** (done: CEPA's rates on
+      every asset, 4 Nov; the remaining mixed price years are stated, at most
+      0.15 %, `ASSUMPTIONS.md`).
+- [x] **4.2 Generation cost scope** (done 4 Nov: own network charges out, land and
+      rates in). Whether their own connection stays in capital is a sweep.
+- [x] **4.3 Decommissioning and insurance, consistently** (closed 5 Nov:
+      decommissioning is on the boundary, as on the carbon side; the fuel cell's
+      insurance is an estimate; the tank's is read as inside its running cost, with
+      a sweep row).
+- [x] **4.4 VoLL** (closed 5 Nov: stated, `ASSUMPTIONS.md`; no saved sweep leaves
+      demand unmet).
 
 ## 5. Bought hydrogen
 
-- [ ] **5.1 CO₂ T&S: replace, don't add; grey's ETS level** (S). On TODO
-      (*Cheap wins*).
-- [ ] **5.2 Seller compression capex, haulage** — Parked on TODO; haulage now
-      closed as a boundary item.
+- [ ] **5.1 CO₂ T&S: replace, don't add; grey's ETS level** (S). Parked on TODO:
+      needed only before a conclusion about buying grey or blue.
+- [x] **5.2 Seller compression capex, haulage** (closed 5 Nov: on the register,
+      compression stated out and haulage on the boundary).
 
 ## Order
 

@@ -2,8 +2,8 @@
 """Rule 3 of the cut-off rule: did adding every still-excluded flow at its upper estimate change the
 best design? (CUTOFF_RULE_PLAN.md step 4.)
 
-    python -m optimisation.sensitivity cutoff     # solve: sensitivity_cutoff_<case>.csv (~1 h)
-    python scripts/cutoff_rule3.py                # judge: cutoff_rule3.md and ASSUMPTIONS.md section 8
+    python -m optimisation.sensitivity cutoff --hours=1   # solve: sensitivity_cutoff_<case>.csv (~1 h)
+    python scripts/cutoff_rule3.py                        # judge: cutoff_rule3.md and ASSUMPTIONS.md section 8
 
 Reads sensitivity_cutoff_<case>.csv (central and cutoff=upper at both anchors), applies Q4's test
 (the same technologies built; every built capacity within 5 %), writes

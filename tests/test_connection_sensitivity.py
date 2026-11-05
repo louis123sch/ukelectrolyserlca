@@ -134,7 +134,7 @@ def test_the_sweep_is_the_central_case_and_each_knob_either_way():
 
 def test_a_frontier_sweep_reports_three_points_with_terms_that_add_up(tmp_path, monkeypatch):
     monkeypatch.setattr(S, "OUT_DIR", tmp_path)
-    case = replace(S.CASES["london_150_leicester_sq"], start="2025-06-02", end="2025-06-04")
+    case = replace(S.CASES["london_150_leicester_sq"], start="2025-06-02", end="2025-06-04", resample_hours=1.0)
     variants = [{}, {"connection_build_scale": 1.5}]
     df = S.run(case, variants, name="t", points=2, progress=None)
     assert list(df.objective[:3]) == ["min_cost", "knee", "min_gwp"] and len(df) == 6
@@ -148,3 +148,15 @@ def test_a_frontier_sweep_reports_three_points_with_terms_that_add_up(tmp_path, 
     monkeypatch.setattr(S, "_frontier_rows", lambda *a, **k: called.append(a) or [])
     again = S.run(case, variants, name="t", points=2, progress=None, resume=True)
     assert not called and len(again) == 6
+
+
+def test_a_sweep_defaults_to_the_rig_s_step_and_never_writes_on_the_hourly_file(tmp_path, monkeypatch):
+    assert all(c.resample_hours == S.SWEEP_HOURS == 4.0 for c in S.CASES.values())
+    monkeypatch.setattr(S, "OUT_DIR", tmp_path)
+    hourly = tmp_path / "sensitivity_t.csv"
+    hourly.write_text("the hourly verdict's rows\n")
+    case = replace(S.CASES["islanded_h2"], start="2025-06-02", end="2025-06-04")
+    df = S.run(case, [{}], name="t", objectives=("cost",), progress=None)
+    assert (df.step_hours == 4.0).all() and (tmp_path / "sensitivity_t_4h.csv").exists()
+    assert hourly.read_text() == "the hourly verdict's rows\n"
+    assert S._out_path("t", replace(case, resample_hours=1.0)) == hourly

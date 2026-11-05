@@ -66,11 +66,21 @@ REGISTER = (
              "Already charged by another route: compression power sits inside cap_ely at electrolyser rates, 47 kW per "
              "MW of solid-oxide, about £120k/MW, inside the calculated range of £72–215k/MW (textbook, Element Energy "
              "extrapolated, Danish Energy Agency). A separate line would double count. Zero on the PEM default"),
+    CostFlow("battery step-up transformer", "cost_batt_p", "cutoff", "included_estimate", None,
+             "Read as inside the capital: Mott MacDonald for BEIS (2018) lists electrical systems in and connection out. "
+             "BEIS 2022, the figure charged, does not itemise its scope, so this is a reading, not a statement"),
+    CostFlow("fuel cell step-up transformer", "cost_fc", "cutoff", "included_estimate", None,
+             "Inside the capital: Baringa's figure is the installed cost of a real 80 MW plant, not equipment. If it were "
+             "not, about £3k/MW/yr at half NGED's 33 kV double-transformer price per firm MVA"),
+    CostFlow("major-hazard compliance", "", "cutoff", "included_estimate", None,
+             "Sourced, so in whatever its size: HSE 0082 (2013 prices, per site), upper tier over 50 t, one-off £118k and "
+             "£27k a year, about £56k a year in 2025 pounds. A step on tonnes held, carried flat at upper tier on any build "
+             "allowed a tank (dc_model.major_hazard_cost), since every North Norfolk design holds 112-221 t; it overstates "
+             "a small tank by at most that much"),
+    CostFlow("the seller's hydrogen loading compressor", "", "cutoff", "excluded", None,
+             "No public per-kg figure. Rule 3 without one: it could only make bought hydrogen dearer, and none of the 89 "
+             "saved sweep rows buys any at today's price"),
     # --- needs a person -----------------------------------------------------
-    CostFlow("major-hazard compliance", "", "cutoff", "open", None,
-             "Sourced, HSE assessment for COMAH 2015 (2013 prices, per site): upper tier over 50 t, one-off £118k and £27k "
-             "a year; lower tier from 5 t, £20k and £10k. A step on tonnes held, so it needs an on/off switch in dc_model. "
-             "Well under 1 % of a large tank's line, about 3 % at the 5 t step"),
     CostFlow("land at an urban site", "", "cutoff", "open", None,
              "Every land figure charged is a rural rent and dc_model has no area limit. Left so by the user (4 Nov 2026): "
              "a central-London run is illustrative, not a use case. MHCLG industrial land values are in "
@@ -80,6 +90,14 @@ REGISTER = (
              "DESNZ/Arup §5.8 and §6.8: £31k and £15k/MW once, at end of life; end-of-life is outside the carbon boundary too"),
     CostFlow("the data centre's building and IT, and its standby generator", "", "boundary", "boundary", None,
              "Constant across designs, so they move no choice, and the £/MWh is not an all-in figure"),
+    CostFlow("road haulage of bought hydrogen", "", "boundary", "boundary", None,
+             "Transport to site, the one transport the study leaves out: the site and seller are unknown"),
+    CostFlow("selling power to the grid", "", "boundary", "boundary", None,
+             "The model refuses export (dc_model.build_model), because it has no export price or carbon credit. Surplus "
+             "power is worth nothing, so a design with spare generation reads dearer than it would be"),
+    CostFlow("the time to get a grid connection", "", "boundary", "boundary", None,
+             "Not a price per MW, and the study has one period. Published room is taken as available; a site with room may "
+             "still wait in the queue"),
 )
 
 

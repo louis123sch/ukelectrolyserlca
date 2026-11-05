@@ -31,67 +31,21 @@ lines here like any other.
 Work where a number the study reports is not currently defensible.
 
 
-- [ ] **Government cost figures: built 4 Nov, to finish** (`docs/COST_GOV_FIGURES_PLAN.md`, *Built*). After the
-      connection sweeps end: regenerate `h2_prices_recommended.csv` (the deflator moved), rebuild and
-      republish both maps, re-run the reference cases and one ±50 % connection case on the new costs,
-      and rule 3 of the cost cut-off (`python -m optimisation.sensitivity cost_cutoff`).
-- [ ] **Major-hazard compliance as a step charge** (4 Nov). HSE's per-site figures are in hand
-      (`cost_exclusions.py`); charging them on tonnes held needs an on/off switch in `dc_model`.
-- [ ] **Best-source build: finish the runs** (4 Nov, evening; `docs/COST_BEST_SOURCE_PLAN.md`, *Built*). Code and
-      records done; `cost_cutoff` and `assumptions` run overnight 4/5 Nov on the new costs (results in the
-      plan's *Built*); left: the ±50 % connection test at North Norfolk (`norfolk_150_room`, started 5 Nov
-      on the pruned lists) and its judge, and both maps republished.
-- [ ] **Finish the one price base** (4 Nov). Network charges, levies and connection prices are 2026/27 money,
-      wholesale 2025, the rest real 2025.
-- [ ] **Wind and solar's own grid connection inside capital** (4 Nov). DESNZ's "infrastructure" (£303/kW, £112/kWp) runs
-      to the nearest grid point; behind our meter some is still needed. May overstate; no figure splits it.
+- [ ] **Run the first full sign-off** (`docs/TESTING.md`). Nothing has been signed off yet. Commit first, then allow a
+      night. Replaces the overnight hourly assumption files, which predate the seven new rows.
 
 ## Cheap wins
 
 Either the source is named and public, or no new sourcing is needed at all.
 
-- [ ] **CO₂ transport & storage: replace, don't add.** Blue's price already
-      carries T&S — NESO's ATR+CCS LCOH has a £0.62/kg T&S line, EHO implies
-      ~£0.74/kg — so adding FES's £450/tCO₂ on top would double count
-      (+£3.60/kg). If FES is wanted, swap it for the embedded rate (and check
-      whether the £450 is capital, ~£55/t levelised). `h2_prices.py:81`
-      already reads CP1/CP2 of that workbook. Also: grey's central price
-      carries 2024 ETS (~£32/t), not FES CP2 (£78.96/t). Audit §3.6.
-- [ ] **Sweep the fuel cell calendar lives.** Stack 5 / 10 / 15 y (central 10
-      since 14 Oct), BoP 15 / 20 / 25 y (central 20). Both indicative, not
-      MW-class H₂ warranties; the stack's binds at backup duty and carries
-      ~80 % of a backup unit's fuel-cell carbon. Both move cost too. Plan §2.
 - [ ] **MW of fuel cell per container** — 1 MW assumed in
       `optimiser_lca/fuel_cell.FC_KW_PER_CONTAINER`; sweep 0.5–2. 3.7 of the
       BoP's 44 t/MW.
-- [ ] **Report the two big assumed scalars as bands, not points.**
-      `green_h2_grid_share` and `transmission_connected` both already have
-      override hooks on `build_tech()`. No sourcing — just run the sweep and
-      publish the range. The T/D threshold alone swings TDR £270k–£4.67m/year.
-
-- [ ] **One price base and one discount-rate policy.** DESNZ is 2023 real and
-      never rebased (~6 % low against Modo/EHO 2025); DOE $ and tank € are
-      converted at the exchange rate only; the 6 % on H₂ assets has no source,
-      and the Green Book 3.5 % marked closed in `DATA_GAPS.md` is used
-      nowhere. Audit §4.
-- [ ] **Network tariffs over the asset's life** (28 Oct). Every charge is
-      FY2025/26, applied to a connection annualised over 40 y. Run NESO's
-      five-year TNUoS forecast as a sensitivity. `COST_PLAN.md` §1.7.
-- [ ] **Decommissioning and insurance, like for like** (28 Oct). Check which
-      cost sources carry them (DESNZ generators believed to; H₂ assets are bare
-      capex + an opex %). `COST_PLAN.md` §4.3.
-
 - [ ] **Third source read, 23 Oct 2026** (`docs/SOURCE_RECHECK_2026-10-23.md`, *Outcome*):
       every finding decided and done by 26 Oct; the stale-docs list at its foot is left.
 
 ## Verification and hygiene
 
-- [ ] **Power factor and reactive charges** (28 Oct). PF 1.0 everywhere; the
-      DUoS reactive rate is transcribed and never used. State it as an
-      assumption unless a source puts a data centre well below 1.
-- [ ] **Decide: is connection lead time in scope?** (28 Oct). The binding GB
-      constraint on new data centres, and not a £/MW. Either model it (a cost
-      of waiting, bridging on on-site generation) or state it out of scope.
 - [ ] **Docs: reconcile 118 vs ~250 gCO₂/kWh** (reviewer, 30 Sep). 250 is the
       grid-only *total per MWh of load*, not a grid intensity: 118 (FES,
       national, direct, 2024) → 139 (API London 2025, direct) → 159
@@ -118,14 +72,21 @@ Either the source is named and public, or no new sourcing is needed at all.
 - [ ] **"Flexible" with a grid is identical to "free"** (`dc_model.py:448-449`),
       so three matrix scenarios are duplicates. Drop it or define it.
       Audit §3.3.
-- [ ] **Export is refused until it is modelled** (`dc_model.build_model`
-      raises since 12 Oct). To build it: credit at an export price, not demand
-      rates; give it a carbon credit; add it to `contributions()`. Audit §3.5.
 - [ ] **Cost map: fill the source links** (30 Oct). Most of the 53 entries in
       `optimisation/source_register.py` have no public URL — the code only
       ever recorded NESO's, Elexon's and Modo's. Add each document's address
       as it is re-read; the map's Sources tab lists the gaps. Also hold each
       register entry to a `SOURCES.md` row (`docs/COST_MAP_PLAN.md`).
+- [ ] **Superset benchmark compares rows the control cannot build** (5 Nov):
+      `validate.py` checks the control against AE, SOEC and bought-hydrogen rows,
+      so a legitimately cheaper one would fail it. Narrow it, and run the matrix so
+      it stops being skipped.
+- [ ] **Re-run for the methods text** (5 Nov; its author notes,
+      https://claude.ai/artifact/Fk66fT4JmNp2gpr7VwTwME): `validate.py` on the
+      current costs, the no-foresight bracket, the half-hourly/hourly/2-hour step test
+      at North Norfolk, the carbon cut-off's rule 3 at grid-connected North Norfolk and
+      150 MW (last solved 23 Oct, before the tank redesign), and the storage-loss
+      factorial (14 Oct; only a helper, no command).
 
 ## Balance of plant not counted
 
@@ -134,17 +95,8 @@ All one-directional — every one of these makes an architecture look cleaner
 than it is. Checked exchange by exchange against the inventories, so this list
 is what is *actually* absent rather than what sounds absent.
 
-- [ ] **Hydrogen compressor capital — cost side only.** Its carbon was judged
-      negligible on 4 Sep (~12.8 t CO₂e per 300 kW unit, 0.01 % of the tank);
-      its £ is still open. Check before adding anything: compressor *power*
-      already sits inside `cap_ely` (4.7 % of SOEC's, priced at electrolyser
-      rates) and Hermesmann's bills list compressors, so plan §6.3 option 2
-      would double count as written. Distinct from the parked seller-side
-      loading compressor below. `h2_storage.py`, audit §3.3.
-- [ ] **Battery and fuel-cell step-up transformers — cost side** (28 Oct).
-      Carbon since 15 Oct; no cost line. Check whether Modo's £/kW already
-      includes the transformer (probably) and the fuel-cell proxy (equipment,
-      not installed — probably not). `COST_PLAN.md` §2.3.
+Nothing open on the cost side since 5 Nov: compressor, transformers and the
+seller's compressor are on the register (`cost_exclusions.py`).
 
 **Closed 4 Sep as negligible** — not to be reopened without new evidence:
 connection and step-up switchgear, and the data centre's own electrical
@@ -162,16 +114,14 @@ the estimates were accepted as final on 23 Oct.
 
 No public source found. Revisit if the item becomes load-bearing in a result.
 
-- [ ] **Hydrogen loading compressor capex.** Bought hydrogen now pays trailer
-      compression in both objectives, but the **carbon** term is complete while
-      the **cost** term is electricity only — no public per-kg figure for a
-      hydrogen loading compressor was found, so the seller's compressor capital
-      is in neither objective. The cost side is therefore a floor, and a
-      residual bias toward buying remains. `h2_prices.bought_h2_compression_gbp_per_kg`.
-- [ ] **Road haulage for bought hydrogen.** Compression onto the trailer is
-      charged; the journey is not. Distance depends entirely on where the seller
-      is, which is the same unanswerable question as `sites.connection_limit_mw`.
-      One-directional, and still favours buying.
+- [ ] **CO₂ transport & storage: replace, don't add.** Needed only before a
+      conclusion about buying grey or blue; no saved sweep buys any hydrogen. Blue's
+      price already carries T&S — NESO's ATR+CCS LCOH has a £0.62/kg T&S line, EHO
+      implies ~£0.74/kg — so adding FES's £450/tCO₂ on top would double count
+      (+£3.60/kg). If FES is wanted, swap it for the embedded rate (and check
+      whether the £450 is capital, ~£55/t levelised). `h2_prices.py:81`
+      already reads CP1/CP2 of that workbook. Also: grey's central price
+      carries 2024 ETS (~£32/t), not FES CP2 (£78.96/t). Audit §3.6.
 - [ ] **Turquoise outlet pressure.** 30 bar since 22 Oct 2026: Hermesmann's own
       functional unit for MP-E, as for every route (§3.1). A real molten-media
       plant may run near-atmospheric, which would make its compression term
@@ -296,22 +246,4 @@ No public source found. Revisit if the item becomes load-bearing in a result.
       overruling the voltage rule (H), the publishers' median for POA price
       rows (E). Check still to do: NGED Table 6 / SPEN appendix 6
       connection-request sizes against the voltage rule.
-- [ ] **NGED's connection prices read as transformer-only** (29 Oct). Its 132 kV
-      substation £1.70–2.79 m against £6.96–13.04 m from the other four
-      publishers; kept and flagged (`connection_cost.NGED_SUBSTATION_FLAG`).
-      Ask NGED what the row covers, or price its four areas on the publishers'
-      median (~4x on that line, ~1 % of a 150 MW site's annual cost).
-- [ ] **EHV local charges for a named node** (29 Oct). 33/132 kV sites take
-      the median of their area's listed sites in the same band
-      (`duos_areas.EHV_BANDS`). Plan: (1) the EDCM method, DCUSA Schedules 17
-      (FCP: HYDE, SOUT, SPOW, MANW, EMEB, MIDE) and 18 (LRIC: EELC, NORW, LOND,
-      NEEB, YELG, SEEB, SWAE, SWEB) — both v17.5, held since 29 Oct, with
-      ENWL's blank 2026/27 LRIC model (OneDrive `3 DUoS/site-specific EHV charges`);
-      (2) each area's EDCM model workbook, if published with its charging
-      statement; (3) node locations — LTDS or the DNO open-data portals —
-      joined to the "Nodal prices" sheet we already hold (node, name, local and
-      remote £/kVA); (4) site -> nearest node at its voltage -> nodal price ->
-      tariff by the schedule's formula + the area's residual band (held) and
-      cost adders (EDCM model); (5) check by reproducing Annex 2 charges for
-      listed sites; low/high from the area's cheapest and dearest nodes.
 

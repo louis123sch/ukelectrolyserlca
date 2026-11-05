@@ -110,7 +110,7 @@ def main(live: bool = True) -> int:
             bad(f"LP cost term {k!r}: map has {mapped[k]['expr']!r}, dc_model now gives {t['expr']!r}")
         ok()
     for k in mapped:
-        if k not in fresh and k not in OPTION_ONLY and k != "connection fixed":
+        if k not in fresh and k not in OPTION_ONLY and k not in ("connection fixed", "major-hazard compliance"):
             bad(f"the map shows a cost term {k!r} that dc_model no longer has")
 
     print("5. the sources")

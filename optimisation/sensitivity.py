@@ -41,11 +41,20 @@ treats them:
 
 A case with one list (islanded, a picked substation) is the same under all three.
 
+The time step (user, 5 Nov 2026). A sweep is a testing rig: it runs the whole year
+in 4-hour steps (``SWEEP_HOURS``), since the tank works across seasons and a short
+window would misjudge it, and writes ``sensitivity_<name>_4h.csv``. A figure to
+report or a verdict to judge is solved with ``--hours=1`` and written to
+``sensitivity_<name>.csv``, the file the judges read. The two never share a file,
+so a resumed run cannot mix steps. docs/TESTING.md is the rule: the rig while
+working, the hourly sign-off to finish.
+
 Run:  python -m optimisation.sensitivity carbon
       python -m optimisation.sensitivity connection london_150_single
       python -m optimisation.sensitivity cost_cutoff          # the cost cut-off's rule 3
       python -m optimisation.sensitivity assumptions          # the cost side's assumptions at their ranges
       python -m optimisation.sensitivity assumptions norfolk_grid --lists=full
+      python -m optimisation.sensitivity connection norfolk_150_room --hours=1
 """
 from __future__ import annotations
 
@@ -66,6 +75,10 @@ from optimisation import dc_pareto as P
 
 OUT_DIR = ROOT / "optimisation_outputs"
 
+# The testing rig's time step (module docstring). The figures quoted against the
+# cases below, £146.39 m and the rest, are hourly: reproduce them with --hours=1.
+SWEEP_HOURS = 4.0
+
 
 @dataclass(frozen=True)
 class Case:
@@ -78,7 +91,7 @@ class Case:
     pue: float = 1.5
     start: str = "2025-01-01"
     end: str = "2025-12-29"
-    resample_hours: float = 1.0
+    resample_hours: float = SWEEP_HOURS
     ely_tech: str = "PEM operation"
     h2_colour: str | None = None
     unserved_fraction: float = 0.0
@@ -261,6 +274,7 @@ def _row(case, variant, objective, point, q, series, tech, assets, seconds, mip_
          "battery_share_of_storage_output": (batt_out / stored) if stored else float("nan"),
          "unserved_MWh_per_year": point["unserved_MWh_per_year"],
          "solve_s": seconds,
+         "step_hours": dt,
          "grid_floor_mw": assets.grid_floor_mw, "grid_ceiling_mw": assets.grid_limit_mw,
          # The price list this point chose, how many it chose among, and the
          # branching gap it was solved at (None: one list, no switches).
@@ -273,9 +287,11 @@ def _row(case, variant, objective, point, q, series, tech, assets, seconds, mip_
     # Constants in the model (the fixed charges with one price list, the
     # facility's carbon), so outside objective_terms; the columns make the terms
     # add up to the totals.
-    fixed_cost, fixed_gwp = M.objective_constants(series, tech, grid=assets.grid)
+    fixed_cost, fixed_gwp = M.objective_constants(series, tech, grid=assets.grid, tank=assets.tank)
+    hazard = M.major_hazard_cost(tech, tank=assets.tank)
     r["gwp_t:constant"] = fixed_gwp / 1e3
-    r["cost_m:fixed charges and cable"] = fixed_cost / 1e6
+    r["cost_m:fixed charges and cable"] = (fixed_cost - hazard) / 1e6
+    r["cost_m:major-hazard compliance"] = hazard / 1e6
     for group in ("cost_capital", "cost_operational"):
         for k, v in terms[group].items():
             r[f"cost_m:{k}"] = v / 1e6
@@ -304,10 +320,17 @@ def _with_changes(rows: list[dict]) -> pd.DataFrame:
     return df
 
 
+def _out_path(name: str, case: Case) -> Path:
+    """Where a sweep writes: hourly on the plain name, any other step on its own."""
+    step = "" if case.resample_hours == 1.0 else f"_{case.resample_hours:g}h"
+    return OUT_DIR / f"sensitivity_{name}{step}.csv"
+
+
 def run(case: Case | str, variants: list[dict], *, name: str,
         objectives=("cost", "gwp"), progress=print, points: int | None = None,
         resume: bool = False, list_choice: str = "fixed") -> pd.DataFrame:
-    """Solve every variant at each anchor and write ``sensitivity_<name>.csv``.
+    """Solve every variant at each anchor and write ``sensitivity_<name>_4h.csv``
+    (``sensitivity_<name>.csv`` for an hourly case).
 
     Percent changes are against the case's central row (the empty variant),
     which is added if the list leaves it out, and solved first.
@@ -333,7 +356,7 @@ def run(case: Case | str, variants: list[dict], *, name: str,
     site, series0, meta0, assets = prepare(case)
     ref_key = (meta0.get("connection_reference") or {}).get("key")
     OUT_DIR.mkdir(exist_ok=True)
-    path = OUT_DIR / f"sensitivity_{name}.csv"
+    path = _out_path(name, case)
     rows, finished = [], set()
     if resume and path.exists():
         rows = pd.read_csv(path).to_dict("records")
@@ -437,8 +460,9 @@ CONNECTION_CASES = ("london_150_single", "london_150_leicester_sq", "london_150_
 def connection(cases=CONNECTION_CASES, points: int = 3, resume: bool = True,
                list_choice: str = "pruned"):
     """Each connection knob at 0.5x and 1.5x, a full frontier per variant
-    (sensitivity_connection_<case>.csv). About 40 minutes a variant on one
-    list, so one process per case; a stopped run carries on where it left off.
+    (sensitivity_connection_<case>.csv with --hours=1, which is what the judge
+    reads). About 40 minutes a variant on one list on an hourly year, so one
+    process per case; a stopped run carries on where it left off.
     The price list is the thing under test here, so each variant prices every
     list alone and keeps the survivors (``pruned``) rather than fixing the
     central one."""
@@ -451,16 +475,24 @@ def connection(cases=CONNECTION_CASES, points: int = 3, resume: bool = True,
 # stated range (docs/COST_BEST_SOURCE_PLAN.md, *The gaps: filled, or assumed*):
 # the cost cases carry the tank's price level, the battery's current price and
 # the fuel cell's stack share and capital; the tank design is the carbon side's
-# vessel substitution; the fuel cell's calendar life its weakest input.
+# vessel substitution; the fuel cell's lives are its weakest inputs. The last two
+# are scope readings: wind and solar without their own grid connection, and the
+# tank paying insurance and rates outside its running cost (wind's ratio). The
+# battery's cap is the longest duration its UK price covers (battery.py).
 ASSUMPTION_KNOBS = {
     "cost_case": ["low", "high"],
     "tank_design": ["gandiglio_28bar"],
     "fc_bop_calendar_years": [15.0, 25.0],
+    "fc_stack_calendar_years": [5.0, 15.0],
+    "fc_stack_duty_hours": [20_000.0, 40_000.0],
+    "generator_connection_out": [True],
+    "tank_insurance_frac": [0.0099],
+    "batt_max_duration_hours": [9.0],
 }
 
 
 def assumptions(cases=("islanded_h2", "norfolk_grid"), list_choice: str = "fixed"):
-    """Every cost-side assumption at its range, one at a time, on the reference cases."""
+    """The cost-side assumptions in ASSUMPTION_KNOBS at their ranges, one at a time, on the reference cases."""
     return pd.concat([run(c, one_at_a_time(ASSUMPTION_KNOBS), name=f"assumptions_{c}",
                           list_choice=list_choice) for c in cases],
                      ignore_index=True)
@@ -486,10 +518,14 @@ def cutoff(cases=("islanded_h2", "london_grid")):
 
 
 if __name__ == "__main__":
-    args = [a for a in sys.argv[1:] if not a.startswith("--lists=")]
+    args = [a for a in sys.argv[1:] if not a.startswith(("--lists=", "--hours="))]
     # --lists=fixed|pruned|full overrides each sweep's own default (module docstring).
     lists = {a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith("--lists=")}
     choice = lists.pop() if lists else None
+    # --hours=1 solves the sweep hourly, for a verdict or a reported figure (module docstring).
+    for a in sys.argv[1:]:
+        if a.startswith("--hours="):
+            CASES = {k: replace(c, resample_hours=float(a.split("=", 1)[1])) for k, c in CASES.items()}
     what = args[0] if args else "carbon"
     cases = args[1:]
     if what == "carbon":

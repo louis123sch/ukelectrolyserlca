@@ -143,9 +143,49 @@ Committed 4 Nov evening as `db38bb5` (the source swap) and `509de1a` (the tank v
 |---|---|---|---|
 | Central, least cost | £224.4 m/yr, 46.9 g/kWh | £195.5 m/yr, 44.8 g/kWh; 24.5 MW connection on 33 kV at Sall Grid, 476 MW wind, 267 MW solar, 98 MW / 1,786 MWh battery, 5 MW electrolyser, 160 t tank, 27 MW fuel cell | — |
 | Central, least carbon | £279.2 m, 39.9 g/kWh | £253.8 m, 38.5 g/kWh | — |
-| Cost cut-off rule 3 (every open or excluded cost at its upper value) | +£0.1 m (0.05 %) | +£0.1 m (0.05 %) | no size moves: the exclusions hold |
+| Cost cut-off rule 3 (every excluded cost that has a figure, at its upper value; open items are not in it) | +£0.03 m (0.015 %) | +£0.03 m (0.015 %) | no size moves: the exclusions hold |
 | Cost case low / high | −28 % / +42 % | −27 % / +41 % | least-cost sizes within 2–3 %: the range rescales the bill, not the design |
 | Gandiglio stainless tank | same cost; carbon +18 % (55.5 g/kWh) | same cost; +16 % (51.8 g/kWh) | the carbon-led design then cuts its tank by 44 % and builds more battery — the vessel choice changes that conclusion |
 | Fuel cell plant life 15 / 25 yr | +0.4 % / −0.2 % | +0.4 % / −0.2 % | tank 190–212 t |
 
-The ±50 % connection test at North Norfolk (`norfolk_150_room`) runs separately on the pruned lists (5 Nov). Timing lesson: the tight-gap solves with a choice of lists took 8.8 h for the twelve Norfolk variants (one 4.9 h), all on the same list; sweeps now fix the central list (`sensitivity.run(list_choice=)`, COST_PLAN *Open* vii).
+The ±50 % connection test at North Norfolk (`norfolk_150_room`, 150 MW of computing, every asset, the lists pruned per variant; 5 Nov, 4.5 h) passes on every one of its 12 points: no size moves by more than 0.006 %, cost by at most 0.53 %, carbon not at all, and every variant chooses the same 33 kV list at Sall Grid, because the connection sits on its 24.5 MW room limit throughout. Central: £240.1 m/yr and 47.9 g/kWh at least cost, £307.9 m and 41.5 g/kWh at least carbon. By the supervisor's test the connection's price needs no more work (`optimisation_outputs/connection_sensitivity.md`). Timing lesson: the tight-gap solves with a choice of lists took 8.8 h for the twelve Norfolk variants (one 4.9 h), all on the same list; sweeps now fix the central list (`sensitivity.run(list_choice=)`, COST_PLAN *Open* vii).
+
+## Review of what was left, 5 Nov
+
+Sized against North Norfolk's £195.5 m a year at 100 MW. Built: major-hazard compliance (about £56k a year, a constant on any build allowed a tank, not a post-solve add, because `_tie_break` reads the total as its cost limit); new register rows; `ASSUMPTION_KNOBS` gains the fuel cell stack's calendar and duty lives, wind and solar without their own connection (−£5.5 m, 2.8 %, by hand) and the tank's insurance (+£0.95 m, 0.5 %, by hand). Corrected: the fuel cell's step-up transformer is inside Baringa's installed plant figure, so it needs no charge; 28 Oct's "equipment, not installed" described the old proxy.
+
+Decided by the user, 5 Nov:
+
+- **Room:** left as a hard limit, with no reinforced option, because the study has no way to include time. Stated: the design sits on 24.5 MW at Sall Grid, and islanded costs £29 m more.
+- **Battery at 18 hours:** the simple option. BEIS's line is kept and stated as an extension past 9 hours. PNNL's 2022 assessment prices the same chemistry at 2, 4, 10 and 24 hours, and a line through 2–10 lands within 1 % at 18; LCP Delta (2025) also holds each added hour constant. A 9-hour cap is one more `assumptions` row. No 18-hour project was found.
+- **Land and wind at North Norfolk:** kept as they are. Rent is charged, there is no area limit, and the regional wind check was dropped.
+
+## The assumption sweep on the 4-hour rig, 5 Nov
+
+Run after the review's changes, the whole of 2025 in 4-hour steps (`optimisation_outputs/sensitivity_assumptions_<case>_4h.csv`; 32 minutes for 26 variants). Comparisons within the rig, not figures to quote: the hourly files from the overnight run stand beside them, and the seven new rows have no hourly solve. No row leaves demand unserved, and every North Norfolk row stays on the 24.5 MW 33 kV list at Sall Grid.
+
+Change from each case's own central at least cost (rig central: islanded £223.7 m and 61,666 t a year, North Norfolk £195.1 m and 58,506 t):
+
+| Row | Islanded: cost, carbon | North Norfolk: cost, carbon | What it says |
+|---|---|---|---|
+| Cost case low / high | −28.6 %, −3.2 % / +42.0 %, +4.8 % | −27.6 %, −2.2 % / +40.4 %, +4.6 % | rescales the bill; sizes stay within about 6 % at North Norfolk's least cost |
+| Gandiglio stainless tank | 0, +17.5 % | 0, +15.6 % | at least carbon the tank falls 50 % and 39 %, as in the overnight run: the vessel choice still changes that conclusion |
+| Fuel cell plant life 15 / 25 yr | +0.39 % / −0.20 % on cost | +0.38 % / −0.22 % on cost | small |
+| Fuel cell stack life 5 / 15 yr | +0.65 % / −0.22 % on cost | +0.62 % / −0.23 % on cost | small |
+| Fuel cell stack running hours, 20,000 / 40,000 | no change | no change | the running-hours life cannot bind: 270 to 470 full-load hours a year on these designs, 2,700 to 4,700 per 10-year stack, so the calendar life sets replacement. The constraint is live (`dc_model.py`, `fc_stack_duty`) |
+| Wind and solar without their own connection | −2.9 %, −0.4 % | −2.9 % (−£5.6 m), −1.5 % | matches the estimate by hand; North Norfolk's solar goes 255 to 303 MW and its battery energy down 13 %, so this scope reading does move the design |
+| Tank insurance and rates at wind's ratio | +0.49 %, 0 | +0.47 % (+£0.93 m), +0.34 % | small |
+| Battery capped at 9 hours | +2.06 % (+£4.6 m), −3.10 % | +1.51 % (+£2.9 m), −1.98 % | see below |
+
+**The 9-hour battery.** Holding the battery to the length BEIS's price covers costs about 1.5 % at North Norfolk, so the bill does not rest on extending the price past 9 hours. The shape of the design does: the battery goes from 95 MW / 1,770 MWh to 166 MW / 1,495 MWh, solar from 255 to 314 MW, the fuel cell from 28.5 to 34 MW, with carbon slightly lower. So quote the cost with confidence and the 18-hour battery as what the extended price favours. At least carbon nothing changes: that design's battery runs about 4 hours.
+
+**How far the rig drifts from hourly.** Central rows against the overnight hourly run (which predates only the £56k major-hazard charge, 0.03 %; the rig's North Norfolk central is also at the 0.1 % loose gap, the hourly at the tight one):
+
+| | Islanded, least cost | Islanded, least carbon | North Norfolk, least cost | North Norfolk, least carbon |
+|---|---|---|---|---|
+| Cost | −0.34 % | +0.02 % | −0.22 % | +0.31 % |
+| Carbon | +0.16 % | −0.47 % | −0.54 % | −0.69 % |
+| Largest size change among the main assets | electrolyser −7.5 %, fuel cell −7.4 %, solar −6.7 %, tank −5.6 % | solar −12.6 % | solar −4.5 %, fuel cell +4.2 % | solar −2.5 % |
+| Small battery at least carbon | | 11.6 to 8.5 MW (−27 %) | | 25.4 to 14.0 MW (−45 %) |
+
+The six rows solved both ways give nearly the same effect: each row's cost change from central agrees within 0.8 of a percentage point, its carbon change within 1.0. Speed: an islanded variant about 43 seconds against 7.6 minutes, ten times faster. So the rig is good for the bill, the carbon and the size of an effect. It is not good for sizes: its drift passes the judges' own 5 % test, so a rig row must only be compared with a rig central, and a size to quote needs `--hours=1`.

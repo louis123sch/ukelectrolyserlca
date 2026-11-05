@@ -169,7 +169,7 @@ FLOWS = ("imp", "exp", "p_ely", "p_fc", "h2_buy", "h2_buy_2", "unserved",
 
 
 def evaluate(df: pd.DataFrame, series: M.Series, tech: M.Tech, caps: dict,
-             grid: bool | None = None, option: int | None = None) -> dict:
+             grid: bool | None = None, option: int | None = None, tank: bool | None = None) -> dict:
     """Annualised cost and carbon of a dispatch, on the LP's own basis.
 
     Scored by ``dc_model.objective_terms`` — the very terms the LP minimises —
@@ -178,7 +178,8 @@ def evaluate(df: pd.DataFrame, series: M.Series, tech: M.Tech, caps: dict,
 
     ``grid``: whether the build has a grid connection, which decides the fixed
     connection charge. Defaults to "it has a non-zero ``cap_grid``"; pass the
-    architecture's own flag where it is known, as the LP uses that.
+    architecture's own flag where it is known, as the LP uses that. ``tank``
+    likewise decides major-hazard compliance, defaulting to "it has a tank".
     """
     dt, scale = series.dt_hours, series.annual_scale
     cap_fc = caps.get("cap_fc", 0.0)
@@ -204,7 +205,9 @@ def evaluate(df: pd.DataFrame, series: M.Series, tech: M.Tech, caps: dict,
     terms = M.score(q, series, tech)
     if grid is None:
         grid = caps.get("cap_grid", 0.0) > 0
-    cost_const, gwp_const = M.objective_constants(series, tech, grid=grid)
+    if tank is None:
+        tank = caps.get("cap_tank", 0.0) > 0
+    cost_const, gwp_const = M.objective_constants(series, tech, grid=grid, tank=tank)
 
     gwp = sum(terms["gwp_embodied"].values()) + sum(terms["gwp_operational"].values()) \
         + gwp_const
@@ -240,7 +243,8 @@ def bracket(series, tech, caps, lp_totals, lp_vars=None, assets=None) -> pd.Data
     chosen = M.chosen_option(lp_vars, M.connection_options_of(tech)) if lp_vars is not None else None
     myo = evaluate(dis, series, tech, caps,
                    grid=(assets.grid if assets is not None else None),
-                   option=(chosen[0] if chosen else None))
+                   option=(chosen[0] if chosen else None),
+                   tank=(assets.tank if assets is not None else None))
     dt, scale = series.dt_hours, series.annual_scale
     mwh = float(series.demand_mw.sum() * dt) * scale
 

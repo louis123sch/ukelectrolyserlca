@@ -4,7 +4,8 @@ Lithium-ion battery storage — cost and embodied carbon.
 
 Costs since 4 Nov 2026 come from **BEIS's 2022 Benefits of Long Duration
 Electricity Storage**, Exhibit 3.11, which FES 2025 also uses for storage running
-costs: UK government, and it covers the durations the optimiser builds. Modo
+costs: UK government, covering 1 to 9 hours, and the straight line through it
+carries the price beyond (``PNNL_LFP_10MW_2030_USD_PER_KW``). Modo
 Energy (the source of FES's capital, not public in full) sets the low case, its
 survey the high case's spread, and the discount rate. Everything is in **real
 2025 GBP**.
@@ -76,11 +77,18 @@ CASES = ("low", "central", "high")
 # =============================================================================
 # Central since 4 Nov 2026 (UK government sources first, COST_GOV_FIGURES_PLAN.md):
 # BEIS, Benefits of Long Duration Electricity Storage (2022), Exhibit 3.11, p. 30,
-# real 2019 pounds. It covers 1 to 9 hours, the durations the optimiser builds; a
-# 2022 forecast of 2030 capital, so its age is stated rather than corrected.
+# real 2019 pounds. It covers 1 to 9 hours; a 2022 forecast of 2030 capital, so its
+# age is stated rather than corrected.
 BEIS_PRICE_YEAR = 2019
 BEIS_CAPEX_GBP_PER_KW = {1: 331.0, 2: 449.0, 4: 696.0, 6: 930.0, 9: 1328.0}
 BEIS_OPEX_GBP_PER_KW_YEAR = {1: 5.0, 2: 7.0, 4: 10.0, 6: 11.0, 9: 13.0}
+# North Norfolk's least-cost design builds 18 hours. No UK figure read goes past 12.
+# The one source read that does, PNNL's 2022 assessment, Figure 4.3 (LFP, 10 MW, 2030,
+# total installed), says the line holds: fitted through 2 to 10 hours it lands within
+# 1 % at 18 and 1.3 % at 24. A check on the shape only, never charged: its level is
+# older and higher. The longest lithium projects found are 8 to 11.5 hours, so
+# sensitivity.ASSUMPTION_KNOBS also runs the design capped at 9.
+PNNL_LFP_10MW_2030_USD_PER_KW = {2: 707.0, 4: 1244.0, 10: 2828.0, 24: 6456.0}
 
 
 def _finance_factor(rate: float, years: int) -> float:
@@ -294,7 +302,10 @@ def annual_costs(case: str) -> dict:
     power = T.cost("cost.battery.power_per_kW", c["power_GBP_per_kW"], "GBP per kW",
                    "Power conversion capital: the fit's intercept against duration", uses=capex_uses)
     energy = T.cost("cost.battery.energy_per_kWh", c["energy_GBP_per_kWh"], "GBP per kWh",
-                    "Energy capital: the fit's slope against duration", uses=capex_uses)
+                    "Energy capital: the fit's slope against duration", uses=capex_uses,
+                    cites=[("pnnl_esgc_2022", "Figure 4.3, LFP at 2, 4, 10 and 24 hours: the line holds past the fit's range"),
+                           ("lcp_delta_long_bess_2025", "p. 30: each added two hours costs the same")],
+                    note="Beyond the source's range at long durations: an extension, checked for shape, not a quote")
     run_uses = ["cost.battery.beis_opex_by_duration", f"price_base.{BEIS_PRICE_YEAR}_to_2025"]
     run_power = T.cost("cost.battery.fixed_opex_per_kW_year", c["fixed_opex_GBP_per_kW_year"], "GBP per kW per year",
                        "Fixed running cost, power: the fit's intercept against duration", uses=run_uses)

@@ -203,6 +203,11 @@ def _value(params, parameter, case):
     raise KeyError(parameter)
 
 
+# The share of capital a sweep takes out for the generator's own grid connection
+# (docs/COST_BEST_SOURCE_PLAN.md). ASSUMED: DESNZ/Arup's "infrastructure" runs to
+# the nearest grid point and no source splits what a site behind the meter still needs.
+GENERATOR_CONNECTION_SHARE = {"onshore_wind": 0.05, "solar_pv": 0.12}
+
 INVERSE_CASE = {"low": "high", "central": "central", "high": "low"}
 SOURCE_KEY = {"onshore_wind": "desnz_arup_2024_onshore_solar", "solar_pv": "desnz_arup_2024_onshore_solar",
               "offshore_wind": "desnz_arup_2024_offshore"}
@@ -300,6 +305,7 @@ def annual_cost(tech: str, case: str) -> dict:
     mwh_per_mw_yr = 8760.0 * _value(params, "net_load_factor", inv)
     return {"capex_GBP_per_MW": capex_per_mw, "opex_GBP_per_MW_year": opex_per_mw, "lifetime_years": life,
             "discount_rate": rate, "crf": crf, "annualised_capex_GBP_per_MW_year": ann_capex,
+            "annualised_capex_2025_GBP_per_MW_year": ann_capex * inflate,
             "published_basis_annual_GBP_per_MW_year": published_annual,
             "total_annual_cost_GBP_per_MW_year": total_annual,
             "net_load_factor": _value(params, "net_load_factor", inv), "MWh_per_MW_year": mwh_per_mw_yr,

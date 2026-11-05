@@ -51,7 +51,7 @@ def test_a_bad_list_choice_fails_at_once(tmp_path, monkeypatch):
 
 @pytest.fixture(scope="module")
 def norfolk_days():
-    return replace(S.CASES["norfolk_150_room"], start="2025-06-02", end="2025-06-04")
+    return replace(S.CASES["norfolk_150_room"], start="2025-06-02", end="2025-06-04", resample_hours=1.0)
 
 
 def test_fixed_solves_the_central_variant_on_every_list_and_the_rest_on_its_choice(tmp_path, monkeypatch, norfolk_days):

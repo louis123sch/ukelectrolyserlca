@@ -129,6 +129,15 @@ CH_SYSTEM_EUR_PER_KW = 1_900.0
 FC_STACK_COST_FRACTION = CH_STACK_EUR_PER_KWE / CH_SYSTEM_EUR_PER_KW
 FC_STACK_COST_FRACTION_UK_HIGH = 1_200.0 / 2_642.0
 
+# Major-hazard compliance at upper tier (hydrogen over 50 t; SI 2015/483 Sch. 1
+# Part 2): HSE's impact assessment HSE 0082, paras 56-60 and Table 3, per site.
+# Charged at upper tier on any build allowed a tank, because a step on tonnes
+# needs a switch and every North Norfolk design holds 112-221 t. It overstates a
+# small tank: lower tier is £20k and £10k a year, nothing below 5 t.
+MAJOR_HAZARD_ONE_OFF_GBP = {"low": 100_000.0, "central": 118_000.0, "high": 135_000.0}
+MAJOR_HAZARD_ANNUAL_GBP = {"low": 24_000.0, "central": 27_000.0, "high": 29_000.0}
+MAJOR_HAZARD_PRICE_YEAR = 2013
+
 # -----------------------------------------------------------------------------
 # Hydrogen vessel
 # -----------------------------------------------------------------------------
@@ -412,6 +421,36 @@ def tank_cost(case: str) -> dict:
         "grade": GRADE,
         "note": "Element Energy for BEIS 2018, one supplier's quote at 50-80 bar; the range is not government",
     }
+
+
+def major_hazard_cost(case: str) -> dict:
+    """The yearly cost of being an upper-tier major-hazard site, each number
+    recorded for the cost map. A cost per site, not per kg: dc_model carries it as
+    a constant of any build allowed a tank (objective_constants)."""
+    import dc_config as cfg
+    rate = T.cost("cost.h2_assets.discount_rate", FC_DISCOUNT_RATE, "fraction per year",
+                  "Discount rate for the fuel cell and tank: CEPA's hydrogen-to-power and novel storage rate",
+                  grade="transcribed", cites=[("cepa_hurdle_rates_2025", "Table E.1, hydrogen CCHT/OCHT emerging and "
+                                                                          "novel LDES, 10.10 %")],
+                  note="No fuel cell or hydrogen store row in the table; the nearest two agree")
+    life = T.cost("cost.h2_tank.life_years", float(cfg.TANK_LIFETIME_YEARS), "years",
+                  "Tank life: the plant's, never replaced", grade="assumed",
+                  note="dc_config.TANK_LIFETIME_YEARS, Gandiglio's plant lifetime")
+    crf = T.cost("cost.h2_tank.crf", capital_recovery_factor(rate, life), "per year",
+                 "Capital recovery factor over the tank's life",
+                 uses=["cost.h2_assets.discount_rate", "cost.h2_tank.life_years"])
+    one_off = T.cost("cost.major_hazard.one_off", MAJOR_HAZARD_ONE_OFF_GBP[case], "GBP per site",
+                     "One-off cost of entering scope at upper tier: drafting the safety report, 2013 prices",
+                     grade="transcribed", cites=[("hse_comah_2015_ia", f"para 58 and Table 3, {case}")],
+                     note="HSE calls it a likely slight underestimate")
+    running = T.cost("cost.major_hazard.annual", MAJOR_HAZARD_ANNUAL_GBP[case], "GBP per site per year",
+                     "Yearly cost of complying at upper tier, 2013 prices", grade="transcribed",
+                     cites=[("hse_comah_2015_ia", f"para 56 and Table 3, {case}")])
+    annual = T.cost("cost.major_hazard.annual_per_site", (one_off * crf + running) * P.to_2025(MAJOR_HAZARD_PRICE_YEAR),
+                    "GBP per site per year", "The one-off repaid over the tank's life, plus the yearly cost, in 2025 pounds",
+                    uses=["cost.major_hazard.one_off", "cost.major_hazard.annual", "cost.h2_tank.crf",
+                          f"price_base.{MAJOR_HAZARD_PRICE_YEAR}_to_2025"])
+    return {"asset": "h2_tank", "case": case, "annual_GBP_per_site_year": annual}
 
 
 def tank_costs():

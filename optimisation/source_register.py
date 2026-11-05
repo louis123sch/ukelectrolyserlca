@@ -84,6 +84,24 @@ _FIXED = [
            note="pp. 93–95 fuel cell CHP, stack replacement, fully installed, maintenance, with the reformer removed; "
                 "boiler efficiency; p. 109 above-ground vessels, 95 m³ holding ~405 kg at 50–80 bar, a supplier's quote; "
                 "p. 110 footprint; p. 112 fixed cost"),
+    Source("pnnl_esgc_2022", "2022 Grid Energy Storage Technology Cost and Performance Assessment (PNNL-33283)",
+           "Pacific Northwest National Laboratory for the US Department of Energy", "August 2022", "document",
+           link="https://www.pnnl.gov/sites/default/files/media/file/ESGC%20Cost%20Performance%20Report%202022%20PNNL-33283.pdf",
+           note="Figure 4.3, PDF p. 46: LFP total installed cost at 1 and 10 MW, 2, 4, 10 and 24 hours, 2021 and 2030. "
+                "The one source read that prices lithium past 12 hours. Used for the line's shape, not its level"),
+    Source("lcp_delta_long_bess_2025", "Value of long-duration BESS to the GB power system", "LCP Delta for Gresham House",
+           "April 2025", "document", link="https://greshamhouse.com/wp-content/uploads/2025/04/Value-of-long-duration-BESS.pdf",
+           basis="real 2024 £",
+           note="p. 30: lithium to 10-12 hours, its own Q4 2024 assumptions, about £1,470/kW in 2030 read off a chart; "
+                "each added two hours costs the same. Commissioned by a battery investor, so read with that in mind"),
+    Source("hse_comah_2015_ia", "The transposition of the Seveso III Directive into UK law through the COMAH "
+                                "Regulations 2015: impact assessment HSE 0082", "HSE", "2014, read as Annex A of S.R. 2015 "
+                                "No. 325's explanatory memorandum", "document",
+           link="https://legislation.gov.uk/nisr/2015/325/pdfs/nisrem_20150325_en.pdf",
+           basis="2013 £",
+           note="Paras 56-60 and Table 3, PDF pp. 24-25: average compliance cost per establishment, from a survey of time "
+                "taken and wage rates, no plant. Upper tier one-off £100-135k (best £118k), about £24-29k a year (best "
+                "£27k); lower tier £15-23k (best £20k), £9-11k (best £10k). HSE calls the one-off a likely slight underestimate"),
     Source("beis_h2_costs_2021", "Hydrogen Production Costs 2021, annex: key assumptions and outputs", "BEIS",
            "August 2021", "workbook",
            link="https://assets.publishing.service.gov.uk/media/611a706ed3bf7f63a7b29216/Hydrogen_Production_Cost_2021_Annex.xlsx",

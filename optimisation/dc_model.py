@@ -250,6 +250,12 @@ class Tech:
     # so running the electrolyser hard costs something in cost as in carbon.
     # Defaulted to zero, which is the model before 28 Oct 2026.
     cost_ely_variable_per_kg: float = 0.0
+    # Major-hazard compliance, GBP per site per year, on any build allowed a tank
+    # (objective_constants). Defaulted to zero, the model before 5 Nov 2026.
+    cost_major_hazard_per_year: float = 0.0
+    # The longest battery a sweep allows, hours of cap_batt_e on cap_batt_p. No limit
+    # by default: the price's straight line holds well past its source (battery.py).
+    batt_max_duration_hours: float = float("inf")
     # Share of cap_tank the fuel cell can draw: a fuel-cell feed needs a minimum
     # pressure, so the last of the gas stays in the vessel. Both objectives pay for
     # cap_tank, so both pay for it. 1.0 is the model before 4 Nov 2026.
@@ -501,6 +507,8 @@ def build_model(series: Series, assets: Assets, tech: Tech, *,
     m.add_constraints(V["ch"] - V["cap_batt_p"] <= 0, name="batt_ch_cap")
     m.add_constraints(V["dis"] - V["cap_batt_p"] <= 0, name="batt_dis_cap")
     m.add_constraints(V["soc"] - V["cap_batt_e"] <= 0, name="batt_soc_cap")
+    if np.isfinite(tech.batt_max_duration_hours):
+        m.add_constraints(V["cap_batt_e"] - tech.batt_max_duration_hours * V["cap_batt_p"] <= 0, name="batt_duration")
     keep_b = 1.0 - tech.batt_leakage_per_hour * dt
     m.add_constraints(
         V["soc"] - keep_b * V["soc"].roll(t=1) - dt * (eta * V["ch"] - V["dis"] / eta) == 0,
@@ -616,7 +624,7 @@ def build_model(series: Series, assets: Assets, tech: Tech, *,
                             group_series=group_da)
     cost = _total(terms["cost_capital"], terms["cost_operational"])
     gwp = _total(terms["gwp_embodied"], terms["gwp_operational"])
-    cost_const, gwp_const = objective_constants(series, tech, grid=assets.grid)
+    cost_const, gwp_const = objective_constants(series, tech, grid=assets.grid, tank=assets.tank)
 
     if gwp_limit is not None:
         m.add_constraints(gwp <= gwp_limit - gwp_const, name="gwp_epsilon")
@@ -644,6 +652,7 @@ def build_model(series: Series, assets: Assets, tech: Tech, *,
 
     return m, V, {"cost": cost, "gwp": gwp,
                   "cost_const": cost_const, "gwp_const": gwp_const,
+                  "cost_major_hazard": major_hazard_cost(tech, tank=assets.tank),
                   "options": opts}
 
 
@@ -857,7 +866,7 @@ CHAINS = {
                 "battery step-up transformers"},
     "electrolyser": {"electrolyser", "electrolyser stack replacements", "electrolyser consumables",
                      "electrolyser stacks and water"},
-    "hydrogen tank": {"H2 tank", "H2 leaked from tank"},
+    "hydrogen tank": {"H2 tank", "H2 leaked from tank", "major-hazard compliance"},
     "fuel cell": {"fuel cell", "fuel cell stack replacements", "fuel cell BoP replacements",
                   "fuel cell maintenance", "fuel cell step-up transformers"},
     "unserved load": {"unserved (VoLL)"},
@@ -885,7 +894,14 @@ def chains(terms: dict, side: str) -> dict:
     return {c: d for c, d in out.items() if d}
 
 
-def objective_constants(series: Series, tech: Tech, *, grid: bool) -> tuple[float, float]:
+def major_hazard_cost(tech: Tech, *, tank: bool) -> float:
+    """Major-hazard compliance for a build allowed a tank, GBP per year. A step on
+    tonnes held, carried flat at upper tier rather than given a switch: it is
+    about 0.03 % of the bill, and a switch would make every islanded run branch."""
+    return tech.cost_major_hazard_per_year if tank else 0.0
+
+
+def objective_constants(series: Series, tech: Tech, *, grid: bool, tank: bool = False) -> tuple[float, float]:
     """The parts of each objective no decision variable moves: (cost, gwp).
 
     Held out of the LP expression: linopy refuses constants in an objective,
@@ -900,7 +916,7 @@ def objective_constants(series: Series, tech: Tech, *, grid: bool) -> tuple[floa
     # With connection options the fixed charge is a term on the switches
     # ("grid connection fixed charges" in objective_terms), not a constant.
     cost_const = (tech.cost_grid_fixed_per_year
-                  if grid and connection_options_of(tech) is None else 0.0)
+                  if grid and connection_options_of(tech) is None else 0.0) + major_hazard_cost(tech, tank=tank)
     gwp_const = (tech.dc_fixed_gwp_per_year
                  + tech.dc_other_gwp_per_mwh
                  * float(series.demand_mw.sum() * series.dt_hours) * series.annual_scale)
@@ -1001,6 +1017,7 @@ def totals(obj: dict) -> dict:
         "gwp_kgco2e_per_year": float(obj["gwp"].solution) + obj["gwp_const"],
         "cost_const_GBP_per_year": obj["cost_const"],
         "gwp_const_kgco2e_per_year": obj["gwp_const"],
+        "cost_major_hazard_GBP_per_year": obj.get("cost_major_hazard", 0.0),
     }
 
 
@@ -1072,7 +1089,10 @@ def contributions(V, obj, series, tech, assets) -> dict:
     """
     dt, scale = series.dt_hours, series.annual_scale
     terms = score(solution_quantities(V), series, tech)
-    terms["cost_operational"]["connection fixed"] = obj["cost_const"]
+    hazard = obj.get("cost_major_hazard", 0.0)
+    terms["cost_operational"]["connection fixed"] = obj["cost_const"] - hazard
+    if hazard:
+        terms["cost_operational"]["major-hazard compliance"] = hazard
     mwh = float(series.demand_mw.sum() * dt) * scale
     facility = facility_terms(tech, mwh)
     return {

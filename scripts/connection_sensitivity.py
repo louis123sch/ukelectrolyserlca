@@ -3,7 +3,8 @@
 the connection cost by +/-50 % and the design doesn't change, there's no need to go further on it for
 now."
 
-    python -m optimisation.sensitivity connection <case>   # solve: sensitivity_connection_<case>.csv (~3.5 h a case
+    python -m optimisation.sensitivity connection <case> --hours=1
+                                                           # solve: sensitivity_connection_<case>.csv (~3.5 h a case
                                                            # on one list; with a choice of lists each variant prices
                                                            # them alone and keeps the survivors, sensitivity.py)
     python scripts/connection_sensitivity.py               # judge: connection_sensitivity.md

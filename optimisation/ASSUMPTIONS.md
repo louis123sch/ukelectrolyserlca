@@ -235,8 +235,8 @@ DUoS) and, since 28 Oct 2026, the FY2026/27 policy levies and losses
 £/MWh, the Capacity Market levy on its 16:00–19:00 winter working-day window,
 and wholesale and BSUoS grossed up for losses: the site's own area's line loss
 factor for the connection voltage and time period, times the offtaking
-transmission loss multiplier for its zone and season (1 + zonal TLF read from
-Elexon's 2026/27 report charts + an assumed national adjustment of 0.011).
+transmission loss multiplier for its zone and season (1 + zonal TLF from
+Elexon's 2026/27 report + Elexon's estimated seasonal adjustment).
 **Assumed**: the site holds no Climate Change Agreement (`CCL_UNDER_CCA`;
 with one, CCL falls from £7.75 to £0.62/MWh). A supplier margin of £4.19/MWh is
 carried as an estimate since 4 Nov 2026. The connection and UoS figures in the DESNZ
@@ -245,8 +245,33 @@ tables are *generator*-side and are not a substitute.
 **The cost side's cut-off test** is `optimisation/cost_exclusions.py`, on the carbon rule. A cost
 a source itemises is in; one no source itemises stays out only under 1 % of its coefficient, 5 %
 together, with no change to the best design. Failing means carried as an estimate (tank land, fuel
-cell insurance, supplier margin). Still open there: major-hazard compliance (a step on tonnes held),
-urban land, battery business rates, hydrogen compressor capital.
+cell insurance, supplier margin). Major-hazard compliance is sourced, so it is in: HSE's upper-tier
+figure, about £56k a year, flat on any build allowed a tank. It overstates a small tank rather than
+adding a switch. The step-up transformers are read as inside the battery's and fuel cell's capital.
+Rule 3 tests only excluded costs with a figure; the assumptions with a range go through
+`sensitivity.assumptions`. Still open there: urban land.
+
+**Stated, not modelled (5 Nov 2026).** Each is small at North Norfolk or outside the study:
+
+- *Price years.* Network charges, levies and connection prices are 2026/27 money, wholesale is 2025,
+  the rest real 2025. A year's inflation on the grid lines is at most about £0.3 m, 0.15 % of the bill.
+- *Power factor* is 1.0, and the local network's reactive charge is transcribed but unused. At 0.95
+  the connection's capacity costs rise about 5 %, about £0.2 m.
+- *Selling power to the grid* is outside the study: the model refuses it, having no export price or
+  carbon credit. Surplus power is worth nothing, so a design with spare generation reads dearer than
+  it would be.
+- *The time to get a connection* is outside the study, because it has no way to include time. Published
+  room is taken as available, and a site with room may still wait in the queue. Room is a hard limit with
+  no reinforced option: North Norfolk's design sits on the 24.5 MW published at Sall Grid and islanded
+  costs £29 m a year more, so the result rests on that one published figure.
+- *The battery's length.* The least-cost design builds 18 hours, and the UK price covers 1 to 9. The
+  straight line through it is an extension, checked for shape against a US laboratory's 24-hour figures
+  (within 1 % at 18 hours; `SOURCES.md`). No 18-hour lithium project was found, the longest being
+  8 to 11.5 hours, so `sensitivity.assumptions` also runs the design capped at 9.
+- *Bought hydrogen.* The reference cases offer green, and no saved sweep buys any. Grey's price carries
+  a 2024 carbon price and blue's its own carbon storage rate, so draw no conclusion about buying those
+  colours without fixing both (`TODO.md`).
+- *Unserved demand's penalty* sets reliability and is not a cost. No saved sweep leaves demand unmet.
 
 **Land and area are a stated limit.** Every land figure charged is a rural rent, and the model has
 no area limit: a London run builds hundreds of MW of wind on no land, where the planning database

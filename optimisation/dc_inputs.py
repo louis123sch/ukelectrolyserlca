@@ -560,7 +560,11 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
                fc_tx_energised: bool | None = None,
                cutoff: str | None = None,
                connection_build_scale: float | None = None,
-               cost_cutoff: str | None = None) -> dc_model.Tech:
+               cost_cutoff: str | None = None,
+               fc_stack_duty_hours: float | None = None,
+               generator_connection_out: bool = False,
+               tank_insurance_frac: float | None = None,
+               batt_max_duration_hours: float | None = None) -> dc_model.Tech:
     """Resolve every coefficient the LP needs. Touches Brightway only via caches.
 
     ``cutoff`` is the cut-off register's seam (``optimiser_lca/exclusions.py``,
@@ -647,6 +651,14 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
     the connection is not touched. The yearly network charges have their own
     knob, ``build_series(network_charges_scale=)``, which ``labels`` also
     records from the meta. None keeps the published prices.
+
+    ``fc_stack_duty_hours``, ``generator_connection_out`` and
+    ``tank_insurance_frac`` exist to sweep (``sensitivity.ASSUMPTION_KNOBS``):
+    the stack's life in running hours; wind and solar with
+    ``tech_costs.GENERATOR_CONNECTION_SHARE`` of their capital taken out; and a
+    yearly fraction of the tank's capital on top of its running cost.
+    ``batt_max_duration_hours`` caps the battery's energy on its power, for the
+    same sweep; None leaves it free.
     """
     # Validated before anything is loaded, so a bad sweep value fails at once
     # rather than after the caches (and Brightway) have been read.
@@ -654,7 +666,9 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
     _standing_loss(tank_leakage_per_hour, "tank_leakage_per_hour")
     for name, v in (("fc_stack_calendar_years", fc_stack_calendar_years),
                     ("fc_bop_calendar_years", fc_bop_calendar_years),
-                    ("fc_kw_per_container", fc_kw_per_container)):
+                    ("fc_kw_per_container", fc_kw_per_container),
+                    ("fc_stack_duty_hours", fc_stack_duty_hours),
+                    ("batt_max_duration_hours", batt_max_duration_hours)):
         if v is not None and not (np.isfinite(v) and v > 0):
             raise ValueError(f"{name} must be a positive number, got {v!r}")
     build_scale = 1.0 if connection_build_scale is None else float(connection_build_scale)
@@ -689,7 +703,9 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
     emb = ren.apply_case(ren.decompose_all(), cost_case, solar_basis=solar_basis,
                          wind_life_extension=wind_life_extension).set_index("technology")
     def gen_cost(asset):
-        return float(tc.annual_cost(asset, cost_case)["total_annual_cost_GBP_per_MW_year"])
+        c = tc.annual_cost(asset, cost_case)
+        out = tc.GENERATOR_CONNECTION_SHARE.get(asset, 0.0) if generator_connection_out else 0.0
+        return float(c["total_annual_cost_GBP_per_MW_year"] - out * c["annualised_capex_2025_GBP_per_MW_year"])
 
     def gen_gwp(asset):
         r = emb.loc[asset]
@@ -1002,7 +1018,8 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
         fc_bop_calendar_years=fc_bop_years,
         fc_bop_duty_hours=d["bop_duty_lifetime_hours"],
         fc_stack_calendar_years=fc_stack_years,
-        fc_stack_duty_hours=d["stack_lifetime_hours"],
+        fc_stack_duty_hours=float(fc_stack_duty_hours or d["stack_lifetime_hours"]),
+        batt_max_duration_hours=float(batt_max_duration_hours or np.inf),
         cost_wind=cstep("cost_wind", gen_cost("onshore_wind"), "GBP per MW per year", "Onshore wind, per MW built",
                         ["cost.onshore_wind.annual_per_MW"]),
         cost_offshore=cstep("cost_offshore", gen_cost("offshore_wind"), "GBP per MW per year",
@@ -1025,8 +1042,14 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
         cost_ely_variable_per_kg=cstep("cost_ely_variable_per_kg", float(ec.variable_opex_GBP_per_kg) + heat_gbp_per_kg,
                                        "GBP per kg H2", "Electrolyser stacks, water and bought heat, per kg made",
                                        [f"{ek}.variable_opex_per_kg", *heat_uses]),
-        cost_tank=cstep("cost_tank", float(tkc.annual_GBP_per_kg_year), "GBP per kg of capacity per year",
+        cost_tank=cstep("cost_tank", (float(tkc.annual_GBP_per_kg_year)
+                                      + float(tkc.capex_GBP_per_kg_capacity) * float(tank_insurance_frac or 0.0)),
+                        "GBP per kg of capacity per year",
                         "Hydrogen tank, per kg it holds", ["cost.h2_tank.annual_per_kg"]),
+        cost_major_hazard_per_year=cstep("cost_major_hazard_per_year",
+                                         float(hc.major_hazard_cost(cost_case)["annual_GBP_per_site_year"]),
+                                         "GBP per year", "Major-hazard compliance, at upper tier, on a build allowed a tank",
+                                         ["cost.major_hazard.annual_per_site"]),
         cost_fc=cstep("cost_fc", float(fcr.annual_GBP_per_MW_year), "GBP per MW per year",
                       "Fuel cell balance of plant, per MW, net of its calendar replacement",
                       ["cost.fuel_cell.annual_per_MW"]),

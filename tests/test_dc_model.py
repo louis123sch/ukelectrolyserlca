@@ -169,6 +169,43 @@ def test_constants_are_excluded_from_the_objective_but_not_the_total(series, tec
     assert tot["cost_GBP_per_year"] > float(obj["cost"].solution)
 
 
+def test_major_hazard_compliance_is_a_constant_of_a_build_allowed_a_tank(series, tech):
+    """In the total and the breakdown, never in the objective, and netted off a
+    cost limit so a tie-break cannot spend it. No tank allowed, no charge."""
+    from dataclasses import replace
+    charged = replace(tech, cost_major_hazard_per_year=56_000.0)
+    with_tank = ALL
+    m0, V0, obj0 = M.build_model(series, with_tank, tech, objective="cost")
+    M.solve(m0)
+    m1, V1, obj1 = M.build_model(series, with_tank, charged, objective="cost")
+    M.solve(m1)
+    t0, t1 = M.totals(obj0), M.totals(obj1)
+    assert t1["cost_GBP_per_year"] == pytest.approx(t0["cost_GBP_per_year"] + 56_000.0, rel=1e-9)
+    assert float(V1["cap_tank"].solution) == pytest.approx(float(V0["cap_tank"].solution), rel=1e-6, abs=1e-6)
+    c = M.contributions(V1, obj1, series, charged, with_tank)
+    assert c["cost_operational"]["major-hazard compliance"] == 56_000.0
+    assert c["cost_operational"]["connection fixed"] == tech.cost_grid_fixed_per_year
+    assert "major-hazard compliance" in c["cost_chains"]["hydrogen tank"]
+    # Held at its own total, the build is unmoved: the charge bought no slack.
+    m2, V2, obj2 = M.build_model(series, with_tank, charged, objective="gwp",
+                                 cost_limit=t1["cost_GBP_per_year"] * (1 + 1e-9))
+    M.solve(m2)
+    assert M.totals(obj2)["cost_GBP_per_year"] <= t1["cost_GBP_per_year"] * (1 + 1e-6)
+    no_tank = M.Assets(grid=True)
+    _, _, obj3 = M.build_model(series, no_tank, charged, objective="cost")
+    assert obj3["cost_const"] == tech.cost_grid_fixed_per_year
+
+
+def test_the_battery_duration_cap_binds_only_when_asked(series, tech):
+    from dataclasses import replace
+    a = M.Assets(grid=False, wind=True, solar=True, battery=True, grid_limit_mw=0.0)
+    m0, _, _ = M.build_model(series, a, tech, objective="cost", unserved_fraction=1.0)
+    assert "batt_duration" not in m0.constraints
+    m1, V, _ = M.build_model(series, a, replace(tech, batt_max_duration_hours=2.0), objective="cost", unserved_fraction=1.0)
+    M.solve(m1)
+    assert float(V["cap_batt_e"].solution) <= 2.0 * float(V["cap_batt_p"].solution) + 1e-6
+
+
 def test_the_connection_is_held_inside_its_band(series, tech):
     """floor <= cap_grid: a grid-only build cannot drop to a cheaper band than
     the one its charges were read for, and says so when the floor binds."""

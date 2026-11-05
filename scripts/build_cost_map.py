@@ -78,6 +78,7 @@ TERM_NAMES = {
     "grid connection": "Grid connection, per MW (local capacity charge and build cost)",
     "grid connection fixed charges": "Grid connection, per year (residual and fixed charges, cable)",
     "connection fixed": "Grid connection, per year (residual and fixed charges, cable)",
+    "major-hazard compliance": "Major-hazard compliance, per site per year",
     "grid winter-peak charge": "National grid locational charge, on winter-peak demand",
     "grid energy + network": "Grid imports (half-hourly price, every part)",
     "electrolyser stacks and water": "Electrolyser stacks and water", "unserved (VoLL)": "Unserved load (penalty)",
@@ -339,18 +340,27 @@ def build():
     for e in gr.edges:
         if e[0] == lp_root and e[1] in gr.nodes:
             e[2]["contribution"] = gr.nodes[e[1]].get("score")
-    if tot["cost_const_GBP_per_year"]:
+    hazard = tot["cost_major_hazard_GBP_per_year"]
+    fixed_const = tot["cost_const_GBP_per_year"] - hazard
+    if fixed_const:
         cid = gr.add("term:connection fixed", kind="term", name=TERM_NAMES["connection fixed"], key="connection fixed",
-                     side="constant", expr="cost_grid_fixed_per_year", score=tot["cost_const_GBP_per_year"],
+                     side="constant", expr="cost_grid_fixed_per_year", score=fixed_const,
                      note="A constant of the single-price-list model (dc_model.objective_constants)")
-        gr.link(study, cid, contribution=tot["cost_const_GBP_per_year"])
+        gr.link(study, cid, contribution=fixed_const)
         gr.link(cid, coefficient_node("cost_grid_fixed_per_year", main_tech, renames[0], ""))
+    if hazard:
+        cid = gr.add("term:major-hazard compliance", kind="term", name=TERM_NAMES["major-hazard compliance"],
+                     key="major-hazard compliance", side="constant", expr="cost_major_hazard_per_year", score=hazard,
+                     note="A constant of any build allowed a tank, flat at upper tier (dc_model.major_hazard_cost)")
+        gr.link(study, cid, contribution=hazard)
+        gr.link(cid, coefficient_node("cost_major_hazard_per_year", main_tech, renames[0], ""))
 
     # every cost coefficient on the Tech reached by a term
     lp_fields = {f for t in term_table(main_tech).values() for f in t["fields"]}
     for f in tech_fields:
         if (f.startswith("cost_") or f.endswith("_gbp_per_kg")) and f not in lp_fields \
-                and not (f == "cost_grid_fixed_per_year" and tot["cost_const_GBP_per_year"]):
+                and not (f == "cost_grid_fixed_per_year" and fixed_const) \
+                and not (f == "cost_major_hazard_per_year" and hazard):
             if opts and f in ("cost_grid_per_mw_year", "cost_grid_fixed_per_year"):
                 continue                 # replaced by the options' own coefficients in the LP
             problems.append(f"Tech.{f} is a cost coefficient no cost term multiplies")

@@ -19,7 +19,7 @@ from __future__ import annotations
 from optimisation import trace as T
 
 BASE_YEAR = 2025
-GDP_DEFLATOR = {2015: 75.2, 2016: 76.5, 2017: 77.7, 2018: 79.2, 2019: 81.1, 2020: 84.9,
+GDP_DEFLATOR = {2013: 73.7, 2014: 74.8, 2015: 75.2, 2016: 76.5, 2017: 77.7, 2018: 79.2, 2019: 81.1, 2020: 84.9,
                 2021: 85.7, 2022: 90.6, 2023: 96.3, 2024: 100.0, 2025: 103.6}
 
 # Foreign figures are inflated in their own currency, then converted at the FES
