@@ -756,7 +756,7 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
     two storage standing losses, as a fraction of the stock lost per *hour*
     held (``dc_model`` multiplies by the step length, so the same number means
     the same thing at half-hourly and hourly resolution). They default to
-    ``battery.STANDING_LOSS_PER_HOUR`` and the tank design's
+    ``battery.STANDING_LOSS_PER_HOUR`` (self-discharge) and the tank design's
     ``leakage_frac_per_hour``; DATA_GAPS.md records each one's source and band.
     The two push in opposite directions in the hydrogen-versus-battery seasonal
     contest. A %/day figure converts as ``pct / 100 / 24``.
@@ -1248,7 +1248,10 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
                                   inputs={"min_pressure_bar": h2s.TANK_MIN_PRESSURE_BAR}, grade="derived",
                                   source="Marocco et al. 2021, Table 5: 3 bar minimum"),
         batt_rte=batt.ROUND_TRIP_EFFICIENCY,
-        batt_leakage_per_hour=batt.STANDING_LOSS_PER_HOUR,
+        batt_leakage_per_hour=step("batt_leakage_per_hour", batt.STANDING_LOSS_PER_HOUR,
+                                   "fraction of stock per hour", "Battery self-discharge",
+                                   inputs={"hours_to_80_percent": batt.SELF_DISCHARGE_HOURS_TO_80_PCT}, grade="derived",
+                                   source="Mott MacDonald for BEIS 2018, Table 5, p. 44"),
         fc_kg_h2_per_mwh=d["h2_kg_per_MWh"],
         bought_h2_gbp_per_kg=cstep("bought_h2_gbp_per_kg", h2_price, "GBP per kg H2",
                                    f"Bought hydrogen ({h2_colour or 'none'}), delivered to the tank",

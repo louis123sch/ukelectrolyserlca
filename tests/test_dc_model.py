@@ -655,11 +655,12 @@ def test_build_tech_refuses_a_negative_loss_before_loading_anything():
             I.build_tech("north_norfolk", {}, **{kwarg: -1e-4})
 
 
-def test_shipped_battery_standing_loss_is_zero_and_flagged_assumed():
-    # The sweep bounds it; it does not set it. DATA_GAPS.md carries the band.
+def test_battery_self_discharge_reaches_80_percent_in_the_reports_time():
+    # Mott MacDonald for BEIS 2018, Table 5, p. 44: 1,560 hours to fall below 80 %.
     from optimisation import battery
-    assert battery.STANDING_LOSS_PER_HOUR == 0.0
-    assert battery.STANDING_LOSS_IS_ASSUMED
+    keep = 1.0 - battery.STANDING_LOSS_PER_HOUR
+    assert keep ** 1560 == pytest.approx(0.8, abs=1e-3)
+    assert not battery.STANDING_LOSS_IS_ASSUMED
 
 
 def test_tank_leakage_is_the_government_reports_low_end():

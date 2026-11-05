@@ -59,6 +59,7 @@ source and provenance grade (transcribed / derived / assumed).
 
 Run:  python optimisation/battery.py
 """
+import math
 import sys
 from pathlib import Path
 
@@ -144,35 +145,23 @@ ASSET_LIFE_YEARS = 15        # Modo: BESS asset lifetime
 # =============================================================================
 WARRANTED_CYCLES = 10_000          # to the repowering threshold
 CAPACITY_AT_END_OF_LIFE = 0.67     # ~67 % remaining after those cycles
-# Standing loss per hour of storage held: self-discharge plus the auxiliary
-# load that keeps a containerised system alive — BMS, and above all the HVAC
-# that holds LFP cells in their temperature window.
+# Standing loss per hour of storage held: self-discharge only, on the energy stored.
 #
-# ZERO, AND ASSUMED, not measured. It is stated here rather than left to a
-# caller's default, which is what it was: dc_inputs read it with
-# ``getattr(battery, "STANDING_LOSS_PER_HOUR", 0.0)`` against a module that had
-# never defined it, so the model ran a battery with no standing loss and
-# nothing anywhere said so.
+# Mott MacDonald for BEIS, "Storage cost and technical assumptions" (8 Aug 2018),
+# Table 5, p. 44, and all its lithium tables: 1,560 hours before capacity falls below
+# 80 % by self-discharge. The model's stock falls by this fraction each hour, so the
+# rate is the one that reaches 80 % in that time: 0.0143 % an hour, 0.34 % a day. It
+# was zero and assumed until 5 Nov 2026. Modo's 88 % is a round-trip number: if it
+# holds any loss over the hours between charge and discharge, the overlap is about
+# 0.06 % of a four-hour hold.
 #
-# It is not negligible in principle. Auxiliary load moves system round-trip
-# efficiency by 2-4 points seasonally in a containerised system, and it falls
-# hardest on a *lightly cycled* battery, which is exactly what the minimum-carbon
-# builds hold: measured on the 300 MW Highland run, the 3,258 MWh battery sits
-# below 1 % of capacity for 5,540 of 8,675 hours. Modo's 88 % is a round-trip
-# number and does not carry a standing term, so setting one from it would be
-# double counting.
-#
-# Left at zero because no source in this study gives a figure, and an invented
-# one would decide the hydrogen-versus-battery seasonal contest by assumption.
-# Registered in DATA_GAPS.md alongside the tank's leakage, which is the same
-# parameter on the other side of that contest.
-#
-# Bounded since 14 Oct: swept over 0.1-0.5 %/day with build_tech's
-# batt_standing_loss_per_hour hook (an islanded North Norfolk build where both
-# stores compete), it moves cost and carbon by under 0.25 % and flips nothing.
-# See DATA_GAPS.md and optimisation_outputs/storage_loss_sweep.csv.
-STANDING_LOSS_PER_HOUR = 0.0
-STANDING_LOSS_IS_ASSUMED = True
+# The auxiliary load that keeps a containerised system alive, BMS and above all the
+# HVAC, is a different thing: it runs on installed size and has no term of its own,
+# and no source here gives a lithium figure. Modo's definition may put part of it in
+# the 88 %, spread per cycle (docs/OBJECTIVE_AUDIT.md). See DATA_GAPS.md.
+SELF_DISCHARGE_HOURS_TO_80_PCT = 1560.0
+STANDING_LOSS_PER_HOUR = -math.log(0.8) / SELF_DISCHARGE_HOURS_TO_80_PCT
+STANDING_LOSS_IS_ASSUMED = False
 
 ROUND_TRIP_EFFICIENCY = 0.88       # Modo standard; least firmly sourced here
 CYCLES_PER_DAY = (1.0, 2.0)        # configurable, warranty-aligned

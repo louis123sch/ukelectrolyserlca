@@ -105,7 +105,7 @@ _EVERY_ASSET = dict(grid=True, wind=True, solar=True, battery=True, electrolyser
                     tank=True, fuel_cell=True)
 
 CASES = {
-    # The storage-loss reference case (DATA_GAPS.md, *Battery standing loss*):
+    # The storage-loss reference case (DATA_GAPS.md, *Battery cooling and control load*):
     # the one architecture where battery and hydrogen actually compete, and the
     # only one that builds every hydrogen asset, so every fuel-cell knob bites.
     "islanded_h2": Case(

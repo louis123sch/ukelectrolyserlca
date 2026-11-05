@@ -209,9 +209,9 @@ def energy_section(gap_ids=lambda *k: []):
     R = ("battery",)
     n("bess_cooling", "Liquid cooling, HVAC, BMS", 3, 1, "component", route=R, status="inside",
       rating="auxiliary load of the container",
-      model="Its electricity is a standing loss on the stored energy: 0 by default, swept 0–0.5 %/day.",
-      loss=f"standing loss {battery.STANDING_LOSS_PER_HOUR:g} /h (ASSUMED)",
-      source="Jasper et al. 2026 container; battery.STANDING_LOSS_PER_HOUR", gaps=("standing loss",))
+      model="Its electricity has no term of its own; part may be inside the 0.88 round trip, per cycle.",
+      loss=f"not modelled; the cells' self-discharge is {battery.STANDING_LOSS_PER_HOUR:g} /h on the energy stored",
+      source="Jasper et al. 2026 container; battery.STANDING_LOSS_PER_HOUR", gaps=("cooling and control load",))
     n("bess_dc", "LFP DC block — cells, modules, racks", 3, 2, "storage", route=R,
       rating=f"{bess.CSS_KWH:,.0f} kWh per container = {bess.CSS_RACKS} racks × "
              f"{bess.CSS_MODULES_PER_RACK} modules × {bess.CSS_MODULE_KWH:g} kWh; {bess.CELL_WH:g} Wh cells",
