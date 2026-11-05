@@ -161,7 +161,8 @@ def build(cost_case: str = "central") -> pd.DataFrame:
                    else "derived from a ~1 wt% Type I cylinder",
             grade="transcribed" if r["is_as_built"] else "assumed",
             note=f"{r['compression_kwh_per_kg']:.1f} kWh/kg charging compression; "
-                 f"standing loss {r['leakage_frac_per_hour']:.4g}/h ASSUMED"))
+                 f"standing loss {r['leakage_frac_per_hour']:.4g}/h"
+                 + (" ASSUMED" if r["leakage_is_assumed"] else "")))
 
     return pd.DataFrame(rows, columns=COLUMNS)
 

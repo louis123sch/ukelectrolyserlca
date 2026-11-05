@@ -425,7 +425,7 @@ CARBON_KNOBS = {
     "fc_kw_per_container": [500.0, 2000.0],
     "batt_usable_fraction": [0.85, 0.95],
     "green_h2_grid_share": [0.0, 1.0],
-    "tank_leakage_per_hour": [0.01 / 100 / 24, 0.1 / 100 / 24],
+    "tank_leakage_per_hour": [0.0, 0.01 / 100],     # none, and Frazer-Nash's high end
     "wind_life_extension": ["none", "servicing"],
     "fc_stack_basis": ["gramc_2025"],
     "batt_cell_basis": ["voss_de", "jasper_fig4_311"],

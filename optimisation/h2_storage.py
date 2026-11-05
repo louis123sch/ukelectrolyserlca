@@ -21,8 +21,7 @@ What it adds over reading the activity directly:
    electrolyser: compression from the electrolyser's delivery pressure to the
    tank's. Zero for the 28 bar design, because the electrolyser already leaves
    at ~30 bar.
-3. **Standing loss**, which is *not* in the inventory and is not modelled here
-   either — see below.
+3. **Standing loss**, which is *not* in the inventory — see below.
 
 Why steel mass alone is defensible, and where it is not
 ------------------------------------------------------
@@ -32,26 +31,26 @@ instrumentation, and end-of-life. The notebook says so, and so does this module.
 Against that, steel is the overwhelming majority of a pressure vessel's embodied
 carbon, so the figure is a defensible lower bound rather than a guess.
 
-Standing loss is deliberately zero and needs a source
------------------------------------------------------
+Standing loss is from a government-commissioned report, on another class of vessel
+---------------------------------------------------------------------------------
 There is **no boil-off** from compressed gas at ambient temperature — that is a
 liquid-hydrogen phenomenon, and this is a steel bottle at 28 bar. The real
 losses are permeation through the wall, which is negligible for steel at this
 pressure, and fitting and valve leakage, which is a maintenance-quality
-question rather than a physical constant. ``LEAKAGE_FRAC_PER_HOUR`` is exposed
-for the optimiser and **defaults to zero with no source**, which is the honest
-position but not a verified one. It was thought to decide the seasonal
-hydrogen-versus-battery contest; swept over 0-0.1 %/day on 14 Oct (an ASSUMED
-range, through ``build_tech(tank_leakage_per_hour=...)``) it moves cost and
-carbon by under 0.1 % and does not change which store dominates. Registered,
-with the band, in ``DATA_GAPS.md``.
-
-If it is ever set non-zero, the leaked hydrogen should also be charged as a
-greenhouse gas in its own right — H2 is an indirect GHG — from DESNZ / Warwick
-et al. 2022, *Atmospheric implications of increased hydrogen use*.
+question rather than a physical constant. ``LEAKAGE_FRAC_PER_HOUR`` is 0.005 %
+an hour (0.12 % a day) since 5 Nov 2026, the low end of Frazer-Nash for BEIS 2022,
+section 4.4, p. 29. That report's figures are for small 500 bar cylinders, and it
+says larger ones lose less, so for this bulk 28 bar vessel the low end probably
+errs high as a rate. The model applies it to the usable stock only, not to the gas
+below the fuel cell's minimum pressure, which errs low. Override with ``build_tech(tank_leakage_per_hour=...)``; ``DATA_GAPS.md``
+has the band. The leaked hydrogen is also charged as a greenhouse gas in its own
+right (``dc_model.H2_GWP100``).
 
 Sources
 -------
+standing loss     Frazer-Nash Consultancy for BEIS (March 2022), "Fugitive Hydrogen
+                  Emissions in a Future Hydrogen Economy", FNC 012865-53172R Issue 1,
+                  section 4.4, p. 29: 0.005 to 0.01 % per hour.
 inventory         Gandiglio, M., Marocco, P., Bianco, I., Lovera, D.,
                   Blengini, G.A., Santarelli, M. (2022), "Life cycle assessment
                   of a renewable energy system with hydrogen-battery storage
@@ -86,9 +85,9 @@ from optimisation import trace as T  # noqa: E402
 CACHE_PATH = OUT_DIR / "h2_storage_decomposition_cache.json"
 _MEMO: list | None = None
 
-# ASSUMED, with no source, and load-bearing. See the module docstring.
-LEAKAGE_FRAC_PER_HOUR = 0.0
-LEAKAGE_IS_ASSUMED = True
+# Frazer-Nash for BEIS 2022, section 4.4, p. 29, the low end. See the module docstring.
+LEAKAGE_FRAC_PER_HOUR = 0.005 / 100.0
+LEAKAGE_IS_ASSUMED = False
 
 RECONSTRUCTION_TOLERANCE = 1e-4      # bw2calc solver noise; see electrolysers.py
 
@@ -164,6 +163,9 @@ def decompose(use_cache: bool = True, refresh: bool = False):
     if use_cache and CACHE_PATH.exists():
         try:
             _MEMO = json.loads(CACHE_PATH.read_text(encoding="utf-8"))
+            # A constant here rather than a score, so the cache cannot hold it stale.
+            for r in _MEMO:
+                r.update(leakage_frac_per_hour=LEAKAGE_FRAC_PER_HOUR, leakage_is_assumed=LEAKAGE_IS_ASSUMED)
             return _MEMO
         except Exception:
             pass
@@ -263,7 +265,8 @@ def traced(row: dict) -> dict:
            uses=[f"{k}.per_kg_capacity", f"{k}.lifetime_years"], grade="derived")
     T.step(f"{k}.leakage_per_hour", row["leakage_frac_per_hour"], "fraction of stock per hour",
            "Standing loss", grade="assumed" if row["leakage_is_assumed"] else "transcribed",
-           note="ASSUMED, with no source, and load-bearing; see the module docstring.")
+           source="Frazer-Nash for BEIS 2022, section 4.4, p. 29, the low end",
+           note="The report's figures are for small 500 bar cylinders. See the module docstring.")
     return row
 
 

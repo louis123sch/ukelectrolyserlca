@@ -757,10 +757,9 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
     held (``dc_model`` multiplies by the step length, so the same number means
     the same thing at half-hourly and hourly resolution). They default to
     ``battery.STANDING_LOSS_PER_HOUR`` and the tank design's
-    ``leakage_frac_per_hour``, both zero and ASSUMED. They exist to sweep, not
-    to change the defaults: the two push in opposite directions in the
-    hydrogen-versus-battery seasonal contest, and DATA_GAPS.md records the band
-    the sweep measured. A %/day figure converts as ``pct / 100 / 24``.
+    ``leakage_frac_per_hour``; DATA_GAPS.md records each one's source and band.
+    The two push in opposite directions in the hydrogen-versus-battery seasonal
+    contest. A %/day figure converts as ``pct / 100 / 24``.
 
     ``fc_stack_calendar_years``, ``fc_bop_calendar_years``,
     ``fc_kw_per_container`` and ``batt_usable_fraction`` override four more

@@ -108,7 +108,7 @@ VOLL_KGCO2E_PER_MWH = VOLL_GBP_PER_MWH / VOLL_CARBON_PRICE_GBP_PER_T * 1000.0
 # under the study's own method a leaked kilogram scores zero. Charged here as
 # a stated extension of that method, at Sand et al. (2023), Commun. Earth
 # Environ. 4:203, GWP100 = 11.6 ± 2.8; Warwick et al. (2022) for BEIS give
-# 11 ± 5. Only bites when tank leakage is non-zero, which by default it is not.
+# 11 ± 5. Charged on the tank's leakage (h2_storage.LEAKAGE_FRAC_PER_HOUR).
 H2_GWP100 = 11.6
 H2_GWP100_SOURCE = "Sand et al. 2023, Commun. Earth Environ. 4:203"
 

@@ -276,7 +276,7 @@ def run_one(scenario: A.Scenario, *, site, start: str, end: str,
         "soec_heat": tech.labels.get("soec_heat"),
         "h2_colour": scenario.h2_colour, "h2_colour_2": scenario.h2_colour_2,
         "green_h2_grid_share": tech.labels.get("green_h2_grid_share"),
-        # The values used, defaults included (both zero and ASSUMED).
+        # The values used, defaults included.
         "batt_standing_loss_per_hour": tech.labels.get("batt_standing_loss_per_hour"),
         "tank_leakage_per_hour": tech.labels.get("tank_leakage_per_hour"),
         "strategy": scenario.strategy,

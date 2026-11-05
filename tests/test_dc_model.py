@@ -655,13 +655,28 @@ def test_build_tech_refuses_a_negative_loss_before_loading_anything():
             I.build_tech("north_norfolk", {}, **{kwarg: -1e-4})
 
 
-def test_shipped_storage_losses_are_zero_and_flagged_assumed():
-    # The sweep bounds them; it does not set them. DATA_GAPS.md carries the band.
-    from optimisation import battery, h2_storage
+def test_shipped_battery_standing_loss_is_zero_and_flagged_assumed():
+    # The sweep bounds it; it does not set it. DATA_GAPS.md carries the band.
+    from optimisation import battery
     assert battery.STANDING_LOSS_PER_HOUR == 0.0
     assert battery.STANDING_LOSS_IS_ASSUMED
-    assert h2_storage.LEAKAGE_FRAC_PER_HOUR == 0.0
-    assert h2_storage.LEAKAGE_IS_ASSUMED
+
+
+def test_tank_leakage_is_the_government_reports_low_end():
+    # Frazer-Nash for BEIS (2022) section 4.4, p. 29: 0.12 to 0.24 % a day. The low
+    # end, since the report says larger cylinders lose less and its figures are for
+    # small 500 bar ones.
+    from optimisation import h2_storage
+    assert h2_storage.LEAKAGE_FRAC_PER_HOUR == pytest.approx(0.12 / 100 / 24)
+    assert not h2_storage.LEAKAGE_IS_ASSUMED
+
+
+def test_a_cached_tank_row_cannot_hide_the_leakage_figure():
+    # The figure is a constant in the module, and the rows come from a committed
+    # cache written when it was zero. Every design must carry the constant.
+    from optimisation import h2_storage
+    assert {r["leakage_frac_per_hour"] for r in h2_storage.decompose()} == {h2_storage.LEAKAGE_FRAC_PER_HOUR}
+    assert {r["leakage_is_assumed"] for r in h2_storage.decompose()} == {h2_storage.LEAKAGE_IS_ASSUMED}
 
 
 # =============================================================================
