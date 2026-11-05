@@ -134,3 +134,18 @@ North Norfolk (52.85, 1.04) is the reference site; `sensitivity.CASES` already h
 - **Solid-oxide and stack share leave UK government,** by the "looks wrong" test.
 - **The tank's carbon moves to a bulk carbon-steel vessel,** an assumption from the calculation above, replacing a sourced inventory for a small stainless one.
 - **No new compressor line,** because the model already charges about the right amount by another route.
+
+## Built
+
+Committed 4 Nov evening as `db38bb5` (the source swap) and `509de1a` (the tank vessel: 556 kg CO₂e per kg stored once the pad is sized on the vessel's own 200 m³ shell; Gandiglio's 2,005). Both maps rebuilt (6,435 and 1,688 checks, 0 problems), 637 tests. The runs, overnight 4/5 Nov on the new costs (`optimisation_outputs/sensitivity_*.csv`):
+
+| Run | Islanded (`islanded_h2`) | North Norfolk grid (`norfolk_grid`) | What it says |
+|---|---|---|---|
+| Central, least cost | £224.4 m/yr, 46.9 g/kWh | £195.5 m/yr, 44.8 g/kWh; 24.5 MW connection on 33 kV at Sall Grid, 476 MW wind, 267 MW solar, 98 MW / 1,786 MWh battery, 5 MW electrolyser, 160 t tank, 27 MW fuel cell | — |
+| Central, least carbon | £279.2 m, 39.9 g/kWh | £253.8 m, 38.5 g/kWh | — |
+| Cost cut-off rule 3 (every open or excluded cost at its upper value) | +£0.1 m (0.05 %) | +£0.1 m (0.05 %) | no size moves: the exclusions hold |
+| Cost case low / high | −28 % / +42 % | −27 % / +41 % | least-cost sizes within 2–3 %: the range rescales the bill, not the design |
+| Gandiglio stainless tank | same cost; carbon +18 % (55.5 g/kWh) | same cost; +16 % (51.8 g/kWh) | the carbon-led design then cuts its tank by 44 % and builds more battery — the vessel choice changes that conclusion |
+| Fuel cell plant life 15 / 25 yr | +0.4 % / −0.2 % | +0.4 % / −0.2 % | tank 190–212 t |
+
+The ±50 % connection test at North Norfolk (`norfolk_150_room`) runs separately on the pruned lists (5 Nov). Timing lesson: the tight-gap solves with a choice of lists took 8.8 h for the twelve Norfolk variants (one 4.9 h), all on the same list; sweeps now fix the central list (`sensitivity.run(list_choice=)`, COST_PLAN *Open* vii).

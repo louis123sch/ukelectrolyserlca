@@ -38,8 +38,9 @@ Work where a number the study reports is not currently defensible.
 - [ ] **Major-hazard compliance as a step charge** (4 Nov). HSE's per-site figures are in hand
       (`cost_exclusions.py`); charging them on tonnes held needs an on/off switch in `dc_model`.
 - [ ] **Best-source build: finish the runs** (4 Nov, evening; `docs/COST_BEST_SOURCE_PLAN.md`, *Built*). Code and
-      records done; left: both maps republished, the reference cases and the ±50 % test at North Norfolk
-      (`norfolk_grid`, `norfolk_150_room`), `sensitivity cost_cutoff` on the new costs, and the assumption sweep.
+      records done; `cost_cutoff` and `assumptions` run overnight 4/5 Nov on the new costs (results in the
+      plan's *Built*); left: the ±50 % connection test at North Norfolk (`norfolk_150_room`, started 5 Nov
+      on the pruned lists) and its judge, and both maps republished.
 - [ ] **Finish the one price base** (4 Nov). Network charges, levies and connection prices are 2026/27 money,
       wholesale 2025, the rest real 2025.
 - [ ] **Wind and solar's own grid connection inside capital** (4 Nov). DESNZ's "infrastructure" (£303/kW, £112/kWp) runs
@@ -247,7 +248,9 @@ No public source found. Revisit if the item becomes load-bearing in a result.
       mode, 11 lists: 6.4 h for a three-point frontier against 38 min fixed), so
       a full-year run with a choice of lists is a batch job until the lists are
       pruned (pick the list on the week or the relaxed problem, then fix it for
-      the year). The year's own answer favours the switch in cap mode: £141.24 m
+      the year; done for the sweeps 5 Nov, `sensitivity.run(list_choice=)`:
+      central at the loose gap, variants on its list; the connection test
+      prunes per variant). The year's own answer favours the switch in cap mode: £141.24 m
       on 132 kV against £146.39 m on the fixed national-grid list; in room mode
       London lands at Ealing (£147.55 m) because its twelve nearer national-grid
       substations publish no figure. **Still open:** the national

@@ -791,7 +791,16 @@ flexible (curtailable) connection once a company publishes its curtailment
 hours. (vii) The full year is ~10x slower with a choice of lists (S5, 31 Oct):
 prune before the year — choose the list on the week or on the relaxed problem
 (switches continuous), keep the two or three cheapest, then fix for the year;
-or carry the week's choice into the page's full-year run. (viii) The
+or carry the week's choice into the page's full-year run. *Done for the sweeps
+5 Nov 2026* (`sensitivity.run(list_choice=)`): the overnight run of 4 Nov had
+spent 8.8 h on twelve North Norfolk variants at the tight gap, every one on the
+same 24.5 MW list, one solve 4.9 h. A sweep now solves its central variant with
+every list at the loose gap and the rest on the list(s) the central points chose
+(`fixed`, the default; one list is a plain linear solve), the connection test
+prices the lists alone per variant and keeps the survivors (`pruned`), and
+`full` is kept for a headline figure. On the North Norfolk June week the fixed
+route returns the full run's answer to the pound. The page's full-year run is
+unchanged (its own full / loose / pruned choice). (viii) The
 connection's price at +/-50 % (4 Nov 2026, the supervisor's test; build cost and
 network charges scaled separately, full year, three cases): no redesign, 35 of
 36 points pass the cut-off rule's test and no technology appears or disappears;

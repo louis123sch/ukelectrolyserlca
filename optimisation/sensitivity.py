@@ -17,10 +17,35 @@ Each variant is solved at both anchors with the same lexicographic tie-breaks
 report as ``min_cost`` or ``min_gwp``. With ``points=`` a variant is solved as a
 whole frontier instead and the knee is reported beside the anchors.
 
+The price lists (5 Nov 2026). When the site's connection is a choice of lists
+(COST_PLAN §1.11, switches in the model) a solve at the tight gap can take
+hours, and a sweep re-proves the same list once per variant: the overnight run
+of 4 Nov spent 8.8 hours on twelve North Norfolk variants that all chose the
+same 24.5 MW list, one of them 4.9 hours. ``list_choice`` says how a sweep
+treats them:
+
+``fixed`` (the default)
+    the central variant is solved with every list at the loose gap (0.1 %,
+    ``dc_model.LOOSE_MIP_REL_GAP``; it matched the tight answer to the pound
+    on the London year), and every other variant is solved on the list(s) the
+    central anchors chose — one list is an ordinary linear programme, minutes
+    not hours. Right for knobs that do not move the connection's price.
+``pruned``
+    each variant prices every list on its own at both anchors (linear,
+    ``dc_pareto.prune_options``), keeps those within 2 % plus the rule's own,
+    and solves the frontier over the survivors at the loose gap. For the
+    connection sweep, where the list is the thing under test.
+``full``
+    every list at the tight gap for every variant, the old behaviour; for a
+    headline figure, not a sweep.
+
+A case with one list (islanded, a picked substation) is the same under all three.
+
 Run:  python -m optimisation.sensitivity carbon
       python -m optimisation.sensitivity connection london_150_single
       python -m optimisation.sensitivity cost_cutoff          # the cost cut-off's rule 3
       python -m optimisation.sensitivity assumptions          # the cost side's assumptions at their ranges
+      python -m optimisation.sensitivity assumptions norfolk_grid --lists=full
 """
 from __future__ import annotations
 
@@ -160,13 +185,48 @@ def grid(knobs: dict[str, list]) -> list[dict]:
     return [dict(zip(keys, combo)) for combo in itertools.product(*knobs.values())]
 
 
-def _anchor(series, assets, tech, case, objective):
+LIST_CHOICES = ("fixed", "pruned", "full")
+
+
+def _restrict(tech, keys):
+    """The Tech on only the price lists named, in their order; unchanged when
+    it has no choice of lists or every list is named."""
+    opts = M.connection_options_of(tech)
+    if not opts:
+        return tech
+    kept = [o for o in opts if o.key in set(keys)]
+    if not kept or len(kept) == len(opts):
+        return tech
+    return replace(tech, connection_options=tuple(kept))
+
+
+def _lists_chosen(rows: list[dict]) -> list[str]:
+    """The price lists the rows' points chose, in first-seen order."""
+    out = []
+    for r in rows:
+        k = r.get("connection_option")
+        if isinstance(k, str) and k and k not in out:
+            out.append(k)
+    return out
+
+
+def _gap(tech, list_choice: str) -> float | None:
+    """The branching gap for a Tech under a list choice: the loose gap when
+    there is a choice of lists and the choice is a sweep's, None (dc_model's
+    tight default) otherwise. One list has no switches, so no gap applies."""
+    opts = M.connection_options_of(tech)
+    if not opts or len(opts) < 2:
+        return None
+    return M.LOOSE_MIP_REL_GAP if list_choice != "full" else None
+
+
+def _anchor(series, assets, tech, case, objective, mip_rel_gap: float | None = None):
     """One anchor, settled the way dc_pareto.front settles it."""
     def solve_one(obj, gwp_limit=None, cost_limit=None):
         m, V, o = M.build_model(series, assets, tech, objective=obj,
                                 gwp_limit=gwp_limit, cost_limit=cost_limit,
                                 unserved_fraction=case.unserved_fraction)
-        M.solve(m)
+        M.solve(m, **({} if mip_rel_gap is None else {"mip_rel_gap": float(mip_rel_gap)}))
         return V, o
 
     held = {}
@@ -184,7 +244,7 @@ def _anchor(series, assets, tech, case, objective):
     return settled, held["V"]
 
 
-def _row(case, variant, objective, point, q, series, tech, assets, seconds):
+def _row(case, variant, objective, point, q, series, tech, assets, seconds, mip_rel_gap=None):
     terms = M.score(q, series, tech)
     dt, scale = series.dt_hours, series.annual_scale
     batt_out = float(q["dis"].sum()) * dt * scale
@@ -201,7 +261,12 @@ def _row(case, variant, objective, point, q, series, tech, assets, seconds):
          "battery_share_of_storage_output": (batt_out / stored) if stored else float("nan"),
          "unserved_MWh_per_year": point["unserved_MWh_per_year"],
          "solve_s": seconds,
-         "grid_floor_mw": assets.grid_floor_mw, "grid_ceiling_mw": assets.grid_limit_mw}
+         "grid_floor_mw": assets.grid_floor_mw, "grid_ceiling_mw": assets.grid_limit_mw,
+         # The price list this point chose, how many it chose among, and the
+         # branching gap it was solved at (None: one list, no switches).
+         "connection_option": point.get("connection_option"),
+         "connection_lists_solved": len(M.connection_options_of(tech) or ()),
+         "mip_rel_gap": mip_rel_gap}
     for group in ("gwp_embodied", "gwp_operational"):
         for k, v in terms[group].items():
             r[f"gwp_t:{k}"] = v / 1e3
@@ -217,14 +282,16 @@ def _row(case, variant, objective, point, q, series, tech, assets, seconds):
     return r
 
 
-def _frontier_rows(case, variant, series, assets, tech, points):
+def _frontier_rows(case, variant, series, assets, tech, points, mip_rel_gap=None):
     """min_cost, knee and min_gwp of one variant's frontier, as rows."""
     solved = {}
     t0 = time.time()
     res = P.front(series, assets, tech, points=points, unserved_fraction=case.unserved_fraction,
+                  mip_rel_gap=mip_rel_gap,
                   on_solution=lambda tag, V: solved.__setitem__(tag, M.solution_quantities(V)))
     seconds = time.time() - t0
-    return [_row(case, variant, name, res[name], solved[res[name]["point"]], series, tech, assets, seconds)
+    return [_row(case, variant, name, res[name], solved[res[name]["point"]], series, tech, assets, seconds,
+                 mip_rel_gap)
             for name in ("min_cost", "knee", "min_gwp")]
 
 
@@ -239,30 +306,44 @@ def _with_changes(rows: list[dict]) -> pd.DataFrame:
 
 def run(case: Case | str, variants: list[dict], *, name: str,
         objectives=("cost", "gwp"), progress=print, points: int | None = None,
-        resume: bool = False) -> pd.DataFrame:
+        resume: bool = False, list_choice: str = "fixed") -> pd.DataFrame:
     """Solve every variant at each anchor and write ``sensitivity_<name>.csv``.
 
     Percent changes are against the case's central row (the empty variant),
-    which is added if the list leaves it out.
+    which is added if the list leaves it out, and solved first.
 
     ``points`` solves each variant as a frontier of that many points instead
     (``dc_pareto.front``, 40 minutes a variant on a full hourly year) and reports
     min_cost, the knee and min_gwp. The file is rewritten after every variant,
     and ``resume`` keeps the variants an earlier run of the same name finished.
+
+    ``list_choice`` (module docstring) says how a choice of price lists is
+    solved: ``fixed`` solves the central variant with every list at the loose
+    gap and the rest on the list(s) its points chose; ``pruned`` prices the
+    lists one by one per variant and keeps the survivors; ``full`` is every
+    list at the tight gap. Each row records ``connection_option``,
+    ``connection_lists_solved`` and ``mip_rel_gap``; a pruned row also records
+    ``connection_lists_dropped``.
     """
     from optimisation import dc_inputs as I
+    if list_choice not in LIST_CHOICES:
+        raise ValueError(f"list_choice must be one of {LIST_CHOICES}, got {list_choice!r}")
     case = CASES[case] if isinstance(case, str) else case
-    if {} not in variants:
-        variants = [{}] + list(variants)
+    variants = [{}] + [v for v in variants if v]       # the central variant first: it may fix the list
     site, series0, meta0, assets = prepare(case)
+    ref_key = (meta0.get("connection_reference") or {}).get("key")
     OUT_DIR.mkdir(exist_ok=True)
     path = OUT_DIR / f"sensitivity_{name}.csv"
     rows, finished = [], set()
     if resume and path.exists():
         rows = pd.read_csv(path).to_dict("records")
         finished = {r["variant"] for r in rows}
+    fixed_keys: list[str] | None = None
     for i, variant in enumerate(variants, 1):
-        if (", ".join(f"{k}={v}" for k, v in variant.items()) or "central") in finished:
+        label = ", ".join(f"{k}={v}" for k, v in variant.items()) or "central"
+        if label in finished:
+            if not variant and list_choice == "fixed":
+                fixed_keys = _lists_chosen([r for r in rows if r["variant"] == "central"])
             continue
         s_kw = {k: v for k, v in variant.items() if k in SERIES_KNOBS}
         series, meta = (prepare(case, **s_kw)[1:3] if s_kw else (series0, meta0))
@@ -270,19 +351,38 @@ def run(case: Case | str, variants: list[dict], *, name: str,
                   **{k: v for k, v in variant.items() if k not in SERIES_KNOBS}}
         tech = I.build_tech(site, meta, ely_tech=case.ely_tech, h2_colour=case.h2_colour,
                             size_mw_it=case.size_mw_it, pue=case.pue, **kwargs)
+        dropped = None
+        if variant and list_choice == "fixed" and fixed_keys:
+            tech = _restrict(tech, fixed_keys)
+        elif list_choice == "pruned":
+            if progress and (M.connection_options_of(tech) or ()) and len(M.connection_options_of(tech)) > 1:
+                progress(f"[{case.name} {i}/{len(variants)}] pricing each list alone {label}")
+            tech, report = P.prune_options(series, assets, tech, keep_keys=[k for k in (ref_key,) if k],
+                                           unserved_fraction=case.unserved_fraction)
+            dropped = report["dropped"]
+        gap = _gap(tech, list_choice)
+        new = []
         if points:
             if progress:
-                progress(f"[{case.name} {i}/{len(variants)}] frontier {variant or 'central'}")
-            rows += _frontier_rows(case, variant, series, assets, tech, points)
+                progress(f"[{case.name} {i}/{len(variants)}] frontier {label}")
+            new = _frontier_rows(case, variant, series, assets, tech, points, gap)
         else:
             for objective in objectives:
                 t0 = time.time()
                 if progress:
-                    progress(f"[{case.name} {i}/{len(variants)}] min_{objective} "
-                             f"{variant or 'central'}")
-                point, V = _anchor(series, assets, tech, case, objective)
-                rows.append(_row(case, variant, f"min_{objective}", point, M.solution_quantities(V),
-                                 series, tech, assets, time.time() - t0))
+                    progress(f"[{case.name} {i}/{len(variants)}] min_{objective} {label}")
+                point, V = _anchor(series, assets, tech, case, objective, gap)
+                new.append(_row(case, variant, f"min_{objective}", point, M.solution_quantities(V),
+                                series, tech, assets, time.time() - t0, gap))
+        for r in new:
+            r["list_choice"] = list_choice
+            r["connection_lists_dropped"] = ", ".join(dropped) if dropped else None
+        rows += new
+        if not variant and list_choice == "fixed":
+            fixed_keys = _lists_chosen(new)
+            if progress and fixed_keys and (M.connection_options_of(tech) or ()) and len(M.connection_options_of(tech)) > 1:
+                progress(f"[{case.name}] the central points chose {', '.join(fixed_keys)}; "
+                         f"the other variants are solved on {'that list' if len(fixed_keys) == 1 else 'those lists'}")
         pd.DataFrame(rows).to_csv(path, index=False)
     df = _with_changes(rows)
     df.to_csv(path, index=False)
@@ -334,12 +434,17 @@ CONNECTION_CASES = ("london_150_single", "london_150_leicester_sq", "london_150_
                     "norfolk_150_room")
 
 
-def connection(cases=CONNECTION_CASES, points: int = 3, resume: bool = True):
+def connection(cases=CONNECTION_CASES, points: int = 3, resume: bool = True,
+               list_choice: str = "pruned"):
     """Each connection knob at 0.5x and 1.5x, a full frontier per variant
-    (sensitivity_connection_<case>.csv). About 40 minutes a variant, so one
-    process per case; a stopped run carries on where it left off."""
+    (sensitivity_connection_<case>.csv). About 40 minutes a variant on one
+    list, so one process per case; a stopped run carries on where it left off.
+    The price list is the thing under test here, so each variant prices every
+    list alone and keeps the survivors (``pruned``) rather than fixing the
+    central one."""
     return pd.concat([run(c, one_at_a_time(CONNECTION_KNOBS), name=f"connection_{c}",
-                          points=points, resume=resume) for c in cases], ignore_index=True)
+                          points=points, resume=resume, list_choice=list_choice)
+                      for c in cases], ignore_index=True)
 
 
 # The cost side's assumptions with no sourced figure behind them, each at its
@@ -354,9 +459,10 @@ ASSUMPTION_KNOBS = {
 }
 
 
-def assumptions(cases=("islanded_h2", "norfolk_grid")):
+def assumptions(cases=("islanded_h2", "norfolk_grid"), list_choice: str = "fixed"):
     """Every cost-side assumption at its range, one at a time, on the reference cases."""
-    return pd.concat([run(c, one_at_a_time(ASSUMPTION_KNOBS), name=f"assumptions_{c}") for c in cases],
+    return pd.concat([run(c, one_at_a_time(ASSUMPTION_KNOBS), name=f"assumptions_{c}",
+                          list_choice=list_choice) for c in cases],
                      ignore_index=True)
 
 
@@ -380,8 +486,12 @@ def cutoff(cases=("islanded_h2", "london_grid")):
 
 
 if __name__ == "__main__":
-    what = sys.argv[1] if len(sys.argv) > 1 else "carbon"
-    cases = sys.argv[2:]
+    args = [a for a in sys.argv[1:] if not a.startswith("--lists=")]
+    # --lists=fixed|pruned|full overrides each sweep's own default (module docstring).
+    lists = {a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith("--lists=")}
+    choice = lists.pop() if lists else None
+    what = args[0] if args else "carbon"
+    cases = args[1:]
     if what == "carbon":
         carbon(cases or ("islanded_h2", "london_grid"))
     elif what == "cutoff":
@@ -390,10 +500,10 @@ if __name__ == "__main__":
         # Rule 3 of optimisation/cost_exclusions.py: the same frontier with every
         # cost left out added back at its upper estimate.
         for c in cases or ("islanded_h2", "norfolk_grid"):
-            run(c, [{}, {"cost_cutoff": "upper"}], name=f"cost_cutoff_{c}")
+            run(c, [{}, {"cost_cutoff": "upper"}], name=f"cost_cutoff_{c}", list_choice=choice or "fixed")
     elif what == "connection":
-        connection(cases or CONNECTION_CASES)
+        connection(cases or CONNECTION_CASES, list_choice=choice or "pruned")
     elif what == "assumptions":
-        assumptions(cases or ("islanded_h2", "norfolk_grid"))
+        assumptions(cases or ("islanded_h2", "norfolk_grid"), list_choice=choice or "fixed")
     else:
         raise SystemExit(f"unknown sweep {what!r}; try: carbon, cutoff, cost_cutoff, connection, assumptions")
