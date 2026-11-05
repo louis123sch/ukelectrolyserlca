@@ -1,6 +1,8 @@
 # The grid connection's price, +/-50 %
 
-**Verdict: halving or raising the connection's price by half does not change the design, so by the supervisor's test there is no need to go further on it for now.** Of the 36 scaled points, 35 pass the cut-off rule's test, and no technology appears or disappears anywhere. The one failure is narrow: on the size-free 132 kV connection at 1.5 times the build cost, the cheapest design's grid connection shrinks by 5.06 %, from 157.6 to 149.6 MW, while nothing else there moves by more than 0.07 %. Next largest are the same connection (grid moves of 2 to 4 % at the other scales) and the battery (up to 3.44 % in power). Wind and solar move by at most 1.28 %, and the electrolyser, tank and fuel cell by at most 0.61 %. On the national-grid list the connection stays on its 240 MW minimum at every scale, and the largest move is 2.41 % in battery power. Total cost moves by at most 2.65 % and carbon by at most 0.37 %. The national-grid list stays dearer than the 132 kV list at every scale, by £3.17 m to £7.18 m a year, so the gap never closes. Three limits apply. These runs are on the costs as they stood at 13:06 on 4 November 2026, before the government figures work. They fix the price list, so only that two-list comparison speaks to the choice of list, and the other lists were not re-tested. The size limit matters far more than the price: capping the same connection at its published 48.2 MW of room costs £84.55 m a year more at the cheapest point, a move no price change here comes near.
+**Verdict: halving or raising the connection's price by half does not change the design, so by the supervisor's test there is no need to go further on it for now.** The test that counts is the North Norfolk one (5 Nov 2026, the reference site, 150 MW of computing, every asset, the new cost sources, the optimiser choosing the price list): all 12 scaled points pass, no technology appears or disappears, and no built size moves by more than 0.006 % (the electrolyser; everything else by 0.001 % or less). The price does not reach the design because the connection sits on its room limit, 24.5 MW on the 33 kV list at Sall Grid, at every point of every variant, and the rest of the design is set by that limit, not by what the connection costs. What the price does move is the bill: at most 0.53 % of yearly cost (£238.9 m to £241.4 m around £240.1 m at the cheapest point) and nothing in carbon. The list choice was under test this time: each variant priced the six lists alone, dropped the same two 11 kV lists at Stody, and chose the same 33 kV list at Sall Grid from the four that survived, so neither knob moves the choice of substation or voltage either. The run took 4.5 hours (3.4 of them the five three-point frontiers).
+
+The earlier London runs (4 Nov 2026, three fixed-list cases on the costs as they stood that afternoon, before the government and best-source figures) said the same: 35 of 36 points pass, the one failure the size-free 132 kV connection shrinking by 5.06 % at 1.5 times the build cost, with the battery moving up to 3.44 % and cost by up to 2.65 %. The national-grid list stayed dearer than the 132 kV list at every scale, by £3.17 m to £7.18 m a year. Those runs are kept below as they were; they are illustrative only, and their one lesson that survives is that the size limit matters far more than the price: capping London's 132 kV connection at its published 48.2 MW of room costs £84.55 m a year more at the cheapest point, a move no price change here comes near. The same holds at North Norfolk, where the room limit is what sets the design.
 
 The supervisor's test (email of 4 Nov 2026). Full year 2025, hourly, three-point frontier per variant (`optimisation/sensitivity.py`, `connection`). Each row is judged against its case's central row at the same point with the cut-off rule's test: the same technologies built and no built capacity moved by more than 5%.
 
@@ -72,6 +74,28 @@ The price list holds the connection between 20.0 and 48.2 MW.
 | Yearly network charges | 1.5x | knee | 48.2 | 860.4 | 916.8 | 204.8 | 3,280.8 | 5.0 | 193,476.1 | 23.7 | 242.58 | 115,565 | pass: tank -0.0% |
 | Yearly network charges | 1.5x | lowest carbon | 48.2 | 1,433.9 | 393.9 | 135.5 | 1,607.8 | 95.7 | 108,353.6 | 39.3 | 297.22 | 99,931 | pass: battery energy -0.0% |
 
+### North Norfolk, 150 MW of computing, the optimiser choosing the price list, each capped at the room its substation publishes (the reference site for conclusions)
+
+The price list holds the connection between 0.0 and 24.5 MW.
+
+| Knob | Scale | Point | Grid MW | Wind MW | Solar MW | Battery MW | Battery MWh | Electrolyser MW | Tank kg | Fuel cell MW | Cost £ m/yr | Carbon t/yr | Test |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Central | 1.0x | cheapest | 24.5 | 589.9 | 330.3 | 121.2 | 2,211.2 | 6.3 | 197,495.3 | 34.0 | 240.14 | 75,474 | reference |
+| Central | 1.0x | knee | 24.5 | 662.9 | 280.4 | 77.7 | 916.5 | 29.0 | 299,125.3 | 86.0 | 256.42 | 68,797 | reference |
+| Central | 1.0x | lowest carbon | 24.5 | 841.0 | 207.8 | 28.3 | 113.9 | 110.7 | 260,849.2 | 135.8 | 307.94 | 65,458 | reference |
+| One-off build cost | 0.5x | cheapest | 24.5 | 589.9 | 330.3 | 121.2 | 2,211.2 | 6.3 | 197,495.2 | 34.0 | 239.49 | 75,475 | pass: electrolyser -0.0% |
+| One-off build cost | 0.5x | knee | 24.5 | 662.9 | 280.4 | 77.7 | 916.5 | 29.0 | 299,125.5 | 86.0 | 255.77 | 68,797 | pass: electrolyser -0.0% |
+| One-off build cost | 0.5x | lowest carbon | 24.5 | 841.0 | 207.8 | 28.3 | 113.9 | 110.7 | 260,849.2 | 135.8 | 307.29 | 65,458 | pass: battery power -0.0% |
+| One-off build cost | 1.5x | cheapest | 24.5 | 589.9 | 330.3 | 121.2 | 2,211.2 | 6.3 | 197,495.5 | 34.0 | 240.80 | 75,474 | pass: electrolyser +0.0% |
+| One-off build cost | 1.5x | knee | 24.5 | 662.9 | 280.4 | 77.7 | 916.5 | 29.0 | 299,125.2 | 86.0 | 257.07 | 68,797 | pass: electrolyser +0.0% |
+| One-off build cost | 1.5x | lowest carbon | 24.5 | 841.0 | 207.8 | 28.3 | 113.9 | 110.7 | 260,849.9 | 135.8 | 308.59 | 65,458 | pass: battery power -0.0% |
+| Yearly network charges | 0.5x | cheapest | 24.5 | 589.9 | 330.3 | 121.2 | 2,211.2 | 6.3 | 197,495.1 | 34.0 | 238.88 | 75,475 | pass: electrolyser -0.0% |
+| Yearly network charges | 0.5x | knee | 24.5 | 662.9 | 280.4 | 77.7 | 916.5 | 29.0 | 299,125.5 | 86.0 | 255.16 | 68,797 | pass: electrolyser -0.0% |
+| Yearly network charges | 0.5x | lowest carbon | 24.5 | 841.0 | 207.8 | 28.3 | 113.9 | 110.7 | 260,849.2 | 135.8 | 306.68 | 65,458 | pass: battery power -0.0% |
+| Yearly network charges | 1.5x | cheapest | 24.5 | 589.9 | 330.3 | 121.2 | 2,211.2 | 6.3 | 197,495.6 | 34.0 | 241.40 | 75,474 | pass: electrolyser +0.0% |
+| Yearly network charges | 1.5x | knee | 24.5 | 662.9 | 280.4 | 77.7 | 916.5 | 29.0 | 299,125.1 | 86.0 | 257.68 | 68,797 | pass: electrolyser +0.0% |
+| Yearly network charges | 1.5x | lowest carbon | 24.5 | 841.0 | 207.8 | 28.3 | 113.9 | 110.7 | 260,849.2 | 135.8 | 309.20 | 65,458 | pass: battery power +0.0% |
+
 ### Which price list is cheaper at each scale
 
 The cheapest point on each of the two lists, £ m a year. The fixed-list runs cannot switch list themselves, so this is the check on whether the choice would flip.
@@ -86,5 +110,5 @@ The cheapest point on each of the two lists, £ m a year. The fixed-list runs ca
 
 ### Summary
 
-35 of 36 points pass the test.
+47 of 48 points pass the test.
 - london_150_leicester_sq_cap, one-off build cost at 1.5x, cheapest: grid -5.1%
