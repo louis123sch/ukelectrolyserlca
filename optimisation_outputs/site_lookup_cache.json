@@ -271,6 +271,14 @@
     "region_name": "North Scotland",
     "tnuos_zone": 1
   },
+  "55.4,-5.76": {
+    "carbon_api_region": 1,
+    "outcode": "PA28",
+    "place": "Argyll and Bute",
+    "postcode": null,
+    "region_name": "North Scotland",
+    "tnuos_zone": 1
+  },
   "55.7,-6.48": {
     "carbon_api_region": 1,
     "outcode": "PA47",
@@ -278,6 +286,14 @@
     "postcode": "PA47 7SZ",
     "region_name": "North Scotland",
     "tnuos_zone": 1
+  },
+  "55.8,-2.4": {
+    "carbon_api_region": 2,
+    "outcode": "TD11",
+    "place": "Scottish Borders",
+    "postcode": "TD11 3TR",
+    "region_name": "South Scotland",
+    "tnuos_zone": 2
   },
   "55.86,-4.25": {
     "carbon_api_region": 2,
