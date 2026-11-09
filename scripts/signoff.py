@@ -4,6 +4,7 @@
     python scripts/signoff.py                       # every step, in order
     python scripts/signoff.py --run-to PATH         # also the North Norfolk optimiser run, saved under PATH
     python scripts/signoff.py --only 1 2 8 3 4 5   # just those steps, in that order
+    python scripts/signoff.py --stop-at 2026-11-10T09:00   # nothing starts after 9:00; a step running then stops
 
 Meant to run from a clean, committed tree (a separate worktree is safest, so nothing edited
 meanwhile in the working checkout can reach it). Each step's output goes to
@@ -83,7 +84,11 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--run-to", default=None, help="save the North Norfolk run under this dc_runs folder")
     ap.add_argument("--only", nargs="*", default=None)
+    ap.add_argument("--stop-at", default=None,
+                    help="local time to stop by, e.g. 2026-11-10T09:00: no step starts after it, and a step "
+                         "still running then is stopped and recorded as such")
     a = ap.parse_args(argv)
+    stop_at = dt.datetime.fromisoformat(a.stop_at) if a.stop_at else None
     os.environ.setdefault("MKL_THREADING_LAYER", "TBB")
     stamp = dt.datetime.now().strftime("%Y-%m-%d_%H%M")
     logdir = ROOT / "optimisation_outputs" / "signoff" / stamp
@@ -97,6 +102,9 @@ def main(argv=None) -> int:
         plan = [by[n] for n in a.only if n in by]
     try:
         for n, name, cmds in plan:
+            if stop_at and dt.datetime.now() >= stop_at:
+                rows.append((n, name, "not started", "0 min", f"past the stop time, {stop_at:%a %H:%M}"))
+                continue
             log = logdir / f"step_{n}.log"
             t0, ok, note = time.time(), True, ""
             with log.open("w", encoding="utf-8", errors="replace") as f:
@@ -109,9 +117,21 @@ def main(argv=None) -> int:
                         continue
                     f.write(f"\n$ {' '.join(map(str, c))}\n")
                     f.flush()
-                    r = subprocess.run(c, cwd=ROOT, stdout=f, stderr=subprocess.STDOUT, text=True)
-                    if r.returncode != 0:
-                        ok, note = False, f"exit {r.returncode} from {' '.join(map(str, c[:4]))}"
+                    proc = subprocess.Popen(c, cwd=ROOT, stdout=f, stderr=subprocess.STDOUT, text=True)
+                    stopped = False
+                    while proc.poll() is None:
+                        if stop_at and dt.datetime.now() >= stop_at:
+                            proc.kill()
+                            proc.wait()
+                            stopped = True
+                            break
+                        time.sleep(20)
+                    if stopped:
+                        f.write(f"\n# stopped at the stop time, {stop_at:%a %H:%M}\n")
+                        ok, note = False, f"stopped unfinished at {stop_at:%a %H:%M}"
+                        break
+                    if proc.returncode != 0:
+                        ok, note = False, f"exit {proc.returncode} from {' '.join(map(str, c[:4]))}"
                         break
                 if n == "1":
                     dirty = subprocess.run(["git", "status", "--porcelain", "--untracked-files=no"], cwd=ROOT,
@@ -120,7 +140,8 @@ def main(argv=None) -> int:
                         ok, note = False, "tracked files changed: not a committed tree"
             mins = (time.time() - t0) / 60.0
             tail = log.read_text(encoding="utf-8", errors="replace").strip().splitlines()[-3:]
-            rows.append((n, name, "done" if ok else "FAILED", f"{mins:,.0f} min", note or " / ".join(tail)[:300]))
+            status = "done" if ok else ("STOPPED" if note.startswith("stopped") else "FAILED")
+            rows.append((n, name, status, f"{mins:,.0f} min", note or " / ".join(tail)[:300]))
             _summary(logdir, head, rows, running=True)
     finally:
         _summary(logdir, head, rows, running=False)
