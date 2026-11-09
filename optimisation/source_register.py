@@ -60,7 +60,8 @@ _FIXED = [
            "document", link="https://docs.modoenergy.com/pages/jan-2026/uk-europe/model-assumptions/",
            basis="real 2025 £",
            note="~£400/kW for a 1-hour system, +£100/kW per further hour; 15-year life; 5.0 % real WACC. "
-                "The source NESO's FES 2025 uses for battery capital"),
+                "The source NESO's FES 2025 uses for battery capital. The October 2026 version says 20 years for "
+                "batteries; the model keeps NESO's 15"),
     Source("modo_capex_survey_2024",
            "BESS CapEx Survey 2024 (30 market participants, 2.8 GW at 1.9 h)", "Modo Energy", "2024",
            "document", basis="nominal 2024 £",
@@ -131,6 +132,23 @@ _FIXED = [
            "release of 30 September 2026", "data feed",
            link="https://www.ons.gov.uk/economy/grossdomesticproductgdp/timeseries/ybgb/qna",
            note="2024 = 100; optimisation/price_base.py holds it, scripts/check_price_base.py compares it"),
+    Source("neso_fes2025_economics_inputs", "FES 2025 Economics Inputs Data Workbook, version 2", "NESO",
+           "24 August 2026", "workbook", link="https://www.neso.energy/document/374261/download",
+           held="OneDrive, DC optimiser/cost sources/11 equipment (checked 9 Nov 2026)", basis="2025 prices",
+           note="E.03 battery storage 1-9 hr, build year 2026: capex 298.35 / 547.26 / 920.18 / 1,264.71 / "
+                "1,812.72 per kW; fixed opex 6.20 / 8.69 / 12.41 / 13.65 / 16.13 per kW per year. E.02: 15-year "
+                "life, 1-year build. Its capex is Modo's data, its opex BEIS 2022's"),
+    Source("desnz_fossil_fuel_prices_2025", "Fossil fuel price assumptions 2025, data tables", "DESNZ",
+           "3 February 2026", "workbook",
+           link="https://assets.publishing.service.gov.uk/media/69693a291c8a70fc0a3b0434/"
+                "Fossil_Fuel_Price_Assumptions_2025_publication.xlsx",
+           held="OneDrive, DC optimiser/cost sources/12 prices (checked 9 Nov 2026)", basis="real 2024 p/therm",
+           note="Sheet Gas, NBP, cases A/B/C (low/central/high): 2025 77/94/121, 2026 52/85/143, 2030 42/71/120"),
+    Source("neso_tyo_2026_workbook", "Ten Year Outlook 2026 Data Workbook", "NESO", "September 2026", "workbook",
+           link="https://www.neso.energy/document/386516/download",
+           held="OneDrive, DC optimiser/cost sources/12 prices (checked 9 Nov 2026)", basis="real 2026 EUR",
+           note="CP2 base case, GB total carbon price 2026 EUR 80.94/t; CP1 conversion 2026 GBP 1 = EUR 1.12; CP1 "
+                "NBP gas 2026 EUR 30.12/MWh. FES is now three-yearly; this covers the near years"),
     Source("hmt_gdp_deflators_oct_2026", "GDP deflators at market prices, and money GDP: October 2026 (Budget)",
            "HM Treasury", "29 October 2026", "workbook",
            link="https://www.gov.uk/government/statistics/gdp-deflators-at-market-prices-and-money-gdp-october-2026-budget",
@@ -147,13 +165,13 @@ _FIXED = [
            note="2015 = 100. Inflates euro figures in their own currency before the FES cross-rate"),
     # --- authoritative alternatives, where no UK government figure exists or it looks wrong (4 Nov 2026)
     Source("cepa_hurdle_rates_2025", "Hurdle rate estimates for electricity sector technologies (final report)",
-           "CEPA for DESNZ", "30 June 2025, published October 2025", "document",
+           "CEPA for DESNZ", "report dated 30 July 2025, published October 2025", "document",
            link="https://assets.publishing.service.gov.uk/media/68cd1d818c44a661b4995d9f/cepa-desnz-hurdle-rates-electricity.pdf",
            basis="pre-tax real (CPI), 50 % gearing, whole-life, 31 December 2024",
            note="Table E.1: solar PV and onshore wind 7.60 %, offshore wind 8.90 %, lithium batteries 8.90 %, hydrogen "
                 "electrolyser 10.10 %, hydrogen to power (emerging) and novel long-duration storage 10.10 %. No fuel cell "
                 "or hydrogen storage row: they take 10.10 %"),
-    Source("dea_renewable_fuels_2026", "Technology Data for Renewable Fuels, data sheet 80 SOEC 10 MW (v0019, DNV)",
+    Source("dea_renewable_fuels_2026", "Technology Data for Renewable Fuels, data sheet 80 SOEC 10 MW (workbook 'Version 0015', August 2026, DNV)",
            "Danish Energy Agency and Energinet", "August 2026", "workbook",
            link="https://ens.dk/media/6444/download", basis="2025 € for the electrolysis chapters (Intro sheet)",
            note="Solid-oxide 10 MW, 2025 column: specific investment €2,959/kW of input electricity (range 2,851–3,067), "
@@ -206,10 +224,15 @@ _FIXED = [
            "NESO", "2025", "workbook", basis="real 2025 £",
            note="Every currency conversion in the study uses its 2025 cross-rates: £1 = €1.17, $1 = €0.913"),
     # --- bought hydrogen ---------------------------------------------------
-    Source("eho_uk_2024",
-           "European Hydrogen Observatory — levelised cost of hydrogen production, United Kingdom, 2024",
-           "European Hydrogen Observatory", "2024", "data feed", basis="€ 2024, converted to real 2025 £",
-           note="SMR, reforming with carbon capture, renewable directly connected, grid electrolysis"),
+    Source("eho_uk_2025",
+           "European Hydrogen Observatory — Hydrogen production costs 2025, United Kingdom rows",
+           "European Hydrogen Observatory", "2025 (posted November 2026)", "data feed",
+           link="https://observatory.clean-hydrogen.europa.eu/sites/default/files/2026-11/"
+                "Hydrogen%20production%20costs%202025.xlsx",
+           held="OneDrive, DC optimiser/cost sources/12 prices (checked 9 Nov 2026)",
+           basis="€ 2025, converted at £1 = €1.17",
+           note="UK, €/kg: SMR 2.68, reforming with carbon capture 3.57, renewable directly connected 5.03, grid "
+                "electrolysis 6.89. Replaced the 2024 workbook (3.35 / 4.32 / 5.63 / 9.52) on 9 Nov 2026"),
     Source("neso_lcoh_green", "Levelised cost of green hydrogen modelling, 2025 to 2050 (resource cc2dad0c)",
            "NESO", "2025", "data feed", basis="real 2025 £",
            note="The green price range; full sensitivity cube"),
@@ -234,10 +257,30 @@ _FIXED = [
            note="Buy-out £69.34 per ROC; obligation 0.472 ROCs per MWh supplied (England, Wales and Scotland)"),
     Source("ofgem_fit_quarterly", "FIT Quarterly Report, Issues 62–65 (Jul 2025 – Jun 2026)", "Ofgem",
            "2025–2026", "document", held=f"{ONEDRIVE}/5 levies and losses",
-           note="Levelisation fund and supply less exempt supply per quarter; £/MWh = fund / (supply − exempt)"),
-    Source("emr_key_figures_2026_27", "Key Figures for Payments in 2026/27", "EMR Settlement", "2026/27",
-           "document", held=f"{ONEDRIVE}/5 levies and losses",
-           note="§1, §3 CfD interim levy rates and operational levy; §5, §7 Nuclear RAB; §9, §12 Capacity Market"),
+           note="Levelisation fund and supply less exempt supply per quarter; £/MWh = fund / (supply − exempt). "
+                "Since 9 Nov 2026 a cross-check only: the FiT figure is Ofgem's Annex 4 (ofgem_annex4_policy_costs_2026)"),
+    Source("emr_key_figures_2026_27", "Key Figures for Payments in 2026/27, Revision 13", "EMR Settlement",
+           "6 November 2026", "document",
+           link="https://www.emrsettlement.co.uk/document/settlement-data/key-figures-for-payment-2026-27/",
+           held="OneDrive, DC optimiser/cost sources/9 levies and losses (checked 9 Nov 2026)",
+           note="§1, §3 CfD interim levy rates and operational levy; §5, §7 Nuclear RAB; §9, §12 Capacity Market. "
+                "Revision 13 added CfD £0.000 from 5 Nov 2026 and Nuclear RAB £5.151 from 6 Dec 2026"),
+    Source("ofgem_annex4_policy_costs_2026", "Default tariff cap, Annex 4 - Policy cost allowance methodology, v1.25 "
+           "(October-December 2026)", "Ofgem", "August 2026", "workbook",
+           link="https://www.ofgem.gov.uk/sites/default/files/2026-08/Annex-4-policy-cost-allowance-methodology-v1.25.xlsx",
+           held="OneDrive, DC optimiser/cost sources/9 levies and losses (checked 9 Nov 2026)",
+           note="Sheet 3i New FIT methodology, row 227: FiT cost £7.698/MWh Apr-Sep 2026, £8.050/MWh Oct 2026-Mar 2027"),
+    Source("capacity_regulations_2014", "The Electricity Capacity Regulations 2014 (SI 2014/2043), regulation 2; "
+           "and the Electricity Capacity (Supplier Payment etc.) Regulations 2014 (SI 2014/3354), regulation 2",
+           "UK legislation", "as amended", "document",
+           link="https://www.legislation.gov.uk/uksi/2014/2043/regulation/2",
+           held="OneDrive, DC optimiser/cost sources/9 levies and losses (checked 9 Nov 2026)",
+           note="'working day' excludes bank and public holidays in England and Wales; 'period of high demand' is "
+                "4-7 pm on any working day, November to February"),
+    Source("govuk_bank_holidays", "UK bank holidays (bank-holidays.json)", "GOV.UK", "fetched 9 November 2026",
+           "data feed", link="https://www.gov.uk/bank-holidays.json",
+           held="OneDrive, DC optimiser/cost sources/9 levies and losses (checked 9 Nov 2026)",
+           note="england-and-wales, 2019-2028; levies.ENGLAND_WALES_BANK_HOLIDAYS holds the November-February ones"),
     Source("neso_aahedc_2026_27", "AAHEDC Final Tariff and Charging Statement 2026-27, Schedule 1", "NESO",
            "2026/27", "document", held=f"{ONEDRIVE}/5 levies and losses",
            note="Total Scheme Energy Consumption Tariff 0.044269 p/kWh"),
@@ -246,7 +289,8 @@ _FIXED = [
            note="Electricity £0.00801/kWh; 92 % discount under a Climate Change Agreement"),
     Source("elexon_tlf_guidance", "Guidance document for Transmission Loss Factors v1.0", "Elexon",
            "January 2026", "document", held=f"{ONEDRIVE}/5 levies and losses",
-           note="Offtaking TLM = 1 + TLF(zone, season) + TLMO−; the worked example's 0.011"),
+           note="Offtaking TLM = 1 + TLF(zone, season) + TLMO−; losses split 45 % delivering, 55 % offtaking; "
+                "the worked example's TLMO− is 0.00398 (0.78 / 196)"),
     Source("elexon_tlf_report_2026_27", "Analysis Reporting for TLFs — BSC Year 2026/27 V1.0", "Elexon",
            "April 2026", "document", held=f"{ONEDRIVE}/5 levies and losses",
            note="Adjusted seasonal zonal TLFs, read from the charts on pp. 7–8 (about ±0.0005)"),
@@ -270,8 +314,10 @@ _FIXED = [
 
 def _price_lists() -> list[Source]:
     from optimisation import connection_cost as cc
+    newer = {"SEPD", "SHEPD"}           # the 29 Oct 2026 editions, saved by the 9 Nov source check
     return [Source(f"connection_prices.{k}", p.source, p.name, str(cc.PRICE_YEAR), "charging statement",
-                   held=f"{ONEDRIVE}/4 connection capital",
+                   held=("OneDrive, DC optimiser/cost sources/10 network (checked 9 Nov 2026)" if k in newer
+                         else f"{ONEDRIVE}/4 connection capital"),
                    note="Statement of Methodology and Charges for Connection, §7 tables F5 (cables) and F7 "
                         "(substations); £ excluding VAT")
             for k, p in cc.PRICE_LISTS.items()]

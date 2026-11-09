@@ -289,12 +289,13 @@ def test_soec_cost_is_danish_between_the_beis_annex_level_and_ratio():
     from optimisation import h2_capex as hc
     soec = hc.electrolyser_costs()
     soec = soec[soec.asset == "electrolyser_soec"].set_index("case")
-    assert soec.loc["central", "capex_GBP_per_kWe"] == pytest.approx(2959.14 / 1.17, rel=1e-3)
-    assert soec.loc["high", "capex_GBP_per_kWe"] == pytest.approx(2010.0 * 2.4603, rel=1e-3)
-    assert soec.loc["low", "capex_GBP_per_kWe"] == pytest.approx(1659.8, rel=1e-3)
+    # since 9 Nov 2026: NESO FES 2025 Economics Inputs H.02 (central 2026 build, high 2025), DEA low
+    assert soec.loc["central", "capex_GBP_per_kWe"] == pytest.approx(4923.845 / 0.95885, rel=1e-3)
+    assert soec.loc["high", "capex_GBP_per_kWe"] == pytest.approx(5234.367 / 0.95885, rel=1e-3)
+    assert soec.loc["low", "capex_GBP_per_kWe"] == pytest.approx(2959.14 / 1.17, rel=1e-3)
     assert soec.loc["central", "variable_opex_GBP_per_kg"] == pytest.approx(0.50, rel=1e-2)
     assert soec.loc["central", "fixed_opex_frac"] * soec.loc["central", "capex_GBP_per_kWe"] == pytest.approx(
-        53.02 / 0.95885 * (103.6 / 84.9), rel=1e-3)
+        123.096 / 0.95885, rel=1e-3)
 
 
 def test_cost_figures_on_uk_government_sources_are_pinned():
@@ -317,8 +318,11 @@ def test_cost_figures_on_uk_government_sources_are_pinned():
     assert hc.tank_cost("low")["capex_GBP_per_kg_capacity"] == pytest.approx(600.0 / 1.17)
     assert hc.tank_cost("high")["capex_GBP_per_kg_capacity"] == pytest.approx(900.0 * 128.705 / 107.183 / 1.17, rel=1e-4)
     comp = battery.cost_components()
-    assert comp["central"]["power_GBP_per_kW"] == pytest.approx(256.1, abs=0.1)
-    assert comp["central"]["energy_GBP_per_kWh"] == pytest.approx(158.6, abs=0.1)
+    import numpy as np
+    neso = battery.NESO_CAPEX_2026_GBP_PER_KW
+    slope, intercept = np.polyfit(battery.NESO_FIT_HOURS, [neso[h] for h in battery.NESO_FIT_HOURS], 1)
+    assert comp["central"]["power_GBP_per_kW"] == pytest.approx(intercept)
+    assert comp["central"]["energy_GBP_per_kWh"] == pytest.approx(slope)
     assert comp["low"]["power_GBP_per_kW"] + comp["low"]["energy_GBP_per_kWh"] == pytest.approx(400.0)
     assert comp["low"]["energy_GBP_per_kWh"] == pytest.approx(125.0 / (1.17 / 0.913), rel=1e-4)
     assert comp["high"]["energy_GBP_per_kWh"] == pytest.approx((2654.969563 - 907.617750) / 8 * 122.4 / 116.1
@@ -352,11 +356,13 @@ def test_transmission_loss_factors_are_elexon_s_exact_values():
     assert levies.TLMO_OFFTAKING_2026_27 == (0.00948, 0.01068, 0.00991, 0.00671)
 
 
-def test_battery_fit_is_within_two_percent_of_the_beis_exhibit():
+def test_battery_fit_is_within_two_percent_of_the_neso_sheet():
+    """NESO FES 2025 Economics Inputs E.03, build year 2026, over the 2-9 hours fitted."""
     from optimisation import battery, price_base as P
     comp = battery.cost_components()["central"]
-    for hours, printed in battery.BEIS_CAPEX_GBP_PER_KW.items():
-        fitted = (comp["power_GBP_per_kW"] + comp["energy_GBP_per_kWh"] * hours) / P.factor(battery.BEIS_PRICE_YEAR)
+    for hours in battery.NESO_FIT_HOURS:
+        printed = battery.NESO_CAPEX_2026_GBP_PER_KW[hours]
+        fitted = (comp["power_GBP_per_kW"] + comp["energy_GBP_per_kWh"] * hours) / P.factor(battery.NESO_PRICE_YEAR)
         assert fitted == pytest.approx(printed, rel=0.02)
 
 
@@ -829,9 +835,9 @@ def test_sweep_overrides_reach_the_tech():
     _cached(fuel_cell)
     from optimisation import battery
     from optimisation import dc_inputs as I
-    base = I.build_tech("london", _NO_NETWORK)
+    base = I.build_tech("north_norfolk", _NO_NETWORK)
     d = fuel_cell.decompose()
-    t = I.build_tech("london", _NO_NETWORK, fc_stack_calendar_years=5.0,
+    t = I.build_tech("north_norfolk", _NO_NETWORK, fc_stack_calendar_years=5.0,
                      fc_bop_calendar_years=15.0, fc_kw_per_container=500.0,
                      batt_usable_fraction=0.80)
     assert (t.fc_stack_calendar_years, t.fc_bop_calendar_years) == (5.0, 15.0)
@@ -855,7 +861,7 @@ def test_sweep_overrides_reach_the_tech():
 def test_bad_sweep_override_is_refused_before_loading(kw, bad):
     from optimisation import dc_inputs as I
     with pytest.raises(ValueError, match=kw):
-        I.build_tech("london", {}, **{kw: bad})
+        I.build_tech("north_norfolk", {}, **{kw: bad})
 
 
 def test_sensitivity_variant_lists():
@@ -940,7 +946,7 @@ def test_gramc_stack_is_the_lighter_basis():
     assert fuel_cell.stack_kgco2e_per_mw(d) == b              # the default
     assert 0.3 < g / b < 0.7
     from optimisation import dc_inputs as I
-    t = I.build_tech("london", _NO_NETWORK, fc_stack_basis="gramc_2025")
+    t = I.build_tech("north_norfolk", _NO_NETWORK, fc_stack_basis="gramc_2025")
     assert t.gwp_fc_stack_per_mw == pytest.approx(g)
 
 

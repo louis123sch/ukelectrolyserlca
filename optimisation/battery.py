@@ -2,13 +2,15 @@
 Lithium-ion battery storage — cost and embodied carbon.
 =============================================================================
 
-Costs since 4 Nov 2026 come from **BEIS's 2022 Benefits of Long Duration
-Electricity Storage**, Exhibit 3.11, which FES 2025 also uses for storage running
-costs: UK government, covering 1 to 9 hours, and the straight line through it
-carries the price beyond (``PNNL_LFP_10MW_2030_USD_PER_KW``). Modo
-Energy (the source of FES's capital, not public in full) sets the low case, its
-survey the high case's spread, and the discount rate. Everything is in **real
-2025 GBP**.
+Costs since 9 Nov 2026 come from **NESO's FES 2025 Economics Inputs Data
+Workbook**, sheet E.03: capital and fixed running cost of a battery built in
+2026, by duration (1, 2, 4, 6 and 9 hours), in 2025 pounds — the system
+operator's figure, stated for the build year (its capital is Modo's data, its
+running cost BEIS 2022's, inflated). The straight line through it carries the
+price beyond 9 hours (``PNNL_LFP_10MW_2030_USD_PER_KW``). Until 9 Nov the
+central case was BEIS 2022 (2030 capital, real 2019), kept below as
+``BEIS_CAPEX_GBP_PER_KW`` for the record. Modo Energy sets the low case. Everything
+is in **real 2025 GBP** (dc_inputs takes it to 2026).
 
 Embodied carbon comes from ecoinvent 3.9.1. Cost and carbon are deliberately
 kept on the same two-part structure — a **power** term (£/kW, kg CO2e/kW) and
@@ -17,10 +19,11 @@ duration independently instead of being locked to a 4-hour product.
 
 Sources
 -------
-cost              BEIS, Benefits of Long Duration Electricity Storage (Research
-                  Paper 2022/019), Exhibit 3.11, p. 30. Li-ion at 1, 2, 4, 6 and
-                  9 hours, capital and running cost, real 2019, 2030 capital;
-                  15-year financial life.
+cost              NESO, FES 2025 Economics Inputs Data Workbook v2 (Aug 2026),
+                  sheet E.03, rows 14-18 (CapEx) and 59-63 (Fixed OpEx), 2026
+                  column; sheet E.02 rows 13-17: 15-year life, 1-year build.
+                  2025 prices. Was BEIS, Benefits of Long Duration Electricity
+                  Storage (2022), Exhibit 3.11 (real 2019, 2030 capital).
 
 cost low case,    Modo Energy, "BESS Cost and Technical Assumptions",
 technical         docs.modoenergy.com/pages/jan-2026/uk-europe/model-assumptions/
@@ -80,8 +83,19 @@ CASES = ("low", "central", "high")
 # real 2019 pounds. It covers 1 to 9 hours; a 2022 forecast of 2030 capital, so its
 # age is stated rather than corrected.
 BEIS_PRICE_YEAR = 2019
-BEIS_CAPEX_GBP_PER_KW = {1: 331.0, 2: 449.0, 4: 696.0, 6: 930.0, 9: 1328.0}
+BEIS_CAPEX_GBP_PER_KW = {1: 331.0, 2: 449.0, 4: 696.0, 6: 930.0, 9: 1328.0}       # the record; not used
 BEIS_OPEX_GBP_PER_KW_YEAR = {1: 5.0, 2: 7.0, 4: 10.0, 6: 11.0, 9: 13.0}
+
+# Central since 9 Nov 2026 (government or system operator decides): NESO FES 2025
+# Economics Inputs Data Workbook v2, sheet E.03, build year 2026, 2025 prices.
+NESO_PRICE_YEAR = 2025
+NESO_CAPEX_2026_GBP_PER_KW = {1: 298.35, 2: 547.26, 4: 920.18, 6: 1264.71, 9: 1812.719849}
+NESO_OPEX_GBP_PER_KW_YEAR = {1: 6.203703703703703, 2: 8.685185185185185, 4: 12.407407407407407,
+                             6: 13.648148148148147, 9: 16.12962962962963}
+# The line is fitted through 2-9 hours, the durations the optimiser builds: there it
+# is within 1 % of every row. NESO's 1-hour system is a cheaper, power-led product
+# the line overprices by about a quarter; nothing the model builds is that short.
+NESO_FIT_HOURS = (2, 4, 6, 9)
 # North Norfolk's least-cost design builds 18 hours. No UK figure read goes past 12.
 # The one source read that does, PNNL's 2022 assessment, Figure 4.3 (LFP, 10 MW, 2030,
 # total installed), says the line holds: fitted through 2 to 10 hours it lands within
@@ -122,7 +136,7 @@ ATB_2026_USD_PER_KW = {2: 907.617750, 4: 1344.455703, 6: 1781.293657, 8: 2218.13
 # CEPA for DESNZ (2025), Table E.1: lithium batteries 8.90 %, pre-tax real.
 # Was Modo's 5.0 % real until 4 Nov 2026 (evening).
 WACC_REAL = 0.089
-BUILD_YEARS = 1              # BEIS 2022, Exhibit 3.11: build time 1 year at every duration
+BUILD_YEARS = 1              # NESO FES 2025 E.02 (and BEIS 2022): build time 1 year at every duration
 ASSET_LIFE_YEARS = 15        # Modo: BESS asset lifetime
 
 # =============================================================================
@@ -252,10 +266,11 @@ def capital_recovery_factor(rate, lifetime_years):
 
 def cost_components():
     """Capex, power (GBP/kW) and energy (GBP/kWh), and fixed running cost per each
-    (GBP per year), by case, in 2025 pounds. Running cost is BEIS's in every case."""
-    inflate = P.factor(BEIS_PRICE_YEAR)
-    power, energy = (v * inflate for v in _fit_power_energy(BEIS_CAPEX_GBP_PER_KW))
-    run_power, run_energy = (v * inflate for v in _fit_power_energy(BEIS_OPEX_GBP_PER_KW_YEAR))
+    (GBP per year), by case, in 2025 pounds. Running cost is NESO's in every case."""
+    inflate = P.factor(NESO_PRICE_YEAR)
+    fit = lambda d: _fit_power_energy({h: d[h] for h in NESO_FIT_HOURS})   # noqa: E731
+    power, energy = (v * inflate for v in fit(NESO_CAPEX_2026_GBP_PER_KW))
+    run_power, run_energy = (v * inflate for v in fit(NESO_OPEX_GBP_PER_KW_YEAR))
     ember = P.usd_to_gbp_2025(EMBER_ALL_IN_USD_PER_KWH, EMBER_PRICE_YEAR)
     atb_power, atb_energy = (P.usd_to_gbp_2025(v, ATB_PRICE_YEAR) for v in _fit_power_energy(ATB_2026_USD_PER_KW))
     capex = {"low": (MODO_1H_GBP_PER_KW - ember, ember),
@@ -270,16 +285,17 @@ def annual_costs(case: str) -> dict:
     """The battery's two LP cost coefficients in one case, £/MW/y (power) and
     £/MWh/y (energy): capital times the CRF at Modo's WACC over the life, plus
     the fixed running cost. Each number recorded for the cost map (``trace.cost``)."""
-    exhibit = [("beis_ldes_2022", "Exhibit 3.11, p. 30, Li-ion, 2030 capex and opex")]
+    sheet = [("neso_fes2025_economics_inputs", "sheet E.03, battery storage 1-9 hr, build year 2026")]
     modo = [("modo_bess_assumptions", "GB model assumptions, capital cost")]
-    T.cost("cost.battery.beis_capex_by_duration", BEIS_CAPEX_GBP_PER_KW[6], "GBP per kW",
-           "Capital of a 6-hour system, the longest at BEIS's 7.3 % (real 2019, 2030 capital)", grade="transcribed",
-           cites=exhibit, inputs={f"{h} h": v for h, v in BEIS_CAPEX_GBP_PER_KW.items()})
-    T.cost("cost.battery.beis_opex_by_duration", BEIS_OPEX_GBP_PER_KW_YEAR[6], "GBP per kW per year",
-           "Running cost of a 6-hour system (real 2019)", grade="transcribed", cites=exhibit,
-           inputs={f"{h} h": v for h, v in BEIS_OPEX_GBP_PER_KW_YEAR.items()})
-    P.to_2025(BEIS_PRICE_YEAR)
-    capex_uses = ["cost.battery.beis_capex_by_duration", f"price_base.{BEIS_PRICE_YEAR}_to_2025"]
+    T.cost("cost.battery.neso_capex_by_duration", NESO_CAPEX_2026_GBP_PER_KW[6], "GBP per kW",
+           "Capital of a 6-hour system built in 2026 (2025 prices); the line runs through 2-9 hours",
+           grade="transcribed",
+           cites=sheet, inputs={f"{h} h": v for h, v in NESO_CAPEX_2026_GBP_PER_KW.items()})
+    T.cost("cost.battery.neso_opex_by_duration", NESO_OPEX_GBP_PER_KW_YEAR[6], "GBP per kW per year",
+           "Running cost of a 6-hour system (2025 prices)", grade="transcribed", cites=sheet,
+           inputs={f"{h} h": v for h, v in NESO_OPEX_GBP_PER_KW_YEAR.items()},
+           note="NESO's own source for running cost is BEIS 2022, inflated")
+    capex_uses = ["cost.battery.neso_capex_by_duration"]
     if case == "low":
         T.cost("cost.battery.modo_1h_per_kW", MODO_1H_GBP_PER_KW, "GBP per kW", "A 1-hour system's capital",
                grade="transcribed", cites=modo)
@@ -306,7 +322,7 @@ def annual_costs(case: str) -> dict:
                     cites=[("pnnl_esgc_2022", "Figure 4.3, LFP at 2, 4, 10 and 24 hours: the line holds past the fit's range"),
                            ("lcp_delta_long_bess_2025", "p. 30: each added two hours costs the same")],
                     note="Beyond the source's range at long durations: an extension, checked for shape, not a quote")
-    run_uses = ["cost.battery.beis_opex_by_duration", f"price_base.{BEIS_PRICE_YEAR}_to_2025"]
+    run_uses = ["cost.battery.neso_opex_by_duration"]
     run_power = T.cost("cost.battery.fixed_opex_per_kW_year", c["fixed_opex_GBP_per_kW_year"], "GBP per kW per year",
                        "Fixed running cost, power: the fit's intercept against duration", uses=run_uses)
     run_energy = T.cost("cost.battery.fixed_opex_per_kWh_year", c["fixed_opex_GBP_per_kWh_year"], "GBP per kWh per year",
@@ -314,13 +330,15 @@ def annual_costs(case: str) -> dict:
     wacc = T.cost("cost.battery.wacc", WACC_REAL, "fraction per year", "CEPA's hurdle rate for lithium batteries",
                   grade="transcribed", cites=[("cepa_hurdle_rates_2025", "Table E.1, lithium batteries, 8.90 %")])
     build = T.cost("cost.battery.construction_years", BUILD_YEARS, "years", "Build time", grade="transcribed",
-                   cites=[("beis_ldes_2022", "Exhibit 3.11, build time 1 year")])
+                   cites=[("neso_fes2025_economics_inputs", "sheet E.02, battery 1-9 hr, build time 1 year")])
     finance = T.cost("cost.battery.building_finance_factor", _finance_factor(wacc, build), "multiplier",
                      "Capital carried at the rate over the build", uses=["cost.battery.wacc",
                                                                          "cost.battery.construction_years"])
     life = T.cost("cost.battery.life_years", ASSET_LIFE_YEARS, "years", "Battery financial life",
-                  grade="transcribed", cites=[("modo_bess_assumptions", "15-year asset lifetime"),
-                                              ("beis_ldes_2022", "Exhibit 3.11, financial lifetime 15 years")])
+                  grade="transcribed", cites=[("neso_fes2025_economics_inputs", "sheet E.02, battery 1-9 hr, "
+                                                                                "15-year life"),
+                                              ("beis_ldes_2022", "Exhibit 3.11, financial lifetime 15 years")],
+                  note="Modo's October 2026 assumptions say 20 years; the system operator and BEIS say 15")
     crf = T.cost("cost.battery.crf", capital_recovery_factor(wacc, life), "per year",
                  "Capital recovery factor at the WACC over the life",
                  uses=["cost.battery.wacc", "cost.battery.life_years"])

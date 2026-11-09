@@ -29,7 +29,7 @@ blue (ATR + CCS)        TRANSCRIBED. Same NESO dataset family, "Levelised
 grey (SMR unabated)     DERIVED. NESO and FES model green, blue and pink
                         only — neither publishes a grey price. So grey is
                         built from this study's own SMR inventory (4.85 m3
-                        natural gas per kg H2) priced at the FES 2025 NBP gas
+                        natural gas per kg H2) priced at DESNZ's 2026 NBP gas
                         projection, plus a non-fuel cost scaled off NESO's
                         own blue cost stack, plus UK ETS carbon on the 9 kg
                         CO2/kg H2 the inventory emits directly.
@@ -88,10 +88,28 @@ EUR_PER_GBP_2025 = 1.17
 # USD cross-rate via the same table (2025 USD->EUR 0.913), so every currency
 # conversion in this module traces back to one published source.
 USD_PER_GBP_2025 = 1.17 / 0.913
+# FES 2025 kept for the record; not used since 9 Nov 2026 (the workbook is annual:
+# 2026 gas 32.37, and 2040 carbon is 121.25, not 120.500 as transcribed).
 NBP_GAS_EUR_PER_MWH = {2025: 39.48, 2030: 29.89, 2035: 29.07, 2040: 28.58,
                        2045: 28.63, 2050: 28.72}
 GB_CARBON_EUR_PER_T = {2025: 92.3808, 2030: 108.178, 2035: 115.309,
-                       2040: 120.500, 2045: 128.782, 2050: 134.609}
+                       2040: 121.25, 2045: 128.782, 2050: 134.609}
+
+# --- Gas, since 9 Nov 2026: DESNZ, Fossil fuel price assumptions 2025 ---------
+# (3 Feb 2026), data tables, sheet "Gas": NBP, real 2024 prices, p/therm, cases
+# A / B / C read as low / central / high. The model's year is 2026; its low and
+# high set the gas price range (dc_inputs.GAS_PRICE_MULTIPLIER).
+DESNZ_GAS_P_PER_THERM_2024 = {2025: (77, 94, 121), 2026: (52, 85, 143), 2030: (42, 71, 120)}
+DESNZ_GAS_PRICE_YEAR = 2024
+GAS_YEAR = 2026
+KWH_PER_THERM = 29.3071
+
+# --- Carbon, since 9 Nov 2026: NESO, Ten Year Outlook 2026 data workbook ------
+# (Sep 2026; FES now publishes three-yearly and this covers the near years):
+# CP2 base case, GB total carbon price (UK ETS plus carbon price support), real
+# 2026 €/t, 2026; converted at the same workbook's 2026 rate, £1 = €1.12.
+TYO_CARBON_EUR_PER_T_2026 = 80.94
+TYO_EUR_PER_GBP_2026 = 1.12
 
 # Natural gas higher heating value. UK pipeline gas is ~39.5 MJ/m3 gross.
 GAS_KWH_HHV_PER_M3 = 39.5 / 3.6
@@ -584,32 +602,37 @@ PRODUCER_ELEC_GBP_PER_MWH = {"low": 40.0, "central": 80.0, "high": 120.0}
 # specific, per technology, with the full cost stack - so it takes precedence
 # over the derivation for grey and blue, which is retained as a cross-check.
 #
-# Note "Grid electrolysis" carries 1.214 grid fees + 1.556 taxes = 2.77 EUR/kg
-# of network cost, 29 % of its total. A behind-the-meter electrolyser on
-# on-site wind avoids that, which is why the directly-connected row is the
-# right analogue for this study's own electrolyser and the grid-connected row
-# is the right one for an electrolyser importing from the grid.
-EHO_UK_2024_EUR_PER_KG = {
-    "SMR": {"CAPEX": 0.263, "Natural gas costs": 2.666, "CO2 costs": 0.332,
-            "Other OPEX": 0.092},
-    "Reforming with carbon capture": {"CAPEX": 0.430, "Natural gas costs": 2.876,
-                                      "CO2 costs": 0.883, "Other OPEX": 0.131},
-    "Grid electrolysis": {"CAPEX": 2.761, "Wholesale electricity costs": 3.805,
-                          "Grid Fees": 1.214, "Taxes": 1.556, "Other OPEX": 0.187},
-    "Renewable hydrogen directly connected": {"CAPEX": 2.771,
-                                              "Electricity costs": 2.676,
-                                              "Grid fees and taxes": 0.0,
-                                              "Other OPEX": 0.182},
+# Since 9 Nov 2026 the "Hydrogen production costs 2025" workbook (posted Nov 2026),
+# UK rows, 2025 euros; the 2024 workbook until then. "Grid electrolysis" now
+# carries 0.547 grid fees + 0.066 taxes = 0.61 EUR/kg of network cost, 9 % of its
+# total (2.77 EUR/kg, 29 %, in 2024). A behind-the-meter electrolyser on on-site
+# wind avoids that, which is why the directly-connected row is the right analogue
+# for this study's own electrolyser and the grid-connected row the right one for
+# an electrolyser importing from the grid.
+EHO_YEAR = 2025
+EHO_UK_EUR_PER_KG = {
+    "SMR": {"CAPEX": 0.2628, "Natural gas costs": 1.9452, "CO2 costs": 0.3798, "Other OPEX": 0.0916},
+    "Reforming with carbon capture": {"CAPEX": 0.4301, "Natural gas costs": 2.1197, "CO2 costs": 0.8890,
+                                      "Other OPEX": 0.1312},
+    "Grid electrolysis": {"CAPEX": 2.5901, "Wholesale electricity costs": 3.5711, "Grid Fees": 0.5474,
+                          "Taxes": 0.0660, "Other OPEX": 0.1114},
+    "Renewable hydrogen directly connected": {"CAPEX": 2.8306, "Electricity costs": 2.0703,
+                                              "Grid fees and taxes": 0.0, "Other OPEX": 0.1259},
 }
-# GDP deflator 2024 -> 2025: one series for the study (price_base.py). Was
-# 124.1 / 121.2 from the FES workbook's rebasing table until 4 Nov 2026.
-DEFLATOR_2024_TO_2025 = _price_base.factor(2024)
+# 2025 euros to 2025 pounds: the cross-rate alone (price_base's deflator is 1).
+DEFLATOR_EHO_TO_2025 = _price_base.factor(EHO_YEAR)
 
 
 def eho_gbp_per_kg(technology):
     """EHO UK total for a technology, converted to real 2025 GBP."""
-    total_eur = sum(EHO_UK_2024_EUR_PER_KG[technology].values())
-    return total_eur / EUR_PER_GBP_2025 * DEFLATOR_2024_TO_2025
+    total_eur = sum(EHO_UK_EUR_PER_KG[technology].values())
+    return total_eur / EUR_PER_GBP_2025 * DEFLATOR_EHO_TO_2025
+
+
+def _eho_network_share():
+    g = EHO_UK_EUR_PER_KG["Grid electrolysis"]
+    net = g["Grid Fees"] + g["Taxes"]
+    return net, net / sum(g.values())
 
 
 # =============================================================================
@@ -652,12 +675,26 @@ def _fetch(resource_id, name):
     return df
 
 
-def gas_gbp_per_mwh(year=BUILD_YEAR):
-    return NBP_GAS_EUR_PER_MWH[year] / EUR_PER_GBP_2025
+def gas_gbp_per_mwh(year=GAS_YEAR, case="central"):
+    """DESNZ's NBP gas for ``year`` and case, £/MWh (HHV), in this module's 2025 pounds."""
+    i = {"low": 0, "central": 1, "high": 2}[case]
+    p_per_therm = DESNZ_GAS_P_PER_THERM_2024[year][i]
+    return p_per_therm / 100.0 * 1000.0 / KWH_PER_THERM * _price_base.factor(DESNZ_GAS_PRICE_YEAR)
 
 
-def carbon_gbp_per_t(year=BUILD_YEAR):
-    return GB_CARBON_EUR_PER_T[year] / EUR_PER_GBP_2025
+def gas_case_ratio(case: str, year=GAS_YEAR) -> float:
+    """DESNZ's low or high gas price over its central, for the gas price range."""
+    return gas_gbp_per_mwh(year, case) / gas_gbp_per_mwh(year, "central")
+
+
+def carbon_gbp_per_t_2026():
+    """NESO's GB total carbon price for 2026, £/t in 2026 pounds."""
+    return TYO_CARBON_EUR_PER_T_2026 / TYO_EUR_PER_GBP_2026
+
+
+def carbon_gbp_per_t(year=None):
+    """The same, in this module's 2025 pounds (``year`` is ignored: one year, 2026)."""
+    return carbon_gbp_per_t_2026() / _price_base.FACTOR_2025_TO_2026
 
 
 def green_prices():
@@ -743,15 +780,15 @@ def headline_prices(green_neso, blue_neso):
     electrolyser sees; the grid-connected variant is added by
     ``recommended_table()`` as a second row.
     """
-    grey = {"low": _fossil_price("grey", "central")["total"],
-            "central": eho_gbp_per_kg("SMR"),
-            "high": eho_gbp_per_kg("SMR") * 1.15}
-    blue = {"low": blue_neso["central"],
-            "central": eho_gbp_per_kg("Reforming with carbon capture"),
-            "high": eho_gbp_per_kg("Reforming with carbon capture") * 1.15}
-    green = {"low": green_neso["low"],
-             "central": eho_gbp_per_kg("Renewable hydrogen directly connected"),
-             "high": green_neso["central"]}
+    def spread(low, central, high):
+        # Low and high are the other sources; a source can fall either side of
+        # the central, so the case takes whichever is lower or higher.
+        return {"low": min(low, central), "central": central, "high": max(high, central)}
+    grey_c = eho_gbp_per_kg("SMR")
+    grey = spread(_fossil_price("grey", "central")["total"], grey_c, grey_c * 1.15)
+    blue_c = eho_gbp_per_kg("Reforming with carbon capture")
+    blue = spread(blue_neso["central"], blue_c, blue_c * 1.15)
+    green = spread(green_neso["low"], eho_gbp_per_kg("Renewable hydrogen directly connected"), green_neso["central"])
     return grey, blue, green
 
 
@@ -795,7 +832,7 @@ def price_table():
                 "source": {
                     "green": "NESO Green Hydrogen Data Portal, LCOH green 2025-2050",
                     "blue": "NESO Green Hydrogen Data Portal, LCOH blue (ATR+CCS) 2025-2050",
-                    "grey": "Derived: SMR inventory gas x FES 2025 NBP gas price "
+                    "grey": "Derived: SMR inventory gas x DESNZ 2026 NBP gas price "
                             "+ scaled NESO blue non-fuel + UK ETS on direct CO2",
                     "turquoise": "Constructed: grey/green blend weighted by the "
                                  "MP-E inventory's own gas:electricity energy split",
@@ -819,7 +856,7 @@ def price_table():
 # which is the right shape: ATR is the cheaper, more efficient route.
 #
 # Green splits in two because the physical setup differs and the cost gap is
-# almost entirely UK network charges (2.77 EUR/kg of grid fees and taxes):
+# largely UK network charges (0.61 EUR/kg of grid fees and taxes in 2025, 2.77 in 2024):
 # an electrolyser behind the meter on on-site wind pays none of them.
 
 def recommended_table():
@@ -837,15 +874,15 @@ def recommended_table():
          "low": round(grey_px["low"], 2),
          "central": round(grey_px["central"], 2),
          "high": round(grey_px["high"], 2),
-         "central_source": "EHO UK 2024, SMR",
-         "corroboration": f"derived from own inventory + FES gas: "
+         "central_source": f"EHO UK {EHO_YEAR}, SMR",
+         "corroboration": f"derived from own inventory + DESNZ 2026 gas: "
                           f"{grey_derived:.2f} ({100*(grey_derived/eho_gbp_per_kg('SMR')-1):+.0f} %)"},
         {"colour": "blue", "variant": "SMR + CCS",
          "activity_code": _R.SMR_CCS,
          "low": round(blue_px["low"], 2),
          "central": round(blue_px["central"], 2),
          "high": round(blue_px["high"], 2),
-         "central_source": "EHO UK 2024, reforming with carbon capture",
+         "central_source": f"EHO UK {EHO_YEAR}, reforming with carbon capture",
          "corroboration": f"NESO ATR+CCS {blue_neso['central']:.2f} "
                           f"(cheaper route, used as low case)"},
         {"colour": "turquoise", "variant": "methane pyrolysis",
@@ -862,16 +899,17 @@ def recommended_table():
          "low": round(green_px["low"], 2),
          "central": round(green_px["central"], 2),
          "high": round(green_px["high"], 2),
-         "central_source": "EHO UK 2024, renewable H2 directly connected",
+         "central_source": f"EHO UK {EHO_YEAR}, renewable H2 directly connected",
          "corroboration": f"NESO PEM cube {green_neso['low']:.2f}-{green_neso['central']:.2f} "
                           f"at CF 0.7-0.5"},
         {"colour": "green", "variant": "grid-connected electrolyser",
          "activity_code": _R.PEM_OP,
-         "low": round(green_neso["central"], 2),
+         "low": round(min(green_neso["central"], eho_gbp_per_kg("Grid electrolysis")), 2),
          "central": round(eho_gbp_per_kg("Grid electrolysis"), 2),
          "high": round(green_neso["high"], 2),
-         "central_source": "EHO UK 2024, grid electrolysis",
-         "corroboration": "includes 2.77 EUR/kg UK grid fees + taxes, 29 % of total"},
+         "central_source": f"EHO UK {EHO_YEAR}, grid electrolysis",
+         "corroboration": f"includes {_eho_network_share()[0]:.2f} EUR/kg UK grid fees + taxes, "
+                          f"{_eho_network_share()[1]:.0%} of total"},
     ]
     return pd.DataFrame(rows)
 
@@ -888,7 +926,7 @@ def check_against_iea():
             # IEA's green range is for *renewable-based* electrolysis, i.e.
             # dedicated generation. It excludes the network charges and taxes
             # a grid-connected electrolyser pays, which in the UK are
-            # 2.77 EUR/kg. Exceeding the band there is a category difference,
+            # 0.61 EUR/kg (2025). Exceeding the band there is a category difference,
             # not a disagreement, so it is exempted rather than flagged.
             exempt = (colour == "green" and "grid-connected" in r["variant"])
             status = "ok" if inside else ("n/a — different scope" if exempt
@@ -942,8 +980,8 @@ def run():
     print(f"HYDROGEN PURCHASE PRICE BY COLOUR — build year {BUILD_YEAR}, real 2025 GBP")
     print("=" * 92)
     print(check_against_inventory())
-    print(f"FES 2025 NBP gas   {gas_gbp_per_mwh():>8.2f} GBP/MWh HHV"
-          f"   ({NBP_GAS_EUR_PER_MWH[BUILD_YEAR]} EUR @ {EUR_PER_GBP_2025})")
+    print(f"DESNZ NBP gas 2026 {gas_gbp_per_mwh():>8.2f} GBP/MWh HHV (2025 GBP)"
+          f"   ({DESNZ_GAS_P_PER_THERM_2024[GAS_YEAR][1]} p/therm, real 2024)")
     print(f"GB total carbon    {carbon_gbp_per_t():>8.2f} GBP/tCO2")
 
     df = price_table()

@@ -652,7 +652,7 @@ def test_build_tech_refuses_a_negative_loss_before_loading_anything():
     from optimisation import dc_inputs as I
     for kwarg in ("batt_standing_loss_per_hour", "tank_leakage_per_hour"):
         with pytest.raises(ValueError, match=kwarg):
-            I.build_tech("london", {}, **{kwarg: -1e-4})
+            I.build_tech("north_norfolk", {}, **{kwarg: -1e-4})
 
 
 def test_shipped_storage_losses_are_zero_and_flagged_assumed():
@@ -786,7 +786,7 @@ def test_myopic_buys_hydrogen_when_the_build_may(series, tech):
 def test_carbon_voll_is_voll_at_the_study_carbon_price():
     from optimisation import h2_prices
     assert M.VOLL_CARBON_PRICE_GBP_PER_T == pytest.approx(
-        h2_prices.carbon_gbp_per_t(2025), rel=1e-4)
+        h2_prices.carbon_gbp_per_t_2026(), rel=1e-4)
     assert M.VOLL_KGCO2E_PER_MWH == pytest.approx(
         M.VOLL_GBP_PER_MWH / M.VOLL_CARBON_PRICE_GBP_PER_T * 1000.0)
 

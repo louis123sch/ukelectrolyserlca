@@ -21,9 +21,9 @@ def test_every_area_has_a_price_list_and_every_row_is_filled():
 
 
 @pytest.mark.parametrize("region, voltage, lo, hi", [
-    (12, "132 kV", 11_495_717, 13_043_778),      # SSEN SEPD v1.47 p.152, outdoor double
-    (12, "33 kV", 2_616_172, 2_833_817),
-    (1, "33 kV", 1_939_300, 2_852_850),          # SHEPD v1.46 p.150, indoor double
+    (12, "132 kV", 12_723_722, 13_246_448),      # SSEN SEPD v1.50 p.153, outdoor double
+    (12, "33 kV", 3_621_588, 4_790_221),
+    (1, "33 kV", 1_807_300, 2_523_675),          # SHEPD v1.48 p.158, outdoor double
     (10, "132 kV", 8_000_000, 9_000_000),        # UKPN Aug 2026 p.167, EPN column
     (14, "132 kV", 8_100_000, 9_200_000),        # SPN column
     (10, "33 kV", 5_200_000, 5_700_000),
@@ -38,9 +38,9 @@ def test_substation_rows_are_the_companys_own(region, voltage, lo, hi):
 
 
 @pytest.mark.parametrize("region, voltage, first_lo, first_hi, m_lo, m_hi", [
-    (12, "132 kV", 57_334, 194_474, 1_405, 32_316),   # SEPD p.150
-    (12, "33 kV", 13_096, 47_697, 437, 1_054),
-    (1, "33 kV", 3_613, 9_544, 141, 439),             # SHEPD p.147
+    (12, "132 kV", 135_816, 177_896, 1_527, 2_482),   # SEPD v1.50 p.150
+    (12, "33 kV", 13_128, 50_506, 439, 1_081),        # SEPD v1.50 p.149
+    (1, "33 kV", 3_613, 9_544, 141, 439),             # SHEPD v1.48 p.154
     (13, "132 kV", 22_000, 50_000, 600, 900),         # UKPN LPN p.163
     (10, "132 kV", 20_000, 50_000, 500, 900),         # EPN
     (14, "11 kV", 3_100, 14_900, 300, 800),           # SPN p.161
@@ -58,7 +58,7 @@ def test_cable_rows_are_the_companys_own(region, voltage, first_lo, first_hi, m_
 
 
 def test_poa_rows_take_the_publishers_median_and_say_so():
-    # 132 kV substation: NGED 1.70, ENWL 6.96, EPN 8.0, SPN 8.1, SEPD 11.50 -> 8.0 m low; 9.2 m high
+    # 132 kV substation: NGED 1.70, ENWL 6.96, EPN 8.0, SPN 8.1, SEPD 12.72 -> 8.0 m low; 9.2 m high
     assert cc.median_row("substation", "132 kV") == (8_000_000, 9_200_000)
     for region in (2, 4, 5, 6, 13):                     # SPEN x2, Northern Powergrid x2, London
         p = cc.prices(region)
@@ -93,8 +93,8 @@ def test_capital_is_priced_on_the_areas_list():
 def test_connection_costs_carries_the_list_and_the_stand_ins():
     k = cc.connection_costs(4, False, connection_voltage="33 kV", route_km=3.0)
     assert k["price_list"] == "NPG-NE" and "substation 33 kV" in k["stand_in"]
-    lo, hi = cc.median_row("substation", "33 kV")        # six lists: 3.33-3.81 m
-    assert (lo, hi) == (3_327_586.0, 3_809_925.0)
+    lo, hi = cc.median_row("substation", "33 kV")        # six lists: 3.83-4.78 m (SEPD v1.50, SHEPD outdoor)
+    assert (lo, hi) == (3_830_294.0, 4_778_610.5)
     assert k["per_MW_year_GBP"] == pytest.approx((lo + hi) / 2 / 29.0 * k["annual_factor"])
 
 

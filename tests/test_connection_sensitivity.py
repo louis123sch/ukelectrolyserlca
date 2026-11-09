@@ -1,6 +1,6 @@
 """The two knobs behind the +/-50 % test of the grid connection's price (4 Nov 2026): each moves what
 it says and nothing else, on one price list and on several, and the sweep reports all three frontier
-points with terms that add up. One June week, so it needs the caches but no full-year solve."""
+points with terms that add up. One winter week, so it needs the caches but no full-year solve."""
 import pathlib
 import sys
 from dataclasses import replace
@@ -11,23 +11,23 @@ import pytest
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 from optimisation import connection_cost, dc_inputs as I, sensitivity as S, sites  # noqa: E402
 
-LONDON = "51.5074,-0.1278"
-WEEK = ("2025-06-02", "2025-06-09")
+NORFOLK = "52.85,1.04"       # never London (user, 9 Nov 2026)
+WEEK = ("2025-01-06", "2025-01-13")      # a winter week: Eastern's super-red unit rate is winter only
 SIZE, PUE = 150.0, 1.2
 
 
-def _series(site=LONDON, mode="single", **kw):
+def _series(site=NORFOLK, mode="single", **kw):
     return I.build_series(site, *WEEK, SIZE, pue=PUE, connection_mode=mode, **kw)
 
 
-def _tech(meta, site=LONDON, **kw):
+def _tech(meta, site=NORFOLK, **kw):
     return I.build_tech(site, meta, size_mw_it=SIZE, pue=PUE, **kw)
 
 
 @pytest.fixture(scope="module")
 def local():
     """A local-network site: the only kind that pays per-MWh and local capacity charges."""
-    return replace(sites.get(LONDON), connection_substation="LEICESTER SQ 11KV",
+    return replace(sites.get(NORFOLK), connection_substation="SALL GRID 132/33kV",
                    connection_substation_voltage="132 kV")
 
 
@@ -116,7 +116,7 @@ def test_the_knobs_reach_every_price_list():
 @pytest.mark.parametrize("kw", [{"connection_build_scale": -1.0}, {"connection_build_scale": float("nan")}])
 def test_a_bad_build_scale_fails_at_once(kw):
     with pytest.raises(ValueError, match="connection_build_scale"):
-        I.build_tech("london", {}, **kw)
+        I.build_tech("north_norfolk", {}, **kw)
 
 
 def test_a_bad_network_scale_fails_at_once():
@@ -134,7 +134,7 @@ def test_the_sweep_is_the_central_case_and_each_knob_either_way():
 
 def test_a_frontier_sweep_reports_three_points_with_terms_that_add_up(tmp_path, monkeypatch):
     monkeypatch.setattr(S, "OUT_DIR", tmp_path)
-    case = replace(S.CASES["london_150_leicester_sq"], start="2025-06-02", end="2025-06-04", resample_hours=1.0)
+    case = replace(S.CASES["norfolk_150_sall"], start="2025-06-02", end="2025-06-04", resample_hours=1.0)
     variants = [{}, {"connection_build_scale": 1.5}]
     df = S.run(case, variants, name="t", points=2, progress=None)
     assert list(df.objective[:3]) == ["min_cost", "knee", "min_gwp"] and len(df) == 6

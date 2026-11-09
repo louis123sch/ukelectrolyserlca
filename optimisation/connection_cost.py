@@ -72,7 +72,8 @@ prices       Each DNO's *Statement of Methodology and Charges for Connection*,
              §7 tables F5 (cables) and F7 (substations). £, excl. VAT.
              NGED South Wales June 2026 pp. 164-168 (the same figures in the
              East Midlands, West Midlands and South West statements);
-             SSEN SEPD v1.47 pp. 148-152 and SHEPD v1.46 pp. 146-150 (2026);
+             SSEN SEPD v1.50 pp. 149-153 and SHEPD v1.48 pp. 154-158 (29 Oct
+             2026; v1.47 and v1.46 until 9 Nov 2026);
              UKPN August 2026 pp. 161-167, columns LPN, EPN, SPN;
              ENWL v5.9 June 2026 pp. 156-161 (South and North columns equal);
              SPEN February 2026 pp. 151-153 (one statement for SP
@@ -156,19 +157,19 @@ PRICE_LISTS = {
         notes=("substation rows 4-5x below the other publishers: read as transformers and switchgear only (FLAGGED)",)),
     "SEPD": PriceList(
         "SSEN Southern Electric Power Distribution",
-        "SEPD connection charging statement v1.47 (2026), pp. 148-152",
-        substation={"132 kV": (11_495_717.0, 13_043_778.0),  # outdoor double
-                    "33 kV": (2_616_172.0, 2_833_817.0)},    # outdoor double
-        hv_switchboard=(16_621.0, 40_331.0),                 # external
-        cable_first={"132 kV": (57_334.0, 194_474.0), "33 kV": (13_096.0, 47_697.0), "11 kV": (6_074.0, 13_812.0)},
-        cable_per_m={"132 kV": (1_405.0, 32_316.0), "33 kV": (437.0, 1_054.0), "11 kV": (304.0, 691.0)},
-        notes=("132 kV cable per additional metre printed £1,405-32,316: the top reads as a special case, "
-               "so the central (the midpoint) errs HIGH",)),
+        "SEPD connection charging statement v1.50 (29 Oct 2026), pp. 149-153",
+        substation={"132 kV": (12_723_722.0, 13_246_448.0),  # outdoor double
+                    "33 kV": (3_621_588.0, 4_790_221.0)},    # outdoor double
+        hv_switchboard=(16_621.0, 59_222.0),                 # external
+        cable_first={"132 kV": (135_816.0, 177_896.0), "33 kV": (13_128.0, 50_506.0), "11 kV": (6_080.0, 13_824.0)},
+        cable_per_m={"132 kV": (1_527.0, 2_482.0), "33 kV": (439.0, 1_081.0), "11 kV": (304.0, 692.0)},
+        notes=("v1.50 (29 Oct 2026) replaced v1.47 on 9 Nov 2026: the 132 kV cable per additional metre, "
+               "printed £1,405-32,316 in v1.47, is now £1,527-2,482",)),
     "SHEPD": PriceList(
         "SSEN Scottish Hydro Electric Power Distribution",
-        "SHEPD connection charging statement v1.46 (2026), pp. 146-150",
+        "SHEPD connection charging statement v1.48 (29 Oct 2026), pp. 154-158",
         substation={"132 kV": None,                          # N/A: 132 kV is transmission in Scotland
-                    "33 kV": (1_939_300.0, 2_852_850.0)},    # indoor double (no outdoor row)
+                    "33 kV": (1_807_300.0, 2_523_675.0)},    # outdoor double (was the indoor row until 9 Nov 2026)
         hv_switchboard=(31_486.0, 53_950.0),                 # external
         cable_first={"132 kV": None, "33 kV": (3_613.0, 9_544.0), "11 kV": (3_614.0, 9_545.0)},
         cable_per_m={"132 kV": None, "33 kV": (141.0, 439.0), "11 kV": (141.0, 439.0)},

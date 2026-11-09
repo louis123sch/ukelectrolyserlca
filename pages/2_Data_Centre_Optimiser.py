@@ -269,13 +269,15 @@ with c1:
 with c2:
     gas_case = st.radio(
         "Gas price", ["low", "central", "high"], index=1, horizontal=True,
-        help="**What it does.** Scales the wholesale gas price by 0.75 / 1 / 1.25 wherever the model "
-             "pays for gas directly: the gas boiler that heats a solid-oxide electrolyser, and the gas "
-             "behind bought grey and turquoise hydrogen. The levy on the site's gas is not scaled.\n\n"
-             "**Why a range.** The central figures are the government's 2025 price for large business "
-             "users (site gas) and the national energy scenarios' 2025 wholesale gas price (bought "
-             "hydrogen), both in 2026 pounds. The scenarios give one central path, not a range, so the "
-             "±25 % is ours.\n\n"
+        help="**What it does.** Scales the wholesale gas price wherever the model pays for gas directly: "
+             "the gas boiler that heats a solid-oxide electrolyser, and the gas behind bought grey and "
+             "turquoise hydrogen. **Low** is about 39 % below central, **high** about 68 % above. The levy "
+             "on the site's gas is not scaled.\n\n"
+             "**Where it comes from.** The government's own gas price assumptions for 2026 (DESNZ, *Fossil "
+             "fuel price assumptions 2025*): low 52, central 85, high 143 pence per therm. Gas is far more "
+             "likely to spike than to collapse, which is why the range is lopsided. Central is DESNZ's 2026 "
+             "view, in 2026 pounds; the site's delivered price is the government's 2025 price for large "
+             "business users moved to that view.\n\n"
              "**What it does not move.** Grid electricity prices (they are the run window's own), and "
              "bought blue hydrogen, whose published cost has its own gas price inside.")
 

@@ -47,6 +47,11 @@ Either the source is named and public, or no new sourcing is needed at all.
       methodology doc (price base, the levy-agreement tickbox, the gas case, the two warnings); swap the OBR 2026
       forecast for ONS outturn once calendar 2026 is published. Sweeps (`sensitivity.py`) do not yet expose
       `ccl_under_cca` / `gas_price_case` as knobs.
+- [ ] **Source check: decide and apply** (all groups checked 9 Nov, `docs/SOURCE_CHECK_FULL_2026-11-09.md`):
+      A (SSEN v1.50/v1.48, Observatory 2025, SHEPD outdoor row, record fixes) and B (battery capex NESO E.03,
+      battery life, DESNZ gas range, carbon price, SOE cross-check). Hand-check UKPN, SPEN, Northern Powergrid
+      editions (sites block automated access). Re-pull DESNZ non-domestic prices after 17 Dec 2026; watch Ofgem's
+      RO mutualisation notice, EMRS revisions, Ofgem's data-centre commitment fee, 2027/28 TNUoS/BSUoS finals.
 - [ ] **Gas-adjusted wholesale prices, as a sensitivity option only** (after the working copy; discussed 9 Nov).
       Off by default. A `build_series` switch like `network_charges_scale`: each day's prices x (today's gas price /
       that day's gas price), daily gas from a free official series (National Gas's daily average price — confirm).

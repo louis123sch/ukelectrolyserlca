@@ -93,12 +93,13 @@ VOLL_IS_ASSUMED = True
 # demand left unmet. Without it unserved load was carbon-free, so a min-GWP
 # solve with any allowance shed the dirtiest hours as an emissions "cut" —
 # 455.7 against a 236.9 kg/MWh mean on the old grid (OBJECTIVE_AUDIT.md §3.7).
-# Expressed at the study's carbon price (FES 2025 CP2, 2025, the figure
+# Expressed at the study's carbon price (NESO Ten Year Outlook 2026, CP2, 2026,
+# £72.27/t in 2026 pounds since 9 Nov 2026 — was FES 2025's £78.96 — the figure
 # dc_pareto reports the front against) so a shed MWh weighs the same in both
-# objectives: £100,000/MWh at £78.96/t is 1,266 t CO2e/MWh. A penalty, not an
+# objectives: £100,000/MWh at £72.27/t is 1,384 t CO2e/MWh. A penalty, not an
 # emission — like VoLL, it is there so the reliability target binds in both
 # objectives, and per-MWh intensities are reported without it.
-VOLL_CARBON_PRICE_GBP_PER_T = 78.96
+VOLL_CARBON_PRICE_GBP_PER_T = 80.94 / 1.12           # h2_prices.carbon_gbp_per_t_2026()
 VOLL_KGCO2E_PER_MWH = VOLL_GBP_PER_MWH / VOLL_CARBON_PRICE_GBP_PER_T * 1000.0
 
 # Hydrogen is an indirect greenhouse gas: it lengthens methane's lifetime and

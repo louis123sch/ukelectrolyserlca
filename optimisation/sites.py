@@ -370,13 +370,16 @@ PRESETS = {
     # England** — not London — which matters, because the cached grid series is
     # region 13. See the note in the module docstring.
     "repo_default": (51.7320, -0.3711, "St Albans (the repo's old WIND_LAT/WIND_LON)"),
-    "london": (51.5074, -0.1278, "Central London"),
+    "london": (51.5074, -0.1278, "Central London"),     # illustrative only: never a test site (user, 9 Nov 2026)
+    # The reference and test site since 9 Nov 2026 (the sweeps' site since 4 Nov):
+    # North Norfolk, region 10 (East England), TNUoS zone 9.
+    "north_norfolk": (52.85, 1.04, "North Norfolk"),
     "slough": (51.5098, -0.6002, "Slough"),
     "scotland": (57.4800, -4.2200, "Inverness, Northern Scotland"),
     "east_england": (52.6200, 1.2900, "Norwich, East England"),
     "south_west": (50.7200, -3.5300, "Exeter, South West"),
 }
-DEFAULT_PRESET = "london"
+DEFAULT_PRESET = "north_norfolk"
 
 
 def preset(key: str, **kw) -> Site:

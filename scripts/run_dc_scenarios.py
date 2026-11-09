@@ -8,7 +8,7 @@ A GB coordinate is the real input. The Carbon Intensity region and the TNUoS
 demand zone are derived from it, so the weather, the grid mix and the network
 bill always move together. Presets are shortcuts for common sites.
 
-Defaults reproduce the study's own baseline case: London, the 2025 window the
+Defaults reproduce the study's own baseline case: North Norfolk (never London, 9 Nov 2026), the 2025 window the
 cached grid and price data covers, hourly resampling (3.5x faster than
 half-hourly for 0.14 % on cost and 0.32 % on carbon — see dc_inputs.resample),
 and a 12-point Pareto sweep per configuration.

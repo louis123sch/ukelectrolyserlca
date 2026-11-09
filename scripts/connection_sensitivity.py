@@ -32,11 +32,11 @@ POINTS = ("min_cost", "knee", "min_gwp")
 POINT_NAME = {"min_cost": "cheapest", "knee": "knee", "min_gwp": "lowest carbon"}
 KNOBS = {"connection_build_scale": "One-off build cost", "network_charges_scale": "Yearly network charges"}
 CASES = {
-    "london_150_single": "London, 150 MW of computing, the fixed national-grid price list (T-Demand4)",
-    "london_150_leicester_sq_cap": "London, 150 MW of computing, connected at LEICESTER SQ 11KV at 132 kV, "
-                                   "size free up to 1.43x the load (room ignored)",
-    "london_150_leicester_sq": "London, 150 MW of computing, connected at LEICESTER SQ 11KV at 132 kV, "
-                               "capped at the room it publishes",
+    "norfolk_150_single": "North Norfolk, 150 MW of computing, one price list fixed by the rule before solving",
+    "norfolk_150_sall_cap": "North Norfolk, 150 MW of computing, connected at SALL GRID 132/33kV at 132 kV, "
+                            "size free up to 1.43x the load (room ignored)",
+    "norfolk_150_sall": "North Norfolk, 150 MW of computing, connected at SALL GRID 132/33kV at 132 kV, "
+                        "capped at the room it publishes",
     "norfolk_150_room": "North Norfolk, 150 MW of computing, the optimiser choosing the price list, each "
                         "capped at the room its substation publishes (the reference site for conclusions)",
 }
@@ -108,7 +108,7 @@ def case_section(case: str, df: pd.DataFrame) -> tuple[list[str], list[dict]]:
 def list_comparison(frames: dict) -> list[str]:
     """The price list itself is part of the design, and the fixed-list cases cannot change it. What
     can be read off them: which of the two lists is cheaper at each scale of each knob."""
-    a, b = frames.get("london_150_single"), frames.get("london_150_leicester_sq_cap")
+    a, b = frames.get("norfolk_150_single"), frames.get("norfolk_150_sall_cap")
     if a is None or b is None:
         return []
     lines = ["### Which price list is cheaper at each scale", "",

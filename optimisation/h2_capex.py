@@ -46,9 +46,11 @@ fuel cell     Baringa Partners for DESNZ, *Hydrogen to Power Costs and Barriers*
 H2 vessel     Element Energy, p. 109, central. Rozzi et al. 2024 dataset
               (30 bar, 50 t), low; the older literature's EUR 1,040/kg, high.
               Element Energy p. 112, running cost; p. 110, footprint.
-SOEC          BEIS, *Hydrogen Production Costs 2021*, annex, sheet "Technical
-              and cost assumptions", commissioning 2025, on NESO's PEM capex in
-              `price_outputs/electrolyser_costs_clean.csv`.
+SOEC          NESO, FES 2025 Economics Inputs Data Workbook v2, sheet H.02
+              (central: built 2026; high: built 2025; 2025 prices), per kWe on
+              the BEIS 2021 annex's electrical conversion; low the Danish Energy
+              Agency's Renewable Fuels sheet 80. Stack replacement from the BEIS
+              2021 annex. Since 9 Nov 2026 (was DEA central, BEIS low and high).
 
 Run:  python optimisation/h2_capex.py
 """
@@ -170,11 +172,17 @@ RURAL_LAND_PRICE_YEAR = 2023
 # -----------------------------------------------------------------------------
 # SOEC
 # -----------------------------------------------------------------------------
-# Central capital since 4 Nov 2026 (evening): the Danish Energy Agency's Renewable
-# Fuels data sheet "80 SOEC 10 MW" (DNV, Aug 2026), 2025 column, in 2025 euros:
-# the one current, technology-specific government figure. The BEIS 2021 annex's
-# own level (dated: its PEM is a third of NESO's) is the low case and its ratio
-# to PEM on NESO's PEM the high: 2.46x, above every other range read.
+# Central capital since 9 Nov 2026 (government or system operator decides): NESO,
+# FES 2025 Economics Inputs Data Workbook v2, sheet H.02, SOE, per kW of hydrogen
+# (HHV), 2025 prices, build year 2026; fixed opex the same sheet's. Per kWe on the
+# BEIS annex's electrical conversion (NESO prints no SOE efficiency). High: NESO's
+# 2025-build figure, the top of every source read. Low: the Danish Energy Agency's
+# Renewable Fuels sheet "80 SOEC 10 MW" (Aug 2026, 2025 euros), central until 9 Nov.
+# The BEIS 2021 annex's own level, the low case until then, sits below it.
+NESO_SOE_CAPEX_GBP_PER_KW_H2 = {2025: 5_234.367140044406, 2026: 4_923.845333723373}
+NESO_SOE_FIXED_GBP_PER_KW_H2_YEAR = {2025: 130.85917850111016, 2026: 123.09613334308433}
+NESO_SOE_PRICE_YEAR = 2025
+NESO_SOE_BUILD_YEAR = {"central": 2026, "high": 2025}
 DEA_SOEC_EUR_PER_KWE = 2_959.1368842714164
 DEA_SOEC_EUR_PER_KWE_RANGE = (2_850.9642857142853, 3_067.3094828285475)
 # BEIS 2021 annex, "Technical and cost assumptions", commissioning 2025, real 2020
@@ -485,40 +493,36 @@ def electrolyser_cost(tech: str, case: str, build_year=2025) -> dict:
     if tech == "soec":
         annex = lambda what: [("beis_h2_costs_2021", f"Technical and cost assumptions, commissioning 2025, {what}")]  # noqa: E731
         P.to_2025(SOE_PRICE_YEAR)
-        soe = T.cost(f"{k}.annex_capex_per_kW_H2", SOE_CAPEX_GBP_PER_KW_H2, "GBP per kW H2 (HHV)",
-                     "Solid-oxide capital, medium, real 2020", grade="transcribed", cites=annex("SOE CAPEX, medium"))
-        soe_in = T.cost(f"{k}.annex_kWh_in_per_kWh_H2", SOE_KWH_IN_PER_KWH_H2, "kWh per kWh H2", "Solid-oxide electrical input",
+        T.cost(f"{k}.annex_kWh_in_per_kWh_H2", SOE_KWH_IN_PER_KWH_H2, "kWh per kWh H2", "Solid-oxide electrical input",
                         grade="transcribed", cites=annex("SOE electrical conversion, medium"))
-        uses = [f"{k}.annex_capex_per_kW_H2", f"{k}.annex_kWh_in_per_kWh_H2"]
         if case == "low":
-            uses.append(f"price_base.{SOE_PRICE_YEAR}_to_2025")
-            why = "The annex's level as printed, inflated: dated, its PEM is a third of NESO's 2025 figure"
-        elif case == "central":
             T.cost(f"{k}.dea_capex_EUR_per_kWe", DEA_SOEC_EUR_PER_KWE, "€ per kW of input electricity",
                    "Solid-oxide 10 MW, 2025, 2025 euros", grade="transcribed",
                    cites=[("dea_renewable_fuels_2026", "sheet 80 SOEC 10 MW, specific investment, 2025 column")],
                    inputs={"lower": DEA_SOEC_EUR_PER_KWE_RANGE[0], "upper": DEA_SOEC_EUR_PER_KWE_RANGE[1]})
             P.record_fx()
             uses = [f"{k}.dea_capex_EUR_per_kWe", "fx.eur_per_gbp_2025"]
-            why = ("The Danish Energy Agency's figure, current and specific to the technology, from a body NESO cites; "
-                   "the UK annex's method puts it 2.46x PEM, above every other range read, so that is the high case")
+            why = "The Danish Energy Agency's figure: the low case since NESO's own became central (9 Nov 2026)"
+            T.cost(f"{k}.annex_fixed_per_kW_H2_year", SOE_FIXED_GBP_PER_KW_H2_YEAR[case], "GBP per kW H2 per year",
+                   "Solid-oxide fixed cost, real 2020", grade="transcribed", cites=annex(f"SOE fixed OPEX, {case}"))
+            P.to_2025(SOE_PRICE_YEAR)
+            fixed_uses = [f"{k}.annex_fixed_per_kW_H2_year", f"{k}.annex_kWh_in_per_kWh_H2",
+                          f"price_base.{SOE_PRICE_YEAR}_to_2025", f"{k}.capex_per_kWe"]
         else:
-            pem = T.cost("cost.electrolyser_pem.capex_per_kWe", _neso_pem_capex(build_year)[case], "GBP per kWe",
-                         "PEM electrolyser capital", grade="transcribed", cites=neso("capex_GBP_per_kWe"))
-            T.cost(f"{k}.annex_pem_per_kWe", PEM_CAPEX_GBP_PER_KW_H2 / PEM_KWH_IN_PER_KWH_H2, "GBP per kWe",
-                   "The same sheet's PEM, medium, real 2020", grade="derived",
-                   cites=annex("PEM CAPEX and electrical conversion, medium"))
-            T.cost(f"{k}.multiplier_of_pem", _soe_ratio_to_pem(), "multiplier", "Solid-oxide over PEM per kWe, in the annex",
-                   uses=[*uses, f"{k}.annex_pem_per_kWe"], inputs={"soe_per_kWe": soe / soe_in, "neso_pem": pem})
-            uses = ["cost.electrolyser_pem.capex_per_kWe", f"{k}.multiplier_of_pem"]
-            why = ("The annex's ratio to PEM on NESO's PEM: the high case, since it assumes a mature plant and sits "
-                   "above every other range read")
+            yr = NESO_SOE_BUILD_YEAR[case]
+            sheet = [("neso_fes2025_economics_inputs", f"sheet H.02, SOE, build year {yr}, 2025 prices")]
+            T.cost(f"{k}.neso_capex_per_kW_H2", NESO_SOE_CAPEX_GBP_PER_KW_H2[yr], "GBP per kW H2 (HHV)",
+                   f"Solid-oxide capital, built {yr}, 2025 prices", grade="transcribed", cites=sheet)
+            T.cost(f"{k}.neso_fixed_per_kW_H2_year", NESO_SOE_FIXED_GBP_PER_KW_H2_YEAR[yr], "GBP per kW H2 per year",
+                   f"Solid-oxide fixed cost, built {yr}, 2025 prices", grade="transcribed", cites=sheet)
+            uses = [f"{k}.neso_capex_per_kW_H2", f"{k}.annex_kWh_in_per_kWh_H2"]
+            why = ("The system operator's figure for a plant built in 2026: about twice the Danish Energy Agency's, "
+                   "the evidence spans a factor of three for a barely commercial technology" if case == "central" else
+                   "The system operator's figure a build year earlier: the top of every source read")
+            fixed_uses = [f"{k}.neso_fixed_per_kW_H2_year", f"{k}.annex_kWh_in_per_kWh_H2", f"{k}.capex_per_kWe"]
         T.cost(f"{k}.capex_per_kWe", float(r.capex_GBP_per_kWe), "GBP per kWe", "SOEC capital", uses=uses, note=why)
-        T.cost(f"{k}.annex_fixed_per_kW_H2_year", SOE_FIXED_GBP_PER_KW_H2_YEAR[case], "GBP per kW H2 per year",
-               "Solid-oxide fixed cost, real 2020", grade="transcribed", cites=annex(f"SOE fixed OPEX, {case}"))
         T.cost(f"{k}.fixed_opex_frac", float(r.fixed_opex_frac), "fraction of capital per year", "Fixed operating cost",
-               uses=[f"{k}.annex_fixed_per_kW_H2_year", f"{k}.annex_kWh_in_per_kWh_H2",
-                     f"price_base.{SOE_PRICE_YEAR}_to_2025", f"{k}.capex_per_kWe"])
+               uses=fixed_uses)
         T.cost(f"{k}.annex_variable_per_kWh_H2", SOE_VARIABLE_GBP_PER_KWH_H2[case], "GBP per kWh H2 (HHV)",
                "Solid-oxide stack replacement, annuitised, real 2020", grade="transcribed",
                cites=annex(f"SOE variable OPEX, {case}"))
@@ -550,13 +554,21 @@ def _soe_ratio_to_pem() -> float:
 
 
 def _soec_capex_gbp_per_kwe(case: str, build_year=2025) -> float:
-    """Danish Energy Agency (central), the BEIS annex's level inflated (low), or
-    the annex's ratio on NESO's PEM (high)."""
+    """NESO's SOE capital (central: built 2026; high: built 2025) per kWe on the
+    annex's conversion, or the Danish Energy Agency's (low). 2025 pounds."""
     if case == "low":
-        return SOE_CAPEX_GBP_PER_KW_H2 / SOE_KWH_IN_PER_KWH_H2 * P.factor(SOE_PRICE_YEAR)
-    if case == "central":
         return DEA_SOEC_EUR_PER_KWE / EUR_PER_GBP_2025
-    return _neso_pem_capex(build_year)[case] * _soe_ratio_to_pem()
+    yr = NESO_SOE_BUILD_YEAR[case]
+    return NESO_SOE_CAPEX_GBP_PER_KW_H2[yr] / SOE_KWH_IN_PER_KWH_H2 * P.factor(NESO_SOE_PRICE_YEAR)
+
+
+def _soec_fixed_gbp_per_kwe_year(case: str) -> float:
+    """Fixed running cost per kWe per year, 2025 pounds: NESO's (central, high) or
+    the BEIS annex's low, inflated (with the Danish capital)."""
+    if case == "low":
+        return SOE_FIXED_GBP_PER_KW_H2_YEAR[case] / SOE_KWH_IN_PER_KWH_H2 * P.factor(SOE_PRICE_YEAR)
+    yr = NESO_SOE_BUILD_YEAR[case]
+    return NESO_SOE_FIXED_GBP_PER_KW_H2_YEAR[yr] / SOE_KWH_IN_PER_KWH_H2 * P.factor(NESO_SOE_PRICE_YEAR)
 
 
 def electrolyser_costs(build_year=2025):
@@ -594,13 +606,13 @@ def electrolyser_costs(build_year=2025):
         rows.append({
             "asset": "electrolyser_soec", "case": case,
             "capex_GBP_per_kWe": capex,
-            # Labour, overheads, insurance and maintenance do not follow the ratio
-            "fixed_opex_frac": SOE_FIXED_GBP_PER_KW_H2_YEAR[case] / SOE_KWH_IN_PER_KWH_H2 * inflate / capex,
+            "fixed_opex_frac": _soec_fixed_gbp_per_kwe_year(case) / capex,
             "variable_opex_GBP_per_kg": SOE_VARIABLE_GBP_PER_KWH_H2[case] * H2_HHV_KWH_PER_KG * inflate,
             "lifetime_years": 25.0,
             "grade": GRADE,
-            "note": {"low": "BEIS 2021 annex's level, dated", "central": "Danish Energy Agency, 10 MW, 2025",
-                     "high": f"BEIS 2021 annex's {_soe_ratio_to_pem():.2f}x NESO's PEM, a mature plant"}[case],
+            "note": {"low": "Danish Energy Agency, 10 MW, 2025",
+                     "central": "NESO FES 2025 Economics Inputs H.02, build year 2026",
+                     "high": "NESO FES 2025 Economics Inputs H.02, build year 2025"}[case],
         })
     return pd.DataFrame(rows)
 

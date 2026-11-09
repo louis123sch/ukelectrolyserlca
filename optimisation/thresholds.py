@@ -727,7 +727,8 @@ def describe(r: dict) -> str:
 
 
 def run():
-    """The headline case: the everything-available control at the London site."""
+    """The headline case: the everything-available control at the default site (North Norfolk since
+    9 Nov 2026; never London)."""
     scen = next(s for s in A.core_matrix() if s.architecture == "res_h2_grid")
     print("=" * 78)
     print("HYDROGEN ENTRY THRESHOLDS —", scen.label)

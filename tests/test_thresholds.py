@@ -348,9 +348,9 @@ def _config(tmp_path, **over):
                      "assets": {"grid": True, "wind": False, "offshore_wind": False,
                                 "solar": False, "battery": False, "electrolyser": True,
                                 "tank": True, "fuel_cell": True, "buy_h2": False}},
-        "site": {"key": "r13_51.5074_-0.1278", "name": "Central London",
-                 "lat": 51.5074, "lon": -0.1278, "carbon_api_region": 13,
-                 "tnuos_zone": 12, "tdr_band": "EHV2",
+        "site": {"key": "r10_52.8500_1.0400", "name": "North Norfolk",
+                 "lat": 52.85, "lon": 1.04, "carbon_api_region": 10,
+                 "tnuos_zone": 9, "tdr_band": "EHV2",
                  "connection_limit_mw": 10.965, "connection_headroom": 1.5,
                  "transmission_connected": False},
         "start": "2025-01-01", "end": "2025-12-29",
@@ -382,8 +382,8 @@ def test_from_run_pins_the_derived_band_and_connection(tmp_path):
     site = T.from_run(_config(tmp_path))["kwargs"]["site"]
     assert site.tdr_band == "EHV2"
     assert site.connection_limit_mw == 10.965
-    assert (site.lat, site.lon) == (51.5074, -0.1278)
-    assert site.carbon_api_region == 13
+    assert (site.lat, site.lon) == (52.85, 1.04)
+    assert site.carbon_api_region == 10
 
 
 def test_from_run_flags_a_front_that_predates_a_model_change(tmp_path):
@@ -408,7 +408,7 @@ def test_from_run_survives_a_config_written_by_an_older_scenario(tmp_path):
 
 def test_run_key_matches_the_dc_runs_convention(tmp_path):
     site = T.from_run(_config(tmp_path))["kwargs"]["site"]
-    assert T.run_key(site, 7.31, "2025-01-01") == "r13_51.5074_-0.1278_7.31MW_2025"
+    assert T.run_key(site, 7.31, "2025-01-01") == "r10_52.8500_1.0400_7.31MW_2025"
 
 
 # --------------------------------------------------------------------------

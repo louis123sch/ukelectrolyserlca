@@ -50,7 +50,7 @@ HTML_OUT = ROOT / "optimisation_outputs" / "lca_map.html"
 
 # The run the map shows: the London site over the 2025 window the grid series
 # is cached for, a 100 MW IT facility, green hydrogen bought, PEM electrolysis.
-SITE, START, END, SIZE_MW_IT = "london", "2025-01-01", "2025-12-29", 100.0
+SITE, START, END, SIZE_MW_IT = "north_norfolk", "2025-01-01", "2025-12-29", 100.0   # never London (user, 9 Nov 2026)
 MAIN = {"h2_colour": "green"}
 VARIANTS = [("grey hydrogen", {"h2_colour": "grey"}), ("blue hydrogen", {"h2_colour": "blue"}),
             ("turquoise hydrogen", {"h2_colour": "turquoise"}),

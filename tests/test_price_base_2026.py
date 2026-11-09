@@ -24,13 +24,22 @@ def test_one_factor_from_2025_to_2026():
 
 
 def test_site_gas_takes_out_the_2025_levy_and_puts_back_this_years():
-    commodity_2025 = 41.49 - 7.75
-    assert I.site_gas_gbp_per_mwh() == pytest.approx(commodity_2025 * F26 + 8.01)
+    """DESNZ 2025 delivered price less its levy, to 2026 pounds and to DESNZ's 2026 market
+    (85 / 94 p/therm), times the case (DESNZ 2026 A or C over B), plus the 2026/27 levy."""
+    commodity = (41.49 - 7.75) * F26 * 85 / 94
+    assert I.site_gas_gbp_per_mwh() == pytest.approx(commodity + 8.01)
     # an agreement takes 89 % off the gas levy, not the electricity 92 %
-    assert I.site_gas_gbp_per_mwh(True) == pytest.approx(commodity_2025 * F26 + 8.01 * 0.11)
+    assert I.site_gas_gbp_per_mwh(True) == pytest.approx(commodity + 8.01 * 0.11)
     # the gas case scales the wholesale part only
-    assert I.site_gas_gbp_per_mwh(None, "low") == pytest.approx(commodity_2025 * F26 * 0.75 + 8.01)
-    assert I.site_gas_gbp_per_mwh(None, "high") == pytest.approx(commodity_2025 * F26 * 1.25 + 8.01)
+    assert I.site_gas_gbp_per_mwh(None, "low") == pytest.approx(commodity * 52 / 85 + 8.01)
+    assert I.site_gas_gbp_per_mwh(None, "high") == pytest.approx(commodity * 143 / 85 + 8.01)
+
+
+def test_gas_and_carbon_are_desnz_2026_and_neso_2026():
+    # DESNZ Fossil fuel price assumptions 2025: 85 p/therm, real 2024, in 2025 pounds
+    assert h2_prices.gas_gbp_per_mwh() == pytest.approx(0.85 * 1000 / 29.3071 * P.factor(2024))
+    # NESO Ten Year Outlook 2026: EUR 80.94/t real 2026 at EUR 1.12
+    assert h2_prices.carbon_gbp_per_t_2026() == pytest.approx(80.94 / 1.12)
 
 
 def test_levy_agreement_on_electricity_and_gas():
@@ -44,7 +53,7 @@ def test_gas_case_moves_grey_and_turquoise_only():
     for colour in ("grey", "turquoise"):
         gas_mwh = h2_prices.INVENTORY[colour]["gas_m3_per_kg"] * h2_prices.GAS_KWH_HHV_PER_M3 / 1000.0
         adj, keys = I._bought_gas_adjustment(colour, "high", h2_prices)
-        assert adj == pytest.approx(gas_mwh * h2_prices.gas_gbp_per_mwh() * 0.25)
+        assert adj == pytest.approx(gas_mwh * h2_prices.gas_gbp_per_mwh() * (143 / 85 - 1))
         assert keys
         assert I._bought_gas_adjustment(colour, "central", h2_prices) == (0.0, [])
     for colour in ("green", "blue"):
@@ -68,4 +77,4 @@ def test_warnings_flag_an_unusual_year_and_a_window_without_winter_evenings():
 
 def test_bad_gas_case_is_refused():
     with pytest.raises(ValueError):
-        I.build_tech("london", {"capacity_GBP_per_MW_year": 0.0, "fixed_GBP_per_year": 0.0}, gas_price_case="dear")
+        I.build_tech("north_norfolk", {"capacity_GBP_per_MW_year": 0.0, "fixed_GBP_per_year": 0.0}, gas_price_case="dear")

@@ -9,7 +9,7 @@ import pytest
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 from optimisation import connection_cost as cc, duos_areas as D, ehv_charges as E, network_charges as nc, substations as S  # noqa: E402
 
-LONDON = (51.505, -0.02)
+NORFOLK = (52.85, 1.04)                   # never London (user, 9 Nov 2026)
 MAXWELL_HOUSE = (52.002384, -0.737258)      # NGED East Midlands, a listed data centre
 
 
@@ -21,18 +21,18 @@ def test_levels_are_normalised_across_companies():
 
 def test_each_voltage_reaches_the_right_substations():
     for v in ("11 kV", "33 kV", "132 kV", "transmission"):
-        c = S.candidates(*LONDON, v, region=13 if v != "transmission" else None)
+        c = S.candidates(*NORFOLK, v, region=10 if v != "transmission" else None)
         assert len(c) and set(c.level_std) <= set(S.VOLTAGE_LEVELS[v])
         assert c.straight_km.is_monotonic_increasing
 
 
 def test_connection_point_prices_the_real_route_not_two_km():
-    p = S.connection_point(*LONDON, "132 kV", 225.0, region=13)
+    p = S.connection_point(*NORFOLK, "132 kV", 225.0, region=10)
     assert p["found"] and p["route_km"] == pytest.approx(p["straight_km"] * S.ROUTE_FACTOR_ASSUMED)
-    assert p["straight_km"] < 2.0
-    with_route = cc.connection_costs(13, False, connection_voltage="132 kV", route_km=p["route_km"])
-    default = cc.connection_costs(13, False, connection_voltage="132 kV")
-    assert with_route["fixed_per_year_GBP"] < default["fixed_per_year_GBP"]
+    assert p["route_km"] > 2.0                                              # Sall, about 11 km in a straight line
+    with_route = cc.connection_costs(10, False, connection_voltage="132 kV", route_km=p["route_km"])
+    default = cc.connection_costs(10, False, connection_voltage="132 kV")
+    assert with_route["fixed_per_year_GBP"] > default["fixed_per_year_GBP"]
     assert with_route["per_MW_year_GBP"] == default["per_MW_year_GBP"]       # the substation does not move
 
 
@@ -76,14 +76,11 @@ def test_the_rule_is_the_floor_not_overruled_by_a_primary_with_room():
 
 
 def test_the_half_published_threshold_and_what_the_capacity_layer_changed():
-    """Until 30 Oct 2026 London (2 of 117 bulk supply points publishing) and
-    Norwich (3 of 31) kept the rule for want of data. With the companies'
-    standard heatmaps in, London's bulk points publish and three have room for
-    103 MW, so it keeps 33 kV *with room*; Norwich's all publish and none has
-    room, so it steps up to 132 kV. The threshold itself is checked wherever an
-    area is still under it."""
-    v, why = S.voltage_with_room(*LONDON, "33 kV", 102.9, region=13)
-    assert v == "33 kV" and "have room for 103 MW" in why
+    """Until 30 Oct 2026 Norwich (3 of 31 bulk supply points publishing) kept the
+    rule for want of data. With the companies' standard heatmaps in, Norwich's all
+    publish and none has room, so it steps up to 132 kV. The threshold itself is
+    checked wherever an area is still under it. (The London half of this test went
+    on 9 Nov 2026: never London.)"""
     v, why = S.voltage_with_room(*NORWICH, "33 kV", 102.9, region=10)
     assert v == "132 kV" and "stepped up from 33 kV" in why
     for lat, lon, region in ((50.72, -3.53, 11), (51.4816, -3.1791, 7), (52.489, -1.898, 8)):

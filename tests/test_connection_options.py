@@ -12,18 +12,18 @@ import pytest
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 from optimisation import connection_options as CO, network_charges as nc, sites, substations as S  # noqa: E402
 
-LONDON = sites.resolve(51.5074, -0.1278, name="London", carbon_api_region=13)
+NORFOLK = sites.resolve(52.85, 1.04, name="North Norfolk", carbon_api_region=10)   # never London
 MANCHESTER = sites.resolve(53.48, -2.24, name="Manchester", carbon_api_region=3)
 INVERNESS = sites.resolve(57.48, -4.22, name="Inverness", carbon_api_region=1)
 
 
 def test_size_ranges_follow_the_rules_and_the_band_tables():
-    rows = size = CO.size_ranges(13, 180.0 * 8760)
+    rows = size = CO.size_ranges(10, 180.0 * 8760)
     by = {(r["voltage"], r["band"]): r for r in rows}
-    assert by[("11 kV", "HV4")]["ceiling_mw"] == pytest.approx(8.0 - nc.BAND_FLOOR_STEP_MW)   # UKPN: 8 MVA and above is 33 kV
-    assert by[("33 kV", "EHV2")]["floor_mw"] == pytest.approx(8.0)
+    assert by[("11 kV", "HV4")]["ceiling_mw"] == pytest.approx(12.0)      # Eastern: 11 kV up to 12 MVA
+    assert by[("33 kV", "EHV3")]["floor_mw"] == pytest.approx(12.0 + nc.BAND_FLOOR_STEP_MW)
     assert by[("33 kV", "EHV4")]["ceiling_mw"] == 120.0 and by[("132 kV", "EHV4")]["ceiling_mw"] == 240.0
-    assert ("33 kV", "EHV1") not in by                    # under the 11 kV limit: an 11 kV connection
+    assert ("33 kV", "EHV1") not in by and ("33 kV", "EHV2") not in by   # under the 11 kV limit: 11 kV
     t = [r for r in rows if r["transmission"]]
     assert len(t) == 1 and t[0]["band"] == "T-Demand4" and t[0]["floor_mw"] == pytest.approx(240.001)
     scot = CO.size_ranges(1, 6.0 * 8760)
@@ -33,53 +33,53 @@ def test_size_ranges_follow_the_rules_and_the_band_tables():
 
 
 def test_room_points_skip_blanks_and_add_the_next_with_room():
-    pts = S.room_points(*(LONDON.lat, LONDON.lon), "transmission", 180.0, 13)
-    assert pts and pts[0]["which"] == "nearest with a published figure"
-    assert pts[0]["room_mw"] is not None and pts[0]["skipped"]            # London's nearest 275/400 kV points publish nothing
-    c = S.candidates(LONDON.lat, LONDON.lon, "transmission", None)
-    assert c.iloc[0]["name"] in pts[0]["skipped"]
+    # No 275/400 kV point within reach of North Norfolk publishes a room figure: none is offered
+    assert S.room_points(NORFOLK.lat, NORFOLK.lon, "transmission", 180.0, 10) == []
+    pts = S.room_points(NORFOLK.lat, NORFOLK.lon, "33 kV", 180.0, 10, within_km=60.0)
+    assert pts and pts[0]["which"] == "nearest with a published figure" and pts[0]["room_mw"] is not None
     pts = S.room_points(MANCHESTER.lat, MANCHESTER.lon, "33 kV", 72.0, 3, within_km=60.0)   # beyond the 15 km reach
     assert pts[0]["room_mw"] < 72.0 and len(pts) == 2 and pts[1]["which"] == "next with room"
     assert pts[1]["room_mw"] >= 72.0 and pts[1]["straight_km"] > pts[0]["straight_km"]
-    assert S.room_points(LONDON.lat, LONDON.lon, "33 kV", 1.0, 13)[0]["room_mw"] >= 1.0 or True
+    assert S.room_points(NORFOLK.lat, NORFOLK.lon, "33 kV", 1.0, 10)[0]["room_mw"] >= 1.0 or True
 
 
 def test_room_mode_caps_each_option_by_its_substations_room():
-    opts, dropped = CO.option_table(LONDON, 180.0, 180.0 * 8760, mode="room")
+    opts, dropped = CO.option_table(NORFOLK, 180.0, 180.0 * 8760, mode="room")
     assert len(opts) > 1 and all(o["mode"] == "room" for o in opts)
     for o in opts:
         assert o["ceiling_mw"] <= o["point"]["room_mw"] + 1e-9 and o["ceiling_mw"] >= o["floor_mw"]
         assert o["cap_basis"] == "published room at the substation"
     tiers = {o["tier"] for o in opts}
-    assert tiers == {"local network", "national grid"}
+    assert tiers == {"local network"}                                    # no national-grid point publishes room
+    assert any("no transmission substation" in d["why"] for d in dropped)
     assert any(d["why"].startswith("room") for d in dropped)          # a band whose floor is above the room
 
 
 def test_cap_mode_caps_every_option_at_the_one_figure_and_keeps_the_nearest():
     cap = sites.max_connection_mw(180.0)[0]
-    opts, dropped = CO.option_table(LONDON, 180.0, 180.0 * 8760, mode="cap", cap_mw=cap)
+    opts, dropped = CO.option_table(NORFOLK, 180.0, 180.0 * 8760, mode="cap", cap_mw=cap)
     assert all(o["ceiling_mw"] <= cap + 1e-9 for o in opts) and all(o["point"]["which"] == "nearest" for o in opts)
     t = [o for o in opts if o["transmission"]]
     assert len(t) == 1 and t[0]["ceiling_mw"] == pytest.approx(cap) and t[0]["floor_mw"] == pytest.approx(240.001)
     local_top = max(o["ceiling_mw"] for o in opts if not o["transmission"])
     assert local_top == 240.0                                        # the company's largest connection
     with pytest.raises(ValueError):
-        CO.option_table(LONDON, 180.0, 180.0 * 8760, mode="cap")       # the cap mode needs its cap
+        CO.option_table(NORFOLK, 180.0, 180.0 * 8760, mode="cap")       # the cap mode needs its cap
 
 
 def test_the_sites_own_settings_still_override():
     cap = 257.0
-    forced_t = sites.resolve(LONDON.lat, LONDON.lon, carbon_api_region=13, transmission_connected=True)
+    forced_t = sites.resolve(NORFOLK.lat, NORFOLK.lon, carbon_api_region=10, transmission_connected=True)
     opts, _ = CO.option_table(forced_t, 180.0, 180.0 * 8760, mode="cap", cap_mw=cap)
     assert opts and all(o["transmission"] for o in opts)
-    forced_band = sites.resolve(LONDON.lat, LONDON.lon, carbon_api_region=13, tdr_band="EHV4")
+    forced_band = sites.resolve(NORFOLK.lat, NORFOLK.lon, carbon_api_region=10, tdr_band="EHV4")
     opts, _ = CO.option_table(forced_band, 180.0, 180.0 * 8760, mode="cap", cap_mw=cap)
     assert opts and all(o["band"] == "EHV4" for o in opts) and {o["voltage"] for o in opts} == {"33 kV", "132 kV"}
 
 
 def test_each_voltage_group_has_a_representative_holding_the_load():
     cap = sites.max_connection_mw(180.0)[0]
-    opts, _ = CO.option_table(LONDON, 180.0, 180.0 * 8760, mode="cap", cap_mw=cap)
+    opts, _ = CO.option_table(NORFOLK, 180.0, 180.0 * 8760, mode="cap", cap_mw=cap)
     rep = CO.representative(opts, "132 kV", 180.0)
     assert rep["band"] == "EHV4" and rep["floor_mw"] <= 180.0 <= rep["ceiling_mw"]
     rep = CO.representative(opts, "11 kV", 180.0)                    # nothing holds 180 MW at 11 kV: the roomiest
@@ -89,9 +89,9 @@ def test_each_voltage_group_has_a_representative_holding_the_load():
 
 def test_charges_follow_each_options_band_and_tier():
     cap = sites.max_connection_mw(180.0)[0]
-    opts, _ = CO.option_table(LONDON, 180.0, 180.0 * 8760, mode="cap", cap_mw=cap)
+    opts, _ = CO.option_table(NORFOLK, 180.0, 180.0 * 8760, mode="cap", cap_mw=cap)
     idx = pd.date_range("2027-01-04", periods=48, freq="30min")
-    duos = CO.with_charges(opts, idx, LONDON)
+    duos = CO.with_charges(opts, idx, NORFOLK)
     t = next(o for o in opts if o["transmission"])
     assert t["network_charges"]["duos_capacity_GBP_per_MW_year"] == 0.0 and float(duos[t["key"]].mean()) == 0.0
     e4 = next(o for o in opts if o["voltage"] == "132 kV" and o["band"] == "EHV4")
@@ -105,7 +105,7 @@ def test_single_mode_is_the_model_before_and_one_option_folds_in():
     """``build_series`` is slow (Brightway caches, the grid series), so the
     single mode and the one-option fold are checked on the option table: a
     site that pins tier, band and limit leaves exactly one list."""
-    pinned = sites.resolve(LONDON.lat, LONDON.lon, carbon_api_region=13, transmission_connected=True,
+    pinned = sites.resolve(NORFOLK.lat, NORFOLK.lon, carbon_api_region=10, transmission_connected=True,
                            tdr_band="T-Demand4", connection_limit_mw=257.0)
     opts, _ = CO.option_table(pinned, 180.0, 180.0 * 8760, mode="cap", cap_mw=257.0)
     assert len(opts) == 1 and opts[0]["band"] == "T-Demand4" and opts[0]["ceiling_mw"] == 257.0

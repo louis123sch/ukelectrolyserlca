@@ -32,7 +32,7 @@ lines = ["### Rule 3 — the design-change test", "",
          "| Case | Anchor | Technologies built | Same with upper? | Largest capacity move | GWP t/yr, central → upper | Verdict |",
          "|---|---|---|---|---|---|---|"]
 verdicts = []
-for case in ("london_grid", "islanded_h2"):
+for case in ("norfolk_grid_green", "islanded_h2"):
     path = OUT / f"sensitivity_cutoff_{case}.csv"
     if not path.exists():
         lines.append(f"| {case} | — | — | — | — | — | not run |")
@@ -65,6 +65,6 @@ print(text)
 (OUT / "cutoff_rule3.md").write_text(text, encoding="utf-8", newline="\n")
 sys.path.insert(0, str(ROOT))
 from optimisation import cutoff, dc_inputs as I  # noqa: E402
-tech = I.build_tech("london", {"capacity_GBP_per_MW_year": 0.0, "fixed_GBP_per_year": 0.0}, h2_colour="green")
+tech = I.build_tech("north_norfolk", {"capacity_GBP_per_MW_year": 0.0, "fixed_GBP_per_year": 0.0}, h2_colour="green")
 cutoff.write_assumptions(tech)
 print("optimisation_outputs/cutoff_rule3.md written and ASSUMPTIONS section 8 regenerated")

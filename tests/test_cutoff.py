@@ -79,6 +79,6 @@ def test_no_excluded_flow_breaks_the_rule():
     """Red until every failing flow is included (CUTOFF_RULE_PLAN.md step 5)."""
     from optimisation import cutoff, dc_inputs as I
     meta = {"capacity_GBP_per_MW_year": 0.0, "fixed_GBP_per_year": 0.0}
-    tech = I.build_tech("london", meta, h2_colour="green")
+    tech = I.build_tech("north_norfolk", meta, h2_colour="green")
     fails = cutoff.failures(tech)
     assert not fails, "the cut-off rule is broken by:\n  " + "\n  ".join(fails)

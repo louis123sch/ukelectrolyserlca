@@ -24,7 +24,7 @@ are computed; the knee is the default.
   point closest to the utopia corner. Needs no carbon price, so it makes no
   policy assumption. **Default.**
 * **Carbon price** — ``min COST + lambda x GWP``, with lambda the FES 2025 GB
-  carbon price the study already loads in ``h2_prices.py`` (£78.96/tCO2 in 2025)
+  carbon price the study already loads in ``h2_prices.py`` (NESO Ten Year Outlook 2026: £72.27/tCO2, 2026 £)
   rather than an invented figure. Policy-relevant, and the lambda is a slider.
 * **Max curvature** — the geometric elbow. Included for completeness, not
   defaulted to: it is sensitive to how the front is sampled in a way the knee
@@ -395,10 +395,11 @@ def special_points(df: pd.DataFrame, degenerate: bool) -> dict:
     }
 
 
-def _carbon_price_gbp_per_kg(year: int = 2025) -> float:
-    """FES 2025 GB carbon price, reused rather than invented."""
+def _carbon_price_gbp_per_kg() -> float:
+    """NESO's GB total carbon price for 2026 (Ten Year Outlook 2026), in 2026 pounds
+    like every cost; reused rather than invented. Was FES 2025's 2025 figure."""
     from optimisation import h2_prices
-    return h2_prices.carbon_gbp_per_t(year) / 1000.0
+    return h2_prices.carbon_gbp_per_t_2026() / 1000.0
 
 
 def summarise(result: dict) -> str:

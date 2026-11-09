@@ -50,7 +50,7 @@ so a resumed run cannot mix steps. docs/TESTING.md is the rule: the rig while
 working, the hourly sign-off to finish.
 
 Run:  python -m optimisation.sensitivity carbon
-      python -m optimisation.sensitivity connection london_150_single
+      python -m optimisation.sensitivity connection norfolk_150_single
       python -m optimisation.sensitivity cost_cutoff          # the cost cut-off's rule 3
       python -m optimisation.sensitivity assumptions          # the cost side's assumptions at their ranges
       python -m optimisation.sensitivity assumptions norfolk_grid --lists=full
@@ -112,39 +112,12 @@ CASES = {
         name="islanded_h2", site=(52.85, 1.04), architecture="custom",
         flags=dict(wind=True, solar=True, battery=True, electrolyser=True,
                    tank=True, fuel_cell=True)),
-    # Grid-connected, with every asset and bought green hydrogen on offer —
-    # where the published figures' kind of answer comes from.
-    "london_grid": Case(
-        name="london_grid", site="london", architecture="res_h2_grid",
-        h2_colour="green"),
-    # The full-year London reference for the connection's price (COST_PLAN 1.11):
-    # the same run as scripts/time_connection_modes.py, whose £146.39 m a year at
-    # 240 MW the central row must reproduce. One price list, national grid.
-    "london_150_single": Case(
-        name="london_150_single", site="51.5074,-0.1278", architecture="custom",
-        flags=_EVERY_ASSET, size_mw_it=150.0, pue=1.2,
-        series_kwargs={"connection_mode": "single"}),
-    # The same site and load connected at a substation picked by the user, at
-    # 132 kV on the local network and capped at the room it publishes.
-    "london_150_leicester_sq": Case(
-        name="london_150_leicester_sq", site="51.5074,-0.1278", architecture="custom",
-        flags=_EVERY_ASSET, size_mw_it=150.0, pue=1.2,
-        site_kwargs={"connection_substation": "LEICESTER SQ 11KV",
-                     "connection_substation_voltage": "132 kV"}),
-    # The same substation with room ignored, capped at 1.43x the load: the
-    # connection the optimiser itself chooses in the cap mode (£141.24 m a year at
-    # 157.6 MW, which the central row must reproduce), and the one case where the
-    # connection's size is free to move both ways, off the band's floor and the room.
-    "london_150_leicester_sq_cap": Case(
-        name="london_150_leicester_sq_cap", site="51.5074,-0.1278", architecture="custom",
-        flags=_EVERY_ASSET, size_mw_it=150.0, pue=1.2,
-        series_kwargs={"connection_mode": "cap"},
-        site_kwargs={"connection_substation": "LEICESTER SQ 11KV",
-                     "connection_substation_voltage": "132 kV"}),
-    # North Norfolk, the reference site for conclusions (user, 4 Nov 2026): a
-    # central-London run is illustrative only. The same coordinate as the
-    # islanded reference case, grid-connected, the optimiser choosing the price
-    # list with each option capped at its substation's published room.
+    # North Norfolk is the reference and test site (user: never test on London,
+    # 9 Nov 2026; the London cases london_grid, london_150_single and
+    # london_150_leicester_sq(_cap) were replaced that day by the Norfolk ones
+    # below). The same coordinate as the islanded reference case, grid-connected,
+    # the optimiser choosing the price list with each option capped at its
+    # substation's published room.
     "norfolk_grid": Case(
         name="norfolk_grid", site=(52.85, 1.04), architecture="res_h2_grid",
         series_kwargs={"connection_mode": "room"}),
@@ -152,6 +125,33 @@ CASES = {
         name="norfolk_150_room", site=(52.85, 1.04), architecture="custom",
         flags=_EVERY_ASSET, size_mw_it=150.0, pue=1.2,
         series_kwargs={"connection_mode": "room"}),
+    # Grid-connected with every asset and bought green hydrogen on offer: where
+    # the published figures' kind of answer comes from (was london_grid).
+    "norfolk_grid_green": Case(
+        name="norfolk_grid_green", site=(52.85, 1.04), architecture="res_h2_grid",
+        h2_colour="green", series_kwargs={"connection_mode": "room"}),
+    # One price list fixed by the rule before solving (was london_150_single).
+    "norfolk_150_single": Case(
+        name="norfolk_150_single", site="52.85,1.04", architecture="custom",
+        flags=_EVERY_ASSET, size_mw_it=150.0, pue=1.2,
+        series_kwargs={"connection_mode": "single"}),
+    # A substation picked by the user, at 132 kV on the local network, capped at
+    # the room it publishes (SALL GRID 132/33kV, 24.5 MW, 11 km away; was
+    # london_150_leicester_sq).
+    "norfolk_150_sall": Case(
+        name="norfolk_150_sall", site="52.85,1.04", architecture="custom",
+        flags=_EVERY_ASSET, size_mw_it=150.0, pue=1.2,
+        site_kwargs={"connection_substation": "SALL GRID 132/33kV",
+                     "connection_substation_voltage": "132 kV"}),
+    # The same substation with room ignored, capped at 1.43x the load: the one
+    # case where the connection's size is free to move both ways (was
+    # london_150_leicester_sq_cap).
+    "norfolk_150_sall_cap": Case(
+        name="norfolk_150_sall_cap", site="52.85,1.04", architecture="custom",
+        flags=_EVERY_ASSET, size_mw_it=150.0, pue=1.2,
+        series_kwargs={"connection_mode": "cap"},
+        site_kwargs={"connection_substation": "SALL GRID 132/33kV",
+                     "connection_substation_voltage": "132 kV"}),
 }
 
 
@@ -453,8 +453,7 @@ CONNECTION_KNOBS = {
 }
 
 
-CONNECTION_CASES = ("london_150_single", "london_150_leicester_sq", "london_150_leicester_sq_cap",
-                    "norfolk_150_room")
+CONNECTION_CASES = ("norfolk_150_single", "norfolk_150_sall", "norfolk_150_sall_cap", "norfolk_150_room")
 
 
 def connection(cases=CONNECTION_CASES, points: int = 3, resume: bool = True,
@@ -498,7 +497,7 @@ def assumptions(cases=("islanded_h2", "norfolk_grid"), list_choice: str = "fixed
                      ignore_index=True)
 
 
-def carbon(cases=("islanded_h2", "london_grid"), knobs=None):
+def carbon(cases=("islanded_h2", "norfolk_grid_green"), knobs=None):
     """CARBON_PLAN.md phase 4: every carbon-side knob, one at a time."""
     knobs = dict(knobs or CARBON_KNOBS)
     out = []
@@ -510,7 +509,7 @@ def carbon(cases=("islanded_h2", "london_grid"), knobs=None):
     return pd.concat(out, ignore_index=True)
 
 
-def cutoff(cases=("islanded_h2", "london_grid")):
+def cutoff(cases=("islanded_h2", "norfolk_grid_green")):
     """The cut-off rule's rule 3: central and every still-excluded flow at its upper estimate, at both
     anchors (sensitivity_cutoff_<case>.csv). Judge it with scripts/cutoff_rule3.py."""
     return pd.concat([run(c, [{}, {"cutoff": "upper"}], name=f"cutoff_{c}") for c in cases],
@@ -529,9 +528,9 @@ if __name__ == "__main__":
     what = args[0] if args else "carbon"
     cases = args[1:]
     if what == "carbon":
-        carbon(cases or ("islanded_h2", "london_grid"))
+        carbon(cases or ("islanded_h2", "norfolk_grid_green"))
     elif what == "cutoff":
-        cutoff(cases or ("islanded_h2", "london_grid"))
+        cutoff(cases or ("islanded_h2", "norfolk_grid_green"))
     elif what == "cost_cutoff":
         # Rule 3 of optimisation/cost_exclusions.py: the same frontier with every
         # cost left out added back at its upper estimate.

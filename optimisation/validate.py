@@ -304,7 +304,7 @@ def check_superset_control_is_no_worse(run_dir: Path):
 def check_switched_connection_matches_forced(site, start, end, size_mw_it, pue):
     """The price list chosen in the LP against the two forced lists (COST_PLAN §1.11).
 
-    Run on the London 150 MW IT site over one June week at hourly steps (the
+    Run on the North Norfolk 150 MW IT site over one June week at hourly steps (the
     chain check's window): forced national grid, forced local network capped at
     the company's largest connection, then the switched model restricted to
     those two lists, which must return the cheaper forced answer; then with
@@ -316,7 +316,7 @@ def check_switched_connection_matches_forced(site, start, end, size_mw_it, pue):
         got = {}
         for mode, transmission, restrict in (("single", True, False), ("single", False, False),
                                              ("cap", None, True), ("cap", None, False)):
-            got[(mode, transmission, restrict)] = both(13, 150.0, transmission, mode=mode, restrict=restrict)
+            got[(mode, transmission, restrict)] = both(10, 150.0, transmission, mode=mode, restrict=restrict)
         forced = min(got[("single", True, False)]["min_cost_cost_m_yr"], got[("single", False, False)]["min_cost_cost_m_yr"])
         two = got[("cap", None, True)]["min_cost_cost_m_yr"]
         every = got[("cap", None, False)]["min_cost_cost_m_yr"]
@@ -326,7 +326,7 @@ def check_switched_connection_matches_forced(site, start, end, size_mw_it, pue):
             "on the two forced lists it equals the cheaper forced run; with every list it is no dearer",
             "The switched model (COST_PLAN §1.11) must contain the both-ways comparison it replaces.",
             ok,
-            f"London 150 MW IT, June week: forced £{forced:.3f} m, switched on the two lists £{two:.3f} m, "
+            f"North Norfolk 150 MW IT, June week: forced £{forced:.3f} m, switched on the two lists £{two:.3f} m, "
             f"every list £{every:.3f} m on {got[('cap', None, False)]['min_cost_option']}",
             "Forced local run capped at the company's 240 MVA; the switched run adds the smaller bands and voltages.")
     except Exception as exc:                                             # noqa: BLE001

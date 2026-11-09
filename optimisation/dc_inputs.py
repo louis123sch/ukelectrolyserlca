@@ -590,10 +590,16 @@ def resample(series: dc_model.Series, freq_hours: float) -> dc_model.Series:
 
 
 # The gas price range (9 Nov 2026): the wholesale part of every gas price the
-# model pays directly, x this. A range we set, not a published one: FES 2025 has
-# one central gas path. +/-25 % is the widening h2_prices already gives blue's
-# capital. The site's levy on top is not scaled.
-GAS_PRICE_MULTIPLIER = {"low": 0.75, "central": 1.0, "high": 1.25}
+# model pays directly, x this. DESNZ's own 2026 low and high over its central
+# (Fossil fuel price assumptions 2025: 52 / 85 / 143 p/therm), about 0.61 and
+# 1.68 — a published range, wide and lopsided as gas is. Was +/-25 % (ours) until
+# the same evening. The site's levy on top is not scaled.
+def _gas_multipliers() -> dict:
+    from optimisation import h2_prices
+    return {c: h2_prices.gas_case_ratio(c) for c in ("low", "central", "high")}
+
+
+GAS_PRICE_MULTIPLIER = _gas_multipliers()
 GAS_PRICE_DEFAULT = "central"
 
 
@@ -602,16 +608,20 @@ def site_gas_gbp_per_mwh(ccl_under_cca: bool | None = None, gas_price_case: str 
     """Gas delivered to a large site, GBP per MWh (HHV), in 2026 pounds.
 
     DESNZ's 2025 price for large users includes the Climate Change Levy at the
-    rate in force all through 2025. It comes out, the rest goes to 2026 pounds
-    and takes the gas price case, and the 2026/27 levy goes back on, less the
-    agreement discount if the site holds one."""
+    rate in force all through 2025. It comes out; the rest goes to 2026 pounds,
+    moves from 2025's gas market to DESNZ's central view of 2026 (85 over 94
+    p/therm, real), and takes the gas price case; and the 2026/27 levy goes back
+    on, less the agreement discount if the site holds one."""
     from optimisation import electrolysers as ely
+    from optimisation import h2_prices
     from optimisation import levies
     case = GAS_PRICE_DEFAULT if gas_price_case is None else str(gas_price_case)
     mult = GAS_PRICE_MULTIPLIER[case]
+    to_2026_market = h2_prices.gas_gbp_per_mwh(2026) / h2_prices.gas_gbp_per_mwh(2025)
     levy_2025 = levies.CCL_GAS_2025_GBP_PER_KWH * 1000.0
     levy_now = levies.ccl_gas_gbp_per_mwh(ccl_under_cca)
-    value = (ely.LARGE_SITE_GAS_GBP_PER_MWH - levy_2025) * P.FACTOR_2025_TO_2026 * mult + levy_now
+    value = ((ely.LARGE_SITE_GAS_GBP_PER_MWH - levy_2025) * P.FACTOR_2025_TO_2026 * to_2026_market * mult
+             + levy_now)
     if record and T.active():
         T.cost("cost.gas.delivered_2025", ely.LARGE_SITE_GAS_GBP_PER_MWH, "GBP per MWh (HHV)",
                "Gas delivered to a large site, including the levy, 2025", grade="transcribed",
@@ -620,9 +630,12 @@ def site_gas_gbp_per_mwh(ccl_under_cca: bool | None = None, gas_price_case: str 
                "Climate Change Levy on gas in force all through 2025", grade="transcribed",
                cites=[("govuk_ccl_rates", "gas, rates from 1 April 2024 and 1 April 2025: £0.00775/kWh")],
                note="Taken at the full rate: DESNZ's average does not say how many buyers held an agreement")
+        T.cost("cost.gas.market_2026_over_2025", to_2026_market, "multiplier",
+               "DESNZ's central NBP gas, 2026 over 2025 (real)", grade="derived",
+               cites=[("desnz_fossil_fuel_prices_2025", "sheet Gas, case B: 85 p/therm 2026, 94 p/therm 2025")])
         T.cost("cost.gas.price_case_multiplier", mult, "multiplier",
-               f"Gas price case: {case}", grade="assumed",
-               note="dc_inputs.GAS_PRICE_MULTIPLIER; a range we set, FES 2025 gives one central gas path")
+               f"Gas price case: {case}, DESNZ's 2026 case over its central", grade="derived",
+               cites=[("desnz_fossil_fuel_prices_2025", "sheet Gas, 2026: A 52, B 85, C 143 p/therm")])
         T.cost("cost.levy.CCL_gas", levy_now, "GBP per MWh", "Climate Change Levy on the site's gas, 2026/27",
                uses=["cost.levy.CCL_under_agreement"],
                cites=[("govuk_ccl_rates", f"gas, £{levies.CCL_GAS_GBP_PER_KWH}/kWh from 1 April 2026; "
@@ -631,7 +644,7 @@ def site_gas_gbp_per_mwh(ccl_under_cca: bool | None = None, gas_price_case: str 
                "Gas delivered to the site in 2026 pounds: the 2025 price less its levy, inflated and "
                "scaled by the gas case, plus the 2026/27 levy",
                uses=["cost.gas.delivered_2025", "cost.gas.levy_in_2025_price", P.KEY_2025_TO_2026,
-                     "cost.gas.price_case_multiplier", "cost.levy.CCL_gas"])
+                     "cost.gas.market_2026_over_2025", "cost.gas.price_case_multiplier", "cost.levy.CCL_gas"])
     return value
 
 
@@ -647,9 +660,9 @@ def _bought_gas_adjustment(colour: str, gas_price_case: str, h2_prices) -> tuple
     adj = gas_mwh * h2_prices.gas_gbp_per_mwh() * (mult - 1.0)
     key = f"cost.bought_h2.{colour}.gas_case_adjustment"
     T.cost(key, adj, "GBP per kg H2", f"Gas price case on the seller's gas ({gas_price_case})", grade="derived",
-           inputs={"gas_MWh_per_kg": gas_mwh, "FES_gas_GBP_per_MWh_2025": h2_prices.gas_gbp_per_mwh(),
+           inputs={"gas_MWh_per_kg": gas_mwh, "DESNZ_gas_2026_GBP_per_MWh_in_2025_GBP": h2_prices.gas_gbp_per_mwh(),
                    "multiplier": mult},
-           cites=[("fes_2025_workbook", "CP1, NBP gas, 2025")],
+           cites=[("desnz_fossil_fuel_prices_2025", "sheet Gas, 2026, case B")],
            note="The plant-gate price already carries this gas at the central price; this is the difference")
     return adj, [key]
 
@@ -788,7 +801,7 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
 
     ``gas_price_case`` (9 Nov 2026) is "low", "central" or "high": the wholesale
     part of every gas price the model pays directly x ``GAS_PRICE_MULTIPLIER``
-    (0.75 / 1 / 1.25) — the site's gas for solid-oxide heat, and the gas behind
+    (DESNZ's 2026 low and high over central, about 0.61 / 1 / 1.68) — the site's gas for solid-oxide heat, and the gas behind
     bought grey and turquoise hydrogen. Bought blue is NESO's own cost with its
     own gas inside, and is not moved. The levy on the site's gas is not moved
     either. None is "central".
@@ -957,7 +970,7 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
             """The recommended-table price of one row, recorded with where it came from."""
             slug = "_".join(str(r.variant).replace(",", "").split())
             src = str(r.central_source)
-            cites = [("eho_uk_2024", f"{src}; the {cost_case} column of optimisation_outputs/"
+            cites = [("eho_uk_2025", f"{src}; the {cost_case} column of optimisation_outputs/"
                                      "h2_prices_recommended.csv")] if src.startswith("EHO") else []
             return T.cost(f"cost.bought_h2.{colour}.{slug}.plant_gate", float(r[cost_case]), "GBP per kg H2",
                           f"Bought {colour} hydrogen at the plant gate: {r.variant}",

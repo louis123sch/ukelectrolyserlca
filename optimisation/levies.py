@@ -31,21 +31,29 @@ connection sources/5 levies and losses" unless noted.
 RO      Ofgem, *RO buy-out price and mutualisation threshold and ceilings 2026
         to 2027* (data page): buy-out £69.34 per ROC; obligation 0.472 ROCs per
         MWh supplied in England, Wales and Scotland. £/MWh = product.
-FiT     Ofgem, *FIT Quarterly Report* Issues 62-65: the levelisation fund and
-        the supply less EII-exempt supply for each quarter. Ofgem publishes no
-        rate; £/MWh = fund / (supply - exempt) per quarter, then their mean.
-        The four latest published quarters (Jul 2025 - Jun 2026): only quarter
-        1 of 2026/27 (Issue 65) is out, and a rolling year keeps the seasonal
-        mix that a single quarter would bias.
-CfD     EMR Settlement, *Key Figures for Payments in 2026/27* §1 and §3:
-        interim levy rates by period, in-period adjustments included, day-
+FiT     Ofgem, price cap *Annex 4 - Policy cost allowance methodology* v1.25
+        (Oct-Dec 2026), sheet "3i New FIT methodology", row 227: the FiT cost
+        per MWh Ofgem sets for each half of 2026/27, £7.698 (Apr-Sep 2026) and
+        £8.050 (Oct 2026-Mar 2027), day-weighted. Since 9 Nov 2026 (source
+        check of the levies): a regulator's figure for the year itself, by the
+        same method (fund / (supply - EII-exempt supply); the overseas
+        renewables exemption is zero from 2023/24). Until then the mean of the
+        FIT Quarterly Reports' Issues 62-65, kept as ``fit_rolling_year`` for
+        a cross-check (1 % higher).
+CfD     EMR Settlement, *Key Figures for Payments in 2026/27*, Revision 13
+        (6 Nov 2026), §1 and §3: interim levy rates by period, in-period
+        adjustments included (the latest: £0.000/MWh from 5 Nov 2026), day-
         weighted over the year; plus the £0.1463/MWh operational costs levy.
 CM      Same document, §9 and §12: Delivery Year 2026/27 total annual capacity
         payments £3,474,489,734.79 over 11,291,571.95 MWh of Total Gross Demand
         for Periods of High Demand, "4 p.m. to 7 p.m. on any working day in
         November, December, January or February". £/MWh in window = division.
-Nuclear Same document, §5 and §7: interim levy rate by quarter, day-weighted;
-RAB     plus the £0.0063/MWh operational costs levy.
+        A working day excludes "a bank holiday or public holiday in England and
+        Wales" (Electricity Capacity Regulations 2014, reg. 2(1)); the dates are
+        GOV.UK's bank-holiday list (``ENGLAND_WALES_BANK_HOLIDAYS``).
+Nuclear Same document, §5 and §7: interim levy rate by quarter, day-weighted,
+RAB     with the in-period adjustment to £5.151/MWh from 6 Dec 2026; plus the
+        £0.0063/MWh operational costs levy.
 AAHEDC  NESO, *AAHEDC Final Tariff and Charging Statement 2026-27*, Schedule 1:
         Total Scheme Energy Consumption Tariff 0.044269 p/kWh.
 CCL     GOV.UK, *Climate Change Levy rates*: electricity £0.00801/kWh from
@@ -79,9 +87,11 @@ TLM     offtaking TLM = 1 + TLF(zone, season) + TLMO- (Elexon, *Guidance
                 range stated in the report's text (p. 9) holds for the values
                 read. ``TLF_ZONE_2026_27``. The exact file is on the Elexon
                 Portal (login; down on 29 Oct 2026): replace when it is back.
-        TLMO-   ASSUMED 0.011: the offtaking share in the guidance's worked
-                example ("TLM of 1.011", 55 % of 2 % losses, before zonal
-                TLFs). It is set per settlement period from metered data.
+        TLMO-   Elexon's estimated offtaking values for 2026/27, by season
+                (``TLMO_OFFTAKING_2026_27``). It is set per settlement period
+                from metered data. Until 4 Nov 2026 an assumed flat 0.011
+                (55 % of 2 % losses); the guidance's own worked example is
+                0.00398 (0.78 / 196).
         Until 29 Oct 2026 the TLM was a flat 1.011 for every site; until 28
         Oct 2026 losses were the carbon side's ecoinvent factor (x1.0338).
 
@@ -122,18 +132,24 @@ RO_BUYOUT_GBP_PER_ROC = 69.34
 FIT_QUARTERS = (
     (62, "Jul-Sep 2025", 540_865_854.37, 58_141_564, 3_272_541),
     (63, "Oct-Dec 2025", 432_300_086.74, 67_525_489, 3_211_180),
-    (64, "Jan-Mar 2026", 358_081_232.287, 70_354_600, 3_230_872),
+    (64, "Jan-Mar 2026", 358_081_232.28, 70_354_600, 3_230_872),      # ".287": the 7 is footnote 7
     (65, "Apr-Jun 2026", 556_039_966.19, 59_217_531, 3_293_227),
 )
 
 # (first day, £/MWh) — each rate holds until the next row's first day. The
 # in-period adjustments are the "Adjusted Rate" column, from their effective date.
+# Revision 13 (6 Nov 2026) added the £0.000 from 5 Nov 2026.
 CFD_ILR = (("2026-04-01", 10.260), ("2026-07-01", 10.559), ("2026-08-17", 2.068),
-           ("2026-10-01", 5.529), ("2027-01-01", 2.979))
+           ("2026-10-01", 5.529), ("2026-11-05", 0.000), ("2027-01-01", 2.979))
 CFD_OPERATIONAL_GBP_PER_MWH = 0.1463
 
+# Revision 13 (6 Nov 2026) added the £5.151 from 6 Dec 2026.
 NUCLEAR_RAB_ILR = (("2026-04-01", 4.683), ("2026-07-01", 4.488),
-                   ("2026-10-01", 3.754), ("2027-01-01", 3.676))
+                   ("2026-10-01", 3.754), ("2026-12-06", 5.151), ("2027-01-01", 3.676))
+
+# Ofgem price cap Annex 4 v1.25, "3i New FIT methodology" row 227: the FiT cost
+# per MWh for each half of 2026/27, as the workbook computes it.
+FIT_ANNEX4 = (("2026-04-01", 7.698273952389116), ("2026-10-01", 8.05013273600938))
 NUCLEAR_RAB_OPERATIONAL_GBP_PER_MWH = 0.0063
 
 SUPPLIER_EBIT_MARGIN = 0.020                    # CMA 2015, Table 1, industrial and commercial, FY09-13
@@ -142,9 +158,16 @@ CM_SUPPLIER_CHARGE_GBP = 3_474_489_734.79       # Delivery Year 2026/27
 CM_PEAK_DEMAND_MWH = 11_291_571.95
 CM_MONTHS = (11, 12, 1, 2)
 CM_HOURS = (16, 19)
-# SIMPLIFIED: working days are taken as Monday-Friday; GB bank holidays in the
-# window (Christmas, New Year) are charged too. They are 5-6 of ~85 days.
-CM_BANK_HOLIDAYS_IGNORED = True
+# England and Wales bank holidays in November-February, 2019-2028 (GOV.UK
+# bank-holidays.json, fetched 9 Nov 2026): not working days, so out of the
+# Capacity Market window. Scotland-only holidays stay in, as the law has it.
+ENGLAND_WALES_BANK_HOLIDAYS = (
+    "2019-01-01", "2019-12-25", "2019-12-26", "2020-01-01", "2020-12-25", "2020-12-28",
+    "2021-01-01", "2021-12-27", "2021-12-28", "2022-01-03", "2022-12-26", "2022-12-27",
+    "2023-01-02", "2023-12-25", "2023-12-26", "2024-01-01", "2024-12-25", "2024-12-26",
+    "2025-01-01", "2025-12-25", "2025-12-26", "2026-01-01", "2026-12-25", "2026-12-28",
+    "2027-01-01", "2027-12-27", "2027-12-28", "2028-01-03", "2028-12-25", "2028-12-26")
+BANK_HOLIDAY_YEARS = (2019, 2028)    # the list's coverage; outside it, every weekday is charged
 
 AAHEDC_P_PER_KWH = 0.044269
 
@@ -204,7 +227,12 @@ def _day_weighted(periods) -> float:
 
 
 def fit_gbp_per_mwh() -> float:
-    """Mean over the quarters of levelisation fund / (supply - exempt)."""
+    """Ofgem's FiT cost per MWh for 2026/27 (Annex 4), day-weighted."""
+    return _day_weighted(FIT_ANNEX4)
+
+
+def fit_rolling_year() -> float:
+    """The cross-check: mean over Issues 62-65 of fund / (supply - exempt)."""
     return float(np.mean([fund / (supply - exempt)
                           for _, _, fund, supply, exempt in FIT_QUARTERS]))
 
@@ -261,7 +289,8 @@ def cm_window(index: pd.DatetimeIndex) -> pd.Series:
     """True in the CM charging window. Read on the UK clock, as the DUoS bands
     are — the study's series are naive UTC."""
     clock = _uk_clock(index)
-    on = ((clock.dayofweek < 5) & clock.month.isin(CM_MONTHS)
+    holiday = np.isin(np.asarray(clock.strftime("%Y-%m-%d")), ENGLAND_WALES_BANK_HOLIDAYS)
+    on = ((clock.dayofweek < 5) & clock.month.isin(CM_MONTHS) & ~holiday
           & (clock.hour >= CM_HOURS[0]) & (clock.hour < CM_HOURS[1]))
     return pd.Series(on, index=index, name="cm_window")
 
@@ -325,20 +354,25 @@ def _record_levies(flat: dict, cm: pd.Series, series: pd.Series, under_cca: bool
            cites=[("ofgem_ro_2026_27", f"{fy}: buy-out £{RO_BUYOUT_GBP_PER_ROC} per ROC, obligation "
                                        f"{RO_ROC_PER_MWH} ROCs per MWh")])
     T.cost("cost.levy.FiT", flat["FiT"], "GBP per MWh",
-           "Feed-in Tariff levelisation: fund / (supply - exempt supply), mean of four quarters", grade="derived",
-           cites=[("ofgem_fit_quarterly", "Issues " + ", ".join(str(q[0]) for q in FIT_QUARTERS))],
-           inputs={q[1]: q[2] / (q[3] - q[4]) for q in FIT_QUARTERS})
+           "Feed-in Tariff levelisation: Ofgem's cost per MWh for each half of 2026/27, day-weighted",
+           grade="derived",
+           cites=[("ofgem_annex4_policy_costs_2026", "v1.25, sheet 3i New FIT methodology, row 227: "
+                                                    "Apr-Sep 2026 £7.698, Oct 2026-Mar 2027 £8.050")],
+           inputs={"Apr-Sep 2026": FIT_ANNEX4[0][1], "Oct 2026-Mar 2027": FIT_ANNEX4[1][1],
+                   "cross-check, Issues 62-65 mean": fit_rolling_year()},
+           note="The FIT Quarterly Reports' rolling year (Issues 62-65, ofgem_fit_quarterly) gives about 1 % more")
     T.cost("cost.levy.CfD", flat["CfD"], "GBP per MWh",
            "Contracts for Difference: interim levy rates day-weighted over the year, plus the operational levy",
            grade="derived", inputs={"operational_GBP_per_MWh": CFD_OPERATIONAL_GBP_PER_MWH},
-           cites=[("emr_key_figures_2026_27", "§1 and §3, interim levy rates and in-period adjustments")])
+           cites=[("emr_key_figures_2026_27", "Revision 13, §1 and §3, interim levy rates and in-period "
+                                              "adjustments, £0.000 from 5 Nov 2026")])
     T.cost("cost.levy.AAHEDC", flat["AAHEDC"], "GBP per MWh",
            "Highlands and Islands distribution subsidy (AAHEDC): p/kWh x 10", grade="transcribed",
            cites=[("neso_aahedc_2026_27", f"Schedule 1: {AAHEDC_P_PER_KWH} p/kWh")])
     T.cost("cost.levy.Nuclear_RAB", flat["Nuclear RAB"], "GBP per MWh",
            "Nuclear funding (RAB): interim levy rates day-weighted, plus the operational levy", grade="derived",
            inputs={"operational_GBP_per_MWh": NUCLEAR_RAB_OPERATIONAL_GBP_PER_MWH},
-           cites=[("emr_key_figures_2026_27", "§5 and §7")])
+           cites=[("emr_key_figures_2026_27", "Revision 13, §5 and §7, £5.151 from 6 Dec 2026")])
     T.cost("cost.levy.CCL_under_agreement", float(cca), "yes (1) / no (0)",
            "Whether the site holds a Climate Change Agreement (92 % off the levy)", grade="assumed",
            note="levies.CCL_UNDER_CCA: data centres are eligible; whether this one holds one is not known")
@@ -349,8 +383,11 @@ def _record_levies(flat: dict, cm: pd.Series, series: pd.Series, under_cca: bool
     T.cost("cost.levy.CM_in_window", cm_gbp_per_mwh_in_window(), "GBP per MWh",
            "Capacity Market: total payments / peak-period demand, charged 4-7 pm on working days, Nov-Feb",
            grade="derived", inputs={"payments_GBP": CM_SUPPLIER_CHARGE_GBP, "peak_demand_MWh": CM_PEAK_DEMAND_MWH},
-           cites=[("emr_key_figures_2026_27", "§9 and §12, Delivery Year 2026/27")],
-           note="Working days taken as Monday-Friday: the window's bank holidays are charged too")
+           cites=[("emr_key_figures_2026_27", "§9 and §12, Delivery Year 2026/27"),
+                  ("capacity_regulations_2014", "reg. 2(1): working day excludes England and Wales bank holidays"),
+                  ("govuk_bank_holidays", "england-and-wales, 2019-2028")],
+           note="Weekdays less England and Wales bank holidays; Scotland-only holidays are charged, as the law "
+                "has it. Outside 2019-2028 every weekday is charged")
     T.cost("cost.levy.CM_mean", float(cm.mean()), "GBP per MWh",
            "Capacity Market, mean over the window on a flat load", uses=["cost.levy.CM_in_window"],
            inputs={"share_of_half_hours_in_window": float((cm > 0).mean())})

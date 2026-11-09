@@ -295,16 +295,16 @@ def test_the_other_connection_type_is_solved_only_when_asked_and_uncertain(monke
         return {"transmission_connected": site.transmission_connected}
 
     monkeypatch.setattr(dc_runner, "run_one", fake_run_one)
-    london = sites.Site(lat=51.5, lon=-0.13, carbon_api_region=13, tnuos_zone=12)
+    norfolk = sites.Site(lat=52.85, lon=1.04, carbon_api_region=10, tnuos_zone=9)
     req = {"both_tiers": True, "out_root": "unused", "kw": {}}
     uncertain = {"connection_limit_mw": 150.0, "transmission_connected": False}
     noop = lambda *a, **k: None
 
-    assert dc_job._other_tier(None, london, {**req, "both_tiers": False}, uncertain, noop, noop) is None
-    assert dc_job._other_tier(None, london, req, {**uncertain, "connection_limit_mw": 100.0},
+    assert dc_job._other_tier(None, norfolk, {**req, "both_tiers": False}, uncertain, noop, noop) is None
+    assert dc_job._other_tier(None, norfolk, req, {**uncertain, "connection_limit_mw": 100.0},
                               noop, noop) is None
-    assert dc_job._other_tier(None, replace(london, transmission_connected=False), req,
+    assert dc_job._other_tier(None, replace(norfolk, transmission_connected=False), req,
                               uncertain, noop, noop) is None
     assert calls == []
-    other = dc_job._other_tier(None, london, req, uncertain, noop, noop)
+    other = dc_job._other_tier(None, norfolk, req, uncertain, noop, noop)
     assert calls == [True] and other == {"transmission_connected": True}

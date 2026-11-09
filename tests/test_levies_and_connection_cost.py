@@ -17,21 +17,44 @@ def test_ro_is_obligation_times_buyout():
     assert lv.flat_components()["RO"] == pytest.approx(0.472 * 69.34)
 
 
-def test_fit_is_the_mean_of_fund_over_net_supply():
-    """Ofgem FIT Quarterly Reports 62-65, fund / (supply - EII exempt)."""
+def test_fit_is_ofgems_annex_4_cost_day_weighted():
+    """Ofgem price cap Annex 4 v1.25, 3i row 227: £7.698 Apr-Sep 2026, £8.050 Oct 2026-Mar 2027."""
+    expected = (7.698273952389116 * 183 + 8.05013273600938 * 182) / 365
+    assert lv.fit_gbp_per_mwh() == pytest.approx(expected)
+
+
+def test_fit_cross_check_is_the_mean_of_fund_over_net_supply():
+    """Ofgem FIT Quarterly Reports 62-65, fund / (supply - EII exempt), within 2 % of Annex 4."""
     by_quarter = [540_865_854.37 / (58_141_564 - 3_272_541),
                   432_300_086.74 / (67_525_489 - 3_211_180),
-                  358_081_232.287 / (70_354_600 - 3_230_872),
+                  358_081_232.28 / (70_354_600 - 3_230_872),
                   556_039_966.19 / (59_217_531 - 3_293_227)]
-    assert lv.fit_gbp_per_mwh() == pytest.approx(sum(by_quarter) / 4)
+    assert lv.fit_rolling_year() == pytest.approx(sum(by_quarter) / 4)
+    assert lv.fit_rolling_year() == pytest.approx(lv.fit_gbp_per_mwh(), rel=0.02)
 
 
 def test_cfd_is_day_weighted_with_its_in_period_adjustments():
-    """EMRS Key Figures 2026/27 §3: 10.260; 10.559 then 2.068 from 17 Aug;
-    5.529 (adjusted) from 1 Oct; 2.979 from 1 Jan; plus £0.1463 operational."""
-    days = {10.260: 91, 10.559: 47, 2.068: 45, 5.529: 92, 2.979: 90}
-    expected = sum(r * d for r, d in days.items()) / sum(days.values()) + 0.1463
+    """EMRS Key Figures 2026/27 Revision 13 §3: 10.260; 10.559 then 2.068 from 17 Aug;
+    5.529 (adjusted) from 1 Oct; 0.000 from 5 Nov; 2.979 from 1 Jan; plus £0.1463 operational."""
+    periods = [(10.260, 91), (10.559, 47), (2.068, 45), (5.529, 35), (0.000, 57), (2.979, 90)]
+    expected = sum(r * d for r, d in periods) / sum(d for _, d in periods) + 0.1463
     assert lv.cfd_gbp_per_mwh() == pytest.approx(expected)
+
+
+def test_nuclear_rab_is_day_weighted_with_its_december_adjustment():
+    """EMRS Key Figures 2026/27 Revision 13 §5, §7: 3.754 rising to 5.151 from 6 Dec 2026."""
+    periods = [(4.683, 91), (4.488, 92), (3.754, 66), (5.151, 26), (3.676, 90)]
+    expected = sum(r * d for r, d in periods) / sum(d for _, d in periods) + 0.0063
+    assert lv.nuclear_rab_gbp_per_mwh() == pytest.approx(expected)
+
+
+def test_capacity_market_window_skips_england_and_wales_bank_holidays_only():
+    """Electricity Capacity Regulations 2014 reg 2(1): no charge on an England and Wales bank holiday."""
+    at = lambda d: lv.cm_window(pd.DatetimeIndex([f"{d} 17:00"])).iloc[0]   # noqa: E731 (17:00 UTC = 17:00 GMT)
+    assert not at("2025-12-25") and not at("2025-12-26") and not at("2026-01-01")
+    assert at("2025-12-29")                 # an ordinary Monday
+    assert at("2026-11-30")                 # St Andrew's Day: a Scottish holiday only, still charged
+    assert not at("2026-12-28")             # substitute Boxing Day 2026
 
 
 def test_capacity_market_is_charge_over_winter_peak_demand():

@@ -47,14 +47,14 @@ def energy_section(gap_ids=lambda *k: []):
     fc_kg_mwh = d_fc["h2_kg_per_MWh"]
     lw, ls, lg = cl.stepup("onshore_wind"), cl.stepup("solar_pv"), cl.grid_intake()
     hv = G.DELIVERY["high"]
-    try:                                     # the London 2025 profiles, for loading
-        sol, _ = profiles.fetch_solar_cf(51.5074, -0.1278, "2025-01-01", "2025-12-31")
+    try:                                     # the North Norfolk 2025 profiles, for loading (never London)
+        sol, _ = profiles.fetch_solar_cf(52.85, 1.04, "2025-01-01", "2025-12-31")
         xs = _x_eff(sol.iloc[:, 0])
         cf_s = float(sol.iloc[:, 0].mean())
     except Exception:                                    # noqa: BLE001
         xs, cf_s = None, None
     try:
-        win, _ = profiles.fetch_wind_cf(51.5074, -0.1278, "2025-01-01", "2025-12-29")
+        win, _ = profiles.fetch_wind_cf(52.85, 1.04, "2025-01-01", "2025-12-29")
         cf_w_gross = float(win.iloc[:, 0].mean())
         xw = _x_eff(win.iloc[:, 0] * profiles.WIND_NET_FACTOR)
     except Exception:                                    # noqa: BLE001
@@ -92,7 +92,7 @@ def energy_section(gap_ids=lambda *k: []):
     # ================================================================ solar
     R = ("solar",)
     n("sun", "Sunlight on the array", 0, 0, "source", route=R,
-      rating=f"shown for the London 2025 reference: CF {pc(cf_s) if cf_s else '—'} at {cfg.PV_TILT_DEG:g}° tilt",
+      rating=f"shown for the North Norfolk 2025 reference: CF {pc(cf_s) if cf_s else '—'} at {cfg.PV_TILT_DEG:g}° tilt",
       model="Renewables.ninja hourly PV profile (MERRA-2) at the site's coordinate, south-facing, "
             f"{cfg.PV_TILT_DEG:g}° fixed tilt. The LP sees it as cf_solar[t] × cap_solar.",
       source="profiles.fetch_solar_cf; dc_config.PV_TILT_DEG", gaps=("dispatch profile",))
@@ -127,7 +127,7 @@ def energy_section(gap_ids=lambda *k: []):
     # ================================================================ wind
     R = ("wind",)
     n("wind", "Wind at hub height", 1, 0, "source", route=R,
-      rating=f"shown for the London 2025 reference: gross CF {pc(cf_w_gross) if cf_w_gross else '—'} (one V90, 80 m)",
+      rating=f"shown for the North Norfolk 2025 reference: gross CF {pc(cf_w_gross) if cf_w_gross else '—'} (one V90, 80 m)",
       model="Renewables.ninja hourly profile for one Vestas V90 2 MW at 80 m; the LP takes it "
             f"× {profiles.WIND_NET_FACTOR:.3f} to make it a farm's net output.",
       source="profiles.fetch_wind_cf; Staffell & Pfenninger 2016", gaps=("wind life extension",))
@@ -173,7 +173,7 @@ def energy_section(gap_ids=lambda *k: []):
     imp_txt = ", ".join(f"{k} {v:.1%}" for k, v in sorted(imports.items(), key=lambda kv: -kv[1]) if v > 0.0005)
     n("gb_gen", "GB generators and interconnectors", 2, 0, "source", route=R,
       rating=f"GB-wide 2025 mix: {mix_txt}; imports {sum(imports.values()):.1%} ({imp_txt})",
-      model="Shown GB-wide; the LP uses the site's own region (London, region 13) half-hour by "
+      model="Shown GB-wide; the LP uses the site's own region (North Norfolk, region 10) half-hour by "
             "half-hour from the Carbon Intensity API, which sets ci[t]. The LP chooses imp[t] each "
             "half-hour up to cap_grid.",
       term="Grid imports (half-hourly, regional)", source="NESO Carbon Intensity API; Elexon FUELHH",
