@@ -3,7 +3,7 @@
 
     python scripts/signoff.py                       # every step, in order
     python scripts/signoff.py --run-to PATH         # also the North Norfolk optimiser run, saved under PATH
-    python scripts/signoff.py --only 2 3            # just those steps
+    python scripts/signoff.py --only 1 2 8 3 4 5   # just those steps, in that order
 
 Meant to run from a clean, committed tree (a separate worktree is safest, so nothing edited
 meanwhile in the working checkout can reach it). Each step's output goes to
@@ -91,10 +91,12 @@ def main(argv=None) -> int:
     LOCK.write_text(f"started {stamp}, logs in {logdir}\n", encoding="utf-8")
     head = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.strip()
     rows = []
+    plan = steps(a.run_to)
+    if a.only:                      # the steps asked for, in the order asked
+        by = {n: (n, name, cmds) for n, name, cmds in plan}
+        plan = [by[n] for n in a.only if n in by]
     try:
-        for n, name, cmds in steps(a.run_to):
-            if a.only and n not in a.only:
-                continue
+        for n, name, cmds in plan:
             log = logdir / f"step_{n}.log"
             t0, ok, note = time.time(), True, ""
             with log.open("w", encoding="utf-8", errors="replace") as f:
