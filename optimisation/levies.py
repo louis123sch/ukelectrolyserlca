@@ -88,6 +88,11 @@ TLM     offtaking TLM = 1 + TLF(zone, season) + TLMO- (Elexon, *Guidance
 Supplier margin, since 4 Nov 2026: unpublished for a site this size, so an
 estimate, the CMA's 2.0 % on industrial and commercial supply of DESNZ's price to
 extra large consumers (cost_exclusions.py: it fails the 1 % test if left out).
+That price is 2025's, so the margin is taken to 2026 pounds (price_base, 9 Nov
+2026); every other figure here is 2026/27 already.
+
+Gas (9 Nov 2026): the levy on the gas the site buys for solid-oxide heat,
+``ccl_gas_gbp_per_mwh``, used by ``dc_inputs.site_gas_gbp_per_mwh``.
 
 Not charged: the ESC and EMR settlement-cost levies (negligible per MWh) and the
 Green Gas Levy (gas only).
@@ -146,6 +151,12 @@ AAHEDC_P_PER_KWH = 0.044269
 CCL_MAIN_GBP_PER_KWH = 0.00801
 CCA_DISCOUNT = 0.92
 CCL_UNDER_CCA = False                # ASSUMED: no Climate Change Agreement
+# Gas (9 Nov 2026, same GOV.UK page): £0.00801/kWh from 1 April 2026, 89 % off
+# under an agreement; £0.00775/kWh from 1 April 2024 and from 1 April 2025, so the
+# rate in force all through calendar 2025, which DESNZ's 2025 gas price includes.
+CCL_GAS_GBP_PER_KWH = 0.00801
+CCL_GAS_2025_GBP_PER_KWH = 0.00775
+CCA_GAS_DISCOUNT = 0.89
 
 # Offtaking share of transmission losses (TLMO-), 2026/27, by season (spring,
 # summer, autumn, winter): Elexon's Estimated Transmission Loss Adjustment
@@ -211,6 +222,19 @@ def ccl_gbp_per_mwh(under_cca: bool | None = None) -> float:
     return CCL_MAIN_GBP_PER_KWH * 1000.0 * ((1.0 - CCA_DISCOUNT) if cca else 1.0)
 
 
+def ccl_gas_gbp_per_mwh(under_cca: bool | None = None) -> float:
+    """The 2026/27 levy on gas, £/MWh, less the agreement discount if held."""
+    cca = CCL_UNDER_CCA if under_cca is None else under_cca
+    return CCL_GAS_GBP_PER_KWH * 1000.0 * ((1.0 - CCA_GAS_DISCOUNT) if cca else 1.0)
+
+
+def supplier_margin_gbp_per_mwh() -> float:
+    """The margin on DESNZ's 2025 extra-large price taken to 2026 pounds, as
+    every other 2025 figure the model charges is (price_base)."""
+    from optimisation import price_base as P
+    return SUPPLIER_EBIT_MARGIN * EXTRA_LARGE_PRICE_GBP_PER_MWH * P.FACTOR_2025_TO_2026
+
+
 def flat_components(under_cca: bool | None = None) -> dict:
     """Every flat £/MWh levy, by name."""
     return {
@@ -220,7 +244,7 @@ def flat_components(under_cca: bool | None = None) -> dict:
         "AAHEDC": AAHEDC_P_PER_KWH * 10.0,
         "Nuclear RAB": nuclear_rab_gbp_per_mwh(),
         "CCL": ccl_gbp_per_mwh(under_cca),
-        "Supplier margin": SUPPLIER_EBIT_MARGIN * EXTRA_LARGE_PRICE_GBP_PER_MWH,
+        "Supplier margin": supplier_margin_gbp_per_mwh(),
     }
 
 
@@ -330,9 +354,12 @@ def _record_levies(flat: dict, cm: pd.Series, series: pd.Series, under_cca: bool
     T.cost("cost.levy.CM_mean", float(cm.mean()), "GBP per MWh",
            "Capacity Market, mean over the window on a flat load", uses=["cost.levy.CM_in_window"],
            inputs={"share_of_half_hours_in_window": float((cm > 0).mean())})
+    from optimisation import price_base as P
+    P.to_2026()
     T.cost("cost.levy.supplier_margin", flat["Supplier margin"], "GBP per MWh",
-           "Supplier margin: an estimate that fails the 1 % test if left out", grade="proxy",
-           inputs={"ebit_margin": SUPPLIER_EBIT_MARGIN, "price_GBP_per_MWh": EXTRA_LARGE_PRICE_GBP_PER_MWH},
+           "Supplier margin: an estimate that fails the 1 % test if left out, in 2026 pounds", grade="proxy",
+           uses=[P.KEY_2025_TO_2026],
+           inputs={"ebit_margin": SUPPLIER_EBIT_MARGIN, "price_GBP_per_MWh_2025": EXTRA_LARGE_PRICE_GBP_PER_MWH},
            cites=[("cma_retail_profitability_2015", "Table 1, industrial and commercial, 2.0 %, FY09-13"),
                   ("desnz_nondomestic_prices", "table 3.4.1, annual, 2025, electricity, extra large")])
     T.cost("cost.levy.mean_per_MWh", float(series.mean()), "GBP per MWh",

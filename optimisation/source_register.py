@@ -131,6 +131,12 @@ _FIXED = [
            "release of 30 September 2026", "data feed",
            link="https://www.ons.gov.uk/economy/grossdomesticproductgdp/timeseries/ybgb/qna",
            note="2024 = 100; optimisation/price_base.py holds it, scripts/check_price_base.py compares it"),
+    Source("hmt_gdp_deflators_oct_2026", "GDP deflators at market prices, and money GDP: October 2026 (Budget)",
+           "HM Treasury", "29 October 2026", "workbook",
+           link="https://www.gov.uk/government/statistics/gdp-deflators-at-market-prices-and-money-gdp-october-2026-budget",
+           held="OneDrive, DC optimiser/cost sources/5 prices and inflation",
+           note="2025 = 100. Calendar 2026: +2.9607 % on 2025, the OBR's October 2026 forecast. "
+                "optimisation/price_base.py: 2025 to 2026 pounds"),
     Source("worldbank_us_gdp_deflator", "GDP deflator, United States (NY.GDP.DEFL.ZS)", "World Bank",
            "fetched 4 November 2026", "data feed",
            link="https://api.worldbank.org/v2/country/USA/indicator/NY.GDP.DEFL.ZS?format=json",

@@ -253,6 +253,39 @@ with c4:
              "on carbon. 2 h costs 1.2 % on carbon — comparable to the "
              "differences between options, so use it only to explore.")
 
+c1, c2 = st.columns(2)
+with c1:
+    ccl_cca = st.checkbox(
+        "Site holds a Climate Change Agreement", value=False,
+        help="**What it does.** The Climate Change Levy is a tax on business energy: £8.01/MWh on "
+             "electricity and on gas from April 2026. A site with a Climate Change Agreement pays 92 % less "
+             "on electricity (£0.64/MWh) and 89 % less on gas, in return for meeting energy-efficiency "
+             "targets.\n\n"
+             "**Why it is a choice.** Data centres can join: techUK runs the data-centre agreement, more "
+             "than 170 sites were in it in 2024, and the government has reopened it to new entrants. Whether "
+             "*this* site would hold one is not known, so it is unticked by default (the higher cost).\n\n"
+             "**What it moves.** About £7.40 on every MWh imported, and the gas for solid-oxide heat. "
+             "Source: GOV.UK, *Climate Change Levy rates*.")
+with c2:
+    gas_case = st.radio(
+        "Gas price", ["low", "central", "high"], index=1, horizontal=True,
+        help="**What it does.** Scales the wholesale gas price by 0.75 / 1 / 1.25 wherever the model "
+             "pays for gas directly: the gas boiler that heats a solid-oxide electrolyser, and the gas "
+             "behind bought grey and turquoise hydrogen. The levy on the site's gas is not scaled.\n\n"
+             "**Why a range.** The central figures are the government's 2025 price for large business "
+             "users (site gas) and the national energy scenarios' 2025 wholesale gas price (bought "
+             "hydrogen), both in 2026 pounds. The scenarios give one central path, not a range, so the "
+             "±25 % is ours.\n\n"
+             "**What it does not move.** Grid electricity prices (they are the run window's own), and "
+             "bought blue hydrogen, whose published cost has its own gas price inside.")
+
+st.caption(
+    "**All costs are in 2026 pounds.** Equipment and gas are inflated from their sources' years, "
+    "and the window's wholesale prices from their own year, by the government's inflation index "
+    "(2025 to 2026 is the OBR's forecast, +2.96 %). Network charges and levies are this year's "
+    "(2026/27), applied to whatever window you run."
+)
+
 st.caption(
     f"**{size_mw * pue:,.2f} MW facility draw**, flat. The dispatch window is "
     "the period the optimiser sees. Any window the Carbon Intensity and Elexon "
@@ -1053,6 +1086,7 @@ if launch:
         unserved_fraction=unserved, gwp_target_kg_per_year=gwp_target,
         green_h2_grid_share=green_share,
         connection_headroom=headroom, connection_mode=conn_mode, connection_solve=conn_solve, refresh=refresh,
+        ccl_under_cca=bool(ccl_cca), gas_price_case=gas_case,
         # Always: it is a few MB, and a run whose dispatch was not kept cannot
         # be asked about later without solving it again.
         save_dispatch=True)
@@ -1160,8 +1194,13 @@ else:
     st.caption(
         f"**{summary['label']}** at {summary['site_name']}, "
         f"{summary['size_mw_it']:g} MW IT · PUE {summary['pue']:g} · "
-        f"{summary['start']} to {summary['end']} · {summary['cost_case']} costs."
+        f"{summary['start']} to {summary['end']} · {summary['cost_case']} costs · "
+        f"{summary.get('price_base') or 'real 2025 pounds (run before 9 Nov 2026)'} · "
+        f"levy agreement {'held' if summary.get('ccl_under_cca') else 'not held'} · "
+        f"{summary.get('gas_price_case') or 'central'} gas."
     )
+    for _w in summary.get("warnings") or []:
+        st.warning(_w)
 
     @st.cache_data(show_spinner="Running the grid baseline for comparison…")
     def _baseline():

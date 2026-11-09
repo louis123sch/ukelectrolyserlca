@@ -246,7 +246,7 @@ def build():
     tot = solved["totals"]
     study = gr.add("study", kind="study", name="The study: cost of a year of data-centre demand served",
                    score=tot["cost_GBP_per_year"],
-                   note=f"Real 2025 £ unless a box says otherwise. Shown for {SITE}, {START} to {END}, "
+                   note=f"Real 2026 £: the coefficients' 2025 £ taken on by the one 2025-to-2026 factor; network charges and levies are 2026/27. Shown for {SITE}, {START} to {END}, "
                         f"{SIZE_MW_IT:g} MW IT, {MAIN['h2_colour']} hydrogen bought, solved for least cost with "
                         "every asset on offer and the optimiser choosing the grid's price list. Pounds per term "
                         f"come from that solve at {SOLVE_HOURS:g}-hour steps (about 0.2 % off the half-hourly "
@@ -420,8 +420,10 @@ def build():
         "nodes": gr.nodes, "edges": gr.edges, "root": "study", "sources": sources,
         "gaps": {g["id"]: g for g in gaps},
         "method": {"assumptions": parse_md_sections(ROOT / "optimisation" / "ASSUMPTIONS.md"),
-                   "price_basis": "Real 2025 £ throughout unless a box says otherwise; currency conversions at the "
-                                  "FES 2025 Data Workbook's 2025 cross-rates."},
+                   "price_basis": "Real 2026 £ in the LP (since 9 Nov 2026). The coefficient modules work in real 2025 £, "
+                                  "taken to 2026 by one factor (HM Treasury, OBR forecast); the window's wholesale prices by "
+                                  "their own year's factor; 2026/27 network charges and levies as published. Currency "
+                                  "conversions at the FES 2025 Data Workbook's 2025 cross-rates."},
         "problems": problems,
         "meta": {"generated": time.strftime("%Y-%m-%d %H:%M"), "seconds": round(time.time() - t0),
                  "nodes": len(gr.nodes), "edges": len(gr.edges),
@@ -467,4 +469,8 @@ if __name__ == "__main__":
     print(f"wrote {OUT.relative_to(ROOT)}: {OUT.stat().st_size / 1e6:.2f} MB")
     page = write_html(blob)
     print(f"wrote {page.relative_to(ROOT)}: {page.stat().st_size / 1e6:.2f} MB")
+    import build_maps_page          # both maps in one four-tab page (9 Nov 2026)
+    both = build_maps_page.write()
+    if both:
+        print(f"wrote {both.relative_to(ROOT)}: {both.stat().st_size / 1e6:.2f} MB")
     sys.exit(1 if out.get("problems") else 0)

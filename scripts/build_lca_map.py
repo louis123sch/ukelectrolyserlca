@@ -717,4 +717,8 @@ if __name__ == "__main__":
     print(f"wrote {OUT.relative_to(ROOT)}: {OUT.stat().st_size / 1e6:.2f} MB")
     page = write_html(blob)
     print(f"wrote {page.relative_to(ROOT)}: {page.stat().st_size / 1e6:.2f} MB")
+    import build_maps_page          # both maps in one four-tab page (9 Nov 2026)
+    both = build_maps_page.write()
+    if both:
+        print(f"wrote {both.relative_to(ROOT)}: {both.stat().st_size / 1e6:.2f} MB")
     sys.exit(1 if out.get("problems") else 0)

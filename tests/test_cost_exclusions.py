@@ -37,9 +37,10 @@ def test_included_estimates_would_have_failed_and_are_in_the_coefficients():
 
 def test_supplier_margin_is_carried_in_the_import_price():
     flat = levies.flat_components()
-    assert flat["Supplier margin"] == pytest.approx(0.02 * 209.27)
+    # DESNZ's 2025 price, taken to 2026 pounds like every 2025 figure the LP charges
+    assert flat["Supplier margin"] == pytest.approx(0.02 * 209.27 * 1.0296071586188875)
     idx = pd.date_range("2025-06-02", periods=48, freq="30min")
-    assert levies.import_levies(idx)["components"]["Supplier margin_GBP_per_MWh"] == pytest.approx(4.1854)
+    assert levies.import_levies(idx)["components"]["Supplier margin_GBP_per_MWh"] == pytest.approx(4.3093, abs=1e-4)
 
 
 def test_upper_additions_only_touch_flows_still_left_out():

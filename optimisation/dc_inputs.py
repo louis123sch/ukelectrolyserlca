@@ -39,6 +39,7 @@ OUT_DIR = ROOT / "optimisation_outputs"
 DC_CACHE = OUT_DIR / "dc_facility_decomposition_v3_cache.json"   # v3: IT normalised on 5.38 MW
 
 from optimisation import dc_model, sites
+from optimisation import price_base as P
 from optimisation import trace as T
 
 # CEPA for DESNZ (2025), Table E.1: hydrogen electrolyser 10.10 % pre-tax real.
@@ -100,6 +101,38 @@ def data_centre_coefficients(refresh: bool = False) -> dict:
     }
     OUT_DIR.mkdir(exist_ok=True)
     DC_CACHE.write_text(json.dumps(out, indent=2), encoding="utf-8")
+    return out
+
+
+
+# The unusual-year warning (9 Nov 2026). The reference is the 2025 run year's
+# wholesale mean (Elexon market index, 1 Jan - 29 Dec 2025, as on the cost map),
+# taken to 2026 pounds; a window more than this share away from it is flagged.
+WHOLESALE_REFERENCE_2025_GBP_PER_MWH = 79.82
+WHOLESALE_WARN_FRACTION = 0.25
+
+
+def run_warnings(index: pd.DatetimeIndex, wholesale_2026: np.ndarray) -> list[str]:
+    """Plain-language warnings about the window itself, for every run's summary."""
+    from optimisation import levies
+    from optimisation import network_charges as nc
+    out = []
+    ref = WHOLESALE_REFERENCE_2025_GBP_PER_MWH * P.FACTOR_2025_TO_2026
+    mean = float(np.mean(wholesale_2026))
+    gap = mean / ref - 1.0
+    if abs(gap) > WHOLESALE_WARN_FRACTION:
+        years = sorted({int(y) for y in index.year})
+        span = f"{years[0]}" if len(years) == 1 else f"{years[0]}-{years[-1]}"
+        out.append(
+            f"Unusual price year: wholesale electricity in {span} averages £{mean:,.0f}/MWh in 2026 pounds, "
+            f"{abs(gap):.0%} {'above' if gap > 0 else 'below'} 2025's £{ref:,.0f}. Prices are only inflated, not "
+            f"adjusted, so this run {'favours on-site supply and storage' if gap > 0 else 'favours the grid'} "
+            "more than an ordinary year would.")
+    if not (np.asarray(levies.cm_window(index)).any() or np.asarray(nc.triad_window(index)).any()):
+        out.append(
+            "No winter evenings in this window: the Capacity Market levy and the national winter-peak charge "
+            "fall only on weekday evenings from November to February, so this run never pays them and "
+            "undervalues anything that cuts winter-evening imports (batteries, fuel cells).")
     return out
 
 
@@ -186,6 +219,14 @@ def build_series(site, start: str, end: str, size_mw_it: float,
     sites.require_grid_region(site, meta["grid_file"])
 
     index = pd.DatetimeIndex(df.index)
+    # The window's wholesale prices in 2026 pounds (price_base, 9 Nov 2026): each
+    # step by its own year's factor. Plain inflation, nothing else: an unusual
+    # year stays unusual, and the warning below says so.
+    wholesale_raw = df["price_GBP_per_MWh"].to_numpy(dtype=float)
+    _f = {int(y): P.factor_to_2026(int(y)) for y in np.unique(index.year)}
+    df = df.copy()
+    df["price_GBP_per_MWh"] = wholesale_raw * np.array([_f[int(y)] for y in index.year])
+    warnings = run_warnings(index, df["price_GBP_per_MWh"].to_numpy())
     # load -> connection ceiling -> band. The band is read from the agreed
     # capacity, which is the connection, not the load: charging a 300 MW site on
     # its load alone is how it stayed on a 7 MW band. A site that pins its own
@@ -245,10 +286,17 @@ def build_series(site, start: str, end: str, size_mw_it: float,
              + duos_ref
              + lev["levies_GBP_per_MWh"].to_numpy())
     if T.active():
-        T.cost("cost.wholesale.mean_per_MWh", float(df["price_GBP_per_MWh"].mean()), "GBP per MWh",
-               f"Wholesale electricity price, mean over {start} to {end}", grade="transcribed",
+        T.cost("cost.wholesale.mean_per_MWh", float(wholesale_raw.mean()), "GBP per MWh",
+               f"Wholesale electricity price, mean over {start} to {end}, in each year's own money",
+               grade="transcribed",
                cites=[("elexon_market_index", f"provider APXMIDP, half-hourly, {start} to {end}")],
                note="Real prices for the solved window, not a forecast")
+        year_keys = sorted({k for y in _f for k in P.record_to_2026(y)})
+        T.cost("cost.wholesale.mean_per_MWh_2026", float(df["price_GBP_per_MWh"].mean()), "GBP per MWh",
+               f"Wholesale electricity price, mean over {start} to {end}, in 2026 pounds",
+               uses=["cost.wholesale.mean_per_MWh", *year_keys],
+               inputs={str(y): f for y, f in _f.items()},
+               note="Each half-hour by its own year's factor; plain inflation only")
         _trace_price("cost.import_price.reference", df["price_GBP_per_MWh"].to_numpy(),
                      charges["bsuos_GBP_per_MWh"].to_numpy(), loss, duos_ref,
                      lev["levies_GBP_per_MWh"].to_numpy(), price,
@@ -336,6 +384,10 @@ def build_series(site, start: str, end: str, size_mw_it: float,
         grid_groups=({g: {"price_per_mwh": d["price_per_mwh"], "gwp_per_mwh": d["gwp_per_mwh"]}
                       for g, d in groups.items()} if len(options) > 1 else None),
     )
+    meta["warnings"] = warnings
+    meta["price_base"] = f"real {P.TARGET_YEAR} pounds"
+    meta["wholesale_mean_GBP_per_MWh_2026"] = float(df["price_GBP_per_MWh"].mean())
+    meta["ccl_under_cca"] = lev["components"]["ccl_under_cca"]
     meta["network_charges"] = _scaled_network_charges(charges["components"], ncs)
     meta["network_charges_scale"] = ncs
     meta["levies"] = {**lev["components"], "loss_gross_up_mean": float(np.mean(loss)),
@@ -394,7 +446,7 @@ def _trace_price(key, wholesale, bsuos, loss, duos, levies, price, loss_key, duo
     """Record one import price series as its four parts, each the window mean of
     what it adds per MWh metered, so the parts add back to the price's mean."""
     parts = {"energy": (wholesale * loss, "Wholesale energy, grossed up for losses",
-                        ["cost.wholesale.mean_per_MWh", f"{loss_key}.mean"]),
+                        ["cost.wholesale.mean_per_MWh_2026", f"{loss_key}.mean"]),
              "balancing": (bsuos * loss, "Balancing charge, grossed up for losses",
                            ["cost.bsuos.mean_per_MWh", f"{loss_key}.mean"]),
              "local_network": (duos, "Local network unit charges (none on the national grid)",
@@ -536,6 +588,72 @@ def resample(series: dc_model.Series, freq_hours: float) -> dc_model.Series:
     )
 
 
+
+# The gas price range (9 Nov 2026): the wholesale part of every gas price the
+# model pays directly, x this. A range we set, not a published one: FES 2025 has
+# one central gas path. +/-25 % is the widening h2_prices already gives blue's
+# capital. The site's levy on top is not scaled.
+GAS_PRICE_MULTIPLIER = {"low": 0.75, "central": 1.0, "high": 1.25}
+GAS_PRICE_DEFAULT = "central"
+
+
+def site_gas_gbp_per_mwh(ccl_under_cca: bool | None = None, gas_price_case: str | None = None,
+                         record: bool = False) -> float:
+    """Gas delivered to a large site, GBP per MWh (HHV), in 2026 pounds.
+
+    DESNZ's 2025 price for large users includes the Climate Change Levy at the
+    rate in force all through 2025. It comes out, the rest goes to 2026 pounds
+    and takes the gas price case, and the 2026/27 levy goes back on, less the
+    agreement discount if the site holds one."""
+    from optimisation import electrolysers as ely
+    from optimisation import levies
+    case = GAS_PRICE_DEFAULT if gas_price_case is None else str(gas_price_case)
+    mult = GAS_PRICE_MULTIPLIER[case]
+    levy_2025 = levies.CCL_GAS_2025_GBP_PER_KWH * 1000.0
+    levy_now = levies.ccl_gas_gbp_per_mwh(ccl_under_cca)
+    value = (ely.LARGE_SITE_GAS_GBP_PER_MWH - levy_2025) * P.FACTOR_2025_TO_2026 * mult + levy_now
+    if record and T.active():
+        T.cost("cost.gas.delivered_2025", ely.LARGE_SITE_GAS_GBP_PER_MWH, "GBP per MWh (HHV)",
+               "Gas delivered to a large site, including the levy, 2025", grade="transcribed",
+               cites=[("desnz_nondomestic_prices", "table 3.4.2, annual, 2025, gas, large, 4.149 p/kWh")])
+        T.cost("cost.gas.levy_in_2025_price", levy_2025, "GBP per MWh",
+               "Climate Change Levy on gas in force all through 2025", grade="transcribed",
+               cites=[("govuk_ccl_rates", "gas, rates from 1 April 2024 and 1 April 2025: £0.00775/kWh")],
+               note="Taken at the full rate: DESNZ's average does not say how many buyers held an agreement")
+        T.cost("cost.gas.price_case_multiplier", mult, "multiplier",
+               f"Gas price case: {case}", grade="assumed",
+               note="dc_inputs.GAS_PRICE_MULTIPLIER; a range we set, FES 2025 gives one central gas path")
+        T.cost("cost.levy.CCL_gas", levy_now, "GBP per MWh", "Climate Change Levy on the site's gas, 2026/27",
+               uses=["cost.levy.CCL_under_agreement"],
+               cites=[("govuk_ccl_rates", f"gas, £{levies.CCL_GAS_GBP_PER_KWH}/kWh from 1 April 2026; "
+                                          f"{levies.CCA_GAS_DISCOUNT:.0%} off under an agreement")])
+        T.cost("cost.gas_price_per_MWh", value, "GBP per MWh (HHV)",
+               "Gas delivered to the site in 2026 pounds: the 2025 price less its levy, inflated and "
+               "scaled by the gas case, plus the 2026/27 levy",
+               uses=["cost.gas.delivered_2025", "cost.gas.levy_in_2025_price", P.KEY_2025_TO_2026,
+                     "cost.gas.price_case_multiplier", "cost.levy.CCL_gas"])
+    return value
+
+
+def _bought_gas_adjustment(colour: str, gas_price_case: str, h2_prices) -> tuple[float, list]:
+    """GBP per kg (2025 pounds) the gas price case adds to a bought colour built
+    from gas at the FES price (grey, turquoise), and the keys it was recorded on.
+    Zero for every other colour, and in the central case."""
+    mult = GAS_PRICE_MULTIPLIER[gas_price_case]
+    inv = h2_prices.INVENTORY.get(colour, {})
+    if mult == 1.0 or colour not in ("grey", "turquoise") or not inv.get("gas_m3_per_kg"):
+        return 0.0, []
+    gas_mwh = inv["gas_m3_per_kg"] * h2_prices.GAS_KWH_HHV_PER_M3 / 1000.0
+    adj = gas_mwh * h2_prices.gas_gbp_per_mwh() * (mult - 1.0)
+    key = f"cost.bought_h2.{colour}.gas_case_adjustment"
+    T.cost(key, adj, "GBP per kg H2", f"Gas price case on the seller's gas ({gas_price_case})", grade="derived",
+           inputs={"gas_MWh_per_kg": gas_mwh, "FES_gas_GBP_per_MWh_2025": h2_prices.gas_gbp_per_mwh(),
+                   "multiplier": mult},
+           cites=[("fes_2025_workbook", "CP1, NBP gas, 2025")],
+           note="The plant-gate price already carries this gas at the central price; this is the difference")
+    return adj, [key]
+
+
 def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
                tank_design: str | None = None, h2_colour: str | None = None,
                cost_case: str = "central", horizon_years: float = 25.0,
@@ -564,7 +682,9 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
                fc_stack_duty_hours: float | None = None,
                generator_connection_out: bool = False,
                tank_insurance_frac: float | None = None,
-               batt_max_duration_hours: float | None = None) -> dc_model.Tech:
+               batt_max_duration_hours: float | None = None,
+               ccl_under_cca: bool | None = None,
+               gas_price_case: str | None = None) -> dc_model.Tech:
     """Resolve every coefficient the LP needs. Touches Brightway only via caches.
 
     ``cutoff`` is the cut-off register's seam (``optimiser_lca/exclusions.py``,
@@ -659,6 +779,19 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
     yearly fraction of the tank's capital on top of its running cost.
     ``batt_max_duration_hours`` caps the battery's energy on its power, for the
     same sweep; None leaves it free.
+
+    ``ccl_under_cca`` (9 Nov 2026) says whether the site holds a Climate Change
+    Agreement; here it takes the gas discount (89 %) off the gas the site buys
+    for solid-oxide heat, as ``build_series`` takes the electricity one (92 %)
+    off imports. Pass the same value to both. None keeps
+    ``levies.CCL_UNDER_CCA``.
+
+    ``gas_price_case`` (9 Nov 2026) is "low", "central" or "high": the wholesale
+    part of every gas price the model pays directly x ``GAS_PRICE_MULTIPLIER``
+    (0.75 / 1 / 1.25) — the site's gas for solid-oxide heat, and the gas behind
+    bought grey and turquoise hydrogen. Bought blue is NESO's own cost with its
+    own gas inside, and is not moved. The levy on the site's gas is not moved
+    either. None is "central".
     """
     # Validated before anything is loaded, so a bad sweep value fails at once
     # rather than after the caches (and Brightway) have been read.
@@ -677,6 +810,15 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
     if batt_usable_fraction is not None and not 0.5 <= batt_usable_fraction <= 1.0:
         raise ValueError(f"batt_usable_fraction must be in [0.5, 1.0], "
                          f"got {batt_usable_fraction!r}")
+    gas_case = GAS_PRICE_DEFAULT if gas_price_case is None else str(gas_price_case)
+    if gas_case not in GAS_PRICE_MULTIPLIER:
+        raise ValueError(f"gas_price_case must be one of {tuple(GAS_PRICE_MULTIPLIER)}, got {gas_price_case!r}")
+
+    # Every pound the LP charges is a 2026 pound (price_base). The coefficient
+    # modules work in 2025 pounds; their figures take the one factor here.
+    # Network charges, levies and connection prices are 2026/27 already.
+    to26, k26 = P.to_2026(), [P.KEY_2025_TO_2026]
+    from optimisation import levies as levies_mod
 
     import dc_config as cfg
     from optimisation import battery as batt
@@ -745,9 +887,7 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
                       "Gas burned for the external heat", grade="derived",
                       cites=[("element_energy_2018", "p. 95, auxiliary boiler efficiency 95 % (HHV)")],
                       inputs={"boiler_efficiency": ely.GAS_BOILER_EFFICIENCY})
-        gas = T.cost("cost.gas_price_per_MWh", ely.LARGE_SITE_GAS_GBP_PER_MWH, "GBP per MWh (HHV)",
-                     "Gas delivered to a large site, including the levy, 2025", grade="transcribed",
-                     cites=[("desnz_nondomestic_prices", "table 3.4.2, annual, 2025, gas, large, 4.149 p/kWh")])
+        gas = site_gas_gbp_per_mwh(ccl_under_cca, gas_case, record=True)
         heat_gbp_per_kg = T.cost(f"{ek}.heat_per_kg", fuel * gas / 1000.0, "GBP per kg H2", "Bought heat per kg made",
                                  uses=[f"{ek}.heat_fuel_kwh_per_kg", "cost.gas_price_per_MWh"])
         heat_uses = [f"{ek}.heat_per_kg"]
@@ -849,10 +989,11 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
             delivered = row[row.variant == grid_variant].iloc[0]
             (p_behind, k_behind), (p_grid, k_grid) = plant_gate(behind), plant_gate(delivered)
             return (T.cost(f"cost.bought_h2.{colour}.delivered",
-                           (1.0 - share) * p_behind + share * p_grid + compression_gbp, "GBP per kg H2",
-                           f"Bought {colour} hydrogen delivered to the tank: the two sellers by share, plus compression",
+                           ((1.0 - share) * p_behind + share * p_grid + compression_gbp) * to26, "GBP per kg H2",
+                           f"Bought {colour} hydrogen delivered to the tank: the two sellers by share, plus "
+                           "compression, in 2026 pounds",
                            uses=[k_behind, k_grid, f"cost.bought_h2.{colour}.grid_share",
-                                 f"cost.bought_h2.{colour}.compression_per_kg"]),
+                                 f"cost.bought_h2.{colour}.compression_per_kg", *k26]),
                     _bought_h2_gwp(behind.activity_code, green_h2_basis,
                                    grid_share=share),
                     f"{1.0 - share:.0%} behind the meter / "
@@ -861,9 +1002,11 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
         # one of its two by an explicit variant.
         one = row.iloc[0]
         p_one, k_one = plant_gate(one)
-        return (T.cost(f"cost.bought_h2.{colour}.delivered", p_one + compression_gbp, "GBP per kg H2",
-                       f"Bought {colour} hydrogen delivered to the tank: plant gate plus compression",
-                       uses=[k_one, f"cost.bought_h2.{colour}.compression_per_kg"]),
+        gas_adj, gas_uses = _bought_gas_adjustment(colour, gas_case, h2_prices)
+        return (T.cost(f"cost.bought_h2.{colour}.delivered", (p_one + gas_adj + compression_gbp) * to26,
+                       "GBP per kg H2",
+                       f"Bought {colour} hydrogen delivered to the tank: plant gate plus compression, in 2026 pounds",
+                       uses=[k_one, *gas_uses, f"cost.bought_h2.{colour}.compression_per_kg", *k26]),
                 _bought_h2_gwp(one.activity_code, green_h2_basis,
                                grid_share=(1.0 if str(one.variant) == grid_variant
                                            else 0.0)),
@@ -929,6 +1072,7 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
     def cstep(field, value, unit, title, uses=(), **kw):
         """``step`` for a cost coefficient: on the cost map, not the LCA map."""
         return T.cost(f"coefficient.{field}", value, unit, title, uses=uses, depth=1, **kw)
+
 
     tech = dc_model.Tech(
         gwp_wind=step("gwp_wind", gen_gwp("onshore_wind"), "kg CO2e per MW per year",
@@ -1020,43 +1164,45 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
         fc_stack_calendar_years=fc_stack_years,
         fc_stack_duty_hours=float(fc_stack_duty_hours or d["stack_lifetime_hours"]),
         batt_max_duration_hours=float(batt_max_duration_hours or np.inf),
-        cost_wind=cstep("cost_wind", gen_cost("onshore_wind"), "GBP per MW per year", "Onshore wind, per MW built",
-                        ["cost.onshore_wind.annual_per_MW"]),
-        cost_offshore=cstep("cost_offshore", gen_cost("offshore_wind"), "GBP per MW per year",
-                            "Offshore wind, per MW built", ["cost.offshore_wind.annual_per_MW"]),
-        cost_solar=cstep("cost_solar", gen_cost("solar_pv"), "GBP per MWp per year", "Solar PV, per MWp built",
-                         ["cost.solar_pv.annual_per_MWp"]),
-        cost_batt_p=cstep("cost_batt_p", bcost["power_GBP_per_MW_year"], "GBP per MW per year",
+        cost_wind=cstep("cost_wind", gen_cost("onshore_wind") * to26, "GBP per MW per year", "Onshore wind, per MW built",
+                        ["cost.onshore_wind.annual_per_MW", *k26]),
+        cost_offshore=cstep("cost_offshore", gen_cost("offshore_wind") * to26, "GBP per MW per year",
+                            "Offshore wind, per MW built", ["cost.offshore_wind.annual_per_MW", *k26]),
+        cost_solar=cstep("cost_solar", gen_cost("solar_pv") * to26, "GBP per MWp per year", "Solar PV, per MWp built",
+                         ["cost.solar_pv.annual_per_MWp", *k26]),
+        cost_batt_p=cstep("cost_batt_p", bcost["power_GBP_per_MW_year"] * to26, "GBP per MW per year",
                           "Battery power conversion, per MW", ["cost.battery.power_per_kW", "cost.battery.crf",
-                                                               "cost.battery.fixed_opex_per_kW_year"]),
-        cost_batt_e=cstep("cost_batt_e", bcost["energy_GBP_per_MWh_year"], "GBP per MWh per year",
+                                                               "cost.battery.fixed_opex_per_kW_year", *k26]),
+        cost_batt_e=cstep("cost_batt_e", bcost["energy_GBP_per_MWh_year"] * to26, "GBP per MWh per year",
                           "Battery energy capacity, per MWh", ["cost.battery.energy_per_kWh", "cost.battery.crf",
-                                                               "cost.battery.fixed_opex_per_kWh_year"]),
+                                                               "cost.battery.fixed_opex_per_kWh_year", *k26]),
         cost_ely=cstep("cost_ely", (float(ec.capex_GBP_per_kWe) * 1000.0 * (finance_e * crf_e + float(ec.fixed_opex_frac))
-                                    * stack_share), "GBP per MW per year",
+                                    * stack_share) * to26, "GBP per MW per year",
                        f"{ely_tech.split()[0]} electrolyser, per MW of cap_ely: capital recovery (carrying the build's "
                        "finance) and fixed opex on the stack's share of the input",
                        [f"{ek}.capex_per_kWe", f"{ek}.crf", f"{ek}.building_finance_factor", f"{ek}.fixed_opex_frac",
-                        "electrolyser.stack_share"]),
+                        "electrolyser.stack_share", *k26]),
         # Stack replacement and water per kg made, and SOEC's gas-raised heat
-        cost_ely_variable_per_kg=cstep("cost_ely_variable_per_kg", float(ec.variable_opex_GBP_per_kg) + heat_gbp_per_kg,
+        # The stacks and water in 2026 pounds; the heat is already (heat_gbp_per_kg)
+        cost_ely_variable_per_kg=cstep("cost_ely_variable_per_kg",
+                                       float(ec.variable_opex_GBP_per_kg) * to26 + heat_gbp_per_kg,
                                        "GBP per kg H2", "Electrolyser stacks, water and bought heat, per kg made",
-                                       [f"{ek}.variable_opex_per_kg", *heat_uses]),
+                                       [f"{ek}.variable_opex_per_kg", *k26, *heat_uses]),
         cost_tank=cstep("cost_tank", (float(tkc.annual_GBP_per_kg_year)
-                                      + float(tkc.capex_GBP_per_kg_capacity) * float(tank_insurance_frac or 0.0)),
+                                      + float(tkc.capex_GBP_per_kg_capacity) * float(tank_insurance_frac or 0.0)) * to26,
                         "GBP per kg of capacity per year",
-                        "Hydrogen tank, per kg it holds", ["cost.h2_tank.annual_per_kg"]),
+                        "Hydrogen tank, per kg it holds", ["cost.h2_tank.annual_per_kg", *k26]),
         cost_major_hazard_per_year=cstep("cost_major_hazard_per_year",
-                                         float(hc.major_hazard_cost(cost_case)["annual_GBP_per_site_year"]),
+                                         float(hc.major_hazard_cost(cost_case)["annual_GBP_per_site_year"]) * to26,
                                          "GBP per year", "Major-hazard compliance, at upper tier, on a build allowed a tank",
-                                         ["cost.major_hazard.annual_per_site"]),
-        cost_fc=cstep("cost_fc", float(fcr.annual_GBP_per_MW_year), "GBP per MW per year",
+                                         ["cost.major_hazard.annual_per_site", *k26]),
+        cost_fc=cstep("cost_fc", float(fcr.annual_GBP_per_MW_year) * to26, "GBP per MW per year",
                       "Fuel cell balance of plant, per MW, net of its calendar replacement",
-                      ["cost.fuel_cell.annual_per_MW"]),
-        cost_fc_stack_per_mw=cstep("cost_fc_stack_per_mw", float(fcr.stack_GBP_per_MW), "GBP per MW replaced",
-                                   "Fuel cell stack, per replacement", ["cost.fuel_cell.stack_per_MW"]),
-        cost_fc_bop_per_mw=cstep("cost_fc_bop_per_mw", float(fcr.bop_GBP_per_MW), "GBP per MW replaced",
-                                 "Fuel cell balance of plant, per replacement", ["cost.fuel_cell.bop_per_MW"]),
+                      ["cost.fuel_cell.annual_per_MW", *k26]),
+        cost_fc_stack_per_mw=cstep("cost_fc_stack_per_mw", float(fcr.stack_GBP_per_MW) * to26, "GBP per MW replaced",
+                                   "Fuel cell stack, per replacement", ["cost.fuel_cell.stack_per_MW", *k26]),
+        cost_fc_bop_per_mw=cstep("cost_fc_bop_per_mw", float(fcr.bop_GBP_per_MW) * to26, "GBP per MW replaced",
+                                 "Fuel cell balance of plant, per replacement", ["cost.fuel_cell.bop_per_MW", *k26]),
         # Use of system (network_charges) plus the connection's own capital
         # (connection_cost), the same per-MW / fixed split as the carbon side.
         # The HH locational TNUoS tariff comes out of the per-MW charge and is
@@ -1127,6 +1273,9 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
                 "batt_cell_basis": batt_cell_basis or batt.CELL_BASIS,
                 "connection_build_scale": build_scale,
                 "network_charges_scale": float(meta.get("network_charges_scale", 1.0)),
+                "gas_price_case": gas_case,
+                "ccl_under_cca_gas": (levies_mod.CCL_UNDER_CCA if ccl_under_cca is None else bool(ccl_under_cca)),
+                "price_base": f"real {P.TARGET_YEAR} pounds",
                 "green_h2_grid_share": (
                     h2_prices._resolve_grid_share(green_h2_grid_share)
                     if "green" in (h2_colour, h2_colour_2) else None)},

@@ -43,6 +43,16 @@ Either the source is named and public, or no new sourcing is needed at all.
       BoP's 44 t/MW.
 - [ ] **Third source read, 23 Oct 2026** (`docs/SOURCE_RECHECK_2026-10-23.md`, *Outcome*):
       every finding decided and done by 26 Oct; the stale-docs list at its foot is left.
+- [ ] **2026 pounds: finish** (built 9 Nov, see `optimisation/price_base.py`): run the hourly sign-off on it; update the
+      methodology doc (price base, the levy-agreement tickbox, the gas case, the two warnings); swap the OBR 2026
+      forecast for ONS outturn once calendar 2026 is published. Sweeps (`sensitivity.py`) do not yet expose
+      `ccl_under_cca` / `gas_price_case` as knobs.
+- [ ] **Gas-adjusted wholesale prices, as a sensitivity option only** (after the working copy; discussed 9 Nov).
+      Off by default. A `build_series` switch like `network_charges_scale`: each day's prices x (today's gas price /
+      that day's gas price), daily gas from a free official series (National Gas's daily average price — confirm).
+      For running 2021-23 weather. Self-check per run: adjusted average and daily spread against 2025's; warn if far.
+      Weak on windy days (gas not setting the price), 2020 (low demand, not gas), carbon-price changes, 2022's French
+      nuclear outages. ~1.5-2 days with tests.
 
 ## Verification and hygiene
 

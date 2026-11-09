@@ -112,6 +112,8 @@ def run_one(scenario: A.Scenario, *, site, start: str, end: str,
             green_h2_grid_share: float | None = None,
             batt_standing_loss_per_hour: float | None = None,
             tank_leakage_per_hour: float | None = None,
+            ccl_under_cca: bool | None = None,
+            gas_price_case: str | None = None,
             save_dispatch: bool = False, refresh: bool = False,
             progress=None, notice=None) -> dict:
     """Solve one configuration's Pareto front and write it to disk.
@@ -163,6 +165,10 @@ def run_one(scenario: A.Scenario, *, site, start: str, end: str,
         # default (None) is not an answer at any other point of the band.
         "batt_standing_loss_per_hour": batt_standing_loss_per_hour,
         "tank_leakage_per_hour": tank_leakage_per_hour,
+        # 9 Nov 2026: whether the site holds a Climate Change Agreement (levy on
+        # electricity and gas) and the gas price case; both move the answer.
+        "ccl_under_cca": ccl_under_cca,
+        "gas_price_case": gas_price_case,
         "coefficients": _coefficient_identity(),
     }
     h = config_hash(cfg)
@@ -187,6 +193,7 @@ def run_one(scenario: A.Scenario, *, site, start: str, end: str,
                                   connection_headroom=connection_headroom,
                                   connection_mode=connection_mode,
                                   grid=A.architecture(scenario.architecture, flags=scenario.assets).grid,
+                                  ccl_under_cca=ccl_under_cca,
                                   on_progress=notice)
     # Record what was *used*, not what was asked for. site.tdr_band is None
     # whenever the band is derived from the load, so writing it straight into
@@ -214,7 +221,8 @@ def run_one(scenario: A.Scenario, *, site, start: str, end: str,
                         batt_standing_loss_per_hour=batt_standing_loss_per_hour,
                         tank_leakage_per_hour=tank_leakage_per_hour,
                         cost_case=cost_case, horizon_years=horizon_years,
-                        size_mw_it=size_mw_it, pue=pue)
+                        size_mw_it=size_mw_it, pue=pue,
+                        ccl_under_cca=ccl_under_cca, gas_price_case=gas_price_case)
     # The ceiling the band was read from is the ceiling the LP is held to.
     # Deriving one and optimising against the other is exactly the incoherence
     # this chain exists to remove.
@@ -278,6 +286,14 @@ def run_one(scenario: A.Scenario, *, site, start: str, end: str,
         "start": start, "end": end,
         "size_mw_it": size_mw_it, "pue": pue,
         "resample_hours": resample_hours, "cost_case": cost_case,
+        # 9 Nov 2026: every pound in 2026 pounds; the levy agreement and gas case
+        # as used; plain-language warnings about the window (unusual price year,
+        # no winter evenings).
+        "price_base": meta.get("price_base"),
+        "ccl_under_cca": meta.get("ccl_under_cca"),
+        "gas_price_case": tech.labels.get("gas_price_case"),
+        "wholesale_mean_GBP_per_MWh_2026": meta.get("wholesale_mean_GBP_per_MWh_2026"),
+        "warnings": meta.get("warnings") or [],
         "slices": series.n, "demand_MWh_per_year": mwh,
         "degenerate": result["degenerate"],
         "min_cost": result["min_cost"], "min_gwp": result["min_gwp"],
