@@ -1236,6 +1236,12 @@ def dispatch_frame(V, series, tech=None) -> pd.DataFrame:
     df.insert(0, "demand", series.demand_mw)
     df["grid_gwp_per_mwh"] = series.grid_gwp_per_mwh
     df["price_per_mwh"] = series.grid_price_per_mwh
+    # Each voltage group's own price and carbon, next to its imports, so the
+    # workbooks can total a chosen price list's imports hour by hour.
+    for g, d in (getattr(series, "grid_groups", None) or {}).items():
+        v = group_import_var(g)[len("imp_"):]
+        df[f"price_per_mwh_{v}"] = np.asarray(d["price_per_mwh"], dtype=float)
+        df[f"grid_gwp_per_mwh_{v}"] = np.asarray(d["gwp_per_mwh"], dtype=float)
     lf = loss_factors(series, tech) if tech is not None else {"wind": 0.0, "solar": 0.0}
     df["curtailed"] = ((1.0 - lf["wind"]) * series.cf_wind
                        * (float(V["cap_wind"].solution) + float(V["cap_offshore"].solution))
