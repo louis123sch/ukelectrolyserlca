@@ -189,12 +189,13 @@ def run_one(scenario: A.Scenario, *, site, start: str, end: str,
             pass
 
     t0 = time.time()
-    series, meta = I.build_series(site, start, end, size_mw_it, pue=pue,
-                                  connection_headroom=connection_headroom,
-                                  connection_mode=connection_mode,
-                                  grid=A.architecture(scenario.architecture, flags=scenario.assets).grid,
-                                  ccl_under_cca=ccl_under_cca,
-                                  on_progress=notice)
+    series, meta, tech, assets = build_inputs(
+        scenario, site=site, start=start, end=end, size_mw_it=size_mw_it, pue=pue,
+        resample_hours=resample_hours, connection_headroom=connection_headroom,
+        connection_mode=connection_mode, cost_case=cost_case, horizon_years=horizon_years,
+        green_h2_grid_share=green_h2_grid_share, batt_standing_loss_per_hour=batt_standing_loss_per_hour,
+        tank_leakage_per_hour=tank_leakage_per_hour, ccl_under_cca=ccl_under_cca,
+        gas_price_case=gas_price_case, notice=notice)
     # Record what was *used*, not what was asked for. site.tdr_band is None
     # whenever the band is derived from the load, so writing it straight into
     # the config would leave the run with no record of the band it was actually
@@ -211,35 +212,6 @@ def run_one(scenario: A.Scenario, *, site, start: str, end: str,
                                               else "derived from the load")
     cfg["site"]["connection_mode"] = meta.get("connection_mode")
     cfg["site"]["connection_chosen_by"] = meta.get("connection_chosen_by")
-    if resample_hours:
-        series = I.resample(series, resample_hours)
-    tech = I.build_tech(site, meta, ely_tech=scenario.ely_tech or "PEM operation",
-                        tank_design=scenario.tank_design, h2_colour=scenario.h2_colour,
-                        h2_colour_2=scenario.h2_colour_2,
-                        soec_heat=scenario.soec_heat,
-                        green_h2_grid_share=green_h2_grid_share,
-                        batt_standing_loss_per_hour=batt_standing_loss_per_hour,
-                        tank_leakage_per_hour=tank_leakage_per_hour,
-                        cost_case=cost_case, horizon_years=horizon_years,
-                        size_mw_it=size_mw_it, pue=pue,
-                        ccl_under_cca=ccl_under_cca, gas_price_case=gas_price_case)
-    # The ceiling the band was read from is the ceiling the LP is held to.
-    # Deriving one and optimising against the other is exactly the incoherence
-    # this chain exists to remove.
-    assets = A.architecture(scenario.architecture,
-                            offshore=site.offshore_wind,
-                            grid_limit_mw=meta["connection_limit_mw"],
-                            grid_floor_mw=meta.get("connection_floor_mw", 0.0),
-                            flags=scenario.assets)
-    # An architecture that *may* buy hydrogen still needs a priced colour on
-    # each stream it unlocks. Without one the LP buys it free and carbon-free;
-    # see the guard in dc_model.build_model. Locking the unpriced stream off is
-    # the right default: the scenario builds its own hydrogen instead.
-    from dataclasses import replace as _replace
-    if scenario.h2_colour is None and assets.buy_h2:
-        assets = _replace(assets, buy_h2=False)
-    if scenario.h2_colour_2 is None and assets.buy_h2_2:
-        assets = _replace(assets, buy_h2_2=False)
     if connection_solve not in CONNECTION_SOLVES:
         raise ValueError(f"connection_solve must be one of {CONNECTION_SOLVES}, got {connection_solve!r}")
     n_lists = len(meta.get("connection_options") or [])
@@ -260,6 +232,10 @@ def run_one(scenario: A.Scenario, *, site, start: str, end: str,
 
     folder.mkdir(parents=True, exist_ok=True)
     (folder / "config.json").write_text(json.dumps(cfg, indent=2, default=str), encoding="utf-8")
+    # The whole site as resolved, picked substation included, so the maps and
+    # workbooks can rebuild this run's inputs exactly (load_inputs). Kept out of
+    # config.json, which is hashed.
+    (folder / "site.json").write_text(json.dumps(asdict(site), indent=2, default=str), encoding="utf-8")
     result["front"].to_parquet(folder / "pareto.parquet", index=False)
     if result.get("dispatch"):
         # One long frame rather than one file per point: three or four points of
@@ -338,6 +314,124 @@ def run_one(scenario: A.Scenario, *, site, start: str, end: str,
     }
     summary_path.write_text(json.dumps(summary, indent=2, default=str), encoding="utf-8")
     return summary
+
+
+def build_inputs(scenario: A.Scenario, *, site, start: str, end: str, size_mw_it: float,
+                 pue: float | None = None, resample_hours: float | None = None,
+                 connection_headroom: float | None = None, connection_mode: str | None = None,
+                 cost_case: str = "central", horizon_years: float = 25.0,
+                 green_h2_grid_share: float | None = None,
+                 batt_standing_loss_per_hour: float | None = None,
+                 tank_leakage_per_hour: float | None = None,
+                 ccl_under_cca: bool | None = None, gas_price_case: str | None = None,
+                 notice=None):
+    """A run's inputs, ``(series, meta, tech, assets)``: what ``run_one`` solves.
+
+    One function for the run and for the maps and workbooks that describe it
+    (``load_inputs``), so the figures they show are the figures it solved with."""
+    from optimisation import dc_inputs as I
+    import dc_config
+    from dataclasses import replace as _replace
+
+    if pue is None:
+        pue = float(dc_config.DC_REFERENCE_PUE)
+    site = sites.get(site)
+    series, meta = I.build_series(site, start, end, size_mw_it, pue=pue,
+                                  connection_headroom=connection_headroom,
+                                  connection_mode=connection_mode,
+                                  grid=A.architecture(scenario.architecture, flags=scenario.assets).grid,
+                                  ccl_under_cca=ccl_under_cca,
+                                  on_progress=notice)
+    if resample_hours:
+        series = I.resample(series, resample_hours)
+    tech = I.build_tech(site, meta, **tech_kwargs(
+        scenario, green_h2_grid_share=green_h2_grid_share,
+        batt_standing_loss_per_hour=batt_standing_loss_per_hour,
+        tank_leakage_per_hour=tank_leakage_per_hour, cost_case=cost_case, horizon_years=horizon_years,
+        size_mw_it=size_mw_it, pue=pue, ccl_under_cca=ccl_under_cca, gas_price_case=gas_price_case))
+    # The ceiling the band was read from is the ceiling the LP is held to.
+    # Deriving one and optimising against the other is exactly the incoherence
+    # this chain exists to remove.
+    assets = A.architecture(scenario.architecture,
+                            offshore=site.offshore_wind,
+                            grid_limit_mw=meta["connection_limit_mw"],
+                            grid_floor_mw=meta.get("connection_floor_mw", 0.0),
+                            flags=scenario.assets)
+    # An architecture that *may* buy hydrogen still needs a priced colour on
+    # each stream it unlocks. Without one the LP buys it free and carbon-free;
+    # see the guard in dc_model.build_model. Locking the unpriced stream off is
+    # the right default: the scenario builds its own hydrogen instead.
+    if scenario.h2_colour is None and assets.buy_h2:
+        assets = _replace(assets, buy_h2=False)
+    if scenario.h2_colour_2 is None and assets.buy_h2_2:
+        assets = _replace(assets, buy_h2_2=False)
+    return series, meta, tech, assets
+
+
+def tech_kwargs(scenario: A.Scenario, **settings) -> dict:
+    """``build_tech``'s keyword arguments for a scenario and a run's settings."""
+    return dict(ely_tech=scenario.ely_tech or "PEM operation", tank_design=scenario.tank_design,
+                h2_colour=scenario.h2_colour, h2_colour_2=scenario.h2_colour_2,
+                soec_heat=scenario.soec_heat, **settings)
+
+
+def finished_runs(out_root: Path = OUT_ROOT) -> list[Path]:
+    """Every saved run with its results written, newest first."""
+    done = [p.parent for p in Path(out_root).glob("*/*/summary.json")]
+    done += [p.parent for p in Path(out_root).glob("*/summary.json")]
+    return sorted(set(done), key=lambda p: (p / "summary.json").stat().st_mtime, reverse=True)
+
+
+def load_inputs(folder: Path):
+    """Rebuild a saved run's inputs, as a namespace: ``cfg``, ``summary``, ``site``,
+    ``series``, ``meta``, ``tech``, ``assets``, and ``tech_kw`` (``build_tech``'s
+    arguments, for a variant built beside it).
+
+    Read from the run's own config.json (and site.json, written since 9 Nov
+    2026; before that the site is resolved again from its coordinates, with a
+    substation the page picked taken from request.json). A run solved over a
+    pruned set of price lists gets the same set back from its summary, rather
+    than re-running the pruning solves."""
+    folder = Path(folder)
+    cfg = json.loads((folder / "config.json").read_text(encoding="utf-8"))
+    summary = json.loads((folder / "summary.json").read_text(encoding="utf-8"))
+    sc = dict(cfg["scenario"])
+    scenario = A.Scenario(**{k: v for k, v in sc.items() if k in A.Scenario.__dataclass_fields__})
+    if (folder / "site.json").exists():
+        s = json.loads((folder / "site.json").read_text(encoding="utf-8"))
+        site = sites.Site(**{k: v for k, v in s.items() if k in sites.Site.__dataclass_fields__})
+    else:
+        s = dict(cfg["site"])
+        req = folder / "request.json"
+        if req.exists():
+            s.update(json.loads(req.read_text(encoding="utf-8")).get("site") or {})
+        keep = ("connection_substation", "connection_substation_voltage", "connection_band_optimised")
+        kw = {k: s[k] for k in keep if s.get(k) is not None}
+        if s.get("tdr_band_source") == "pinned on the site":
+            kw["tdr_band"] = s.get("tdr_band")
+        if s.get("connection_limit_source") == "pinned on the site":
+            kw["connection_limit_mw"] = s.get("connection_limit_mw")
+        site = sites.resolve(float(s["lat"]), float(s["lon"]), name=s.get("name") or "", **kw)
+    settings = dict(cost_case=cfg.get("cost_case", "central"), horizon_years=cfg.get("horizon_years", 25.0),
+                    green_h2_grid_share=cfg.get("green_h2_grid_share"),
+                    batt_standing_loss_per_hour=cfg.get("batt_standing_loss_per_hour"),
+                    tank_leakage_per_hour=cfg.get("tank_leakage_per_hour"),
+                    ccl_under_cca=cfg.get("ccl_under_cca"), gas_price_case=cfg.get("gas_price_case"))
+    series, meta, tech, assets = build_inputs(
+        scenario, site=site, start=cfg["start"], end=cfg["end"], size_mw_it=cfg["size_mw_it"],
+        pue=cfg.get("pue"), resample_hours=cfg.get("resample_hours"),
+        connection_headroom=cfg.get("connection_headroom"), connection_mode=cfg.get("connection_mode"),
+        **settings)
+    solved = summary.get("connection_options_solved")
+    opts = M.connection_options_of(tech)
+    if opts and solved and len(solved) < len(opts):
+        from dataclasses import replace as _replace
+        tech = _replace(tech, connection_options=tuple(o for o in opts if o.key in set(solved)))
+    from types import SimpleNamespace
+    pue = cfg.get("pue")
+    return SimpleNamespace(cfg=cfg, summary=summary, site=sites.get(site), series=series, meta=meta,
+                           tech=tech, assets=assets,
+                           tech_kw=tech_kwargs(scenario, size_mw_it=cfg["size_mw_it"], pue=pue, **settings))
 
 
 def _floor_binding(result: dict, assets) -> list[str]:

@@ -103,12 +103,22 @@ function show(tab) {
   try { localStorage.setItem("dc-maps-tab", tab); } catch (e) {}
   if (location.hash !== "#" + tab) history.replaceState(null, "", "#" + tab);
 }
+// The point on the run's cost-carbon curve: switched in either map, kept in step in the other.
+let mapPoint = null;
 window.addEventListener("message", e => {
+  if (e.data && e.data.mapPoint) {
+    mapPoint = e.data.mapPoint;
+    ["cost", "lca"].forEach(m => {
+      if (loaded[m] && e.source !== frame(m).contentWindow) frame(m).contentWindow.postMessage({ mapPoint }, "*");
+    });
+    return;
+  }
   if (!(e.data && e.data.mapReady)) return;
   ["cost", "lca"].forEach(m => {
     if (e.source === frame(m).contentWindow) {
       loaded[m] = true;
       frame(m).contentWindow.postMessage({ mapTab: pending[m] || "tree" }, "*");
+      if (mapPoint) frame(m).contentWindow.postMessage({ mapPoint }, "*");
     }
   });
 });

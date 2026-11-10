@@ -88,6 +88,13 @@ button, input { font: inherit; color: inherit; }
 }
 .btn:hover { border-color: var(--accent); color: var(--accent); }
 .btn.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.points { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.points[hidden] { display: none; }
+.points button { border: 0; border-left: 1px solid var(--line); background: var(--surface); color: var(--ink);
+  padding: 5px 10px; font: inherit; font-size: 13px; cursor: pointer; white-space: nowrap; }
+.points button:first-child { border-left: 0; }
+.points button:hover { color: var(--accent); }
+.points button.on { background: var(--accent); color: var(--accent-ink); }
 .search { position: relative; }
 .search input {
   width: min(280px, 70vw); padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px;
@@ -290,6 +297,7 @@ pre.code { margin: 0; padding: 8px 10px; background: var(--bg); border: 1px soli
     </div>
     <button class="btn tree-only" id="expand" title="Open every box under the selected one by one more level">Open level</button>
     <button class="btn tree-only" id="collapse" title="Close everything below the top levels">Collapse</button>
+    <div class="points" id="points" role="group" aria-label="Point on the run's cost-carbon curve" hidden></div>
     <button class="btn" id="fit">Fit</button>
     <button class="btn tree-only" id="bg" title="Show or hide ecoinvent datasets and elementary flows">Background: shown</button>
   </div>
@@ -428,8 +436,10 @@ function shortUnit(u) {
   if (!u) return "";
   return u.replace(/kg CO2e per /, "kg/").replace(/ per year/, "/yr").replace(/\(.*\)/, "").slice(0, 24);
 }
+function tonnes(kg) { const t = kg / 1000; return (Math.abs(t) >= 100 ? Math.round(t).toLocaleString("en-GB") : t.toPrecision(3)) + " t"; }
 function valueLine(n) {
-  if (n.kind === "term") return n.expr || "";
+  if (n.kind === "term") return n.score !== undefined && n.score !== null ? tonnes(n.score) + "/yr · " + (n.expr || "") : (n.expr || "");
+  if (["study", "chain", "group"].includes(n.kind) && n.score !== undefined && n.score !== null) return tonnes(n.score) + " CO₂e per year";
   if (n.value !== undefined && n.value !== null) return fmt(n.value) + " " + shortUnit(n.unit);
   if (n.score !== undefined && n.score !== null) return fmt(n.score) + " kg / " + (n.unit || "unit");
   if (n.kind === "biosphere") return "CF " + fmt(n.cf || 0);
@@ -649,7 +659,8 @@ function panel(n) {
 
   if (n.kind === "term") {
     h += `<section><h3>In the LP</h3><pre class="code">${esc(n.expr)}</pre>` +
-      kv([["Objective part", esc((n.side || "").replace("gwp_", ""))], ["LP key", mono(n.key)],
+      kv([[typeof POINT_NAMES !== "undefined" && currentPoint ? "At the " + POINT_NAMES[currentPoint] : null, n.score !== undefined && n.score !== null ? mono(tonnes(n.score) + " CO₂e per year") + (ROOT.score ? " · " + esc((100 * n.score / ROOT.score).toFixed(1)) + " % of the total" : "") : null],
+          ["Objective part", esc((n.side || "").replace("gwp_", ""))], ["LP key", mono(n.key)],
           ["Decision variables", (n.variables || []).length ? mono(n.variables.join(", ")) : null],
           ["Series", (n.series || []).length ? mono(n.series.join(", ")) + (n.series.includes("ci") ? " — the grid's half-hourly carbon, shown below by its mean" : "") : null]]) +
       `<div class="prose">Read from <span class="mono">dc_model.objective_terms</span>${n.side === "gwp_facility" ? " / <span class=\"mono\">facility_terms</span>" : ""}, the function the LP is built with.</div></section>`;
@@ -752,18 +763,55 @@ function toggleBackground() {
 }
 document.getElementById("bg").addEventListener("click", toggleBackground);
 
-(function stats() {
+function stats() {
   const m = DATA.meta; let open_ = 0;
   for (const g of Object.values(GAPS)) if (GAP_IS_OPEN(g.status)) open_++;
   const probs = (DATA.problems || []).length;
   document.getElementById("stats").innerHTML =
     `<span><b>${m.nodes.toLocaleString("en-GB")}</b> boxes</span>` +
+    (ROOT.score !== undefined && ROOT.score !== null ? `<span><b>${tonnes(ROOT.score)}</b> CO₂e a year</span>` : "") +
     `<span><b>${m.steps}</b> trace steps</span>` +
     `<span><b>${m.foreground_activities}</b> foreground</span>` +
     `<span class="open"><b>${open_}</b> open gaps</span>` +
     (probs ? `<span class="open"><b>${probs}</b> disagreements</span>` : `<span>checks <b>pass</b></span>`);
   document.getElementById("sub").textContent = "Generated from the model's code and Brightway · " + m.generated;
+}
+stats();
+
+// ------------------------------------------------------------- the run's three points (the switch, top right)
+// The figures are the same at every point of the run's cost-carbon curve; what was
+// built differs, so each part's total does. The build stores each part's value at
+// every point (scores, contributions); the switch shows one.
+var POINT_NAMES = { knee: "Knee", min_cost: "Lowest cost", min_gwp: "Lowest carbon" };
+var currentPoint = DATA.meta.point || null;
+function setPoint(pt, quiet) {
+  const P = DATA.meta.points || {};
+  if (!P[pt]) return;
+  currentPoint = pt;
+  for (const n of all) {
+    if (n.scores) n.score = n.scores[pt] === undefined ? null : n.scores[pt];
+    if (n.chosen_at) n.chosen = n.chosen_at.includes(pt);
+    for (const e of n.kids) if (e.contributions) e.contribution = e.contributions[pt] === undefined ? null : e.contributions[pt];
+    if (n.kids.some(e => e.contributions)) n.kids.sort((a, b) => Math.abs(b.contribution || 0) - Math.abs(a.contribution || 0));
+  }
+  if ("solve" in DATA.meta) DATA.meta.solve = Object.assign({}, P[pt]);
+  document.querySelectorAll("#points button").forEach(b => b.classList.toggle("on", b.dataset.pt === pt));
+  stats(); render(); if (selected) panel(selected);
+  if (!quiet && window.parent !== window) window.parent.postMessage({ mapPoint: pt }, "*");
+}
+(function pointSwitch() {
+  const P = DATA.meta.points || {}, el = document.getElementById("points");
+  const keys = Object.keys(POINT_NAMES).filter(k => P[k]);
+  window.addEventListener("message", e => { if (e.data && e.data.mapPoint) setPoint(e.data.mapPoint, true); });
+  if (keys.length < 2) return;
+  el.innerHTML = keys.map(k => `<button type="button" data-pt="${k}" title="${esc(P[k].label || POINT_NAMES[k])}: point ${esc(P[k].point || "")} of the run">${POINT_NAMES[k]}</button>`).join("");
+  el.hidden = false;
+  el.querySelectorAll("button").forEach(b => {
+    b.addEventListener("click", () => setPoint(b.dataset.pt));
+    b.classList.toggle("on", b.dataset.pt === currentPoint);
+  });
 })();
+
 function findTerm(name) {
   return all.find(x => x.kind === "term" && x.name === name)
     || all.find(x => x.kind === "chain" && name.toLowerCase().startsWith(x.name.toLowerCase().split(" ")[0]));

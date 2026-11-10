@@ -81,6 +81,10 @@ class Step:
     where: str = ""          # "optimisation/renewables.py:412"
     function: str = ""       # "apply_case"
     code: str = ""           # the expression that computed the value
+    # The value of each name in ``code`` when it ran ({"row['x']": 1.2}): what
+    # lets the workbooks (scripts/build_workbooks.py) link each name to the
+    # step it came from and write the expression as an Excel formula.
+    leaves: dict = field(default_factory=dict)
 
     def as_dict(self) -> dict:
         return {k: v for k, v in self.__dict__.items() if v not in (None, "", [], {})}
@@ -133,6 +137,50 @@ def active() -> bool:
     return _CURRENT.get() is not None
 
 
+# A sweep's "push": one recorded number times a factor, through the real code.
+# (key, factor, hits) - hits records, per call under that key, whether the value
+# was a number that could be scaled.
+_PUSH: contextvars.ContextVar[tuple | None] = contextvars.ContextVar("trace_push", default=None)
+
+
+@contextmanager
+def pushed(key: str, factor: float):
+    """Inside the block, every ``step`` recorded under ``key`` returns its value
+    times ``factor`` - so everything the code makes from it moves with it. Yields
+    the list of hits: empty if no step by that key ran, False where the value was
+    not a number (a flag, a label, a table). Used by the input screen
+    (``scripts/screen_inputs.py``) and by a sweep's ``push`` knob
+    (``optimisation/sensitivity.py``). A step the code only records, going on
+    with another figure, moves nothing when pushed."""
+    hits: list[bool] = []
+    token = _PUSH.set((key, float(factor), hits))
+    try:
+        yield hits
+    finally:
+        _PUSH.reset(token)
+
+
+def _scaled(v, f):
+    """``v`` times ``f`` for a number or an array of numbers; None otherwise."""
+    if isinstance(v, bool) or v is None:
+        return None
+    try:
+        import numpy as np
+    except ImportError:                                         # pragma: no cover
+        np = None
+    if isinstance(v, (int, float)) or (np is not None and isinstance(v, (np.integer, np.floating))):
+        return v * f
+    if np is not None and isinstance(v, np.ndarray) and np.issubdtype(v.dtype, np.number):
+        return v * f
+    try:
+        import pandas as pd
+        if isinstance(v, pd.Series) and pd.api.types.is_numeric_dtype(v):
+            return v * f
+    except ImportError:                                         # pragma: no cover
+        pass
+    return None
+
+
 def step(key: str, value, unit: str, title: str, *, uses=(), inputs: dict | None = None,
          grade: str = "derived", source: str = "", note: str = "", scores: dict | None = None,
          factor: float = 1.0, side: str = "", cites=(), depth: int = 0):
@@ -151,6 +199,12 @@ def step(key: str, value, unit: str, title: str, *, uses=(), inputs: dict | None
     depth    frames to skip when a module wraps ``step`` in its own helper, so
              the record points at the helper's caller
     """
+    push = _PUSH.get()
+    if push is not None and key == push[0]:
+        scaled = _scaled(value, push[1])
+        push[2].append(scaled is not None)
+        if scaled is not None:
+            value = scaled
     rec = _CURRENT.get()
     if rec is None:
         return value
@@ -158,12 +212,13 @@ def step(key: str, value, unit: str, title: str, *, uses=(), inputs: dict | None
         raise ValueError(f"trace step {key!r}: grade {grade!r} is not one of {GRADES}")
     frame = sys._getframe(1 + depth)
     path, line = frame.f_code.co_filename, frame.f_lineno
+    code = _value_source(path, line)
     rec.add(Step(key=key, value=_num(value), unit=unit, title=title, uses=list(uses),
                  inputs={k: _num(v) if not isinstance(v, str) else v for k, v in (inputs or {}).items()},
                  grade=grade, source=source, note=note, scores=scores, factor=float(factor),
                  side=side, cites=[{"source": c[0], "at": c[1] if len(c) > 1 else ""} for c in cites],
                  where=f"{_rel(path)}:{line}", function=frame.f_code.co_name,
-                 code=_value_source(path, line)))
+                 code=code, leaves=_leaf_values(code, frame)))
     return value
 
 
@@ -220,6 +275,53 @@ def _value_source(path: str, line: int) -> str:
         return " ".join((ast.get_source_segment(src, call.args[1]) or "").split())
     except Exception:                                   # noqa: BLE001
         return ""
+
+
+_LEAVES: dict[str, list] = {}
+
+
+def leaf_nodes(expr) -> list:
+    """The names an expression reads: bare names, attributes (``ely.LIFE``) and
+    subscripts by a constant (``row["x"]``), outermost first. Calls and
+    arithmetic are walked into, never evaluated."""
+    out = []
+
+    def visit(n):
+        if isinstance(n, (ast.Name, ast.Attribute)) or (
+                isinstance(n, ast.Subscript) and isinstance(n.slice, ast.Constant)):
+            out.append(n)
+            return
+        for c in ast.iter_child_nodes(n):
+            visit(c)
+    visit(expr)
+    return out
+
+
+def _leaf_values(code: str, frame) -> dict:
+    """The numeric value of each name ``code`` reads, in the frame that ran it.
+
+    Only names, attributes and constant subscripts are evaluated - never a call -
+    so reading them cannot change anything. Anything that is not one number (an
+    array, a table, a string) is left out."""
+    if not code:
+        return {}
+    try:
+        if code not in _LEAVES:
+            tree = ast.parse(code, mode="eval")
+            _LEAVES[code] = [(ast.unparse(n), compile(ast.Expression(n), "<leaf>", "eval"))
+                             for n in leaf_nodes(tree.body)]
+        out = {}
+        for src, compiled in _LEAVES[code]:
+            try:
+                v = eval(compiled, frame.f_globals, frame.f_locals)   # noqa: S307 - names only
+                if isinstance(v, (bool, str)):
+                    continue
+                out[src] = float(v)
+            except Exception:                                         # noqa: BLE001
+                pass
+        return out
+    except Exception:                                                 # noqa: BLE001
+        return {}
 
 
 def _is_step(func) -> bool:

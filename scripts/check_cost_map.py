@@ -145,7 +145,10 @@ def main(live: bool = True) -> int:
         print("7. every step, re-recorded now")
         from build_cost_map import merge, record
         from optimisation.trace import _same
-        runs, _cases, _s, _m = record()
+        folder = ((m.get("meta") or {}).get("run") or {}).get("folder")
+        if folder and not Path(folder).exists():
+            bad(f"the saved run the map was built from is gone: {folder}")
+        runs, _cases, _s, _m, _L = record(Path(folder) if folder and Path(folder).exists() else None)
         steps, _r, _p = merge(runs)
         shown = {n["key"]: n for n in nodes.values() if n["kind"] == "step"}
         for k, n in shown.items():

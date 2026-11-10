@@ -89,6 +89,13 @@ button, input { font: inherit; color: inherit; }
 }
 .btn:hover { border-color: var(--accent); color: var(--accent); }
 .btn.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.points { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.points[hidden] { display: none; }
+.points button { border: 0; border-left: 1px solid var(--line); background: var(--surface); color: var(--ink);
+  padding: 5px 10px; font: inherit; font-size: 13px; cursor: pointer; white-space: nowrap; }
+.points button:first-child { border-left: 0; }
+.points button:hover { color: var(--accent); }
+.points button.on { background: var(--accent); color: var(--accent-ink); }
 .search { position: relative; }
 .search input {
   width: min(280px, 70vw); padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px;
@@ -320,6 +327,7 @@ pre.code { margin: 0; padding: 8px 10px; background: var(--bg); border: 1px soli
     </div>
     <button class="btn tree-only" id="expand" title="Open every box under the selected one by one more level">Open level</button>
     <button class="btn tree-only" id="collapse" title="Close everything below the top levels">Collapse</button>
+    <div class="points" id="points" role="group" aria-label="Point on the run's cost-carbon curve" hidden></div>
     <button class="btn" id="fit">Fit</button>
   </div>
 </header>
@@ -672,7 +680,7 @@ function panel(n) {
 
   if (n.kind === "term") {
     h += `<section><h3>In the LP</h3><pre class="code">${esc(n.expr)}</pre>` +
-      kv([["In the reference run", n.score !== undefined && n.score !== null ? mono(money(n.score) + " per year") + (ROOT.score ? " · " + esc(pct(n.score / ROOT.score)) + " of the bill" : "") : null],
+      kv([[currentPoint ? "At the " + POINT_NAMES[currentPoint] : "In the reference run", n.score !== undefined && n.score !== null ? mono(money(n.score) + " per year") + (ROOT.score ? " · " + esc(pct(n.score / ROOT.score)) + " of the bill" : "") : null],
           ["Objective part", esc((n.side || "").replace("cost_", ""))], ["LP key", mono(n.key)],
           ["Decision variables", (n.variables || []).length ? mono(n.variables.join(", ")) : null],
           ["Series", (n.series || []).length ? mono(n.series.join(", ")) + " — the half-hourly import price, shown below by its mean" : null]]) +
@@ -682,7 +690,7 @@ function panel(n) {
     h += `<section><h3>Value</h3>${kv([["Value", mono(fmt(n.value)) + " " + esc(n.unit || "")],
       ["Rescored", n.rescored !== undefined ? mono(fmt(n.rescored)) + " from its Brightway activity" + (Math.abs(n.rescored - n.value) <= 1e-3 * Math.abs(n.rescored) ? ' <span class="ok">· matches</span>' : "") : null],
       ["Trace key", n.key ? mono(n.key) : null],
-      ["In the reference run", n.chosen ? "the price list the optimiser chose" : null]])}</section>`;
+      [currentPoint ? "At the " + POINT_NAMES[currentPoint] : "In the reference run", n.chosen ? "the price list the optimiser chose" : null]])}</section>`;
     if (n.cases) h += `<section><h3>Cost cases</h3><div class="cases">${["low", "central", "high"].map(c => `<div class="${c === "central" ? "cur" : ""}">${c}<b>${n.cases[c] === null || n.cases[c] === undefined ? "–" : esc(fmt(n.cases[c]))}</b></div>`).join("")}</div><div class="prose" style="color:var(--muted)">The map shows the central case; low and high are the same code run with <span class="mono">cost_case</span> set.</div></section>`;
     if ((n.cites || []).length) h += `<section><h3>Read from</h3><div class="cites">${n.cites.map(c => { const s = (DATA.sources || {})[c.source] || {};
       return `<div class="cite"><button data-go="src:${esc(c.source)}">${esc(s.title || c.source)}</button><span class="at">${esc([s.publisher, s.date].filter(Boolean).join(" · "))}</span>${c.at ? `<span>${esc(c.at)}</span>` : ""}${s.link ? `<a href="${esc(s.link)}" target="_blank" rel="noopener">${esc(s.link)}</a>` : '<span class="nolink">no link recorded</span>'}</div>`; }).join("")}</div></section>`;
@@ -728,7 +736,7 @@ function studyPanel(el) {
   const build = Object.entries(so.build || {}).filter(([k, v]) => Math.abs(v) > 1e-6 && !/^cap_conn_/.test(k)).map(([k, v]) => `${k.replace("cap_", "")} ${fmt(v)}`).join(", ");
   let h = `<button class="btn close" id="closep">Close</button><h2>${esc(ROOT.name)}</h2>
     <div class="prose">${inline(ROOT.note || "")}</div>
-    <section><h3>The reference run</h3>${kv([["Cost", mono(money(so.cost_GBP_per_year) + " per year")],
+    <section><h3>${typeof POINT_NAMES !== "undefined" && currentPoint && (m.points || {})[currentPoint] ? "The run, at the " + POINT_NAMES[currentPoint] + " (point " + esc(m.points[currentPoint].point) + ")" : "The reference run"}</h3>${kv([["Cost", mono(money(so.cost_GBP_per_year) + " per year")],
       ["Per MWh served", so.GBP_per_MWh_served ? mono(money(so.GBP_per_MWh_served)) : null],
       ["Price list chosen", c.key ? esc(c.key) + ` · ${fmt(c.cap_mw)} MW` : null],
       ["Built (MW, MWh, kg)", build ? mono(build) : null],
@@ -787,7 +795,7 @@ document.getElementById("collapse").addEventListener("click", () => {
 });
 function toggleBackground() {}
 
-(function stats() {
+function stats() {
   const m = DATA.meta; let open_ = 0;
   for (const g of Object.values(GAPS)) if (GAP_IS_OPEN(g.status)) open_++;
   const probs = (DATA.problems || []).length;
@@ -800,7 +808,43 @@ function toggleBackground() {}
     `<span class="open"><b>${open_}</b> open gaps</span>` +
     (probs ? `<span class="open"><b>${probs}</b> disagreements</span>` : `<span>checks <b>pass</b></span>`);
   document.getElementById("sub").textContent = "Generated from the model's code · " + m.generated;
+}
+stats();
+
+// ------------------------------------------------------------- the run's three points (the switch, top right)
+// The figures are the same at every point of the run's cost-carbon curve; what was
+// built differs, so each part's total does. The build stores each part's value at
+// every point (scores, contributions); the switch shows one.
+var POINT_NAMES = { knee: "Knee", min_cost: "Lowest cost", min_gwp: "Lowest carbon" };
+var currentPoint = DATA.meta.point || null;
+function setPoint(pt, quiet) {
+  const P = DATA.meta.points || {};
+  if (!P[pt]) return;
+  currentPoint = pt;
+  for (const n of all) {
+    if (n.scores) n.score = n.scores[pt] === undefined ? null : n.scores[pt];
+    if (n.chosen_at) n.chosen = n.chosen_at.includes(pt);
+    for (const e of n.kids) if (e.contributions) e.contribution = e.contributions[pt] === undefined ? null : e.contributions[pt];
+    if (n.kids.some(e => e.contributions)) n.kids.sort((a, b) => Math.abs(b.contribution || 0) - Math.abs(a.contribution || 0));
+  }
+  if ("solve" in DATA.meta) DATA.meta.solve = Object.assign({}, P[pt]);
+  document.querySelectorAll("#points button").forEach(b => b.classList.toggle("on", b.dataset.pt === pt));
+  stats(); render(); if (selected) panel(selected);
+  if (!quiet && window.parent !== window) window.parent.postMessage({ mapPoint: pt }, "*");
+}
+(function pointSwitch() {
+  const P = DATA.meta.points || {}, el = document.getElementById("points");
+  const keys = Object.keys(POINT_NAMES).filter(k => P[k]);
+  window.addEventListener("message", e => { if (e.data && e.data.mapPoint) setPoint(e.data.mapPoint, true); });
+  if (keys.length < 2) return;
+  el.innerHTML = keys.map(k => `<button type="button" data-pt="${k}" title="${esc(P[k].label || POINT_NAMES[k])}: point ${esc(P[k].point || "")} of the run">${POINT_NAMES[k]}</button>`).join("");
+  el.hidden = false;
+  el.querySelectorAll("button").forEach(b => {
+    b.addEventListener("click", () => setPoint(b.dataset.pt));
+    b.classList.toggle("on", b.dataset.pt === currentPoint);
+  });
 })();
+
 function findTerm(name) {
   return all.find(x => x.kind === "term" && x.name === name)
     || all.find(x => x.kind === "chain" && name.toLowerCase().startsWith(x.name.toLowerCase().split(" ")[0]));

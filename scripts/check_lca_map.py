@@ -139,7 +139,11 @@ def main(use_bw: bool = True) -> int:
         print("7. every trace step, re-recorded now")
         from build_lca_map import merge, record
         from optimisation.trace import _same
-        steps, _r, _p = merge(record())
+        folder = ((m.get("meta") or {}).get("run") or {}).get("folder")
+        if folder and not Path(folder).exists():
+            bad(f"the saved run the map was built from is gone: {folder}")
+        runs, _L = record(Path(folder) if folder and Path(folder).exists() else None)
+        steps, _r, _p = merge(runs)
         mapped_steps = {n["key"]: n for n in nodes.values() if n["kind"] == "step"}
         for k, s in steps.items():
             n = mapped_steps.get(k)

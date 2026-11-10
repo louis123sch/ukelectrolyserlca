@@ -28,7 +28,10 @@ lines = ["### Rule 3 — the design-change test", "",
          "The two reference cases re-solved at both anchors with every still-excluded flow added at its",
          "upper estimate (`dc_inputs.build_tech(cutoff=\"upper\")`, sensitivity knob `cutoff`), against the",
          "central model. Q4's test: the same technologies are built and no built capacity moves by more than",
-         "5 %. Solved 23 Oct 2026; `optimisation_outputs/sensitivity_cutoff_*.csv`.", "",
+         "5 %. Solved " + ", ".join(sorted({__import__("datetime").date.fromtimestamp(p.stat().st_mtime).isoformat()
+                                            for p in OUT.glob("sensitivity_cutoff_*.csv")
+                                            if p.stem.split("cutoff_", 1)[1] in ("norfolk_grid_green", "islanded_h2")}))
+         + "; `optimisation_outputs/sensitivity_cutoff_*.csv`.", "",
          "| Case | Anchor | Technologies built | Same with upper? | Largest capacity move | GWP t/yr, central → upper | Verdict |",
          "|---|---|---|---|---|---|---|"]
 verdicts = []
@@ -54,11 +57,7 @@ for case in ("norfolk_grid_green", "islanded_h2"):
 summary = ("**Rule 3 passes**: at both anchors of both cases the upper-estimate run builds the same technologies "
            "and moves no capacity by more than 5 %." if verdicts and all(verdicts) else
            "**Rule 3 fails** on at least one case; the flows that drive the change are to be included (step 5).")
-lines += ["", summary, "",
-          "The London case was solved with the grid connection at 282.0 kg CO2e per MW per year; the switchyard's",
-          "share of Leng's construction machinery (+4.85, carried since 22 Oct 2026) was added while it ran. At the",
-          "145 MW connection the minimum-cost design builds that is 0.7 t CO2e a year, under a millionth of the",
-          "system, so it cannot move a design. The islanded case has no grid connection.", ""]
+lines += ["", summary, "", "The islanded case has no grid connection.", ""]
 text = "\n".join(lines)
 print(text)
 

@@ -59,6 +59,7 @@ Run:  python -m optimisation.sensitivity carbon
 from __future__ import annotations
 
 import itertools
+import math
 import sys
 import time
 from dataclasses import dataclass, field, replace
@@ -72,6 +73,7 @@ sys.path.insert(0, str(ROOT))
 from optimisation import dc_architectures as A
 from optimisation import dc_model as M
 from optimisation import dc_pareto as P
+from optimisation import trace as T
 
 OUT_DIR = ROOT / "optimisation_outputs"
 
@@ -371,9 +373,14 @@ def run(case: Case | str, variants: list[dict], *, name: str,
         s_kw = {k: v for k, v in variant.items() if k in SERIES_KNOBS}
         series, meta = (prepare(case, **s_kw)[1:3] if s_kw else (series0, meta0))
         kwargs = {**case.tech_kwargs,
-                  **{k: v for k, v in variant.items() if k not in SERIES_KNOBS}}
-        tech = I.build_tech(site, meta, ely_tech=case.ely_tech, h2_colour=case.h2_colour,
-                            size_mw_it=case.size_mw_it, pue=case.pue, **kwargs)
+                  **{k: v for k, v in variant.items() if k not in SERIES_KNOBS and k != "push"}}
+        push_key, push_factor = parse_push(variant["push"]) if "push" in variant else ("", 1.0)
+        with T.pushed(push_key, push_factor) as hits:
+            tech = I.build_tech(site, meta, ely_tech=case.ely_tech, h2_colour=case.h2_colour,
+                                size_mw_it=case.size_mw_it, pue=case.pue, **kwargs)
+        if push_key and not any(hits):
+            raise ValueError(f"push {variant['push']!r}: no step {push_key!r} that the code reads back "
+                             f"ran while building {case.name}'s coefficients")
         dropped = None
         if variant and list_choice == "fixed" and fixed_keys:
             tech = _restrict(tech, fixed_keys)
@@ -509,6 +516,77 @@ def carbon(cases=("islanded_h2", "norfolk_grid_green"), knobs=None):
     return pd.concat(out, ignore_index=True)
 
 
+def parse_push(spec: str) -> tuple[str, float]:
+    """``"<step key>*<factor>"`` -> (key, factor). The key is a recorded step's
+    (``T.step`` / ``T.cost``); the factor multiplies it inside build_tech."""
+    key, sep, factor = str(spec).rpartition("*")
+    if not sep or not key:
+        raise ValueError(f"a push is '<step key>*<factor>', got {spec!r}")
+    f = float(factor)
+    if not (f > 0 and f == f and f != float("inf")):
+        raise ValueError(f"a push factor must be a positive number, got {spec!r}")
+    return key, f
+
+
+# The +/-30-50 % runs the supervisor asked for (19 Oct, point 6), on the inputs
+# the screen picked (scripts/screen_inputs.py, optimisation_outputs/input_screen.md,
+# 10 Nov 2026): unsure and moving a total by 1 % or more at +/-50 %, plus those
+# that act through how the plant runs and need a solve to judge. Inputs with a
+# published range are swept on it; those without are pushed to x0.5 and x1.5.
+# The discount rates are influential but a method choice from government
+# guidance, stated in the report and not swept (user, 10 Nov 2026).
+_STANDING = -math.log(0.8) / 1560.0     # battery.STANDING_LOSS_PER_HOUR: 80 % after 1,560 h (BEIS 2018)
+SHAKY_KNOBS = {
+    # unsure and influential
+    "push": [f"{k}*{f}" for k in ("cost.fuel_cell.capex_per_kW",        # one plant (Baringa), thin evidence
+                                  "battery.energy_per_usable_kWh",      # battery carbon (supervisor)
+                                  "coefficient.cost_ely",               # NESO electrolyser, no range
+                                  "cost.bought_h2.green.delivered")     # bought hydrogen price (supervisor)
+             for f in (0.5, 1.5)],
+    "batt_cell_basis": ["voss_de", "jasper_fig4_311"],
+    "green_h2_grid_share": [0.0, 1.0],          # the electricity the seller runs on
+    "wind_life_extension": ["none", "servicing"],
+    "tank_design": ["gandiglio_28bar"],
+    "fc_stack_basis": ["gramc_2025"],
+    # act through how the plant runs: only a solve can judge them
+    "fc_stack_calendar_years": [5.0, 15.0],
+    "fc_stack_duty_hours": [20_000.0, 40_000.0],
+    "tank_leakage_per_hour": [0.0, 0.01 / 100],
+    "batt_standing_loss_per_hour": [0.0, 2 * _STANDING],
+    "batt_tx_x_eff": [1.0],
+    "fc_tx_x_eff": [0.5],
+}
+# Knobs that only bite where hydrogen is bought.
+_BOUGHT_H2_ONLY = ("green_h2_grid_share", "cost.bought_h2.green.delivered")
+
+
+def shaky_variants(case: Case) -> list[dict]:
+    """SHAKY_KNOBS one at a time for ``case``, without the bought-hydrogen ones
+    where the case buys none."""
+    knobs = {k: list(v) for k, v in SHAKY_KNOBS.items()}
+    if case.h2_colour is None:
+        knobs.pop("green_h2_grid_share", None)
+        knobs["push"] = [p for p in knobs["push"] if not p.startswith(_BOUGHT_H2_ONLY)]
+    return one_at_a_time(knobs)
+
+
+def variant_label(variant: dict) -> str:
+    """The label a row carries in its ``variant`` column."""
+    return ", ".join(f"{k}={v}" for k, v in variant.items()) or "central"
+
+
+def shaky(cases=("islanded_h2", "norfolk_grid_green"), list_choice: str = "fixed", only=None):
+    """The screened inputs at their ranges, one at a time (sensitivity_shaky_<case>[_4h].csv).
+    ``only`` keeps the variants with those labels (the central one always)."""
+    out = []
+    for c in cases:
+        vs = shaky_variants(CASES[c])
+        if only is not None:
+            vs = [v for v in vs if not v or variant_label(v) in only]
+        out.append(run(CASES[c], vs, name=f"shaky_{c}", list_choice=list_choice))
+    return pd.concat(out, ignore_index=True)
+
+
 def cutoff(cases=("islanded_h2", "norfolk_grid_green")):
     """The cut-off rule's rule 3: central and every still-excluded flow at its upper estimate, at both
     anchors (sensitivity_cutoff_<case>.csv). Judge it with scripts/cutoff_rule3.py."""
@@ -517,7 +595,12 @@ def cutoff(cases=("islanded_h2", "norfolk_grid_green")):
 
 
 if __name__ == "__main__":
-    args = [a for a in sys.argv[1:] if not a.startswith(("--lists=", "--hours="))]
+    args = [a for a in sys.argv[1:] if not a.startswith(("--lists=", "--hours=", "--only="))]
+    # --only=<file>: solve only the variants whose labels the file lists, one a line
+    # (the hourly confirmations scripts/shaky_judge.py pick writes); central always.
+    only = next((Path(a.split("=", 1)[1]) for a in sys.argv[1:] if a.startswith("--only=")), None)
+    only_labels = ({ln.strip() for ln in only.read_text(encoding="utf-8").splitlines() if ln.strip()}
+                   if only else None)
     # --lists=fixed|pruned|full overrides each sweep's own default (module docstring).
     lists = {a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith("--lists=")}
     choice = lists.pop() if lists else None
@@ -540,5 +623,7 @@ if __name__ == "__main__":
         connection(cases or CONNECTION_CASES, list_choice=choice or "pruned")
     elif what == "assumptions":
         assumptions(cases or ("islanded_h2", "norfolk_grid"), list_choice=choice or "fixed")
+    elif what == "shaky":
+        shaky(cases or ("islanded_h2", "norfolk_grid_green"), list_choice=choice or "fixed", only=only_labels)
     else:
-        raise SystemExit(f"unknown sweep {what!r}; try: carbon, cutoff, cost_cutoff, connection, assumptions")
+        raise SystemExit(f"unknown sweep {what!r}; try: carbon, cutoff, cost_cutoff, connection, assumptions, shaky")

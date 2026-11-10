@@ -78,8 +78,11 @@ REGISTER = (
              "allowed a tank (dc_model.major_hazard_cost), since every North Norfolk design holds 112-221 t; it overstates "
              "a small tank by at most that much"),
     CostFlow("the seller's hydrogen loading compressor", "", "cutoff", "excluded", None,
-             "No public per-kg figure. Rule 3 without one: it could only make bought hydrogen dearer, and none of the 89 "
-             "saved sweep rows buys any at today's price"),
+             "No public per-kg figure, so rule 3 cannot add it back. Left out, it can only make bought hydrogen "
+             "cheaper than it is: the bought price is a floor, and a design that buys hydrogen leans towards it. "
+             "Designs do buy it (the North Norfolk reference run, about 2.6 million kg a year at its lowest-cost "
+             "point, 10 Nov 2026), so this is stated, not argued away. The bought price itself is swept to x0.5 and "
+             "x1.5 (sensitivity.SHAKY_KNOBS), a range wide enough to hold any compressor's share"),
     # --- needs a person -----------------------------------------------------
     CostFlow("land at an urban site", "", "cutoff", "open", None,
              "Every land figure charged is a rural rent and dc_model has no area limit. Left so by the user (4 Nov 2026): "

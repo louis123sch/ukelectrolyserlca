@@ -223,21 +223,52 @@ def field_default_where(field):
 # =============================================================================
 # 2. The trace, main run and variants merged
 # =============================================================================
-def record():
+def record(run=None):
+    """The trace, main run and variants. With ``run`` (a saved run's folder) the
+    main run is that run's inputs, rebuilt as it built them, and the variants
+    are built beside it; without one, the fixed example above. Returns (runs,
+    the run's inputs or None)."""
     from optimisation import dc_inputs as I, trace as T
-    with T.recording() as rec:
-        tech = I.build_tech(SITE, META_CHARGES, **MAIN)
-        I.build_series(SITE, START, END, SIZE_MW_IT)
-    runs = [("", rec, tech)]
-    for label, kw in VARIANTS:
-        with T.recording() as r:
-            t = I.build_tech(SITE, META_CHARGES, **kw)
-        runs.append((label, r, t))
+    L = None
+    if run is not None:
+        from build_workbooks import record_run
+        rec, L = record_run(run)
+        runs = [("", rec, L.tech)]
+        for label, kw in VARIANTS:
+            with T.recording() as r:
+                t = I.build_tech(L.site, L.meta, **{**L.tech_kw, **kw})
+            runs.append((label, r, t))
+    else:
+        with T.recording() as rec:
+            tech = I.build_tech(SITE, META_CHARGES, **MAIN)
+            I.build_series(SITE, START, END, SIZE_MW_IT)
+        runs = [("", rec, tech)]
+        for label, kw in VARIANTS:
+            with T.recording() as r:
+                t = I.build_tech(SITE, META_CHARGES, **kw)
+            runs.append((label, r, t))
     # Pound figures are the cost map's (scripts/build_cost_map.py), not this one's.
     for _label, r, _t in runs:
         r.steps = {k: s for k, s in r.steps.items() if s.side != "cost"}
         r.conflicts = {k: v for k, v in r.conflicts.items() if v[0].side != "cost"}
-    return runs
+    return runs, L
+
+
+def run_view(run, L, problems) -> dict:
+    """The saved run's three points: each carbon term's kg per year, the total,
+    what was built and the price list chosen."""
+    from build_workbooks import run_points
+    out = {}
+    for pt, p in run_points(run, L, problems).items():
+        out[pt] = {"label": p["label"], "point": str(p["row"]["point"]),
+                   "terms": {k: v.val for g in ("gwp_embodied", "gwp_operational", "gwp_facility")
+                             for k, v in p["terms"][g].items()},
+                   "gwp_kgco2e_per_year": p["gwp"], "cost_GBP_per_year": p["cost"],
+                   "served_MWh_per_year": p["served"],
+                   "connection": {"index": p["connection_index"], "key": p["connection"],
+                                  "cap_mw": p["build"].get("cap_grid")},
+                   "build": p["build"]}
+    return out
 
 
 def merge(runs):
@@ -368,7 +399,7 @@ class Graph:
         self.edges.append([parent, child, {k: v for k, v in d.items() if v not in (None, "")}])
 
 
-def build():
+def build(run=None):
     from optimisation import dc_architectures, dc_model as M
     from optimiser_lca import build as fg_build, exclusions as X, grid as G
     from lp_terms import KEY_TO_NAME, CONSTANTS
@@ -376,7 +407,13 @@ def build():
 
     t0 = time.time()
     problems = []
-    runs = record()
+    runs, L = record(run)
+    points, fresh_note = {}, None
+    if L is not None:
+        points = run_view(run, L, problems)
+        from build_workbooks import freshness
+        fresh_note = freshness(L.cfg, problems)
+    default = "knee" if "knee" in points else (next(iter(points)) if points else None)
     steps, renames, p = merge(runs)
     problems += p
     BW = Brightway()
@@ -552,14 +589,24 @@ def build():
                             f"{total:.9g}, build_tech gives {float(value):.9g}")
         return nid
 
+    if L is not None:
+        s_, c_ = L.summary, L.cfg
+        shown_for = (f"Shown for the saved run {Path(run).parent.name}/{Path(run).name}: {s_.get('site_name')}, "
+                     f"{c_['start']} to {c_['end']}, {c_['size_mw_it']:g} MW IT, {s_.get('label')}. The carbon per "
+                     "term is the run's own result at each point of its cost-carbon curve (the switch at the "
+                     "top right).")
+    else:
+        shown_for = f"Shown for {SITE}, {START} to {END}, {SIZE_MW_IT:g} MW IT (no saved run was found)."
+    totals = {pt: v["gwp_kgco2e_per_year"] for pt, v in points.items()}
     study = gr.add("study", kind="study", name="The study: carbon of a year of data-centre demand served",
-                   note="IPCC 2021 GWP100 with long-term emissions, ecoinvent 3.9.1 apos background. "
-                        f"Shown for {SITE}, {START} to {END}, {SIZE_MW_IT:g} MW IT.")
+                   score=totals.get(default), scores=totals or None,
+                   note="IPCC 2021 GWP100 with long-term emissions, ecoinvent 3.9.1 apos background. " + shown_for)
     lp_root = gr.add("lp", kind="group", name="The LP's carbon objective, by technology",
+                     score=totals.get(default), scores=totals or None,
                      note="Terms read from dc_model.objective_terms and facility_terms; grouped by "
                           "dc_model.CHAINS.")
-    gr.link(study, lp_root)
-    chain_nodes = {}
+    gr.link(study, lp_root, contribution=totals.get(default), contributions=totals or None)
+    chain_nodes, chain_sum = {}, {}
 
     for (label, _rec, tech), rename in zip(runs, renames):
         for key, t in term_table(tech).items():
@@ -584,15 +631,35 @@ def build():
             note = None
             if key == "offshore wind" and not dc_architectures.OFFSHORE_IN_SCOPE:
                 note = "dc_architectures.OFFSHORE_IN_SCOPE is False: cap_offshore is held at zero."
+            amounts = {} if label else {pt: v["terms"][key] for pt, v in points.items() if key in v["terms"]}
             gr.add(tid, kind="term", name=name, key=key, side=t["side"], expr=t["expr"],
                    variables=t["vars"], variant=label or None, note=note,
+                   score=amounts.get(default), scores=amounts or None,
                    series=[s for s in t["series"] if s not in ("dt", "annual_scale")])
-            gr.link(chain_nodes[chain], tid)
+            for pt, a in amounts.items():
+                chain_sum.setdefault(chain, {}).setdefault(pt, 0.0)
+                chain_sum[chain][pt] += a
+            gr.link(chain_nodes[chain], tid, contribution=amounts.get(default), contributions=amounts or None)
             for u in uses:
                 gr.link(tid, u)
             for f in t["fields"]:
                 if f not in tech_fields:
                     problems.append(f"term {key!r} multiplies {f}, which Tech does not have")
+
+    # ---- each chain's carbon at each point, and the terms adding to the run's total
+    if points:
+        for chain, nid in chain_nodes.items():
+            sums = {pt: chain_sum.get(chain, {}).get(pt, 0.0) for pt in points}
+            gr.nodes[nid]["score"], gr.nodes[nid]["scores"] = sums[default], sums
+        for e in gr.edges:
+            if e[0] == lp_root and e[1] in gr.nodes and gr.nodes[e[1]].get("scores"):
+                e[2]["contribution"] = gr.nodes[e[1]]["score"]
+                e[2]["contributions"] = gr.nodes[e[1]]["scores"]
+        for pt, v in points.items():
+            drawn = sum(chain_sum.get(c, {}).get(pt, 0.0) for c in chain_nodes)
+            if abs(drawn - v["gwp_kgco2e_per_year"]) > 1e-6 * max(1.0, abs(v["gwp_kgco2e_per_year"])):
+                problems.append(f"{v['label']}: the terms add to {drawn:,.1f} kg, the run's total is "
+                                f"{v['gwp_kgco2e_per_year']:,.1f} kg")
 
     # ---- every foreground database, so nothing hangs unreached -----------------------
     inv_root = gr.add("inventories", kind="group", name="Every foreground inventory, by database",
@@ -656,7 +723,13 @@ def build():
         "meta": {"generated": time.strftime("%Y-%m-%d %H:%M"), "seconds": round(time.time() - t0),
                  "nodes": len(gr.nodes), "edges": len(gr.edges), "steps": len(steps),
                  "foreground_activities": len(BW.fg_acts), "ecoinvent_drilled": len(drilled),
-                 "run": {"site": SITE, "start": START, "end": END, "size_mw_it": SIZE_MW_IT, **MAIN},
+                 "run": ({"site": SITE, "start": START, "end": END, "size_mw_it": SIZE_MW_IT, **MAIN,
+                          "folder": None} if L is None else
+                         {"site": L.summary.get("site_name"), "start": L.cfg["start"], "end": L.cfg["end"],
+                          "size_mw_it": L.cfg["size_mw_it"], "h2_colour": L.summary.get("h2_colour"),
+                          "label": L.summary.get("label"), "folder": str(Path(run).resolve()), "note": fresh_note}),
+                 "points": {pt: {k: v[k] for k in v if k != "terms"} for pt, v in points.items()},
+                 "point": default,
                  "variants": [v for v, _ in VARIANTS], "cutoff_added": added,
                  "fingerprint": fingerprint()},
     }
@@ -702,9 +775,15 @@ if __name__ == "__main__":
     if "--html-only" in sys.argv:          # re-wrap an existing map, no Brightway
         out = json.loads(OUT.read_text(encoding="utf-8"))
     else:
-        out = build()
+        # --run <folder>: that saved run; --fixed: the fixed example; neither:
+        # the newest finished run, else the fixed example.
+        from build_workbooks import choose_run
+        arg = sys.argv[sys.argv.index("--run") + 1] if "--run" in sys.argv else None
+        run = None if "--fixed" in sys.argv else choose_run(arg)
+        print(f"run: {run}" if run else "no saved run: the fixed example")
+        out = build(run)
         m = out["meta"]
-        print(f"built the map: {m['nodes']:,} boxes, {m['edges']:,} links, {m['steps']} trace steps, "
+        print(f"built the map:{m['nodes']:,} boxes, {m['edges']:,} links, {m['steps']} trace steps, "
               f"{m['ecoinvent_drilled']} ecoinvent datasets opened, {m['seconds']} s")
         if out["problems"]:
             print(f"\n{len(out['problems'])} PROBLEMS — the map disagrees with the model:")
@@ -721,4 +800,12 @@ if __name__ == "__main__":
     both = build_maps_page.write()
     if both:
         print(f"wrote {both.relative_to(ROOT)}: {both.stat().st_size / 1e6:.2f} MB")
+    if not out.get("problems") and "--html-only" not in sys.argv and "--fixed" not in sys.argv and run:
+        # The workbooks describe the same run (scripts/build_workbooks.py): rebuilt here so the
+        # maps and the workbooks are never from two different runs.
+        import build_workbooks
+        try:
+            build_workbooks.build(run)
+        except Exception as e:                                   # noqa: BLE001
+            print(f"WORKBOOKS NOT REBUILT: {e} (is one open in Excel?) - run scripts/build_workbooks.py")
     sys.exit(1 if out.get("problems") else 0)

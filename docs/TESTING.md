@@ -25,13 +25,14 @@ From a committed tree, one at a time, in the `brightway` environment with `MKL_T
 | 3 | Connection's price, ±50 % | delete `optimisation_outputs/sensitivity_connection_norfolk_150_room.csv`, then `python -m optimisation.sensitivity connection norfolk_150_room --hours=1`, then `python scripts/connection_sensitivity.py` | every North Norfolk point passes (about 4.5 hours) |
 | 4 | Cost cut-off, rule 3 | `python -m optimisation.sensitivity cost_cutoff --hours=1` | no built size moves by more than 5 %, no technology appears or goes |
 | 5 | Carbon cut-off, rule 3 | `python -m optimisation.sensitivity cutoff --hours=1`, then `python scripts/cutoff_rule3.py` | the judge passes |
-| 6 | Assumptions at their ranges | `python -m optimisation.sensitivity assumptions --hours=1` | no pass mark: every row is recorded, and any that moves the design is stated with the result |
-| 7 | Carbon inputs at their ranges | `python -m optimisation.sensitivity carbon --hours=1` | only if carbon inputs changed since the last sign-off; recorded as in 6 |
+| 6 | The screened inputs at their ranges (the supervisor's ±30–50 %) | `python scripts/screen_inputs.py --series`, then `python -m optimisation.sensitivity shaky` (the rig), then `python scripts/shaky_judge.py pick`, then `python -m optimisation.sensitivity shaky norfolk_grid_green --hours=1 --only=optimisation_outputs/shaky_hourly.txt`, then `python scripts/shaky_judge.py judge` | no pass mark: every hourly row is recorded in `shaky_inputs.md`, and any that moves the design is stated with the result |
 | 8 | Both maps | `python scripts/build_lca_map.py`, `python scripts/build_cost_map.py`, then `python -m pytest tests/test_cost_map.py tests/test_lca_map.py -q`, then republish both | no problems listed, tests pass |
 
 Then add a row to the log below, and quote figures only from those hourly files.
 
 Allow a night for it, though only steps 2 and 3 have been timed since sweeps began fixing the price list. Run them one at a time, because memory will not hold two.
+
+**How step 6 chooses its inputs (agreed 10 Nov 2026).** It replaces the old steps 6 and 7, which swept every listed assumption hourly (about 150 answers). The screen (`scripts/screen_inputs.py`, `input_screen.md`) pushes every recorded number to ×0.5 and ×1.5 through the real code and re-scores a saved run with its design held fixed. An input goes into `sensitivity.SHAKY_KNOBS` if it is unsure (assumed, a proxy, a choice between sources, or one thin source) and moves cost or carbon by 1 % or more, or if it acts through how the plant runs, which only a solve can judge. Inputs with a published range are swept on it; the rest at ×0.5 and ×1.5. Influential inputs from UK government sources (capital costs, lives) are covered by the low/high cost case. The discount rates are stated as fixed and influential, not swept. All screened variants run on the rig on both cases. Hourly on North Norfolk: any that moves a size by more than 3 % on the rig or changes what is built, plus battery carbon and the fuel cell's capital and running-hours life regardless. The 3 % flag sits below the 5 % test because a rig effect can differ from hourly by about a point.
 
 **Delete the file in step 3 first.** The connection sweep resumes by default, so it would otherwise keep rows solved on older code. The other sweeps start fresh.
 

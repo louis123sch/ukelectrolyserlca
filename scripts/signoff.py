@@ -16,7 +16,7 @@ TESTING.md says to delete (step 3's resumable sweep).
 
 Steps (TESTING.md): 1 clean tree; 2 every test; R the North Norfolk run (optional, for the maps
 and workbooks: dc_runner, the page's path, dispatch saved); 3 connection's price at +/-50 %;
-4 cost cut-off; 5 carbon cut-off; 6 assumptions at their ranges; 7 carbon inputs at their ranges;
+4 cost cut-off; 5 carbon cut-off; 6r the screened inputs, screen and rig; 6h their hourly confirmations;
 8 both maps and their tests.
 """
 from __future__ import annotations
@@ -71,8 +71,17 @@ def steps(run_to: str | None):
         ("4", "Cost cut-off, rule 3", [[PY, "-m", "optimisation.sensitivity", "cost_cutoff", *hours]]),
         ("5", "Carbon cut-off, rule 3", [[PY, "-m", "optimisation.sensitivity", "cutoff", *hours],
                                          [PY, "scripts/cutoff_rule3.py"]]),
-        ("6", "Assumptions at their ranges", [[PY, "-m", "optimisation.sensitivity", "assumptions", *hours]]),
-        ("7", "Carbon inputs at their ranges", [[PY, "-m", "optimisation.sensitivity", "carbon", *hours]]),
+        # The screened inputs (TESTING.md step 6, 10 Nov 2026): the screen, the rig on
+        # both cases, then hourly on North Norfolk for what the judge picks. 6r is the
+        # rig half alone, for a night that ends before the hourly half could finish.
+        ("6r", "Screened inputs: screen and rig",
+         [[PY, "scripts/screen_inputs.py", "--series"],
+          [PY, "-m", "optimisation.sensitivity", "shaky"],
+          [PY, "scripts/shaky_judge.py", "pick"]]),
+        ("6h", "Screened inputs: hourly confirmations",
+         [[PY, "-m", "optimisation.sensitivity", "shaky", "norfolk_grid_green", *hours,
+           "--only=optimisation_outputs/shaky_hourly.txt"],
+          [PY, "scripts/shaky_judge.py", "judge"]]),
         ("8", "Both maps", [[PY, "scripts/build_lca_map.py"], [PY, "scripts/build_cost_map.py"],
                             [PY, "-m", "pytest", "tests/test_cost_map.py", "tests/test_lca_map.py", "-q",
                              "-p", "no:cacheprovider"]]),
