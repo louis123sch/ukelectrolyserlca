@@ -282,7 +282,8 @@ def _row(case, variant, objective, point, q, series, tech, assets, seconds, mip_
          # branching gap it was solved at (None: one list, no switches).
          "connection_option": point.get("connection_option"),
          "connection_lists_solved": len(M.connection_options_of(tech) or ()),
-         "mip_rel_gap": mip_rel_gap}
+         "mip_rel_gap": mip_rel_gap,
+         "solver": M.current_solver()}
     for group in ("gwp_embodied", "gwp_operational"):
         for k, v in terms[group].items():
             r[f"gwp_t:{k}"] = v / 1e3

@@ -1053,12 +1053,40 @@ MIP_REL_GAP = 1e-7
 LOOSE_MIP_REL_GAP = 1e-3
 
 
-def solve(m, solver="highs", **kw):
+# The solver (10 Nov 2026): HiGHS by default; DC_SOLVER=gurobi in the environment
+# (or solver="gurobi") uses Gurobi, given gurobipy and a licence. Options are
+# written in HiGHS's names everywhere and translated here, and Gurobi is held to
+# HiGHS's default tolerances so the frontier's tie-breaks (dc_pareto.LEX_TOL,
+# 1e-6) mean the same on either. Every sweep row records which solved it.
+SOLVERS = ("highs", "gurobi")
+_GUROBI_NAMES = {"mip_rel_gap": "MIPGap", "output_flag": "OutputFlag", "time_limit": "TimeLimit",
+                 "threads": "Threads"}
+
+
+def current_solver(solver: str | None = None) -> str:
+    import os
+    s = (solver or os.environ.get("DC_SOLVER") or "highs").strip().lower()
+    if s not in SOLVERS:
+        raise ValueError(f"solver must be one of {SOLVERS}, got {s!r} (DC_SOLVER)")
+    return s
+
+
+def solve(m, solver=None, **kw):
     import logging
     logging.getLogger("linopy").setLevel(logging.ERROR)
-    if solver == "highs" and len(m.binaries):
+    solver = current_solver(solver)
+    if len(m.binaries):
         kw.setdefault("mip_rel_gap", MIP_REL_GAP)
-    m.solve(solver_name=solver, output_flag=False, progress=False, **kw)
+    else:
+        kw.pop("mip_rel_gap", None)
+    kw.setdefault("output_flag", False)
+    extra = {}
+    if solver == "gurobi":
+        kw = {_GUROBI_NAMES.get(k, k): (int(bool(v)) if k == "output_flag" else v) for k, v in kw.items()}
+        kw.setdefault("FeasibilityTol", 1e-7)        # HiGHS's primal feasibility tolerance
+        kw.setdefault("OptimalityTol", 1e-7)         # and its dual
+        extra["io_api"] = "direct"                   # hand the model over in memory, no LP file
+    m.solve(solver_name=solver, progress=False, **extra, **kw)
     if m.termination_condition != "optimal":
         raise RuntimeError(
             f"LP did not solve to optimality: {m.status} / {m.termination_condition}. "
