@@ -109,7 +109,10 @@ _FIXED = [
            basis="real 2020 £",
            note="'Technical and cost assumptions', 10 MW, commissioning 2025, construction period 3 years. Assumes a "
                 "mature solid-oxide plant and heat at no cost. Its PEM is a third of NESO's 2025 figure, so its level is "
-                "the low case and its ratio to PEM the high; the central is the Danish Energy Agency's"),
+                "the low case and its ratio to PEM the high; the central is the Danish Energy Agency's. Since 11 Nov "
+                "2026 also the bought blue price: sheet '2025_R', SMR with CCUS 300 MW, total LCOH on industrial LRVC "
+                "gas, low / central / high 42.28 / 51.89 / 63.79 £/MWh H2 HHV = 2.03 / 2.50 / 3.07 £/kg in 2025 £. "
+                "The report's main gas basis is the LRVC (p. 24); 90 % capture, 74 % HHV efficiency (p. 12)"),
     Source("beis_ldes_2022", "Benefits of Long Duration Electricity Storage (Research Paper 2022/019)",
            "AFRY for BEIS", "July 2022", "document",
            link="https://www.gov.uk/government/publications/benefits-of-long-duration-electricity-storage",
@@ -224,6 +227,30 @@ _FIXED = [
            "NESO", "2025", "workbook", basis="real 2025 £",
            note="Every currency conversion in the study uses its 2025 cross-rates: £1 = €1.17, $1 = €0.913"),
     # --- bought hydrogen ---------------------------------------------------
+    Source("desnz_har2_cost_challenge_2025",
+           "HAR2: cost challenge guidance for shortlisted projects on being cost competitive", "DESNZ",
+           "7 April 2025", "document",
+           link="https://www.gov.uk/government/publications/hydrogen-allocation-round-2-har2-due-diligence-and-"
+                "cost-assurance/har2-cost-challenge-guidance-for-shortlisted-projects-on-being-cost-competitive",
+           basis="real 2023 £, per MWh of hydrogen on the higher heating value",
+           note="The first round's weighted average strike price, 241 £/MWh H2 (HHV), footnote 1 'In 2023 real "
+                "prices'. The bought green hydrogen price since 11 Nov 2026: 9.50 £/kg at 39.41 kWh/kg. No "
+                "second-round prices published (checked 11 Nov 2026)"),
+    Source("desnz_har1_successful_2023",
+           "Hydrogen Production Business Model / Net Zero Hydrogen Fund: HAR1 successful projects", "DESNZ",
+           "14 December 2023; ten contracts signed, press release 23 July 2025", "document",
+           link="https://www.gov.uk/government/publications/hydrogen-production-business-model-net-zero-hydrogen-"
+                "fund-shortlisted-projects/hydrogen-production-business-model-net-zero-hydrogen-fund-har1-"
+                "successful-projects",
+           note="The projects and capacities behind the green grid share (0.7): 119.8 MW signed; each project's "
+                "power arrangement from its own material, not from DESNZ"),
+    Source("desnz_h2_update_july_2025", "Hydrogen Update to the Market: July 2025", "DESNZ", "July 2025",
+           "document",
+           link="https://assets.publishing.service.gov.uk/media/6880b2139fab8e2e86160efe/"
+                "hydrogen-update-to-the-market-2025.pdf",
+           note="p. 19: of first- and second-round projects, 'most of these projects aim to use long term power "
+                "purchase agreements powered by multiple generation assets'; p. 16: second-round winners "
+                "expected 'in early 2026'"),
     Source("eho_uk_2025",
            "European Hydrogen Observatory — Hydrogen production costs 2025, United Kingdom rows",
            "European Hydrogen Observatory", "2025 (posted November 2026)", "data feed",

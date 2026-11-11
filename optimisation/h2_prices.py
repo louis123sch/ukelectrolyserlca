@@ -15,16 +15,24 @@ so a price and its LCA can never drift apart.
 
 Sources, and how solid each one is
 ----------------------------------
-green (PEM / Alkaline)  TRANSCRIBED. NESO Green Hydrogen Data Portal,
-                        "Levelised cost of green hydrogen modelling, 2025 to
-                        2050" (resource cc2dad0c). A full sensitivity cube:
-                        tech x scenario x build year x capacity factor x
-                        electricity price x discount rate.
+green (PEM / Alkaline)  DERIVED, since 11 Nov 2026. DESNZ's first hydrogen
+                        allocation round, weighted average strike price,
+                        241 £/MWh HHV in 2023 prices (HAR2 cost challenge
+                        guidance, 7 Apr 2025), per kg at 39.41 kWh/kg and
+                        inflated to 2025: one figure for both sellers and
+                        every case. The NESO cube ("Levelised cost of green
+                        hydrogen modelling", resource cc2dad0c) and the
+                        European Hydrogen Observatory remain as the record of
+                        the old figure and as turquoise's green input.
 
-blue (ATR + CCS)        TRANSCRIBED. Same NESO dataset family, "Levelised
-                        cost of blue hydrogen modelling, 2025 to 2050"
-                        (resource 3f3b1bf0). Includes its own fuel, CO2 T&S
-                        and emissions cost components.
+blue (SMR + CCS)        DERIVED, since 11 Nov 2026. BEIS, Hydrogen Production
+                        Costs 2021, annex sheet 2025_R: SMR with CCUS, 300 MW,
+                        commissioning 2025, industrial LRVC gas, low / central
+                        / high, £/MWh HHV in 2020 prices, per kg at 39.41
+                        kWh/kg and inflated to 2025. The same process as the
+                        blue inventory. NESO's "Levelised cost of blue
+                        hydrogen modelling" (resource 3f3b1bf0, ATR + CCS) and
+                        the European Hydrogen Observatory stay as checks.
 
 grey (SMR unabated)     DERIVED. NESO and FES model green, blue and pink
                         only — neither publishes a grey price. So grey is
@@ -246,17 +254,71 @@ GREEN_GRID_DELIVERED_VARIANT = "grid-connected electrolyser"
 
 # Default supply mix. A buyer contracting for green hydrogen on the open market
 # gets a portfolio, not one plant: some of it made behind a generator's meter,
-# some by electrolysers taking renewable power over the network. Both are green —
-# the source is renewable either way — so the mix moves price and delivery burden
-# together and nothing else.
+# some by electrolysers taking renewable power over the network under contract.
+# Both are green, the source is renewable either way. Since 11 Nov 2026 the price
+# is one figure for both (the first allocation round's strike price, below), so the
+# mix moves the delivery burden in carbon only.
 #
-# ASSUMED. 50:50 is a neutral prior, not a market observation: no GB breakdown of
-# green hydrogen production by connection type is published, and at the current
-# scale of the GB electrolyser fleet any such split would be dominated by a
-# handful of projects. It is exposed as ``green_h2_grid_share`` on
-# ``build_tech()`` precisely so it can be swept rather than trusted.
-# 0.0 is all behind the meter, 1.0 all grid-connected.
-GREEN_H2_GRID_SHARE = 0.5
+# DERIVED, 0.7 since 11 Nov 2026 (was 0.5, assumed). The first hydrogen allocation
+# round is the only one with a published project list: DESNZ's ten signed projects
+# (press release, 23 Jul 2025), 119.8 MW. By each project's own material, 32.2 MW
+# sit next to a wind or solar farm (Cromarty, HyMarnham, Whitelee, Tees Green),
+# 42.1 MW take contracted power over the network (Barrow, Green Hydrogen 3,
+# Trafford), and 45.7 MW do not say (Bradford, West Wales, Langage): 0.35 on the
+# confirmed projects, 0.73 if the three are networked, which DESNZ's Hydrogen
+# Update to the Market (July 2025, p. 19) supports: of first- and second-round
+# projects, "most of these projects aim to use long term power purchase
+# agreements powered by multiple generation assets". By energy the share is higher
+# still, as the co-located plants also import. docs/SOURCE_HUNT_2026-11-11.md §4.
+# 0.0 is all behind the meter, 1.0 all grid-connected; swept as build_tech's
+# ``green_h2_grid_share``.
+GREEN_H2_GRID_SHARE = 0.7
+
+# --- the price of bought green hydrogen ---------------------------------------
+# Since 11 Nov 2026: the first hydrogen allocation round's weighted average strike
+# price, the latest UK government figure for what electrolytic hydrogen being built
+# costs, return on capital included. DESNZ, "HAR2: cost challenge guidance for
+# shortlisted projects on being cost competitive" (7 Apr 2025): "a weighted average
+# strike price of 241 £/MWh H2 (HHV)", footnote 1 "In 2023 real prices". One figure
+# for both sellers and every cost case: the round publishes no range or split, and
+# the ±50 % push tests it. It slightly understates full cost (grant-funded capital
+# and electricity levies are outside a strike price). It is what the producer is
+# guaranteed, not what a buyer pays (about gas parity, the taxpayer paying the gap);
+# the full cost is the model's rule. No second-round prices are published (checked
+# 11 Nov 2026). Road haulage to the site stays outside the boundary (ASSUMPTIONS §3).
+# Replaced the European Hydrogen Observatory's levelised costs (£4.30 behind the
+# meter, £5.89 over the grid), kept below for grey, blue and turquoise.
+HAR1_STRIKE_GBP_PER_MWH_HHV = 241.0
+HAR1_PRICE_YEAR = 2023
+H2_HHV_KWH_PER_KG = 39.41      # hydrogen's higher heating value, 141.8 MJ/kg (physical constant)
+
+
+# --- the price of bought blue hydrogen ---------------------------------------
+# Since 11 Nov 2026: BEIS, "Hydrogen Production Costs 2021" (17 Aug 2021), annex
+# sheet "2025_R": SMR with CCUS, 300 MW, commissioning 2025, total levelised cost on
+# the industrial LRVC gas price (the report's main basis, p. 24: "we assume that
+# plants face the industrial LRVC"), low / central / high gas, £/MWh H2 HHV in real
+# 2020 prices. The same process as this study's blue inventory: steam reforming
+# with 90 % capture (report p. 12; efficiency 74 % HHV against the inventory's
+# ~67 %, so the costed plant burns about 10 % less gas). UK government, the only
+# figure found for SMR with capture; NESO's blue table is autothermal reforming and
+# the European Hydrogen Observatory (3.05 £/kg, used until 11 Nov 2026) is not UK
+# government. No UK contract price for blue exists (checked 11 Nov 2026).
+BEIS_SMR_CCS_GBP_PER_MWH_HHV = {"low": 42.28259306822128, "central": 51.88816101327176,
+                                "high": 63.78630866001913}
+BEIS_H2_PRICE_YEAR = 2020
+
+
+def blue_beis_gbp_per_kg(case: str) -> float:
+    """BEIS 2021's SMR with capture per kg, in 2025 pounds (unrecorded)."""
+    return (BEIS_SMR_CCS_GBP_PER_MWH_HHV[case] * H2_HHV_KWH_PER_KG / 1000.0
+            * _price_base.factor(BEIS_H2_PRICE_YEAR))
+
+
+def green_har1_gbp_per_kg() -> float:
+    """The first round's strike price per kg, in 2025 pounds (unrecorded)."""
+    return (HAR1_STRIKE_GBP_PER_MWH_HHV * H2_HHV_KWH_PER_KG / 1000.0
+            * _price_base.factor(HAR1_PRICE_YEAR))
 
 
 def _resolve_grid_share(grid_share: float | None) -> float:
@@ -786,8 +848,9 @@ def headline_prices(green_neso, blue_neso):
         return {"low": min(low, central), "central": central, "high": max(high, central)}
     grey_c = eho_gbp_per_kg("SMR")
     grey = spread(_fossil_price("grey", "central")["total"], grey_c, grey_c * 1.15)
-    blue_c = eho_gbp_per_kg("Reforming with carbon capture")
-    blue = spread(blue_neso["central"], blue_c, blue_c * 1.15)
+    # Blue since 11 Nov 2026: BEIS's SMR with carbon capture, all three cases from
+    # the one document (see BEIS_SMR_CCS_GBP_PER_MWH_HHV).
+    blue = {c: blue_beis_gbp_per_kg(c) for c in CASES}
     green = spread(green_neso["low"], eho_gbp_per_kg("Renewable hydrogen directly connected"), green_neso["central"])
     return grey, blue, green
 
@@ -802,7 +865,9 @@ def price_table():
         for case in CASES:
             inv = INVENTORY[colour]
             if colour == "green":
-                total, stack = green_px[case], {}
+                # the first round's strike price; green_px (the Observatory) now
+                # feeds turquoise's blend only
+                total, stack = green_har1_gbp_per_kg(), {}
             elif colour == "blue":
                 total, stack = blue_px[case], {}
             elif colour == "turquoise":
@@ -826,12 +891,15 @@ def price_table():
                 "elec_kwh_per_kg": inv["elec_kwh_per_kg"],
                 "direct_co2_kg_per_kg": inv["direct_co2_kg_per_kg"],
                 "build_year": BUILD_YEAR,
-                "discount_rate": DISCOUNT[case],
-                "basis": {"green": "transcribed", "blue": "transcribed",
+                # a strike price has none; BEIS 2021's hurdle rate for blue is 10 %
+                "discount_rate": {"green": None, "blue": 0.10}.get(colour, DISCOUNT[case]),
+                "basis": {"green": "derived", "blue": "derived",
                           "grey": "derived", "turquoise": "constructed"}[colour],
                 "source": {
-                    "green": "NESO Green Hydrogen Data Portal, LCOH green 2025-2050",
-                    "blue": "NESO Green Hydrogen Data Portal, LCOH blue (ATR+CCS) 2025-2050",
+                    "green": "DESNZ, first hydrogen allocation round, weighted average strike price "
+                             "(HAR2 cost challenge guidance, 7 Apr 2025)",
+                    "blue": "BEIS, Hydrogen Production Costs 2021 annex, SMR with CCUS 300 MW, "
+                            "commissioning 2025, industrial LRVC gas",
                     "grey": "Derived: SMR inventory gas x DESNZ 2026 NBP gas price "
                             "+ scaled NESO blue non-fuel + UK ETS on direct CO2",
                     "turquoise": "Constructed: grey/green blend weighted by the "
@@ -882,9 +950,11 @@ def recommended_table():
          "low": round(blue_px["low"], 2),
          "central": round(blue_px["central"], 2),
          "high": round(blue_px["high"], 2),
-         "central_source": f"EHO UK {EHO_YEAR}, reforming with carbon capture",
-         "corroboration": f"NESO ATR+CCS {blue_neso['central']:.2f} "
-                          f"(cheaper route, used as low case)"},
+         "central_source": "BEIS Hydrogen Production Costs 2021 annex, SMR with CCUS 300 MW, 2025, "
+                           "industrial LRVC gas, 2020 prices",
+         "corroboration": f"was EHO UK {EHO_YEAR} reforming with carbon capture "
+                          f"{eho_gbp_per_kg('Reforming with carbon capture'):.2f}; "
+                          f"NESO ATR+CCS {blue_neso['central']:.2f}"},
         {"colour": "turquoise", "variant": "methane pyrolysis",
          "activity_code": _R.MP_E,
          "low": round(turq["low"], 2), "central": round(turq["central"], 2),
@@ -894,22 +964,22 @@ def recommended_table():
          "corroboration": f"direct energy cost "
                           f"{_fossil_price('turquoise','central')['total']:.2f}; "
                           f"IEA GHR 2026 pre-commercial, publishes no cost"},
+        # Both green sellers at the first round's strike price since 11 Nov 2026: the
+        # round publishes one figure, not a split by power arrangement or a range.
         {"colour": "green", "variant": "behind the meter, on-site renewables",
          "activity_code": _R.PEM_OP,
-         "low": round(green_px["low"], 2),
-         "central": round(green_px["central"], 2),
-         "high": round(green_px["high"], 2),
-         "central_source": f"EHO UK {EHO_YEAR}, renewable H2 directly connected",
-         "corroboration": f"NESO PEM cube {green_neso['low']:.2f}-{green_neso['central']:.2f} "
-                          f"at CF 0.7-0.5"},
+         **{c: round(green_har1_gbp_per_kg(), 2) for c in CASES},
+         "central_source": f"DESNZ HAR1 weighted average strike price, {HAR1_STRIKE_GBP_PER_MWH_HHV:g} GBP/MWh HHV, "
+                           f"{HAR1_PRICE_YEAR} prices",
+         "corroboration": f"was EHO UK {EHO_YEAR} directly connected {green_px['central']:.2f}; "
+                          f"NESO PEM cube {green_neso['low']:.2f}-{green_neso['central']:.2f} at CF 0.7-0.5"},
         {"colour": "green", "variant": "grid-connected electrolyser",
          "activity_code": _R.PEM_OP,
-         "low": round(min(green_neso["central"], eho_gbp_per_kg("Grid electrolysis")), 2),
-         "central": round(eho_gbp_per_kg("Grid electrolysis"), 2),
-         "high": round(green_neso["high"], 2),
-         "central_source": f"EHO UK {EHO_YEAR}, grid electrolysis",
-         "corroboration": f"includes {_eho_network_share()[0]:.2f} EUR/kg UK grid fees + taxes, "
-                          f"{_eho_network_share()[1]:.0%} of total"},
+         **{c: round(green_har1_gbp_per_kg(), 2) for c in CASES},
+         "central_source": f"DESNZ HAR1 weighted average strike price, {HAR1_STRIKE_GBP_PER_MWH_HHV:g} GBP/MWh HHV, "
+                           f"{HAR1_PRICE_YEAR} prices",
+         "corroboration": f"was EHO UK {EHO_YEAR} grid electrolysis {eho_gbp_per_kg('Grid electrolysis'):.2f} "
+                          f"(incl. {_eho_network_share()[0]:.2f} EUR/kg grid fees + taxes)"},
     ]
     return pd.DataFrame(rows)
 
@@ -928,7 +998,10 @@ def check_against_iea():
             # a grid-connected electrolyser pays, which in the UK are
             # 0.61 EUR/kg (2025). Exceeding the band there is a category difference,
             # not a disagreement, so it is exempted rather than flagged.
-            exempt = (colour == "green" and "grid-connected" in r["variant"])
+            # Since 11 Nov 2026 both green rows are the first round's strike price: a
+            # UK contract price for first-of-a-kind plants with return on capital,
+            # not a global production cost, so neither is held to IEA's band.
+            exempt = colour == "green"
             status = "ok" if inside else ("n/a — different scope" if exempt
                                           else "OUTSIDE")
             lines.append(f"  {colour:<10} {r['variant'][:34]:<34} "
@@ -951,7 +1024,7 @@ def check_against_inventory():
     """Verify the hardcoded coefficients still match the Brightway activities."""
     try:
         import bw2data as bd
-        bd.projects.set_current("hydrogen-smr")
+        import dc_config as _cfg; bd.projects.set_current(_cfg.PROJECT_NAME)
     except Exception as e:
         return f"skipped — Brightway unavailable ({type(e).__name__})"
     problems = []
@@ -1044,13 +1117,11 @@ def run():
     print("  %.2f GBP/kg H2, which would dominate everything else - see the module"
           % (CARBON_BLACK_USD_PER_KG * CARBON_KG_PER_KG_H2 / USD_PER_GBP_2025))
     print("  docstring for why the market cannot actually absorb it.")
-    gh = rec.query("colour=='green' and variant.str.contains('grid-connected')",
-                   engine="python")["high"].iloc[0]
-    print("  green tops out at %.2f for a grid-connected plant at CF %.2f on"
-          % (gh, GREEN_CASES["high"]["capacity_factor"]))
-    print("  %.0f GBP/MWh power at %.0f%% - an electrolyser that barely runs, on"
-          % (GREEN_CASES["high"]["electricity_price"], 100 * DISCOUNT["high"]))
-    print("  dear power, paying full UK network charges.")
+    print("  green is the first allocation round's strike price (%.0f GBP/MWh HHV, %d"
+          % (HAR1_STRIKE_GBP_PER_MWH_HHV, HAR1_PRICE_YEAR))
+    print("  prices) = %.2f GBP/kg in 2025 pounds, for both sellers and every case:"
+          % green_har1_gbp_per_kg())
+    print("  a contract price with return on capital, not a production cost.")
 
     print()
     print("=" * 92)

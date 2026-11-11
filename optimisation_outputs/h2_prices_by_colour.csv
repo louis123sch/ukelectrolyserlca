@@ -2,12 +2,12 @@ colour,case,price_GBP_per_kg,activity_code,activity_database,gas_m3_per_kg,elec_
 grey,low,2.29,smr_hermesmann_1kg_h2,hydrogen foreground,4.85,0.0,9.678685480725212,2025,0.06,derived,Derived: SMR inventory gas x DESNZ 2026 NBP gas price + scaled NESO blue non-fuel + UK ETS on direct CO2,1.599,-0.132,0.435,0.0,-0.0
 grey,central,2.29,smr_hermesmann_1kg_h2,hydrogen foreground,4.85,0.0,9.678685480725212,2025,0.06,derived,Derived: SMR inventory gas x DESNZ 2026 NBP gas price + scaled NESO blue non-fuel + UK ETS on direct CO2,1.599,-0.088,0.435,0.679,-0.0
 grey,high,2.63,smr_hermesmann_1kg_h2,hydrogen foreground,4.85,0.0,9.678685480725212,2025,0.08,derived,Derived: SMR inventory gas x DESNZ 2026 NBP gas price + scaled NESO blue non-fuel + UK ETS on direct CO2,1.599,-0.044,0.435,0.679,-0.0
-blue,low,2.9,smr_ccs_hermesmann_1kg_h2,hydrogen foreground,5.33,0.0,1.0646576002528945,2025,0.06,transcribed,"NESO Green Hydrogen Data Portal, LCOH blue (ATR+CCS) 2025-2050",,,,,
-blue,central,3.05,smr_ccs_hermesmann_1kg_h2,hydrogen foreground,5.33,0.0,1.0646576002528945,2025,0.06,transcribed,"NESO Green Hydrogen Data Portal, LCOH blue (ATR+CCS) 2025-2050",,,,,
-blue,high,3.51,smr_ccs_hermesmann_1kg_h2,hydrogen foreground,5.33,0.0,1.0646576002528945,2025,0.08,transcribed,"NESO Green Hydrogen Data Portal, LCOH blue (ATR+CCS) 2025-2050",,,,,
+blue,low,2.03,smr_ccs_hermesmann_1kg_h2,hydrogen foreground,5.33,0.0,1.0646576002528945,2025,0.1,derived,"BEIS, Hydrogen Production Costs 2021 annex, SMR with CCUS 300 MW, commissioning 2025, industrial LRVC gas",,,,,
+blue,central,2.5,smr_ccs_hermesmann_1kg_h2,hydrogen foreground,5.33,0.0,1.0646576002528945,2025,0.1,derived,"BEIS, Hydrogen Production Costs 2021 annex, SMR with CCUS 300 MW, commissioning 2025, industrial LRVC gas",,,,,
+blue,high,3.07,smr_ccs_hermesmann_1kg_h2,hydrogen foreground,5.33,0.0,1.0646576002528945,2025,0.1,derived,"BEIS, Hydrogen Production Costs 2021 annex, SMR with CCUS 300 MW, commissioning 2025, industrial LRVC gas",,,,,
 turquoise,low,2.55,mp_e_1kg_h2,hydrogen foreground,5.72,10.29,0.0,2025,0.06,constructed,Constructed: grey/green blend weighted by the MP-E inventory's own gas:electricity energy split,1.886,0.412,0.0,0.0,-0.0
 turquoise,central,2.57,mp_e_1kg_h2,hydrogen foreground,5.72,10.29,0.0,2025,0.06,constructed,Constructed: grey/green blend weighted by the MP-E inventory's own gas:electricity energy split,1.886,0.823,0.0,0.0,-0.0
 turquoise,high,3.75,mp_e_1kg_h2,hydrogen foreground,5.72,10.29,0.0,2025,0.08,constructed,Constructed: grey/green blend weighted by the MP-E inventory's own gas:electricity energy split,1.886,1.235,0.0,0.0,-0.0
-green,low,4.11,pem_op_gerloff_1kg_h2,hydrogen foreground,0.0,54.0,0.0,2025,0.06,transcribed,"NESO Green Hydrogen Data Portal, LCOH green 2025-2050",,,,,
-green,central,4.3,pem_op_gerloff_1kg_h2,hydrogen foreground,0.0,54.0,0.0,2025,0.06,transcribed,"NESO Green Hydrogen Data Portal, LCOH green 2025-2050",,,,,
-green,high,6.99,pem_op_gerloff_1kg_h2,hydrogen foreground,0.0,54.0,0.0,2025,0.08,transcribed,"NESO Green Hydrogen Data Portal, LCOH green 2025-2050",,,,,
+green,low,10.22,pem_op_gerloff_1kg_h2,hydrogen foreground,0.0,54.0,0.0,2025,,derived,"DESNZ, first hydrogen allocation round, weighted average strike price (HAR2 cost challenge guidance, 7 Apr 2025)",,,,,
+green,central,10.22,pem_op_gerloff_1kg_h2,hydrogen foreground,0.0,54.0,0.0,2025,,derived,"DESNZ, first hydrogen allocation round, weighted average strike price (HAR2 cost challenge guidance, 7 Apr 2025)",,,,,
+green,high,10.22,pem_op_gerloff_1kg_h2,hydrogen foreground,0.0,54.0,0.0,2025,,derived,"DESNZ, first hydrogen allocation round, weighted average strike price (HAR2 cost challenge guidance, 7 Apr 2025)",,,,,

@@ -3,20 +3,21 @@ Hydrogen storage — embodied carbon per kg of capacity.
 =============================================================================
 
 The one asset in the hydrogen chain that was already the right shape. ecoinvent
-3.9.1 has no hydrogen vessel, so ``optimiser_lca/h2_tank.py`` builds one the
-way Gandiglio et al. (2022) do — as a mass of steel and nothing else — with a
-reference product of **one kilogram of storage capacity**. That is already a
+3.9.1 has no hydrogen vessel, so ``optimiser_lca/h2_tank.py`` builds one — as a
+mass of steel, its rolling, a frame and a pad — with a reference product of
+**one kilogram of storage capacity**. Since 4 Nov 2026 the built vessel is a bulk
+carbon-steel vessel at 28 bar (161.2 kg of steel per kg of hydrogen, unalloyed
+steel hot-rolled to plate since 11 Nov 2026); Gandiglio et al. (2022)'s small
+stainless vessel, the default before, stays in the table. That is already a
 capacity basis, so unlike the electrolyser and the fuel cell there is nothing to
-decompose: this module reads it, amortises it, and offers the second design the
-config defines but does not build.
+decompose: this module reads it, amortises it, and scores the other designs.
 
 What it adds over reading the activity directly:
 
-1. **Both tank designs**, not just the one ``h2_tank.TANK_DESIGN``
-   currently selects, so the optimiser can run 28 bar against 200 bar as a
-   sensitivity without a foreground rebuild. The as-built design is
-   cross-checked against Brightway; the other is scored from its own steel
-   process at its own steel intensity.
+1. **Every tank design**, not just the one ``h2_tank.TANK_DESIGN``
+   currently selects, so another design can be run without a foreground
+   rebuild. The as-built design is cross-checked against Brightway; the
+   others are scored from their own steel process at their own steel intensity.
 2. **The charging parasitic**, which belongs to storage and not to the
    electrolyser: compression from the electrolyser's delivery pressure to the
    tank's. Zero for the 28 bar design, because the electrolyser already leaves
@@ -25,10 +26,11 @@ What it adds over reading the activity directly:
 
 Why steel mass alone is defensible, and where it is not
 ------------------------------------------------------
-Gandiglio's inventory is one line: 15,652 kg of chromium steel 18/8 for a
-21.6 m3, 28 bar vessel. Missing are foundations, the enclosure, valves and
-instrumentation, and end-of-life. The notebook says so, and so does this module.
-Against that, steel is the overwhelming majority of a pressure vessel's embodied
+The vessel is its steel (the thin-wall formula for the carbon-steel vessel;
+Gandiglio's one line, 15,652 kg of chromium steel 18/8 for a 21.6 m3 vessel, for
+theirs), its rolling, and an assumed frame and pad. Missing are the enclosure,
+bending and welding, valves and instrumentation (cut-off register), and
+end-of-life. Steel is the overwhelming majority of a pressure vessel's embodied
 carbon, so the figure is a defensible lower bound rather than a guess.
 
 Standing loss is from a government-commissioned report, on another class of vessel
@@ -51,16 +53,18 @@ Sources
 standing loss     Frazer-Nash Consultancy for BEIS (March 2022), "Fugitive Hydrogen
                   Emissions in a Future Hydrogen Economy", FNC 012865-53172R Issue 1,
                   section 4.4, p. 29: 0.005 to 0.01 % per hour.
-inventory         Gandiglio, M., Marocco, P., Bianco, I., Lovera, D.,
-                  Blengini, G.A., Santarelli, M. (2022), "Life cycle assessment
-                  of a renewable energy system with hydrogen-battery storage
-                  for a remote off-grid community", Int. J. Hydrogen Energy 47.
-                  Table 3 — the as-built 21.6 m3 vessel at Ginostra.
+inventory         the default: a bulk carbon-steel vessel at 28 bar, DERIVED by
+                  the thin-wall formula (SA-516 Gr 70), see optimiser_lca/h2_tank.py.
+                  Kept in the table: Gandiglio, M., Marocco, P., Bianco, I.,
+                  Lovera, D., Blengini, G.A., Santarelli, M. (2022), "Life cycle
+                  assessment of a renewable energy system with hydrogen-battery
+                  storage for a remote off-grid community", Int. J. Hydrogen
+                  Energy 47, Table 5 — the 21.6 m3 stainless vessel at Ginostra.
 type I cylinder   ~1 wt% gravimetric capacity, a typical industrial stationary
                   bottle. DERIVED, not transcribed — see optimiser_lca/h2_tank.py.
 embodied carbon   ecoinvent 3.9.1 apos, IPCC 2021 GWP100.
-vessel lifetime   25 years, the paper's own plant life. The tank is never
-                  replaced within it.
+vessel lifetime   25 years (dc_config.TANK_LIFETIME_YEARS), the data centre's own
+                  life, so the tank is never replaced. No tank-specific source.
 
 Every number in this module is listed in ``SOURCES.md`` alongside its
 source and provenance grade (transcribed / derived / assumed).
@@ -178,13 +182,14 @@ def decompose(use_cache: bool = True, refresh: bool = False):
     ei, _bio, _fg, _m = H.setup_brightway()
     method = _gwp_method(bd)
 
-    # Frame and pad (14 Oct 2026) and the shell's forming (22 Oct 2026), scored
-    # once per unit and applied per design. The forming is sheet rolling of
-    # chromium steel on the shell mass, as the inventory carries it; the 200 bar
-    # low-alloy design takes the same per-kg factor as a stand-in (ASSUMED).
+    # Frame and pad (14 Oct 2026) and the shell's rolling step (22 Oct 2026), scored
+    # once per unit and applied per design: each design's own rolling step on its
+    # shell mass (hot rolling of unalloyed steel for the carbon-steel vessel since
+    # 11 Nov 2026; sheet rolling for Gandiglio's stainless and the 200 bar cylinder),
+    # and the frame in hot-rolled unalloyed steel for every design.
     unit = {k: H.run_lca_score(H.resolve_exact(*h2_tank.ALL_PROCESSES[k].identity), method)
-            for k in ("steel_low_alloyed_hr", "concrete_normal", "reinforcing_steel", "sheet_rolling_cr_steel",
-                      "sheet_rolling_steel")}
+            for k in ("concrete_normal", "reinforcing_steel", "sheet_rolling_cr_steel", "sheet_rolling_steel",
+                      *h2_tank.FRAME_PROCESSES)}
 
     rows = []
     for name, design in TANK_DESIGNS.items():
@@ -194,7 +199,7 @@ def decompose(use_cache: bool = True, refresh: bool = False):
         per_kg_steel = H.run_lca_score(steel, method)
         intensity = steel_kg_per_kg_h2(design)
         f = h2_tank.foundations_per_kg_h2(design)
-        foundations = (f["frame_kg"] * unit["steel_low_alloyed_hr"]
+        foundations = (f["frame_kg"] * sum(unit[k] for k in h2_tank.FRAME_PROCESSES)
                        + f["concrete_m3"] * unit["concrete_normal"]
                        + f["rebar_kg"] * unit["reinforcing_steel"])
         forming = intensity * unit[design.get("forming_process", "sheet_rolling_cr_steel")]
@@ -336,11 +341,10 @@ def run():
         per_kwh = r["kgco2e_per_kg_capacity"] / kwh_out_per_kg
         print(f"  {r['design']:<22}{per_kwh:>28,.1f}{per_kwh / b_energy:>12,.1f}x")
     print(f"  {'Li-ion battery (LFP)':<22}{b_energy:>28,.1f}{1.0:>12,.1f}x")
-    print("\n  The 28 bar steel vessel is a Gandiglio as-built low-pressure buffer, and")
-    print("  per deliverable kWh it is barely better than a lithium battery. The 200 bar")
-    print("  Type I cylinder is roughly seven times better. Which design the study uses")
-    print("  is therefore not a detail — it decides whether hydrogen storage has an")
-    print("  embodied-carbon advantage at all. Run both.")
+    print("\n  The as-built design is marked *. Gandiglio's small stainless buffer, the default")
+    print("  until 4 Nov 2026, is several times the carbon-steel vessel per kWh: which vessel")
+    print("  the study uses is not a detail. Since 11 Nov 2026 the tank's test is its own")
+    print("  carbon at x0.5 / x1.5 (sensitivity.TANK_PUSH).")
 
     if any(r["leakage_is_assumed"] for r in rows):
         print(f"\n  ASSUMED: standing loss = {LEAKAGE_FRAC_PER_HOUR:.4g} /h, no source. "

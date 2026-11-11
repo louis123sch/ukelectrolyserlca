@@ -391,7 +391,7 @@ def tank_cost(case: str) -> dict:
     import dc_config as cfg
     life = T.cost("cost.h2_tank.life_years", float(cfg.TANK_LIFETIME_YEARS), "years",
                   "Tank life: the plant's, never replaced", grade="assumed",
-                  note="dc_config.TANK_LIFETIME_YEARS, Gandiglio's plant lifetime")
+                  note="dc_config.TANK_LIFETIME_YEARS: the data centre's own 25 years, no tank-specific source")
     rate = T.cost("cost.h2_assets.discount_rate", FC_DISCOUNT_RATE, "fraction per year",
                   "Discount rate for the fuel cell and tank: CEPA's hydrogen-to-power and novel storage rate",
                   grade="transcribed", cites=[("cepa_hurdle_rates_2025", "Table E.1, hydrogen CCHT/OCHT emerging and "
@@ -443,7 +443,7 @@ def major_hazard_cost(case: str) -> dict:
                   note="No fuel cell or hydrogen store row in the table; the nearest two agree")
     life = T.cost("cost.h2_tank.life_years", float(cfg.TANK_LIFETIME_YEARS), "years",
                   "Tank life: the plant's, never replaced", grade="assumed",
-                  note="dc_config.TANK_LIFETIME_YEARS, Gandiglio's plant lifetime")
+                  note="dc_config.TANK_LIFETIME_YEARS: the data centre's own 25 years, no tank-specific source")
     crf = T.cost("cost.h2_tank.crf", capital_recovery_factor(rate, life), "per year",
                  "Capital recovery factor over the tank's life",
                  uses=["cost.h2_assets.discount_rate", "cost.h2_tank.life_years"])

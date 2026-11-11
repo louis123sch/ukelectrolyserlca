@@ -434,9 +434,11 @@ CARBON_KNOBS = {
     "batt_usable_fraction": [0.85, 0.95],
     "green_h2_grid_share": [0.0, 1.0],
     "tank_leakage_per_hour": [0.0, 0.01 / 100],     # none, and Frazer-Nash's high end
-    "wind_life_extension": ["none", "servicing"],
-    "fc_stack_basis": ["gramc_2025"],
-    "batt_cell_basis": ["voss_de", "jasper_fig4_311"],
+    # Since 11 Nov 2026 a percentage change, not a swap of source or basis (user):
+    # wind's life-extension parts and the fuel cell stack's carbon at x0.5 / x1.5. The
+    # battery cell swap is dropped; the battery's own push covers it (SHAKY_KNOBS).
+    "push": [f"{k}*{f}" for k in ("onshore_wind.parts_fraction", "coefficient.gwp_fc_stack_per_mw")
+             for f in (0.5, 1.5)],
     "wind_net_factor": [1.0],
     # The container step-ups' ASSUMED loadings, and a standby fuel cell's unit
     # de-energised (conversion_losses.py, 15 Oct).
@@ -486,9 +488,14 @@ def connection(cases=CONNECTION_CASES, points: int = 3, resume: bool = True,
 # are scope readings: wind and solar without their own grid connection, and the
 # tank paying insurance and rates outside its running cost (wind's ratio). The
 # battery's cap is the longest duration its UK price covers (battery.py).
+# Since 11 Nov 2026 the tank's test is its own carbon (the carbon-steel vessel) at
+# x0.5 and x1.5, like every other unsourced range (user: a percentage change where
+# possible), in place of the switch to Gandiglio's stainless buffer, which stays in
+# h2_tank.TANK_DESIGNS but is no longer tested.
+TANK_PUSH = ["coefficient.gwp_tank*0.5", "coefficient.gwp_tank*1.5"]
 ASSUMPTION_KNOBS = {
     "cost_case": ["low", "high"],
-    "tank_design": ["gandiglio_28bar"],
+    "push": TANK_PUSH,
     "fc_bop_calendar_years": [15.0, 25.0],
     "fc_stack_calendar_years": [5.0, 15.0],
     "fc_stack_duty_hours": [20_000.0, 40_000.0],
@@ -542,13 +549,14 @@ SHAKY_KNOBS = {
     "push": [f"{k}*{f}" for k in ("cost.fuel_cell.capex_per_kW",        # one plant (Baringa), thin evidence
                                   "battery.energy_per_usable_kWh",      # battery carbon (supervisor)
                                   "coefficient.cost_ely",               # NESO electrolyser, no range
-                                  "cost.bought_h2.green.delivered")     # bought hydrogen price (supervisor)
+                                  "cost.bought_h2.green.delivered",     # bought hydrogen price (supervisor)
+                                  "coefficient.gwp_tank",               # tank carbon, since 11 Nov 2026 (TANK_PUSH)
+                                  # since 11 Nov 2026 in place of swaps (user): wind's life-extension
+                                  # parts and the stack's carbon; the battery cell swap is dropped
+                                  "onshore_wind.parts_fraction",
+                                  "coefficient.gwp_fc_stack_per_mw")
              for f in (0.5, 1.5)],
-    "batt_cell_basis": ["voss_de", "jasper_fig4_311"],
     "green_h2_grid_share": [0.0, 1.0],          # the electricity the seller runs on
-    "wind_life_extension": ["none", "servicing"],
-    "tank_design": ["gandiglio_28bar"],
-    "fc_stack_basis": ["gramc_2025"],
     # act through how the plant runs: only a solve can judge them
     "fc_stack_calendar_years": [5.0, 15.0],
     "fc_stack_duty_hours": [20_000.0, 40_000.0],

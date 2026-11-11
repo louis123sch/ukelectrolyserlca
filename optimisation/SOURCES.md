@@ -66,9 +66,11 @@ low-cost scenario is paired with a **high** load factor and lifetime.
 | Colour | Central | Grade | Source |
 |---|---|---|---|
 | grey (SMR) | £2.93/kg | transcribed | European Hydrogen Observatory, *Hydrogen production costs 2024*, UK rows, technology "SMR" |
-| blue (SMR+CCS) | £3.78/kg | transcribed | Same, technology "Reforming with carbon capture" — matches `smr_ccs_hermesmann`. NESO's ATR+CCS (£2.90) is the cheaper-route low case |
-| green, behind meter | £4.93/kg | transcribed | Same, "Renewable hydrogen directly connected to a renewable electricity generation source" |
-| green, grid-connected | £8.33/kg | transcribed | Same, "Grid electrolysis". Includes €2.77/kg of UK grid fees and taxes — 29 % of its total |
+| blue (SMR+CCS), since 11 Nov 2026 | **£2.50/kg** (2025 £); low £2.03, high £3.07 | **derived** | BEIS, *Hydrogen Production Costs 2021*, annex sheet "2025_R": SMR with CCUS, 300 MW, commissioning 2025, total levelised cost on the industrial LRVC gas price (the report's main basis, p. 24), low / central / high gas: 42.28 / 51.89 / 63.79 £/MWh H₂ HHV in 2020 prices, × 39.41 kWh/kg and the GDP deflator 2020→2025. UK government, and the same process as `smr_ccs_hermesmann` (steam reforming, 90 % capture, p. 12), though at 74 % HHV efficiency against the inventory's ~67 %. Includes its own CO₂ transport and storage and carbon cost (at £28/t, 2020). Replaced the row below; NESO's ATR+CCS (£2.90) is a different process and stays a check. No UK contract price for blue exists (11 Nov 2026) |
+| blue (SMR+CCS), until 11 Nov 2026 | £3.05/kg (2025 workbook); £3.78 (2024) | transcribed | European Hydrogen Observatory, technology "Reforming with carbon capture"; NESO's ATR+CCS the low case |
+| green, both sellers (since 11 Nov 2026) | **£10.22/kg** (2025 £), every cost case | **derived** | DESNZ, *HAR2: cost challenge guidance for shortlisted projects on being cost competitive* (7 Apr 2025): the first hydrogen allocation round's "weighted average strike price of 241 £/MWh H2 (HHV)", footnote 1 "In 2023 real prices"; × 39.41 kWh/kg (HHV) = £9.50/kg, × the GDP deflator 2023→2025. What producers being built in the UK are guaranteed, return on capital included; slightly understates full cost (grant-funded capital and levies are outside it). Not what a buyer pays (about gas parity). The only round with published prices (checked 11 Nov 2026). Replaced the two rows below |
+| green, behind meter (until 11 Nov 2026) | £4.93/kg | transcribed | Same Observatory workbook, "Renewable hydrogen directly connected to a renewable electricity generation source" |
+| green, grid-connected (until 11 Nov 2026) | £8.33/kg | transcribed | Same, "Grid electrolysis". Includes €2.77/kg of UK grid fees and taxes — 29 % of its total |
 | turquoise (pyrolysis) | £3.21/kg | **derived** | Constructed: 86 % grey + 14 % green, weighted by the MP-E inventory's own gas:electricity energy split (62.8 kWh gas + 10.3 kWh electricity per kg, HHV) |
 
 Supporting inputs:
@@ -191,25 +193,38 @@ both terms were short even for one: the gross-up left CHP and import kWh out of
 "generation" (corrected low voltage: ×1.1132) and the network omitted the N₂O and
 the direct SF₆ (corrected: 11.30 g/kWh).
 
-**The default is a 50:50 mix of the two, not one or the other.** A buyer
-contracting on the open market gets a portfolio, not one plant.
-`build_tech(green_h2_grid_share=...)` sets the fraction taken over the network
-and defaults to `h2_prices.GREEN_H2_GRID_SHARE` = 0.5, blending price and delivery
-burden together so the two can never be mismatched; `h2_variant=` pins a single
-row instead. Previously an undocumented `.iloc[0]` made the second row
-unreachable.
+**The default is a 70:30 mix, networked to behind the meter, since 11 Nov 2026**
+(50:50 before). A buyer contracting on the open market gets a portfolio, not one
+plant. `build_tech(green_h2_grid_share=...)` sets the fraction taken over the
+network and defaults to `h2_prices.GREEN_H2_GRID_SHARE` = 0.7, blending the two
+rows' price and delivery burden together; `h2_variant=` pins a single row instead.
+Since 11 Nov 2026 both rows carry the first round's strike price, so the share
+moves carbon only and the £/kg column below is £10.22 throughout. Previously an
+undocumented `.iloc[0]` made the second row unreachable.
+
+**Where 0.7 comes from (derived, 11 Nov 2026).** DESNZ's ten signed first-round
+projects (HAR1 successful projects, 14 Dec 2023; contracts signed, press release
+23 Jul 2025), 119.8 MW, with each project's power arrangement from its own
+material: 32.2 MW beside a wind or solar farm (Cromarty 10.6, HyMarnham 9.3,
+Whitelee 7.1, Tees Green 5.2); 42.1 MW on contracted power over the network,
+confirmed (Barrow 21.0, Green Hydrogen 3 10.6, Trafford 10.5); 45.7 MW unstated
+(Bradford 24.5, West Wales 14.2, Langage 7.0). 0.35 on confirmed projects, 0.73 if
+the three are networked. DESNZ, *Hydrogen Update to the Market: July 2025*, p. 19:
+of first- and second-round projects, "most of these projects aim to use long term
+power purchase agreements powered by multiple generation assets". By energy the
+share is higher, the co-located plants importing too. Swept 0 and 1.
 
 | grid share | electricity g/kWh | kg CO₂e/kg | £/kg | kg CO₂e/MWh |
 |---|---|---|---|---|
 | 0.00 — all behind the meter | 14.466 | 0.9762 | 4.93 | 61.66 |
-| **0.50 — default** | **15.676** | **1.0416** | **6.63** | **65.79** |
+| 0.50 — the default until 11 Nov 2026 | 15.676 | 1.0416 | 6.63 | 65.79 |
+| **0.70 — default since 11 Nov 2026** | **16.161** | **1.0677** | **10.22** | **67.44** |
 | 1.00 — all grid-connected | 16.887 | 1.1069 | 8.33 | 69.91 |
 
-The share is **ASSUMED**, and is the weakest input in this section: no GB
-breakdown of green hydrogen production by connection type is published, and at
-the current size of the GB electrolyser fleet any such split would be dominated by
-a handful of projects. 50:50 is a neutral prior, exposed as a parameter precisely
-so it can be swept rather than trusted.
+(The £/kg column is the Observatory's, before 11 Nov 2026, except the 0.70 row; the
+0.70 row's carbon is linear between the two ends.) Until 11 Nov 2026 the share was
+**ASSUMED**: no GB breakdown of green hydrogen production by connection type had
+been found, and 50:50 was a neutral prior.
 
 Both effects run the same way, which is the reassuring part: £8.33/kg is £4.93
 plus €2.77/kg of UK network fees and taxes, and the grid-connected route pays more
@@ -1063,8 +1078,8 @@ Hydrogen is excluded from every coefficient — the LP supplies it explicitly.
 
 | Input | Value | Grade | Source |
 |---|---|---|---|
-| **Bulk carbon-steel vessel, 28 bar** (as built since 4 Nov 2026, evening) | **161.2 kg low-alloyed steel per kg H₂**, formed by sheet rolling of steel (0.39 kg CO₂e per kg) | **derived** | The thin-wall cylinder formula (SA-516 Gr 70 at 138 MPa allowable, 110 % design pressure, 3 mm corrosion allowance, hemispherical heads): 161–167 kg per kg for 95–500 m³ vessels, and the same at 50 and 80 bar. The class of vessel the cost side prices (Element Energy's 95 m³), so cost and carbon describe one vessel. A substitution under the cut-off rule's clause, on a stated physical check: Gandiglio's 313 kg of stainless per kg is a 21.6 m³ buffer set by its minimum plate, not a bulk store. Reported as a sensitivity: Gandiglio's vessel below |
-| Gandiglio 28 bar vessel (the sensitivity) | 312.8 kg steel per kg H₂ → **1,595 kg CO₂e per kg** capacity (shell only; forming, frame and pad added) | transcribed | Gandiglio et al. 2022, Table 5; the as-built default until 4 Nov 2026 |
+| **Bulk carbon-steel vessel, 28 bar** (as built since 4 Nov 2026, evening) | **161.2 kg of steel per kg H₂**: unalloyed (2.05 kg CO₂e per kg), hot-rolled to plate once (0.28) since 11 Nov 2026; was low-alloyed hot-rolled steel (2.50) plus sheet rolling (0.39), the rolling counted twice | **derived** | The thin-wall cylinder formula (SA-516 Gr 70 at 138 MPa allowable, 110 % design pressure, 3 mm corrosion allowance, hemispherical heads): 161–167 kg per kg for 95–500 m³ vessels, and the same at 50 and 80 bar. The class of vessel the cost side prices (Element Energy's 95 m³), so cost and carbon describe one vessel. A substitution under the cut-off rule's clause, on a stated physical check: Gandiglio's 313 kg of stainless per kg is a 21.6 m³ buffer set by its minimum plate, not a bulk store. Reported as a sensitivity: Gandiglio's vessel below **Since 11 Nov 2026 the tank's test is its own carbon at ×0.5 and ×1.5** (`sensitivity.TANK_PUSH`, a push on `coefficient.gwp_tank`), not the switch to Gandiglio's vessel (user). |
+| Gandiglio 28 bar vessel (the sensitivity until 11 Nov 2026; no longer tested) | 312.8 kg steel per kg H₂ → **1,595 kg CO₂e per kg** capacity (shell only; forming, frame and pad added) | transcribed | Gandiglio et al. 2022, Table 5; the as-built default until 4 Nov 2026 |
 | Type I 200 bar cylinder | 100 kg steel per kg H₂ → **250 kg CO₂e per kg** capacity | assumed | ~1 wt% gravimetric capacity, a typical industrial stationary bottle. No Brightway activity exists for it |
 | Vessel lifetime | 25 y, never replaced within it | transcribed | The paper's own plant life |
 | Standing loss | **0.005 %/h** (0.12 %/day) since 5 Nov 2026; swept 0 to 0.01 %/h | **transcribed**, from another class of vessel | Frazer-Nash Consultancy for BEIS, *Fugitive Hydrogen Emissions in a Future Hydrogen Economy* (March 2022, FNC 012865-53172R Issue 1), section 4.4, p. 29: "Leakage rates from compressed gas cylinders range from 0.005 to 0.01 % per hour". Its sources are a DOE vessel and a Mahytec 500 bar, 160-300 l datasheet (refs 27, 28, p. 49), and it says larger cylinders lose less, so the **low end** is taken for this bulk 28 bar vessel and as a rate probably errs high; the model charges it on the usable stock only, which errs low. Mott MacDonald for BEIS, *Storage cost and technical assumptions* (8 Aug 2018): 0.1 to 0.5 %/day, section 2.10.1, p. 29; 2,500 h to lose 20 %, Table 53, p. 76 (0.21 %/day). No boil-off exists for compressed gas at ambient temperature; the real losses are fittings and valves. Was zero and assumed until 5 Nov, swept 14 Oct at 0.01 and 0.1 %/day, an assumed range below this report's. The leaked H₂'s own GWP is charged since 14 Oct (`dc_model.H2_GWP100`) |
@@ -1428,7 +1443,7 @@ stated row by row.
 
 | Input | Value (real 2025 GBP) | Grade | Source and why it is weak |
 |---|---|---|---|
-| Fuel cell capex | £946 / £2,215 / £2,700 per kW | derived | Central and high: Baringa for DESNZ, *Hydrogen to Power Costs and Barriers* (9 Dec 2025), §4.4: the 80 MW Korean plant at about £2,700/kW, less about £485/kW of purification in the central (this hydrogen is not pipeline-supplied). Low, since 4 Nov 2026 (evening): the US national laboratory's modelled 100 MW plant, NLR/TP-5400-91146 Table 18, $1,352/kW (2022 $) less its US sales tax ($143) and grid spur ($100), inflated in dollars (World Bank deflator) then the FES rate; Baringa's own floor was the same document as its central, so no real range. Limited evidence by Baringa's own account; 3-year build (NLR Table 12) carried at the rate |
+| Fuel cell capex | £946 / £2,215 / £2,700 per kW | derived | Central and high: Baringa for DESNZ, *Hydrogen to Power Costs and Barriers* (9 Dec 2025), §4.4: the 80 MW Korean plant at about £2,700/kW, less about £485/kW of purification in the central (this hydrogen is not pipeline-supplied). Low, since 4 Nov 2026 (evening): the US national laboratory's modelled 100 MW plant, NLR/TP-5400-91146 Table 18, $1,352/kW (2022 $) less its US sales tax ($143) and grid spur ($100), inflated in dollars (World Bank deflator) then the FES rate; Baringa's own floor was the same document as its central, so no real range. Limited evidence by Baringa's own account; 3-year build (NLR Table 12) carried at the rate. **Caveat (11 Nov 2026):** Baringa calls the Korean plant (Shinincheon, 78.96 MW) a PEM facility, but Doosan supplied 124 of its 440 kW units (Doosan release, 2 Nov 2021), which its datasheet calls phosphoric-acid (PureCell Model 400); the rest came from POSCO Energy. Kept as the government's figure (user, 11 Nov 2026): Baringa's p. 52 membrane figures (equipment over £1,300/kW, installed more than double) and its p. 55 conclusion (over £2,500/kW) agree with it, and no other UK government fuel cell cost exists |
 | Fuel cell maintenance | £42 / £48 / £48 per kW per year, taken as 2017 £ | transcribed | Element Energy for BEIS, *Hydrogen supply chain evidence base* (Nov 2018), p. 94, 1.4 MWe. Rests on Roland Berger 2015, converted to pounds, so inflating from 2017 may understate |
 | Fuel cell insurance | 0.23 % of capital | proxy | Onshore wind's ratio (DESNZ/Arup Table 3). An estimate carried because leaving it out fails the 1 % test (`cost_exclusions.py`) |
 | Stack share of capital | **21.1 %** (€400 of €1,900) | derived | Clean Hydrogen Partnership SRIA KPIs, Table 21, 51–500 kWe PEM stationary units, 2020 state of the art: stack production cost €400/kWe on a €1,900/kW system (excluding power conversion and site). Since 4 Nov 2026 (evening). The UK figure, Element Energy's 45 % (£1,200 replacement over £2,642 installed, read off a chart), sat above every other share read (Battelle 22–41 % with the fuel processor out; Roland Berger 34 %; NLR's module 17 %) and is the high case of a sweep (`FC_STACK_COST_FRACTION_UK_HIGH`). 17.2 % until 4 Nov, frozen from a carbon split |

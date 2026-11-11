@@ -145,8 +145,8 @@ def build(cost_case: str = "central") -> pd.DataFrame:
                      duty=d["stack_lifetime_hours"],
                      source="Babatunde et al. 2024 Table S1; stack life their §3.4",
                      grade="assumed",
-                     note="calendar life 10 y ASSUMED — sweep 5/10/15 y; Gramc 2025 "
-                          "stack is the sensitivity basis; see DATA_GAPS.md"))
+                     note="calendar life 10 y ASSUMED — sweep 5/10/15 y; stack carbon tested at x0.5/x1.5 "
+                          "(since 11 Nov 2026; Gramc 2025 kept, untested); see DATA_GAPS.md"))
     rows.append(_row("fuel_cell_maintenance", "MW", 0.0,
                      throughput=d["maintenance_kgco2e_per_MWh"],
                      source="Usai 2021 air filter + coolant per 8,000 h",

@@ -733,9 +733,11 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
 
     ``green_h2_grid_share`` is the fraction of bought green hydrogen taken over
     the network rather than from behind a generator's meter, and defaults to
-    ``h2_prices.GREEN_H2_GRID_SHARE`` (0.5). It blends the two green price rows
-    and their delivery burdens together, since both are renewable and differ only
-    in how the electricity reaches the seller's electrolyser.
+    ``h2_prices.GREEN_H2_GRID_SHARE`` (0.7 since 11 Nov 2026, from the first
+    allocation round's projects). It blends the two green rows and their delivery
+    burdens, since both are renewable and differ only in how the electricity
+    reaches the seller's electrolyser. Both rows carry the same price since
+    11 Nov 2026 (the first round's strike price), so it moves carbon only.
 
     ``h2_variant`` pins one row of ``h2_prices_recommended.csv`` instead of
     blending; only green has two. Passing it overrides ``green_h2_grid_share``.
@@ -969,13 +971,43 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
             """The recommended-table price of one row, recorded with where it came from."""
             slug = "_".join(str(r.variant).replace(",", "").split())
             src = str(r.central_source)
+            key = f"cost.bought_h2.{colour}.{slug}.plant_gate"
+            if src.startswith("DESNZ HAR1"):
+                # green since 11 Nov 2026: the first allocation round's strike price
+                strike = T.cost(f"cost.bought_h2.{colour}.har1_strike_per_MWh", h2_prices.HAR1_STRIKE_GBP_PER_MWH_HHV,
+                                "GBP per MWh H2 (HHV)", "First hydrogen allocation round, weighted average strike "
+                                f"price, {h2_prices.HAR1_PRICE_YEAR} prices", grade="transcribed",
+                                cites=[("desnz_har2_cost_challenge_2025", "'a weighted average strike price of "
+                                        "241 £/MWh H2 (HHV)', footnote 1 'In 2023 real prices'")],
+                                note="What the producer is guaranteed, return on capital included; one figure "
+                                     "for both sellers and every cost case")
+                infl = P.to_2025(h2_prices.HAR1_PRICE_YEAR)
+                return T.cost(key, float(r[cost_case]), "GBP per kg H2",
+                              f"Bought {colour} hydrogen at the plant gate: {r.variant}, 2025 pounds",
+                              grade="derived",
+                              uses=[f"cost.bought_h2.{colour}.har1_strike_per_MWh",
+                                    f"price_base.{h2_prices.HAR1_PRICE_YEAR}_to_2025"],
+                              inputs={"GBP_per_MWh_HHV": strike, "kWh_HHV_per_kg": h2_prices.H2_HHV_KWH_PER_KG,
+                                      "to_2025": infl},
+                              note=f"{src}. Previously: {r.corroboration}"), key
+            if src.startswith("BEIS"):
+                # blue since 11 Nov 2026: converted from £/MWh HHV in 2020 prices
+                return T.cost(key, float(r[cost_case]), "GBP per kg H2",
+                              f"Bought {colour} hydrogen at the plant gate: {r.variant}, 2025 pounds",
+                              grade="derived",
+                              cites=[("beis_h2_costs_2021", f"sheet 2025_R, SMR with CCUS 300MW, total LCOH, "
+                                                            f"Industrial LRVC ({cost_case.capitalize()})")],
+                              uses=[f"price_base.{h2_prices.BEIS_H2_PRICE_YEAR}_to_2025"],
+                              inputs={"GBP_per_MWh_HHV": h2_prices.BEIS_SMR_CCS_GBP_PER_MWH_HHV[cost_case],
+                                      "kWh_HHV_per_kg": h2_prices.H2_HHV_KWH_PER_KG,
+                                      "to_2025": P.to_2025(h2_prices.BEIS_H2_PRICE_YEAR)},
+                              note=f"{src}. Previously: {r.corroboration}"), key
             cites = [("eho_uk_2025", f"{src}; the {cost_case} column of optimisation_outputs/"
                                      "h2_prices_recommended.csv")] if src.startswith("EHO") else []
-            return T.cost(f"cost.bought_h2.{colour}.{slug}.plant_gate", float(r[cost_case]), "GBP per kg H2",
+            return T.cost(key, float(r[cost_case]), "GBP per kg H2",
                           f"Bought {colour} hydrogen at the plant gate: {r.variant}",
                           grade="transcribed" if cites else "derived", cites=cites,
-                          note=f"{src}. Range check: {r.corroboration}"), \
-                f"cost.bought_h2.{colour}.{slug}.plant_gate"
+                          note=f"{src}. Range check: {r.corroboration}"), key
         rec = pd.read_csv(OUT_DIR / "h2_prices_recommended.csv")
         row = rec[rec.colour == colour]
         if row.empty:
@@ -996,7 +1028,13 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
             # left the second unreachable.
             share = T.cost(f"cost.bought_h2.{colour}.grid_share", h2_prices._resolve_grid_share(green_h2_grid_share),
                            "fraction", "Share of the green hydrogen bought from grid-connected electrolysers",
-                           grade="assumed", note="h2_prices.GREEN_H2_GRID_SHARE unless the run sets it")
+                           grade="derived",
+                           cites=[("desnz_har1_successful_2023", "the signed projects and their capacities"),
+                                  ("desnz_h2_update_july_2025", "p. 19: 'most of these projects aim to use long term "
+                                                                "power purchase agreements'")],
+                           note="h2_prices.GREEN_H2_GRID_SHARE unless the run sets it: 0.35 confirmed to 0.73 by "
+                                "capacity across the first round's ten signed projects, each project's power "
+                                "arrangement from its own material")
             behind = row[row.variant != grid_variant].iloc[0]
             delivered = row[row.variant == grid_variant].iloc[0]
             (p_behind, k_behind), (p_grid, k_grid) = plant_gate(behind), plant_gate(delivered)

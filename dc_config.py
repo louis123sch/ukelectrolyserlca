@@ -27,7 +27,9 @@ imported it. Changing an inventory in ``optimiser_lca/`` means re-running
 # =============================================================================
 # Brightway project
 # =============================================================================
-PROJECT_NAME      = "hydrogen-smr"
+# DC_BW_PROJECT picks another project, so a branch can rebuild its inventories in
+# its own copy without touching the one a working checkout reads (11 Nov 2026).
+PROJECT_NAME      = __import__("os").environ.get("DC_BW_PROJECT", "hydrogen-smr")
 ECOINVENT_VERSION = "3.9.1"
 SYSTEM_MODEL      = "apos"                       # "apos", "cutoff", "consequential", ...
 ECOINVENT_DB      = f"ecoinvent-{ECOINVENT_VERSION}-{SYSTEM_MODEL}"
@@ -46,7 +48,7 @@ DC_REFERENCE_PUE = 1.4
 # =============================================================================
 # Amortisation — how long a scored asset is charged over (optimisation/)
 # =============================================================================
-TANK_LIFETIME_YEARS = 25     # Gandiglio's plant lifetime; the tank is never replaced
+TANK_LIFETIME_YEARS = 25     # the data centre's own life, so the tank is never replaced (no tank-specific source)
 TX_ASSET_LIFE_YEARS = 35.0   # this study's own generation life; see renewables.py
 
 # =============================================================================

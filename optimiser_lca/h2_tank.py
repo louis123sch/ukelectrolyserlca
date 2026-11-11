@@ -18,13 +18,14 @@ The paper's 21.6 m³ at 28 bar and 15 °C holds 50.0 kg of hydrogen
 kg stored; ``optimisation/h2_storage.py`` amortises that over
 ``dc_config.TANK_LIFETIME_YEARS``.
 
-**Boundary.** In: the shell (Gandiglio), its forming (ADDED, 22 Oct 2026: a
-pressure vessel is rolled and welded, which the paper's steel line does not
-cover; sheet rolling of chromium steel on the shell mass, average metal working
-being the sensitivity case — CUTOFF_RULE_PLAN.md step 5), and the frame and
-foundation pad (ASSUMED from the vessel's geometry, 14 Oct 2026: a 0.5 m slab
-with 0.5 m clearance, rebar at 100 kg/m³, saddles and frame at 10 % of the
-shell). Out: end-of-life, delivery to site, and the hydrogen itself (leakage is
+**Boundary.** In: the shell, its plate-making or forming step (ADDED, 22 Oct
+2026, CUTOFF_RULE_PLAN.md step 5; for the default carbon-steel vessel since
+11 Nov 2026 the mill's hot rolling on unalloyed steel, for Gandiglio's stainless
+vessel sheet rolling of chromium steel), and the frame and foundation pad
+(ASSUMED from the design's own vessel geometry, 14 Oct 2026: a 0.5 m slab with
+0.5 m clearance, rebar at 100 kg/m³, saddles and frame at 10 % of the shell, in
+hot-rolled unalloyed steel). Bending and welding the plate are on the cut-off
+register. Out: end-of-life, delivery to site, and the hydrogen itself (leakage is
 the LP's ``H2 leaked from tank`` term). Valves, pipework and compressor hardware
 are unsourced and sit on the cut-off register (``optimiser_lca/exclusions.py``).
 
@@ -33,7 +34,8 @@ a bulk carbon-steel vessel at 28 bar sized by the thin-wall formula, about 161 k
 of steel per kg of hydrogen, the class of vessel the cost side prices.
 ``gandiglio_28bar`` is the paper's small stainless buffer, 313 kg per kg: heavy
 because a 21.6 m³ vessel is set by its minimum plate, not hoop stress; it was the
-default until 4 Nov 2026 and stays as the sensitivity. A Type I seamless cylinder
+default until 4 Nov 2026 and stays in the table, no longer tested (since 11 Nov
+2026 the test is the tank's carbon at x0.5 / x1.5). A Type I seamless cylinder
 at 200 bar reaches ~1 wt%, and needs 2.5 kWh/kg of compression (charged in the
 dispatch, not here). ``TANK_DESIGN`` picks which is built.
 """
@@ -59,8 +61,14 @@ TANK_DESIGNS = {
     # as the default under the cut-off rule's substitution clause (a stated
     # physical check: 313 kg of stainless per kg is a 21.6 m3 vessel, not a bulk
     # store); Gandiglio's stays as the sensitivity. docs/COST_BEST_SOURCE_PLAN.md.
+    # Steel since 11 Nov 2026: SA-516 is plain carbon (carbon-manganese) steel, so
+    # ecoinvent's "steel, unalloyed" plus one mill rolling step ("hot rolling,
+    # steel") to make the plate. Until then "steel, low-alloyed, hot rolled" (which
+    # already includes the mill rolling) plus "sheet rolling, steel" on top, the
+    # mill step for thin cold-rolled sheet: rolling counted twice, about 17 % of
+    # the tank. Bending and welding the plate stay on the cut-off register.
     "bulk_carbon_steel_28bar": {
-        "steel_process": "steel_low_alloyed_hr", "forming_process": "sheet_rolling_steel",
+        "steel_process": "steel_unalloyed", "forming_process": "hot_rolling_steel",
         "steel_kg_per_kg_h2": 161.2, "pressure_bar": 28.0, "volume_m3": 200.0,
         "note": "DERIVED - bulk carbon-steel vessel at 28 bar, thin-wall formula on a 200 m3 shell; "
                 "the cost side's vessel class",
@@ -195,7 +203,15 @@ ALL_PROCESSES = {
     "steel_low_alloyed_hr": Process(
         identity=("market for steel, low-alloyed, hot rolled", "GLO"),
         query="market for steel low-alloyed hot rolled GLO",
-        why="a Type I cylinder is carbon/low-alloy steel, not stainless; also the frame"),
+        why="a Type I seamless cylinder is quenched-and-tempered low-alloy (Cr-Mo) steel, not stainless"),
+    "steel_unalloyed": Process(
+        identity=("market for steel, unalloyed", "GLO", "steel, unalloyed"),
+        query="market for steel unalloyed GLO",
+        why="SA-516 Gr 70 plate is carbon-manganese steel, ecoinvent's unalloyed; also the frame (11 Nov 2026)"),
+    "hot_rolling_steel": Process(
+        identity=("market for hot rolling, steel", "GLO", "hot rolling, steel"),
+        query="market for hot rolling steel GLO",
+        why="the plate mill's rolling of the unalloyed steel, once; the shell and the frame (11 Nov 2026)"),
     "concrete_normal": Process(
         identity=("concrete, all types to generic market for concrete, normal strength",
                   "RoW", "concrete, normal strength"),
@@ -205,14 +221,35 @@ ALL_PROCESSES = {
         identity=("market for reinforcing steel", "GLO", "reinforcing steel"),
         query="market for reinforcing steel GLO"),
 }
+# The frame and saddles, every design: hot-rolled unalloyed (structural) steel.
+FRAME_PROCESSES = ("steel_unalloyed", "hot_rolling_steel")
 processes = {k: v for k, v in ALL_PROCESSES.items()
              if k in (DESIGN["steel_process"], DESIGN["forming_process"],
-                      "steel_low_alloyed_hr", "concrete_normal", "reinforcing_steel")}
+                      *FRAME_PROCESSES, "concrete_normal", "reinforcing_steel")}
 flows = {}
 
 # =============================================================================
 # Activities
 # =============================================================================
+def _steel_rows():
+    """The shell's steel and its rolling, and the frame's. Where the shell and the
+    frame use the same datasets (the carbon-steel vessel since 11 Nov 2026) each
+    dataset is one row carrying both masses, so every input appears once."""
+    shell, frame = TANK_STEEL_KG_PER_KG_H2, TANK_FOUNDATIONS["frame_kg"]
+    shell_rows = [(DESIGN["steel_process"], shell,
+                   f"vessel steel, {TANK_DESIGN}, {DESIGN['pressure_bar']:g} bar: {DESIGN['note']}"),
+                  (DESIGN["forming_process"], shell,
+                   "ADDED — rolling the shell's steel into plate or sheet, on the shell mass (22 Oct 2026; "
+                   "the mill's hot rolling for the carbon-steel vessel since 11 Nov 2026)")]
+    frame_rows = [(FRAME_PROCESSES[0], frame,
+                   f"ASSUMED — saddles and frame, {FRAME_STEEL_FRACTION_OF_SHELL:.0%} of the shell mass"),
+                  (FRAME_PROCESSES[1], frame, "ASSUMED — hot rolling of the frame's steel (11 Nov 2026)")]
+    if (DESIGN["steel_process"], DESIGN["forming_process"]) == FRAME_PROCESSES:
+        return [(s[0], s[1] + f[1], "kilogram", f"{s[2]}; plus {f[1]:.2f} kg: {f[2]}")
+                for s, f in zip(shell_rows, frame_rows)]
+    return [(k, amt, "kilogram", note) for k, amt, note in shell_rows + frame_rows]
+
+
 activities = [
     Activity(
         code=R.H2_TANK,
@@ -220,19 +257,15 @@ activities = [
         reference_product="hydrogen storage capacity",
         unit="kilogram", location="GLO",
         comment=f"One kg of hydrogen storage capacity, design {TANK_DESIGN!r}: {DESIGN['note']}; "
-                f"{TANK_STEEL_KG_PER_KG_H2:.1f} kg steel per kg H2 at {DESIGN['pressure_bar']:g} bar, the forming "
-                "of that steel (sheet rolling, ADDED 22 Oct 2026), and a frame and reinforced pad from the "
-                "reference vessel's geometry (ASSUMED). Gandiglio et al. 2022 Table 5's vessel (15,652 kg chromium "
+                f"{TANK_STEEL_KG_PER_KG_H2:.1f} kg steel per kg H2 at {DESIGN['pressure_bar']:g} bar, the rolling "
+                "of that steel into plate or sheet (ADDED 22 Oct 2026; hot rolling of unalloyed steel since 11 Nov "
+                "2026), and a frame in hot-rolled unalloyed steel and a reinforced pad from the design's own vessel "
+                "geometry (ASSUMED). Gandiglio et al. 2022 Table 5's vessel (15,652 kg chromium "
                 "steel 18/8, 21.6 m3, 28 bar, 50.0 kg of H2) is the 'gandiglio_28bar' design. Amortised over "
                 "TANK_LIFETIME_YEARS (dc_config). Out: valves, pipework, compressor hardware (cut-off register), "
                 "end-of-life, delivery to site.",
         technosphere=[
-            (DESIGN["steel_process"], TANK_STEEL_KG_PER_KG_H2, "kilogram",
-             f"vessel steel, {TANK_DESIGN}, {DESIGN['pressure_bar']:g} bar: {DESIGN['note']}"),
-            (DESIGN["forming_process"], TANK_STEEL_KG_PER_KG_H2, "kilogram",
-             "ADDED — forming of the shell: sheet rolling of its own steel, on the shell mass (22 Oct 2026)"),
-            ("steel_low_alloyed_hr", TANK_FOUNDATIONS["frame_kg"], "kilogram",
-             f"ASSUMED — saddles and frame, {FRAME_STEEL_FRACTION_OF_SHELL:.0%} of the shell mass"),
+            *_steel_rows(),
             ("concrete_normal", TANK_FOUNDATIONS["concrete_m3"], "cubic meter",
              f"ASSUMED — pad, {PAD_THICKNESS_M:g} m slab with {PAD_CLEARANCE_M:g} m clearance round the vessel"),
             ("reinforcing_steel", TANK_FOUNDATIONS["rebar_kg"], "kilogram",

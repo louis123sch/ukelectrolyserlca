@@ -103,7 +103,8 @@ delivers at ~30 bar.
 
 **Bought green hydrogen is green by definition, and that rests on certificates.**
 Decided 2–3 Sep. The grid-connected share of bought green
-(`h2_prices.GREEN_H2_GRID_SHARE`, 0.5) is scored on a *renewable* electricity
+(`h2_prices.GREEN_H2_GRID_SHARE`, 0.7 since 11 Nov 2026 from the first allocation
+round's projects; was 0.5) is scored on a *renewable* electricity
 basis plus the grid's high-voltage delivery terms — 1.107 kg CO₂e/kg against
 0.976 behind the meter — not on the grid mix the electrolyser physically draws from. That is a
 market-based reading, and it holds only if the seller's grid electricity is
