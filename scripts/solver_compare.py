@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """Gurobi against HiGHS on the real cases, hourly (10 Nov 2026).
 
-    set DC_SOLVER=gurobi
+    set DC_SOLVER=gurobi                        # the default since 11 Nov 2026
     python scripts/solver_compare.py solve      # central rows, both anchors: sensitivity_solver_gurobi_<case>.csv
     python scripts/solver_compare.py judge      # optimisation_outputs/solver_compare.md
 

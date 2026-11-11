@@ -1367,7 +1367,8 @@ read: until 30 Oct 2026 one price list was fixed from 1.43x the load before
 the solve; now every price list the site could be on is an **option** with
 its size range, substation, cable and charges, and the LP picks the option
 and the connection size together, one on/off switch per option (HiGHS via
-linopy, the same solver, now with those integers). Imports are split into one
+linopy, the same solver, now with those integers; Gurobi since 11 Nov 2026,
+after it matched HiGHS's designs on both reference cases at 5-19x the speed). Imports are split into one
 series per **voltage group** — national grid, 132 kV, 33 kV, 11 kV — each with
 that voltage's loss factor, unit rates and delivered carbon
 (`optimiser_lca.grid.delivered` at "high" or "medium"), and each limited by

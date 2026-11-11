@@ -1,5 +1,5 @@
 {
- "checked": "2026-11-09T13:49:42+00:00",
+ "checked": "2026-11-10T13:58:59+00:00",
  "stale": [],
  "errors": [
   "ssen_gsp_limits: HTTPError: 403 Client Error: Forbidden for url: https://ckan-prod.sse.datopian.com/api/3/action/package_show?id=technicallimits"

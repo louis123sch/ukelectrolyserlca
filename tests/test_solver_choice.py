@@ -1,6 +1,6 @@
-"""The solver switch (10 Nov 2026): HiGHS by default, Gurobi by DC_SOLVER=gurobi or
-solver="gurobi", with HiGHS's option names translated. The Gurobi checks skip
-where gurobipy or a licence is missing."""
+"""The solver switch (10 Nov 2026; Gurobi the default since 11 Nov): HiGHS by
+DC_SOLVER=highs or solver="highs", with HiGHS's option names translated for
+Gurobi. The Gurobi checks skip where gurobipy or a licence is missing."""
 from __future__ import annotations
 
 import pathlib
@@ -30,12 +30,12 @@ def _gurobi_ok() -> bool:
 needs_gurobi = pytest.mark.skipif(not _gurobi_ok(), reason="gurobipy or its licence is not available")
 
 
-def test_the_default_is_highs_and_the_environment_can_choose(monkeypatch):
+def test_the_default_is_gurobi_and_the_environment_can_choose(monkeypatch):
     monkeypatch.delenv("DC_SOLVER", raising=False)
-    assert M.current_solver() == "highs"
-    monkeypatch.setenv("DC_SOLVER", "Gurobi")
     assert M.current_solver() == "gurobi"
-    assert M.current_solver("highs") == "highs"          # an explicit argument wins
+    monkeypatch.setenv("DC_SOLVER", "HiGHS")
+    assert M.current_solver() == "highs"
+    assert M.current_solver("gurobi") == "gurobi"        # an explicit argument wins
     monkeypatch.setenv("DC_SOLVER", "cplex")
     with pytest.raises(ValueError):
         M.current_solver()

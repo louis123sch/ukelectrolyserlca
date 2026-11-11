@@ -43,8 +43,8 @@ Either the source is named and public, or no new sourcing is needed at all.
       BoP's 44 t/MW.
 - [ ] **Third source read, 23 Oct 2026** (`docs/SOURCE_RECHECK_2026-10-23.md`, *Outcome*):
       every finding decided and done by 26 Oct; the stale-docs list at its foot is left.
-- [ ] **2026 pounds: finish** (built 9 Nov, see `optimisation/price_base.py`): run the hourly sign-off on it; update the
-      methodology doc (price base, the levy-agreement tickbox, the gas case, the two warnings); swap the OBR 2026
+- [ ] **2026 pounds: finish** (built 9 Nov, see `optimisation/price_base.py`): run the hourly sign-off on it; the
+      methodology doc has the price base, gas range and two warnings (10 Nov), not yet the levy-agreement tickbox; swap the OBR 2026
       forecast for ONS outturn once calendar 2026 is published. Sweeps (`sensitivity.py`) do not yet expose
       `ccl_under_cca` / `gas_price_case` as knobs.
 - [ ] **Source check: decide and apply** (all groups checked 9 Nov, `docs/SOURCE_CHECK_FULL_2026-11-09.md`):

@@ -1053,8 +1053,10 @@ MIP_REL_GAP = 1e-7
 LOOSE_MIP_REL_GAP = 1e-3
 
 
-# The solver (10 Nov 2026): HiGHS by default; DC_SOLVER=gurobi in the environment
-# (or solver="gurobi") uses Gurobi, given gurobipy and a licence. Options are
+# The solver: Gurobi by default since 11 Nov 2026, after the head-to-head of
+# 10 Nov (scripts/solver_compare.py: the same designs, cost and carbon as HiGHS
+# on both reference cases, 5-19 times faster). It needs gurobipy and a licence;
+# DC_SOLVER=highs in the environment (or solver="highs") uses HiGHS. Options are
 # written in HiGHS's names everywhere and translated here, and Gurobi is held to
 # HiGHS's default tolerances so the frontier's tie-breaks (dc_pareto.LEX_TOL,
 # 1e-6) mean the same on either. Every sweep row records which solved it.
@@ -1065,7 +1067,7 @@ _GUROBI_NAMES = {"mip_rel_gap": "MIPGap", "output_flag": "OutputFlag", "time_lim
 
 def current_solver(solver: str | None = None) -> str:
     import os
-    s = (solver or os.environ.get("DC_SOLVER") or "highs").strip().lower()
+    s = (solver or os.environ.get("DC_SOLVER") or "gurobi").strip().lower()
     if s not in SOLVERS:
         raise ValueError(f"solver must be one of {SOLVERS}, got {s!r} (DC_SOLVER)")
     return s
