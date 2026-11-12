@@ -67,6 +67,20 @@ def test_cap_mode_caps_every_option_at_the_one_figure_and_keeps_the_nearest():
         CO.option_table(NORFOLK, 180.0, 180.0 * 8760, mode="cap")       # the cap mode needs its cap
 
 
+def test_a_fixed_route_replaces_every_measured_cable_and_nothing_else():
+    """12 Nov 2026, the UK site study: every site on the same 2 km cable."""
+    cap = sites.max_connection_mw(180.0)[0]
+    measured, _ = CO.option_table(NORFOLK, 180.0, 180.0 * 8760, mode="cap", cap_mw=cap)
+    fixed_site = sites.resolve(52.85, 1.04, name="North Norfolk", carbon_api_region=10, connection_route_km=2.0)
+    fixed, _ = CO.option_table(fixed_site, 180.0, 180.0 * 8760, mode="cap", cap_mw=cap)
+    assert [o["key"] for o in fixed] == [o["key"] for o in measured]          # same substations and lists
+    assert all(o["point"]["route_km"] == 2.0 and o["point"]["route_fixed"] for o in fixed)
+    assert any(o["point"]["route_km"] != 2.0 for o in measured)
+    assert [o["ceiling_mw"] for o in fixed] == [o["ceiling_mw"] for o in measured]
+    with pytest.raises(ValueError):
+        sites.resolve(52.85, 1.04, carbon_api_region=10, connection_route_km=0.0)
+
+
 def test_the_sites_own_settings_still_override():
     cap = 257.0
     forced_t = sites.resolve(NORFOLK.lat, NORFOLK.lon, carbon_api_region=10, transmission_connected=True)

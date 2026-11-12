@@ -403,7 +403,7 @@ def build_series(site, start: str, end: str, size_mw_it: float,
     meta["connection_limit_mw"] = max(o["ceiling_mw"] for o in options) if len(options) > 1 else conn_mw
     meta["connection_limit_note"] = conn_note
     meta["connection_floor_mw"] = min(o["floor_mw"] for o in options) if len(options) > 1 else conn_floor
-    meta["connection_site"] = conn_point
+    meta["connection_site"] = CO.fixed_route(site, conn_point) if isinstance(conn_point, dict) else conn_point
     meta["connection_mode"] = mode
     meta["connection_mode_requested"] = mode_requested
     pinned = bool(getattr(site, "connection_substation", None))

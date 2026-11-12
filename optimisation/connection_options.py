@@ -155,6 +155,16 @@ def _point_from_connection_point(p: dict) -> dict:
             "which": "nearest", "skipped": [], "note": p.get("note", "")}
 
 
+def fixed_route(site, p: dict) -> dict:
+    """``p`` with its cable route replaced by the site's fixed one, when the site sets
+    ``connection_route_km`` (12 Nov 2026); unchanged otherwise. Only the route moves:
+    the substation, its room and its charges are still the measured ones."""
+    km = getattr(site, "connection_route_km", None)
+    if km is None or not p:
+        return p
+    return dict(p, route_km=float(km), route_fixed=True)
+
+
 def option_table(site, load_mw: float, annual_mwh: float, *, mode: str = DEFAULT_MODE,
                  cap_mw: float | None = None) -> tuple[list[dict], list[dict]]:
     """``(options, dropped)`` for a site: every price list it could be on.
@@ -195,6 +205,7 @@ def option_table(site, load_mw: float, annual_mwh: float, *, mode: str = DEFAULT
                 continue
             points = [_point_from_connection_point(cp)]
         for p in points:
+            p = fixed_route(site, p)
             ceiling = r["ceiling_mw"]
             if mode == "room":
                 ceiling = min(ceiling, float(p["room_mw"]))

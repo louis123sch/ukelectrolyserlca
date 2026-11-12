@@ -217,6 +217,10 @@ class Site:
     # picks the band with the size — a few switches, not the twenty of the
     # open choice (4 Nov 2026).
     connection_band_optimised: bool = False
+    # A cable route fixed by the user, km, in place of the measured route to each
+    # option's substation (12 Nov 2026, the UK site study: every site on the same
+    # connection terms). None measures it, as before.
+    connection_route_km: float | None = None
     key: str = ""
 
     @property
@@ -332,12 +336,16 @@ def resolve(lat: float, lon: float, *, name: str | None = None,
             carbon_api_region: int | None = None,
             connection_substation: str | None = None,
             connection_substation_voltage: str | None = None,
-            connection_band_optimised: bool = False) -> Site:
+            connection_band_optimised: bool = False,
+            connection_route_km: float | None = None) -> Site:
     """Build a Site from a coordinate, deriving its region and TNUoS zone.
 
     ``carbon_api_region`` overrides the lookup, for a boundary case you have
-    checked yourself or when the APIs are unreachable.
+    checked yourself or when the APIs are unreachable. ``connection_route_km``
+    fixes the cable route to every substation (None measures it).
     """
+    if connection_route_km is not None and not float(connection_route_km) > 0:
+        raise ValueError(f"connection_route_km must be positive, got {connection_route_km!r}")
     if carbon_api_region is not None:
         region = int(carbon_api_region)
         info = {"outcode": "", "place": name or "",
@@ -357,6 +365,7 @@ def resolve(lat: float, lon: float, *, name: str | None = None,
         connection_substation=connection_substation,
         connection_substation_voltage=connection_substation_voltage,
         connection_band_optimised=bool(connection_band_optimised),
+        connection_route_km=None if connection_route_km is None else float(connection_route_km),
         key=f"r{info['carbon_api_region']}_{float(lat):.4f}_{float(lon):.4f}",
     )
 
