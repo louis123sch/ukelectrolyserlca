@@ -483,14 +483,14 @@ ceiling. A flow that fails is included (status below). Register:
 
 | Technology | Flow | Kind | Status | Central | Upper | Unit | Share at upper | Verdict |
 |---|---|---|---|---|---|---|---|---|
-| battery | cell processing materials (NMP make-up, argon, nitrogen, compressed air) | cutoff | excluded | 9.47 | 47.4 | kg CO2e per usable MWh per year | 0.62% | pass |
+| battery | cell processing materials (NMP make-up, argon, nitrogen, compressed air) | cutoff | included_estimate | 9.47 | 47.4 | kg CO2e per usable MWh per year | 0.62% | included (estimate) |
 | battery | site installation (crane and commissioning diesel) | cutoff | excluded | 7.77 | 15.5 | kg CO2e per usable MWh per year | 0.20% | pass |
 | battery | container switchgear (MV, one per container) | cutoff | included_estimate | 102 | 186 | kg CO2e per MW per year | 1.70% | included (estimate) |
 | fuel cell | container switchgear (MV, one per container) | cutoff | included_estimate | 76.2 | 139 | kg CO2e per MW per year, calendar replacements | 1.06% | included (estimate) |
 | fuel cell | balance-of-plant assembly energy | cutoff | excluded | 50.8 | 127 | kg CO2e per MW per year, calendar replacements | 0.97% | pass |
-| hydrogen tank | forming of the vessel steel (rolling, welding) | cutoff | included_inventory | 2.53 | 17.5 | kg CO2e per kg of capacity per year | — | in the inventory |
-| hydrogen tank | valves, pipework and fittings | cutoff | included_estimate | 0.161 | 0.323 | kg CO2e per kg of capacity per year | 1.44% | included (estimate) |
-| hydrogen tank | compressor hardware | cutoff | excluded | 0.01 | 0.03 | kg CO2e per kg of capacity per year | 0.13% | pass |
+| hydrogen tank | forming of the vessel steel (rolling, welding) | cutoff | included_inventory | 1.83 | 13.3 | kg CO2e per kg of capacity per year | — | in the inventory |
+| hydrogen tank | valves, pipework and fittings | cutoff | included_estimate | 0.132 | 0.265 | kg CO2e per kg of capacity per year | 1.42% | included (estimate) |
+| hydrogen tank | compressor hardware | cutoff | excluded | 0.01 | 0.03 | kg CO2e per kg of capacity per year | 0.16% | pass |
 | wind | step-up switchgear (turbine MV switchgear) | cutoff | excluded | 43.6 | 79.6 | kg CO2e per MW per year (turbine + step-ups) | 0.32% | pass |
 | wind | step-up transformer replacement rate | cutoff | excluded | 0 | 98.2 | kg CO2e per MW per year (turbine + step-ups) | 0.40% | pass |
 | wind | Leng's electrical installation beyond its four printed rows | cutoff | excluded | 0 | 125 | kg CO2e per MW per year (turbine + step-ups) | 0.51% | pass |
@@ -510,13 +510,13 @@ ceiling. A flow that fails is included (status below). Register:
 |---|---|---|---|---|---|---|
 | wind | 2.47e+04 | kg CO2e/MW/yr | 4 | 4 | 1.36% | pass |
 | solar | 2.41e+04 | kg CO2e/MWp/yr | 1 | 1 | 0.30% | pass |
-| battery | 3.27e+03 | kg CO2e/MW/yr (p) and per usable MWh/yr (e) | 3 | 2 | 0.82% | pass |
+| battery | 3.27e+03 | kg CO2e/MW/yr (p) and per usable MWh/yr (e) | 3 | 1 | 0.20% | pass |
 | electrolyser | 1.98e+04 | kg CO2e/MW/yr | 1 | 0 | 0.00% | n/a |
-| hydrogen tank | 22.4 | kg CO2e per kg capacity/yr | 3 | 1 | 0.13% | pass |
+| hydrogen tank | 18.7 | kg CO2e per kg capacity/yr | 3 | 1 | 0.16% | pass |
 | fuel cell | 1.31e+04 | kg CO2e/MW/yr, calendar replacements | 2 | 1 | 0.97% | pass |
 | grid connection | 305 | kg CO2e/MW/yr | 3 | 0 | 0.00% | n/a |
 | grid electricity | — | kg CO2e/kWh (series mean; no entries) | 0 | 0 | 0.00% | n/a |
-| bought hydrogen | 1.14 | kg CO2e/kg | 0 | 0 | 0.00% | n/a |
+| bought hydrogen | 1.17 | kg CO2e/kg | 0 | 0 | 0.00% | n/a |
 | facility | 1.54e+07 | kg CO2e/yr | 1 | 1 | 0.60% | pass |
 
 ### Boundary items — reported, not tested
@@ -539,20 +539,17 @@ ceiling. A flow that fails is included (status below). Register:
 The two reference cases re-solved at both anchors with every still-excluded flow added at its
 upper estimate (`dc_inputs.build_tech(cutoff="upper")`, sensitivity knob `cutoff`), against the
 central model. Q4's test: the same technologies are built and no built capacity moves by more than
-5 %. Solved 23 Oct 2026; `optimisation_outputs/sensitivity_cutoff_*.csv`.
+5 %. Solved 2026-11-11; `optimisation_outputs/sensitivity_cutoff_*.csv`.
 
 | Case | Anchor | Technologies built | Same with upper? | Largest capacity move | GWP t/yr, central → upper | Verdict |
 |---|---|---|---|---|---|---|
-| london_grid | min_cost | batt_e, batt_p, grid, solar, wind | yes | grid -0.0% | 108,904 → 109,096 | pass |
-| london_grid | min_gwp | batt_e, batt_p, fc, grid, solar, wind | yes | grid +3.0% | 52,926 → 53,193 | pass |
-| islanded_h2 | min_cost | batt_e, batt_p, ely, fc, solar, tank, wind | yes | batt_e +0.0% | 71,895 → 72,285 | pass |
-| islanded_h2 | min_gwp | batt_e, batt_p, ely, fc, solar, tank, wind | yes | batt_e -1.1% | 63,828 → 64,148 | pass |
+| norfolk_grid_green | min_cost | batt_e, batt_p, fc, grid, solar, wind | yes | grid +0.0% | 55,761 → 55,997 | pass |
+| norfolk_grid_green | min_gwp | batt_e, batt_p, ely, fc, grid, solar, tank, wind | yes | batt_e -3.5% | 44,305 → 44,592 | pass |
+| islanded_h2 | min_cost | batt_e, batt_p, ely, fc, solar, tank, wind | yes | fc -0.0% | 61,672 → 62,022 | pass |
+| islanded_h2 | min_gwp | batt_e, batt_p, ely, fc, solar, tank, wind | yes | ely +0.3% | 52,698 → 53,085 | pass |
 
 **Rule 3 passes**: at both anchors of both cases the upper-estimate run builds the same technologies and moves no capacity by more than 5 %.
 
-The London case was solved with the grid connection at 282.0 kg CO2e per MW per year; the switchyard's
-share of Leng's construction machinery (+4.85, carried since 22 Oct 2026) was added while it ran. At the
-145 MW connection the minimum-cost design builds that is 0.7 t CO2e a year, under a millionth of the
-system, so it cannot move a design. The islanded case has no grid connection.
+The islanded case has no grid connection.
 
 <!-- cutoff:end -->

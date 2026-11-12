@@ -189,7 +189,11 @@ REGISTER: list[Exclusion] = [
     # ------------------------------------------------------------ battery
     Exclusion(
         "battery", "cell processing materials (NMP make-up, argon, nitrogen, compressed air)",
-        "cutoff", side="energy", method="mass_x_factor",
+        "cutoff", status="included_estimate", side="energy", method="mass_x_factor",
+        note="Carried at its central estimate since 11 Nov 2026: alone at its upper estimate it shrank "
+             "North Norfolk's lowest-carbon battery by 7.9 % (rule 3, cutoff='upper:<flow>' on Gurobi), "
+             "the one item behind that design's 6.1 % rule-3 failure. Under 1 % of battery carbon, so it "
+             "passes rules 1 and 2; it is carried because it moves a design.",
         amount_central=1.9 * 0.01 * 1000 / 0.9 / 15, amount_upper=1.9 * 0.05 * 1000 / 0.9 / 15,
         factor_identity=("market for N-methyl-2-pyrrolidone", "GLO", "N-methyl-2-pyrrolidone"),
         factor_unit="kilogram", factor=6.73, scored_on="2026-10-20",

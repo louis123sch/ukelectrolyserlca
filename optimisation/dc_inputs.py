@@ -1459,26 +1459,53 @@ CUTOFF_FIELD = {
 CUTOFF_MODES = (None, "central", "upper", "none")
 
 
+def parse_cutoff(mode):
+    """``"upper:<key>|<key>"`` -> ``("upper", {keys})``; any other mode -> ``(mode, None)``.
+
+    A key is a coefficient field (``gwp_batt_e``) or an exclusion's flow name:
+    rule 3 one group or one item at a time (11 Nov 2026), to find which
+    still-excluded flows move a design. Flow names hold commas, so keys are
+    split on ``|``."""
+    if isinstance(mode, str) and mode.startswith("upper:"):
+        keys = {k.strip() for k in mode[len("upper:"):].split("|") if k.strip()}
+        if not keys:
+            raise ValueError(f"cutoff {mode!r}: no field or flow named after 'upper:'")
+        return "upper", keys
+    return mode, None
+
+
 def with_cutoff(tech: dc_model.Tech, mode: str | None = None) -> dc_model.Tech:
     """``tech`` with the cut-off register's estimates added onto its coefficients.
 
     None or "central": every ``included_estimate`` entry at its central estimate.
     "upper": those, plus every still-excluded ``cutoff`` entry at its upper
-    estimate (rule 3). "none": nothing added. The additions are recorded in
-    ``labels["cutoff"]`` and ``labels["cutoff_added"]`` (kg per coefficient).
+    estimate (rule 3). "upper:<key>|<key>": the same, but only the still-excluded
+    entries whose coefficient field or flow name is one of the keys. "none":
+    nothing added. The additions are recorded in ``labels["cutoff"]`` and
+    ``labels["cutoff_added"]`` (kg per coefficient).
     """
     from dataclasses import replace
     from optimiser_lca import exclusions as X
-    if mode not in CUTOFF_MODES:
-        raise ValueError(f"cutoff must be one of {CUTOFF_MODES}, got {mode!r}")
+    base, only = parse_cutoff(mode)
+    if base not in CUTOFF_MODES:
+        raise ValueError(f"cutoff must be one of {CUTOFF_MODES} or 'upper:<field or flow>', got {mode!r}")
+
+    def picked(e) -> bool:
+        return only is None or CUTOFF_FIELD[(e.technology, e.side)] in only or e.flow in only
+
+    if only is not None:
+        known = {k for e in X.REGISTER if e.kind == "cutoff" and e.status == "excluded"
+                 for k in (CUTOFF_FIELD[(e.technology, e.side)], e.flow)}
+        if only - known:
+            raise ValueError(f"cutoff {mode!r}: no still-excluded flow or field named {sorted(only - known)}")
     added: dict[str, float] = {}
-    if mode != "none":
+    if base != "none":
         for e in X.REGISTER:
             if e.kind == "boundary":
                 continue
             if e.status == "included_estimate":            # a failed cut-off, or a sourced figure carried whole
                 est = e.estimate("central")
-            elif e.kind == "cutoff" and e.status == "excluded" and mode == "upper":
+            elif e.kind == "cutoff" and e.status == "excluded" and base == "upper" and picked(e):
                 est = e.estimate("upper")
             else:
                 continue
@@ -1491,7 +1518,8 @@ def with_cutoff(tech: dc_model.Tech, mode: str | None = None) -> dc_model.Tech:
             flows = [e.flow for e in X.REGISTER if e.kind != "boundary"
                      and CUTOFF_FIELD.get((e.technology, e.side)) == f
                      and (e.status == "included_estimate"
-                          or (mode == "upper" and e.kind == "cutoff" and e.status == "excluded"))]
+                          or (base == "upper" and e.kind == "cutoff" and e.status == "excluded"
+                              and picked(e)))]
             T.step(f"cutoff.{f}", v, "same unit as the coefficient",
                    f"Cut-off register estimates carried on {f}", grade="assumed",
                    inputs={"mode": mode or "central", "flows": "; ".join(flows)},
