@@ -305,10 +305,10 @@ def test_cost_figures_on_uk_government_sources_are_pinned():
     fc = hc.fuel_cell_cost("central")
     assert fc["capex_GBP_per_kW"] == pytest.approx(2215.0)
     assert fc["stack_cost_fraction"] == pytest.approx(400.0 / 1900.0)
-    # maintenance and insurance come back out of the fraction
+    # maintenance, insurance and (since 12 Nov 2026) business rates come back out of the fraction
     bop_per_kw = fc["capex_GBP_per_kW"] * (1.0 - fc["stack_cost_fraction"])
     assert fc["fixed_opex_frac"] * bop_per_kw == pytest.approx(
-        48.0 * P.factor(2017) + hc.FC_INSURANCE_FRAC_OF_CAPITAL * 2215.0)
+        48.0 * P.factor(2017) + (hc.FC_INSURANCE_FRAC_OF_CAPITAL + hc.RATES_FRAC_OF_CAPITAL) * 2215.0)
     # the US plant, less its sales tax and grid spur, inflated in dollars
     assert hc.fuel_cell_cost("low")["capex_GBP_per_kW"] == pytest.approx(
         (1352.08 - 143.17 - 100.0) * 122.4 / 112.0 / (1.17 / 0.913), rel=1e-4)
@@ -844,8 +844,11 @@ def test_sweep_overrides_reach_the_tech():
     # Half a container per MW more: the container term doubles, nothing else moves.
     assert t.gwp_fc_bop_per_mw - base.gwp_fc_bop_per_mw == pytest.approx(
         d["bop_container_kgco2e_per_MW"], rel=1e-9)
+    # Since 11 Nov 2026 gwp_batt_e also carries the cell-processing estimate
+    # (exclusions.py), a flat figure per usable MWh that the usable share does not
+    # scale (about 0.1 % of the term), so the ratio is no longer exact.
     assert t.gwp_batt_e == pytest.approx(
-        base.gwp_batt_e * battery.USABLE_FRACTION / 0.80, rel=1e-9)
+        base.gwp_batt_e * battery.USABLE_FRACTION / 0.80, rel=2e-4)
     # The BoP life moves the cost annuity too, not just the carbon count.
     assert t.cost_fc != pytest.approx(base.cost_fc, rel=1e-6)
     assert t.labels["fc_kw_per_container"] == 500.0

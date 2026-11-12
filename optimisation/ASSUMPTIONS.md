@@ -483,9 +483,9 @@ ceiling. A flow that fails is included (status below). Register:
 
 | Technology | Flow | Kind | Status | Central | Upper | Unit | Share at upper | Verdict |
 |---|---|---|---|---|---|---|---|---|
-| battery | cell processing materials (NMP make-up, argon, nitrogen, compressed air) | cutoff | included_estimate | 9.47 | 47.4 | kg CO2e per usable MWh per year | 0.62% | included (estimate) |
-| battery | site installation (crane and commissioning diesel) | cutoff | excluded | 7.77 | 15.5 | kg CO2e per usable MWh per year | 0.20% | pass |
-| battery | container switchgear (MV, one per container) | cutoff | included_estimate | 102 | 186 | kg CO2e per MW per year | 1.70% | included (estimate) |
+| battery | cell processing materials (NMP make-up, argon, nitrogen, compressed air) | cutoff | included_estimate | 9.47 | 47.4 | kg CO2e per usable MWh per year | 0.49% | included (estimate) |
+| battery | site installation (crane and commissioning diesel) | cutoff | excluded | 7.77 | 15.5 | kg CO2e per usable MWh per year | 0.16% | pass |
+| battery | container switchgear (MV, one per container) | cutoff | included_estimate | 102 | 186 | kg CO2e per MW per year | 1.44% | included (estimate) |
 | fuel cell | container switchgear (MV, one per container) | cutoff | included_estimate | 76.2 | 139 | kg CO2e per MW per year, calendar replacements | 1.06% | included (estimate) |
 | fuel cell | balance-of-plant assembly energy | cutoff | excluded | 50.8 | 127 | kg CO2e per MW per year, calendar replacements | 0.97% | pass |
 | hydrogen tank | forming of the vessel steel (rolling, welding) | cutoff | included_inventory | 1.83 | 13.3 | kg CO2e per kg of capacity per year | — | in the inventory |
@@ -510,19 +510,20 @@ ceiling. A flow that fails is included (status below). Register:
 |---|---|---|---|---|---|---|
 | wind | 2.47e+04 | kg CO2e/MW/yr | 4 | 4 | 1.36% | pass |
 | solar | 2.41e+04 | kg CO2e/MWp/yr | 1 | 1 | 0.30% | pass |
-| battery | 3.27e+03 | kg CO2e/MW/yr (p) and per usable MWh/yr (e) | 3 | 1 | 0.20% | pass |
+| battery | 3.27e+03 | kg CO2e/MW/yr (p) and per usable MWh/yr (e) | 3 | 1 | 0.16% | pass |
 | electrolyser | 1.98e+04 | kg CO2e/MW/yr | 1 | 0 | 0.00% | n/a |
 | hydrogen tank | 18.7 | kg CO2e per kg capacity/yr | 3 | 1 | 0.16% | pass |
 | fuel cell | 1.31e+04 | kg CO2e/MW/yr, calendar replacements | 2 | 1 | 0.97% | pass |
 | grid connection | 305 | kg CO2e/MW/yr | 3 | 0 | 0.00% | n/a |
 | grid electricity | — | kg CO2e/kWh (series mean; no entries) | 0 | 0 | 0.00% | n/a |
-| bought hydrogen | 1.17 | kg CO2e/kg | 0 | 0 | 0.00% | n/a |
+| bought hydrogen | 1.29 | kg CO2e/kg | 0 | 0 | 0.00% | n/a |
 | facility | 1.54e+07 | kg CO2e/yr | 1 | 1 | 0.60% | pass |
 
 ### Boundary items — reported, not tested
 
 | Technology | What | Why |
 |---|---|---|
+| fuel cell | site hydrogen supply piping and skid (tank or delivery point to the fuel cell) | Usai et al. 2021 SI Table 1 stops at the system's own fuel management (blower, ejectors, pipes); no source here itemises a stationary plant's supply line — Left out with its source, unsized (user, 12 Nov 2026: only sourced items go in). The completeness checks of 12 Nov put all fuel cell site items at 0.3-0.8 % of the lowest-carbon design, an unsourced bound; the foundation, the largest of them, is already in through the battery's container (Jasper's 43.9 t block, since 21 Oct 2026). |
 | all | end-of-life of every asset | ASSUMPTIONS.md §6 — cradle-to-gate throughout; APOS carries some EoL in the background |
 | electrolyser | delivery to site — Gerloff's second 250 km lorry leg | ASSUMPTIONS.md §6; Gerloff 2021 §2.1 — the first leg, to assembly, is in |
 | solar | delivery to site — Z-PV-239's 100 km light-commercial leg 'to construction place' | ASSUMPTIONS.md §6; IEA PVPS workbook remark O29 — out since 22 Oct 2026; was in from 21 Oct |

@@ -118,6 +118,23 @@ TANK_BUILD_YEARS = 1
 # Insurance, which the maintenance figure does not carry, at the ratio DESNZ's
 # onshore wind gives (£3.6k/MW/yr on £1,588/kW). Estimate: cost_exclusions.py.
 FC_INSURANCE_FRAC_OF_CAPITAL = 3.6 / 1_588.0
+# The same ratio on the electrolyser and the tank since 12 Nov 2026 (dc_inputs).
+INSURANCE_FRAC_OF_CAPITAL = FC_INSURANCE_FRAC_OF_CAPITAL
+# Business rates on the hydrogen plant (user, 12 Nov 2026): at the ratio DESNZ/Arup
+# give solar, §6.8.2 central £1.8k per MWp a year on £659/kWp total capital, as a
+# fraction of capital a year. A proxy: the rateable value of hydrogen plant is not
+# sourced. The battery is exempt to 2035 (cost_exclusions.py).
+RATES_FRAC_OF_CAPITAL = 1.8 / 659.0
+_RATES_CITE = [("desnz_arup_2024_onshore_solar",
+                "§6.8.2 business rates over total capex, solar, central (tech_costs.SOLAR_PV)")]
+
+
+def rates_frac() -> float:
+    """Business rates as a fraction of capital a year (traced once per build)."""
+    return T.cost("cost.hydrogen_plant.rates_frac", RATES_FRAC_OF_CAPITAL, "fraction of capital per year",
+                  "Business rates on the electrolyser, fuel cell and tank, at solar's ratio to capital",
+                  grade="proxy", cites=_RATES_CITE,
+                  note="Solar's 2.5k high case gives 0.38 %; rateable value of hydrogen plant is not sourced")
 # Stack's share of fuel-cell capital, since 4 Nov 2026 (evening): the Clean
 # Hydrogen Partnership's state-of-the-art KPIs for 51-500 kWe PEM stationary
 # units, Table 21: stack production cost €400/kWe on a €1,900/kW system. The UK
@@ -281,11 +298,14 @@ def fuel_cell_cost(case: str, bop_calendar_years: float | None = None) -> dict:
     insurance = T.cost("cost.fuel_cell.insurance_frac", FC_INSURANCE_FRAC_OF_CAPITAL, "fraction of capital per year",
                        "Insurance, at onshore wind's ratio to capital: an estimate that fails the 1 % test if left out",
                        grade="proxy", cites=[("desnz_arup_2024_onshore_solar", "Table 3, insurance over total capex, central")])
+    rates = rates_frac()     # since 12 Nov 2026 (user)
     # As a share of balance-of-plant capital, which is what the annuity below runs on
-    opex = T.cost("cost.fuel_cell.fixed_opex_frac", (maintenance * inflate + insurance * capex) / (capex * (1.0 - stack_frac)),
-                  "fraction of balance-of-plant capital per year", "Fixed operating cost",
+    opex = T.cost("cost.fuel_cell.fixed_opex_frac",
+                  (maintenance * inflate + (insurance + rates) * capex) / (capex * (1.0 - stack_frac)),
+                  "fraction of balance-of-plant capital per year", "Fixed operating cost, with insurance and rates",
                   uses=["cost.fuel_cell.maintenance_per_kW_year", f"price_base.{ELEMENT_ENERGY_PRICE_YEAR}_to_2025",
-                        "cost.fuel_cell.insurance_frac", "cost.fuel_cell.capex_per_kW", "cost.fuel_cell.stack_cost_fraction"])
+                        "cost.fuel_cell.insurance_frac", "cost.hydrogen_plant.rates_frac",
+                        "cost.fuel_cell.capex_per_kW", "cost.fuel_cell.stack_cost_fraction"])
     # BoP, split the same way as the stack so that duty reaches the
     # cost objective as it reaches carbon. The LP charges
     #   A_bop * (CRF + o - 1/L) * cap_fc  +  A_bop * fc_bop_units

@@ -56,6 +56,18 @@ REGISTER = (
              "h2_capex.TANK_FOOTPRINT_M2_PER_KWH_HHV at the rural rent: about 2.3 % of cost_tank"),
     CostFlow("fuel cell insurance", "cost_fc", "cutoff", "included_estimate", 5_021.0,
              "h2_capex.FC_INSURANCE_FRAC_OF_CAPITAL, onshore wind's ratio: about 2.3 % of cost_fc"),
+    CostFlow("battery insurance", "cost_batt_e", "cutoff", "included_estimate", None,
+             "Since 12 Nov 2026: battery.INSURANCE_FRAC_OF_CAPITAL, onshore wind's ratio, on both the power and the "
+             "energy capital. NESO's running cost (BEIS 2022) does not say whether it carries insurance"),
+    CostFlow("electrolyser insurance", "cost_ely", "cutoff", "included_estimate", None,
+             "Since 12 Nov 2026: h2_capex.INSURANCE_FRAC_OF_CAPITAL, onshore wind's ratio, inside cost_ely. NESO's "
+             "fixed opex fraction does not say whether it carries insurance"),
+    CostFlow("tank insurance", "cost_tank", "cutoff", "included_estimate", None,
+             "Since 12 Nov 2026: h2_capex.INSURANCE_FRAC_OF_CAPITAL, onshore wind's ratio, on the tank's capital "
+             "(build_tech(tank_insurance_frac=) overrides it; the sweep's 0.99 % is insurance and rates together)"),
+    CostFlow("electrolyser land", "cost_ely", "cutoff", "excluded", 1_000.0 * RURAL_RENT_GBP_PER_M2_YEAR,
+             "1,000 m² per MW at DESNZ's rural rent, ASSUMED and generous (containerised units are a few hundred m² "
+             "per MW): about £270 per MW a year against a cost_ely in the hundred thousands, so well under 1 %"),
     CostFlow("supplier margin", "", "cutoff", "included_estimate", None,
              "levies.flat_components: 2.0 % of the extra-large price, £4.19/MWh; 1 % of the reference run's grid chain is "
              "crossed at about £1.60/MWh"),
@@ -83,7 +95,17 @@ REGISTER = (
              "Designs do buy it (the North Norfolk reference run, about 2.6 million kg a year at its lowest-cost "
              "point, 10 Nov 2026), so this is stated, not argued away. The bought price itself is swept to x0.5 and "
              "x1.5 (sensitivity.SHAKY_KNOBS), a range wide enough to hold any compressor's share"),
+    CostFlow("business rates on the electrolyser, fuel cell and tank", "cost_ely", "cutoff", "included_estimate", None,
+             "Since 12 Nov 2026 (user): h2_capex.RATES_FRAC_OF_CAPITAL, DESNZ/Arup's solar ratio (§6.8.2, £1.8k per MWp "
+             "a year on £659/kWp, 0.27 % of capital a year), inside cost_ely, cost_fc and cost_tank. About 3 % of a "
+             "capital-heavy coefficient, so it fails 1 % if left out. A proxy: the rateable value of hydrogen plant is "
+             "not sourced. The battery is exempt to 2035 (above). The sweep's tank_insurance_frac of 0.99 % (wind's "
+             "insurance and rates) replaces the tank's insurance and rates together"),
     # --- needs a person -----------------------------------------------------
+    CostFlow("grid connection upkeep", "", "cutoff", "open", None,
+             "12 Nov 2026: not sized. The network operator's upkeep of its own assets is in the use-of-system charges "
+             "the model already pays; whether a customer-owned intake substation's maintenance is anywhere is not "
+             "checked"),
     CostFlow("land at an urban site", "", "cutoff", "open", None,
              "Every land figure charged is a rural rent and dc_model has no area limit. Left so by the user (4 Nov 2026): "
              "a central-London run is illustrative, not a use case. MHCLG industrial land values are in "

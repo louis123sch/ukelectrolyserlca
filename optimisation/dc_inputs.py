@@ -39,6 +39,7 @@ OUT_DIR = ROOT / "optimisation_outputs"
 DC_CACHE = OUT_DIR / "dc_facility_decomposition_v3_cache.json"   # v3: IT normalised on 5.38 MW
 
 from optimisation import dc_model, sites
+from optimisation import h2_leakage as h2_leak
 from optimisation import price_base as P
 from optimisation import trace as T
 
@@ -873,6 +874,22 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
     bcost = batt.annual_costs(cost_case)
     be = batt.embodied_components(usable_fraction=batt_usable_fraction,
                                   cell_basis=batt_cell_basis)
+    # Sized to still hold cap_batt_e in year 15 (12 Nov 2026): energy only, cost and carbon.
+    batt_oversize = batt.end_of_life_oversize()
+    # Insurance on the electrolyser and tank (12 Nov 2026), at onshore wind's ratio to
+    # capital, as the fuel cell and battery carry it. The sweep's tank_insurance_frac
+    # (insurance and rates together) replaces the tank's when given.
+    _ins_cite = [("desnz_arup_2024_onshore_solar", "Table 3, insurance over total capex, central")]
+    # Business rates at solar's ratio on both, since 12 Nov 2026 (user; h2_capex.rates_frac).
+    h2_rates = hc.rates_frac()
+    ely_ins = T.cost("cost.electrolyser.insurance_frac", hc.INSURANCE_FRAC_OF_CAPITAL, "fraction of capital per year",
+                     "Electrolyser insurance, at onshore wind's ratio to capital", grade="proxy", cites=_ins_cite) \
+        + h2_rates
+    tank_ins = T.cost("cost.h2_tank.insurance_frac",
+                      hc.INSURANCE_FRAC_OF_CAPITAL if tank_insurance_frac is None else float(tank_insurance_frac),
+                      "fraction of capital per year", "Tank insurance, at onshore wind's ratio to capital",
+                      grade="proxy", cites=_ins_cite) \
+        + (h2_rates if tank_insurance_frac is None else 0.0)    # the sweep's figure is insurance and rates together
 
     # electrolyser
     ely_row = ely.with_heat_source(
@@ -1134,9 +1151,11 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
         gwp_batt_p=step("gwp_batt_p", be["power_kgco2e_per_kW"] * 1000.0 / batt.ASSET_LIFE_YEARS,
                         "kg CO2e per MW per year", "Battery power conversion, per MW, over the battery's life",
                         ["battery.pcs_per_kW"], inputs={"asset_life_years": batt.ASSET_LIFE_YEARS}),
-        gwp_batt_e=step("gwp_batt_e", be["energy_kgco2e_per_kWh"] * 1000.0 / batt.ASSET_LIFE_YEARS,
-                        "kg CO2e per MWh per year", "Battery cells, racks and container, per usable MWh, "
-                        "over the battery's life", ["battery.energy_per_usable_kWh"],
+        gwp_batt_e=step("gwp_batt_e", be["energy_kgco2e_per_kWh"] * 1000.0 / batt.ASSET_LIFE_YEARS
+                        * batt_oversize,
+                        "kg CO2e per MWh per year", "Battery cells, racks and container, per usable MWh "
+                        "needed at end of life, over the battery's life",
+                        ["battery.energy_per_usable_kWh", "battery.end_of_life_oversize"],
                         inputs={"asset_life_years": batt.ASSET_LIFE_YEARS}),
         # The balance of plant once over the plant's life; the stacks by replacement
         # (gwp_ely_stack_per_mw x ely_stack_units, dc_model). At the calendar floor the
@@ -1223,14 +1242,18 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
         cost_batt_p=cstep("cost_batt_p", bcost["power_GBP_per_MW_year"] * to26, "GBP per MW per year",
                           "Battery power conversion, per MW", ["cost.battery.power_per_kW", "cost.battery.crf",
                                                                "cost.battery.fixed_opex_per_kW_year", *k26]),
-        cost_batt_e=cstep("cost_batt_e", bcost["energy_GBP_per_MWh_year"] * to26, "GBP per MWh per year",
-                          "Battery energy capacity, per MWh", ["cost.battery.energy_per_kWh", "cost.battery.crf",
-                                                               "cost.battery.fixed_opex_per_kWh_year", *k26]),
-        cost_ely=cstep("cost_ely", (float(ec.capex_GBP_per_kWe) * 1000.0 * (finance_e * crf_e + float(ec.fixed_opex_frac))
+        cost_batt_e=cstep("cost_batt_e", bcost["energy_GBP_per_MWh_year"] * to26 * batt_oversize,
+                          "GBP per MWh per year",
+                          "Battery energy capacity, per MWh needed at end of life",
+                          ["cost.battery.energy_per_kWh", "cost.battery.crf",
+                           "cost.battery.fixed_opex_per_kWh_year", "battery.end_of_life_oversize", *k26]),
+        cost_ely=cstep("cost_ely", (float(ec.capex_GBP_per_kWe) * 1000.0
+                                    * (finance_e * crf_e + float(ec.fixed_opex_frac) + ely_ins)
                                     * stack_share) * to26, "GBP per MW per year",
                        f"{ely_tech.split()[0]} electrolyser, per MW of cap_ely: capital recovery (carrying the build's "
-                       "finance) and fixed opex on the stack's share of the input",
+                       "finance), fixed opex and insurance on the stack's share of the input",
                        [f"{ek}.capex_per_kWe", f"{ek}.crf", f"{ek}.building_finance_factor", f"{ek}.fixed_opex_frac",
+                        "cost.electrolyser.insurance_frac", "cost.hydrogen_plant.rates_frac",
                         "electrolyser.stack_share", *k26]),
         # Stack replacement and water per kg made, and SOEC's gas-raised heat
         # The stacks and water in 2026 pounds; the heat is already (heat_gbp_per_kg)
@@ -1239,9 +1262,11 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
                                        "GBP per kg H2", "Electrolyser stacks, water and bought heat, per kg made",
                                        [f"{ek}.variable_opex_per_kg", *k26, *heat_uses]),
         cost_tank=cstep("cost_tank", (float(tkc.annual_GBP_per_kg_year)
-                                      + float(tkc.capex_GBP_per_kg_capacity) * float(tank_insurance_frac or 0.0)) * to26,
+                                      + float(tkc.capex_GBP_per_kg_capacity) * tank_ins) * to26,
                         "GBP per kg of capacity per year",
-                        "Hydrogen tank, per kg it holds", ["cost.h2_tank.annual_per_kg", *k26]),
+                        "Hydrogen tank, per kg it holds, with insurance and rates",
+                        ["cost.h2_tank.annual_per_kg", "cost.h2_tank.insurance_frac",
+                         "cost.hydrogen_plant.rates_frac", *k26]),
         cost_major_hazard_per_year=cstep("cost_major_hazard_per_year",
                                          float(hc.major_hazard_cost(cost_case)["annual_GBP_per_site_year"]) * to26,
                                          "GBP per year", "Major-hazard compliance, at upper tier, on a build allowed a tank",
@@ -1273,9 +1298,11 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
                                               conn.get("trace_fixed_per_year"))),
         ely_kwh_per_kg=step("ely_kwh_per_kg", ely_row["kwh_per_kg"], "kWh per kg H2",
                             "Electrolyser electricity per kg made", [f"{eb}.kwh_per_kg"]),
-        ely_variable_gwp_per_kg=step("ely_variable_gwp_per_kg", ely_row["variable_kgco2e_per_kg"],
-                                     "kg CO2e per kg H2", "Electrolyser consumables per kg made",
-                                     [f"{eb}.variable_per_kg"]),
+        # Since 12 Nov 2026 with the hydrogen leaked at the electrolyser and the fuel cell (h2_leakage.py).
+        ely_variable_gwp_per_kg=step("ely_variable_gwp_per_kg",
+                                     ely_row["variable_kgco2e_per_kg"] + h2_leak.electrolyser_per_kg(),
+                                     "kg CO2e per kg H2", "Electrolyser consumables per kg made, with leaks",
+                                     [f"{eb}.variable_per_kg", "h2_leakage.electrolyser_per_kg"]),
         tank_compression_kwh_per_kg=step("tank_compression_kwh_per_kg", compression_kwh, "kWh per kg H2",
                                          "Compression into the tank, per kg", ["tank.compression_kwh_per_kg"]),
         tank_leakage_per_hour=step("tank_leakage_per_hour", tank_row["leakage_frac_per_hour"],
@@ -1295,15 +1322,20 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
                                    f"Bought hydrogen ({h2_colour or 'none'}), delivered to the tank",
                                    [f"cost.bought_h2.{h2_colour}.delivered"] if h2_colour else [],
                                    **({} if h2_colour else {"grade": "assumed", "note": "No hydrogen bought"})),
-        bought_h2_gwp_per_kg=step("bought_h2_gwp_per_kg", h2_gwp, "kg CO2e per kg H2",
-                                  f"Bought hydrogen ({h2_colour or 'none'}), delivered to the tank", b1),
+        # Since 12 Nov 2026 with the hydrogen leaked making, trucking and burning it (h2_leakage.py).
+        bought_h2_gwp_per_kg=step("bought_h2_gwp_per_kg", h2_gwp + h2_leak.bought_per_kg(h2_colour),
+                                  "kg CO2e per kg H2",
+                                  f"Bought hydrogen ({h2_colour or 'none'}), delivered to the tank, with leaks",
+                                  [*b1, *([f"h2_leakage.bought_{h2_colour}_per_kg"] if h2_colour else [])]),
         bought_h2_2_gbp_per_kg=cstep("bought_h2_2_gbp_per_kg", h2_price_2, "GBP per kg H2",
                                      f"Second bought colour ({h2_colour_2 or 'none'}), delivered to the tank",
                                      [f"cost.bought_h2.{h2_colour_2}.delivered"] if h2_colour_2 else [],
                                      **({} if h2_colour_2 else {"grade": "assumed",
                                                                 "note": "No second colour bought"})),
-        bought_h2_2_gwp_per_kg=step("bought_h2_2_gwp_per_kg", h2_gwp_2, "kg CO2e per kg H2",
-                                    f"Second bought colour ({h2_colour_2 or 'none'}), delivered to the tank", b2),
+        bought_h2_2_gwp_per_kg=step("bought_h2_2_gwp_per_kg", h2_gwp_2 + h2_leak.bought_per_kg(h2_colour_2),
+                                    "kg CO2e per kg H2",
+                                    f"Second bought colour ({h2_colour_2 or 'none'}), delivered to the tank, with leaks",
+                                    [*b2, *([f"h2_leakage.bought_{h2_colour_2}_per_kg"] if h2_colour_2 else [])]),
         dc_fixed_gwp_per_year=step("dc_fixed_gwp_per_year", dc["it_kgco2e_per_year"] * scale_it,
                                    "kg CO2e per year", f"The facility's IT-driven burden at {size_mw_it:g} MW IT",
                                    ["data_centre.it_per_year"], inputs={"scale_it": scale_it}),

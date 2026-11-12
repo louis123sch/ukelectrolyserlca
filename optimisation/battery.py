@@ -270,6 +270,12 @@ def cost_components():
             for c in CASES}
 
 
+# Insurance (12 Nov 2026): NESO's running cost (BEIS 2022) does not say it carries
+# it, so it is added at the ratio DESNZ/Arup give onshore wind (£3.6k/MW/yr on
+# £1,588/kW), as the fuel cell does (h2_capex). Estimate: cost_exclusions.py.
+INSURANCE_FRAC_OF_CAPITAL = 3.6 / 1_588.0
+
+
 def annual_costs(case: str) -> dict:
     """The battery's two LP cost coefficients in one case, £/MW/y (power) and
     £/MWh/y (energy): capital times the CRF at Modo's WACC over the life, plus
@@ -331,8 +337,11 @@ def annual_costs(case: str) -> dict:
     crf = T.cost("cost.battery.crf", capital_recovery_factor(wacc, life), "per year",
                  "Capital recovery factor at the WACC over the life",
                  uses=["cost.battery.wacc", "cost.battery.life_years"])
-    return {"power_GBP_per_MW_year": (power * finance * crf + run_power) * 1000.0,
-            "energy_GBP_per_MWh_year": (energy * finance * crf + run_energy) * 1000.0,
+    ins = T.cost("cost.battery.insurance_frac", INSURANCE_FRAC_OF_CAPITAL, "fraction of capital per year",
+                 "Insurance, at onshore wind's ratio to capital: an estimate that fails the 1 % test if left out",
+                 grade="proxy", cites=[("desnz_arup_2024_onshore_solar", "Table 3, insurance over total capex, central")])
+    return {"power_GBP_per_MW_year": (power * finance * crf + run_power + power * ins) * 1000.0,
+            "energy_GBP_per_MWh_year": (energy * finance * crf + run_energy + energy * ins) * 1000.0,
             "power_GBP_per_kW": power, "energy_GBP_per_kWh": energy, "crf": crf, "finance": finance}
 
 
@@ -352,6 +361,69 @@ def lifetime_throughput_mwh_per_mwh():
     """
     mean_capacity = (1.0 + CAPACITY_AT_END_OF_LIFE) / 2.0
     return WARRANTED_CYCLES * mean_capacity
+
+
+# =============================================================================
+# Ageing: sized to end of life (12 Nov 2026, user)
+# =============================================================================
+# The LP's cap_batt_e is the energy the plant needs in every hour of every year,
+# so the battery is bought big enough to still hold it in year 15. That is BEIS's
+# own convention: Mott MacDonald for BEIS (2018, summary table p. 7) give
+# lithium-ion 15 years, "dependent on the energy capacity installed at the start
+# of the project (overplanting at project start to account for degradation can
+# extend life)". They give no fade rate.
+#
+# Fade over life = time + use. Modo's warranted line (67 % after 10,000 cycles,
+# ~12-15 years at 1-2 cycles a day) holds both; the calendar part is taken out of
+# it over Modo's own span so it is not counted twice, and the rest is spread per
+# cycle. The calendar rate is ASSUMED: no UK government figure; published LFP
+# measurements and fleet data run about 1-2 % a year at moderate temperature
+# (DATA_GAPS.md). Tested at x0.5 / x1.5 on the whole fade (SHAKY_KNOBS).
+CALENDAR_FADE_PER_YEAR = 0.01            # ASSUMED, fraction of rated capacity lost per year
+MODO_WARRANTY_SPAN_YEARS = 13.5          # Modo: "~12-15 years" for the 10,000 cycles
+# Full cycles a year the saved North Norfolk run gives the battery (11 Nov 2026,
+# re-solve of the pre-tank reference run): 161 at lowest cost, 205 at lowest
+# carbon. Fixed here, not solved for; check it against each new run.
+CYCLES_PER_YEAR_IN_USE = 180.0
+
+
+def capacity_fade_at_end_of_life(calendar_fade_per_year: float | None = None,
+                                 cycles_per_year: float | None = None) -> float:
+    """Share of rated energy lost by the end of ``ASSET_LIFE_YEARS``: the calendar
+    rate over the life, plus Modo's per-cycle fade net of its own calendar part
+    times the cycles the battery does. Recorded as a traced step so a sweep can
+    push it (``battery.capacity_fade_at_end_of_life``)."""
+    cal = CALENDAR_FADE_PER_YEAR if calendar_fade_per_year is None else float(calendar_fade_per_year)
+    cyc_yr = CYCLES_PER_YEAR_IN_USE if cycles_per_year is None else float(cycles_per_year)
+    warranted_fade = 1.0 - CAPACITY_AT_END_OF_LIFE
+    per_cycle = (warranted_fade - cal * MODO_WARRANTY_SPAN_YEARS) / WARRANTED_CYCLES
+    if per_cycle < 0:
+        raise ValueError(f"calendar fade {cal:.3%}/yr exceeds Modo's whole warranted fade over "
+                         f"{MODO_WARRANTY_SPAN_YEARS} years")
+    fade = cal * ASSET_LIFE_YEARS + per_cycle * cyc_yr * ASSET_LIFE_YEARS
+    fade = T.step("battery.capacity_fade_at_end_of_life", fade, "fraction of rated energy",
+                  "Battery energy lost by the end of its 15-year life: time plus use",
+                  grade="assumed",
+                  inputs={"calendar_fade_per_year": cal, "asset_life_years": ASSET_LIFE_YEARS,
+                          "cycles_per_year": cyc_yr, "warranted_cycles": WARRANTED_CYCLES,
+                          "capacity_at_end_of_warranty": CAPACITY_AT_END_OF_LIFE,
+                          "warranty_span_years": MODO_WARRANTY_SPAN_YEARS},
+                  cites=[("modo_bess_assumptions", "~67 % after 10,000 cycles, ~12-15 years"),
+                         ("mott_macdonald_storage_2018", "summary table p. 7: 15 years with overplanting")],
+                  note="Calendar rate assumed (about 1-2 %/yr in LFP measurements); cycles from the saved run")
+    if not 0.0 <= fade < 0.9:
+        raise ValueError(f"battery fade at end of life {fade!r} is outside [0, 0.9)")
+    return fade
+
+
+def end_of_life_oversize(calendar_fade_per_year: float | None = None,
+                         cycles_per_year: float | None = None) -> float:
+    """Rated energy bought per MWh the plant needs in year 15: 1 / (1 - fade).
+    Multiplies the battery's energy cost and carbon, not its power."""
+    fade = capacity_fade_at_end_of_life(calendar_fade_per_year, cycles_per_year)
+    return T.step("battery.end_of_life_oversize", 1.0 / (1.0 - fade), "MWh rated per MWh needed",
+                  "Battery energy bought so it still holds what is needed at end of life",
+                  uses=["battery.capacity_fade_at_end_of_life"])
 
 
 def embodied_components(basis: str | None = None, usable_fraction: float | None = None,

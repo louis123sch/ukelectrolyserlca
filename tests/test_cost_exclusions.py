@@ -45,7 +45,8 @@ def test_supplier_margin_is_carried_in_the_import_price():
 
 def test_upper_additions_only_touch_flows_still_left_out():
     added = X.upper_additions()
-    assert set(added) == {"cost_batt_e", "cost_fc"}      # battery rates are exempt to 2035: upper 0, not added
+    # battery rates are exempt to 2035: upper 0, not added. Electrolyser land since 12 Nov 2026.
+    assert set(added) == {"cost_batt_e", "cost_fc", "cost_ely"}
 
 
 def test_major_hazard_is_hse_upper_tier_in_2025_pounds():

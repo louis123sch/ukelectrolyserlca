@@ -272,6 +272,7 @@ def _row(case, variant, objective, point, q, series, tech, assets, seconds, mip_
          "cost_m_GBP_per_year": point["cost_GBP_per_year"] / 1e6,
          "gwp_t_per_year": point["gwp_kgco2e_per_year"] / 1e3,
          "gwp_g_per_kWh": point["gwp_g_per_kWh"],
+         "gwp_supply_g_per_kWh": point.get("gwp_supply_g_per_kWh", float("nan")),
          **{k: point[k] for k in P.CAPACITY_VARS},
          "battery_share_of_storage_output": (batt_out / stored) if stored else float("nan"),
          "unserved_MWh_per_year": point["unserved_MWh_per_year"],
@@ -554,7 +555,9 @@ SHAKY_KNOBS = {
                                   # since 11 Nov 2026 in place of swaps (user): wind's life-extension
                                   # parts and the stack's carbon; the battery cell swap is dropped
                                   "onshore_wind.parts_fraction",
-                                  "coefficient.gwp_fc_stack_per_mw")
+                                  "coefficient.gwp_fc_stack_per_mw",
+                                  # since 12 Nov 2026: battery sized to end of life, calendar rate assumed
+                                  "battery.capacity_fade_at_end_of_life")
              for f in (0.5, 1.5)],
     "green_h2_grid_share": [0.0, 1.0],          # the electricity the seller runs on
     # act through how the plant runs: only a solve can judge them

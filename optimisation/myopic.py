@@ -217,7 +217,7 @@ def evaluate(df: pd.DataFrame, series: M.Series, tech: M.Tech, caps: dict,
     unserved = float((df.unserved * dt).sum()) * scale
     return {
         "cost_GBP_per_year": cost, "gwp_kgco2e_per_year": gwp,
-        **M.intensities(cost, gwp, unserved, mwh),
+        **M.intensities(cost, gwp, unserved, mwh, facility_gwp=gwp_const),
         "import_MWh_per_year": float((df.imp * dt).sum()) * scale,
         "unserved_MWh_per_year": unserved,
         "curtailed_MWh_per_year": (float((df.curtailed * dt).sum()) * scale

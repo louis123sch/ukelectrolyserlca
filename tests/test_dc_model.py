@@ -821,6 +821,15 @@ def test_intensities_divide_by_served_demand_without_the_penalties():
     assert r["served_MWh_per_year"] == 1000.0
     assert r["cost_GBP_per_MWh"] == pytest.approx(2000.0)
     assert r["gwp_g_per_kWh"] == pytest.approx(500.0)
+    # With no facility carbon given, supply-only equals the total.
+    assert r["gwp_supply_g_per_kWh"] == pytest.approx(500.0)
+
+
+def test_supply_only_carbon_leaves_out_the_building():
+    r = M.intensities(cost=2e6, gwp=5e5, unserved_mwh=0.0, demand_mwh=1000.0,
+                      facility_gwp=1.5e5)
+    assert r["gwp_g_per_kWh"] == pytest.approx(500.0)
+    assert r["gwp_supply_g_per_kWh"] == pytest.approx(350.0)
 
 
 def test_leaked_hydrogen_is_charged_at_its_gwp(series, tech):

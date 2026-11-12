@@ -547,6 +547,8 @@ def comparison_table(summaries) -> pd.DataFrame:
                 "cost_m_GBP_per_year": p["cost_GBP_per_year"] / 1e6,
                 "gwp_t_per_year": p["gwp_kgco2e_per_year"] / 1000.0,
                 "gwp_g_per_kWh": p["gwp_g_per_kWh"],
+                # electricity supply alone, without the building (12 Nov 2026); absent in older runs
+                "gwp_supply_g_per_kWh": p.get("gwp_supply_g_per_kWh", float("nan")),
                 "cost_GBP_per_MWh": p["cost_GBP_per_MWh"],
                 **{k: p[k] for k in P.CAPACITY_VARS},
             })

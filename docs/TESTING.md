@@ -46,4 +46,5 @@ Allow a night for it, though only steps 2 and 3 have been timed since sweeps beg
 
 | Date | Commit | Result | Notes |
 |---|---|---|---|
+| 2026-11-11 | 5cd2758 (source-update) | not passed: carbon cut-off rule 3 fails on one point | Steps 1, 2, R, 4, 5, 6, 8 run in `optimisation_outputs/signoff/2026-11-11_1608/`. Step 3 (connection) skipped by the user: no change touches the connection price. Step 2: 680 passed, only the 3 map tests failed (stale maps, rebuilt and passing in step 8). Step 4 cost cut-off passes (largest move 0.2 %). Step 5: the sweep ran but the judge crashed printing to a cp1252 log; re-run with PYTHONIOENCODING=utf-8, no new solves: three points pass, islanded_h2 min_gwp fails (battery energy -7.4 %, carbon +0.7 %). Step 6: every hourly row recorded in `shaky_inputs.md`. |
 | none yet | | | The 5 Nov connection test passed hourly but started before that day's cost changes (major-hazard charge, new knobs), and the 5 Nov assumption sweep is rig only, so neither counts |

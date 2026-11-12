@@ -221,7 +221,14 @@ _FIXED = [
     Source("mott_macdonald_storage_2018", "Storage cost and technical assumptions for BEIS", "Mott MacDonald for BEIS",
            "August 2018", "document",
            link="https://assets.publishing.service.gov.uk/government/uploads/system/uploads/attachment_data/file/910261/storage-costs-technical-assumptions-2018.pdf",
-           note="Table 53: hydrogen storage system build time 1 year"),
+           note="Table 53: hydrogen storage system build time 1 year. Summary table p. 7: lithium-ion 15 years "
+                "with overplanting at the start for degradation (battery.py, end-of-life sizing)"),
+    Source("frazer_nash_beis_fugitive_h2_2022", "Fugitive Hydrogen Emissions in a Future Hydrogen Economy",
+           "Frazer-Nash Consultancy for BEIS", "March 2022", "document",
+           link="https://assets.publishing.service.gov.uk/media/624ec79cd3bf7f600d4055d1/fugitive-hydrogen-emissions-future-hydrogen-economy.pdf",
+           note="FNC 012865-53172R Issue 1. Summary table p. 6 / Table 4 p. 39, 50 % confidence: electrolytic "
+                "0.24 % recombined (3.32 % venting), reformer with capture 0.25 %, road trailer gas 0.30 %, fuel "
+                "cell 0.56 % recombined (1.36 % venting). Charged in optimisation/h2_leakage.py"),
     Source("fes_2025_workbook",
            "Future Energy Scenarios 2025 Data Workbook V006 (cross-rates, gas price CP1, carbon price CP2)",
            "NESO", "2025", "workbook", basis="real 2025 £",

@@ -382,6 +382,15 @@ REGISTER: list[Exclusion] = [
               "over 25 years ≈ 46 t/yr; ×2 upper.",
         where=("data_centre", "DC_SCOPE", "operation")),
     # ------------------------------------------------------------ boundary (reported, never tested)
+    Exclusion("fuel cell", "site hydrogen supply piping and skid (tank or delivery point to the fuel cell)",
+              "boundary",
+              source="Usai et al. 2021 SI Table 1 stops at the system's own fuel management (blower, ejectors, "
+                     "pipes); no source here itemises a stationary plant's supply line",
+              note="Left out with its source, unsized (user, 12 Nov 2026: only sourced items go in). The "
+                   "completeness checks of 12 Nov put all fuel cell site items at 0.3-0.8 % of the "
+                   "lowest-carbon design, an unsourced bound; the foundation, the largest of them, is already "
+                   "in through the battery's container (Jasper's 43.9 t block, since 21 Oct 2026).",
+              where=("fuel_cell", "docstring", "balance of plant")),
     Exclusion("all", "end-of-life of every asset", "boundary",
               source="ASSUMPTIONS.md §6", note="cradle-to-gate throughout; APOS carries some EoL in the background",
               where=(("bess", "BESS_SCOPE", "end_of_life"), ("upv", "UPV_PV_SCOPE", "end_of_life"),

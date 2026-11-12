@@ -1023,13 +1023,20 @@ def totals(obj: dict) -> dict:
 
 
 def intensities(cost: float, gwp: float, unserved_mwh: float,
-                demand_mwh: float) -> dict:
+                demand_mwh: float, facility_gwp: float = 0.0) -> dict:
     """£/MWh and g/kWh of a build, on the demand it actually *served*.
 
     Both VoLL penalties come off first: they are there to make a reliability
     target bind, not to be read as money spent or carbon emitted. Dividing by
     gross demand, as every intensity did until 14 Oct, credited a build for
     load it never carried.
+
+    Carbon is reported two ways (12 Nov 2026, user). ``gwp_g_per_kWh`` is the
+    data centre total, with the building, servers and water
+    (``facility_terms``, the objective's carbon constant). ``gwp_supply_g_per_kWh``
+    leaves that out: the electricity supply alone, the scope of the £/MWh and of
+    published supply studies. The facility term is the same at every design, so
+    it moves no choice.
     """
     served = demand_mwh - unserved_mwh
     cost_x = cost - VOLL_GBP_PER_MWH * unserved_mwh
@@ -1038,7 +1045,8 @@ def intensities(cost: float, gwp: float, unserved_mwh: float,
             "cost_excl_VoLL_GBP_per_year": cost_x,
             "gwp_excl_VoLL_kgco2e_per_year": gwp_x,
             "cost_GBP_per_MWh": cost_x / served if served > 0 else float("nan"),
-            "gwp_g_per_kWh": gwp_x / served if served > 0 else float("nan")}
+            "gwp_g_per_kWh": gwp_x / served if served > 0 else float("nan"),
+            "gwp_supply_g_per_kWh": (gwp_x - facility_gwp) / served if served > 0 else float("nan")}
 
 
 # The branch-and-bound gap when the model carries the price-list switches:

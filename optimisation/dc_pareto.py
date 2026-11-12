@@ -129,7 +129,7 @@ def _extract(V, obj, series, tag):
         "gwp_kgco2e_per_year": tot["gwp_kgco2e_per_year"],
         # On served demand, VoLL penalties off: see dc_model.intensities.
         **M.intensities(tot["cost_GBP_per_year"], tot["gwp_kgco2e_per_year"],
-                        unserved, mwh),
+                        unserved, mwh, facility_gwp=tot["gwp_const_kgco2e_per_year"]),
         "import_MWh_per_year": _energy(V, series, "imp"),
         "export_MWh_per_year": _energy(V, series, "exp"),
         "unserved_MWh_per_year": unserved,
