@@ -1,127 +1,127 @@
 point,side,term,value,share_pct
-min_cost,cost,wind,56930398.43646867,36.866893227842546
+min_cost,cost,wind,61639830.15591272,35.82482553058197
 min_cost,cost,offshore wind,0.0,0.0
-min_cost,cost,solar,24391976.48881609,15.795715777973193
-min_cost,cost,battery,24435640.929444343,15.823991924192189
-min_cost,cost,electrolyser,0.0,0.0
-min_cost,cost,H2 tank,0.0,0.0
-min_cost,cost,fuel cell,20736326.59257254,13.428396066455917
-min_cost,cost,grid connection,434827.93596454547,0.28158515534679657
-min_cost,cost,grid winter-peak charge,416.6115543669187,0.0002697886210909053
-min_cost,cost,grid connection fixed charges,3392768.5121042007,2.1970834197149602
-min_cost,cost,grid energy + network,9918999.727982784,6.423329432809489
-min_cost,cost,bought H2 (green),14122077.379083239,9.14515150409488
+min_cost,cost,solar,27551928.903488424,16.013072124011853
+min_cost,cost,battery,33230540.9439482,19.31345898573359
+min_cost,cost,electrolyser,230838.96256983088,0.1341626921879418
+min_cost,cost,H2 tank,303801.6650926572,0.17656832636163158
+min_cost,cost,fuel cell,18916169.555524662,10.994002941271452
+min_cost,cost,grid connection,434827.9443588695,0.25272028172491384
+min_cost,cost,grid winter-peak charge,1545.7784344874322,0.0008984003133100197
+min_cost,cost,grid connection fixed charges,3392768.5121042007,1.9718636424588862
+min_cost,cost,grid energy + network,7703883.217804259,4.477466461015904
+min_cost,cost,bought H2 (green),18585348.102212727,10.80173082084711
 min_cost,cost,"bought H2, second colour",0.0,0.0
-min_cost,cost,electrolyser stacks and water,0.0,0.0
+min_cost,cost,electrolyser stacks and water,9461.076826741846,0.005498740437670499
 min_cost,cost,unserved (VoLL),0.0,0.0
 min_cost,cost,export credit,-0.0,-0.0
-min_cost,cost,major-hazard compliance,58037.3065443089,0.0375837029489324
-min_cost,carbon,wind,6422573.050366817,12.019585789065326
+min_cost,cost,major-hazard compliance,58037.3065443089,0.033731053053774954
+min_cost,carbon,wind,6953865.120588277,12.766170902076318
 min_cost,carbon,offshore wind,0.0,0.0
-min_cost,carbon,solar,7556412.062320244,14.141519657047553
-min_cost,carbon,battery cells and container,6529801.151919405,12.220258845720764
-min_cost,carbon,battery power conversion,208378.7264019632,0.3899723613827203
-min_cost,carbon,electrolyser,0.0,0.0
-min_cost,carbon,electrolyser stack replacements,0.0,0.0
-min_cost,carbon,H2 tank,0.0,0.0
-min_cost,carbon,fuel cell stack replacements,552280.0922125239,1.03356986302588
-min_cost,carbon,fuel cell BoP replacements,143998.24197797038,0.26948688778712304
-min_cost,carbon,grid connection,7471.4844841852355,0.013982581128322999
-min_cost,carbon,wind step-up transformers,86719.13852304831,0.1622913615551773
-min_cost,carbon,solar step-up transformers,134436.5281951031,0.2515925270375637
-min_cost,carbon,battery step-up transformers,112634.83617577287,0.21079154189997087
-min_cost,carbon,fuel cell step-up transformers,48811.20411283568,0.09134819498367537
-min_cost,carbon,grid connection cable,256642.72861771352,0.4802964901402309
-min_cost,carbon,grid import,10217380.575975642,19.121414643225407
-min_cost,carbon,bought H2 (green),3011355.6509066634,5.635630346842385
+min_cost,carbon,solar,8535336.527647447,15.66949644969012
+min_cost,carbon,battery cells and container,8991419.344332451,16.506790685677338
+min_cost,carbon,battery power conversion,227037.2912423795,0.4168037215107066
+min_cost,carbon,electrolyser,2254.627656444729,0.004139131473445414
+min_cost,carbon,electrolyser stack replacements,11483.045698768316,0.021081013411204507
+min_cost,carbon,H2 tank,59402.05164181638,0.10905255279516238
+min_cost,carbon,fuel cell stack replacements,495367.93192349386,0.909415349403332
+min_cost,carbon,fuel cell BoP replacements,129159.30220022594,0.23711557484760604
+min_cost,carbon,grid connection,7471.484628421741,0.013716436543508782
+min_cost,carbon,wind step-up transformers,93892.77287059388,0.17237193476574564
+min_cost,carbon,solar step-up transformers,151852.62533200637,0.278776843280699
+min_cost,carbon,battery step-up transformers,122720.3397699417,0.22529468194968577
+min_cost,carbon,fuel cell step-up transformers,43781.236327393075,0.08037526405349796
+min_cost,carbon,grid connection cable,256642.72861771352,0.4711545129928771
+min_cost,carbon,grid import,7959346.227747215,14.612071481136446
+min_cost,carbon,bought H2 (green),2264184.876011574,4.156676981766791
 min_cost,carbon,"bought H2, second colour",0.0,0.0
-min_cost,carbon,electrolyser consumables,0.0,0.0
-min_cost,carbon,fuel cell maintenance,134.03047092589685,0.0002508326072757761
+min_cost,carbon,electrolyser consumables,14972.27197576108,0.027486668136405275
+min_cost,carbon,fuel cell maintenance,92.52989942471004,0.0001698699196955162
 min_cost,carbon,unserved (VoLL),0.0,0.0
-min_cost,carbon,H2 leaked from tank,0.0,0.0
-min_cost,carbon,"data centre, IT capacity",15398643.50050173,28.817938719894023
-min_cost,carbon,"data centre, cooling consumables",2746556.4543090775,5.140069356656609
-knee,cost,wind,76846015.382783,45.42445423212827
+min_cost,carbon,H2 leaked from tank,5550.361925096077,0.010189566187352159
+min_cost,carbon,"data centre, IT capacity",15398643.50050173,28.269417249053802
+min_cost,carbon,"data centre, cooling consumables",2746556.4543090775,5.042233129328258
+knee,cost,wind,86569233.50984016,44.14127819927809
 knee,cost,offshore wind,0.0,0.0
-knee,cost,solar,17504401.212697838,10.34702798559349
-knee,cost,battery,15768247.382412296,9.320769957628011
-knee,cost,electrolyser,0.0,0.0
-knee,cost,H2 tank,0.0,0.0
-knee,cost,fuel cell,27011379.243783664,15.966698521636156
-knee,cost,grid connection,434827.96278757474,0.2570311914821685
+knee,cost,solar,17640043.828139503,8.99458214536295
+knee,cost,battery,12345591.84062253,6.2949639482451145
+knee,cost,electrolyser,5072003.677619965,2.586192764847986
+knee,cost,H2 tank,4296897.500429429,2.1909694734524656
+knee,cost,fuel cell,31940355.66442809,16.286249375271975
+knee,cost,grid connection,434827.96278757474,0.2217168998273497
 knee,cost,grid winter-peak charge,0.0,0.0
-knee,cost,grid connection fixed charges,3392768.5121042007,2.0054996635884375
-knee,cost,grid energy + network,901743.7634701475,0.5330298273608861
-knee,cost,bought H2 (green),27255806.918408204,16.111182183719897
+knee,cost,grid connection fixed charges,3392768.5121042007,1.7299580080204735
+knee,cost,grid energy + network,1997458.0019481496,1.0184952064447383
+knee,cost,bought H2 (green),32211771.047185805,16.42464290646236
 knee,cost,"bought H2, second colour",0.0,0.0
-knee,cost,electrolyser stacks and water,-6.749869598607255e-13,-3.989915952408167e-19
+knee,cost,electrolyser stacks and water,159558.32548202673,0.08135810089288277
 knee,cost,unserved (VoLL),0.0,0.0
 knee,cost,export credit,-0.0,-0.0
-knee,cost,major-hazard compliance,58037.3065443089,0.03430643686267971
-knee,carbon,wind,8669342.93418499,19.4414868272082
+knee,cost,major-hazard compliance,58037.3065443089,0.02959297189362226
+knee,carbon,wind,9766262.689197144,21.471780008232063
 knee,carbon,offshore wind,0.0,0.0
-knee,carbon,solar,5422703.999734096,12.160717274542879
-knee,carbon,battery cells and container,4170377.1430496643,9.352304194979045
-knee,carbon,battery power conversion,143537.440423698,0.32189074516878025
-knee,carbon,electrolyser,0.0,0.0
-knee,carbon,electrolyser stack replacements,0.0,0.0
-knee,carbon,H2 tank,0.0,0.0
-knee,carbon,fuel cell stack replacements,719406.4461199053,1.6133092267578715
-knee,carbon,fuel cell BoP replacements,187573.77817816022,0.42064469767375795
-knee,carbon,grid connection,7471.484945075235,0.016755223232269127
-knee,carbon,wind step-up transformers,117055.57023916768,0.26250366886311965
-knee,carbon,solar step-up transformers,96475.61476816874,0.21635196668321605
-knee,carbon,battery step-up transformers,77586.21221259495,0.1739914240508643
-knee,carbon,fuel cell step-up transformers,63582.03994095032,0.14258628379836039
-knee,carbon,grid connection cable,256642.72861771352,0.5755356854145618
-knee,carbon,grid import,702802.3762725173,1.5760736706532512
-knee,carbon,bought H2 (green),5811958.537016433,13.033642364305404
+knee,carbon,solar,5464724.846054525,12.014562113897897
+knee,carbon,battery cells and container,3194235.4117780533,7.022739633254854
+knee,carbon,battery power conversion,115057.68215807606,0.2529619894709579
+knee,carbon,electrolyser,49538.77646063329,0.10891430467217401
+knee,carbon,electrolyser stack replacements,252305.97714548418,0.554711521534469
+knee,carbon,H2 tank,840168.2957934185,1.8471660440919941
+knee,carbon,fuel cell stack replacements,836439.3163185382,1.8389676339644014
+knee,carbon,fuel cell BoP replacements,218088.23596845494,0.47948153496606616
+knee,carbon,grid connection,7471.484945075235,0.01642655805817378
+knee,carbon,wind step-up transformers,131866.44672707844,0.2899171796518452
+knee,carbon,solar step-up transformers,97223.20987607817,0.21375171246033084
+knee,carbon,battery step-up transformers,62192.064441550145,0.1367334023713972
+knee,carbon,fuel cell step-up transformers,73925.55113341646,0.16253025557870973
+knee,carbon,grid connection cable,256642.72861771352,0.5642461589413746
+knee,carbon,grid import,1740347.8292759848,3.826270797462044
+knee,carbon,bought H2 (green),3924242.0660338523,8.62770795978413
 knee,carbon,"bought H2, second colour",0.0,0.0
-knee,carbon,electrolyser consumables,-5.723850208400519e-13,-1.2836054505207216e-18
-knee,carbon,fuel cell maintenance,258.6806840578802,0.0005801059145709382
+knee,carbon,electrolyser consumables,252503.0383815842,0.5551447738075591
+knee,carbon,fuel cell maintenance,217.6440227466684,0.0004785049025654757
 knee,carbon,unserved (VoLL),0.0,0.0
-knee,carbon,H2 leaked from tank,-3.1557552022713774e-15,-7.076957695712671e-21
-knee,carbon,"data centre, IT capacity",15398643.50050173,34.532320043701645
-knee,carbon,"data centre, cooling consumables",2746556.4543090775,6.159306597052211
-min_gwp,cost,wind,99428708.68819413,49.326493394177376
+knee,carbon,H2 leaked from tank,55524.985979818615,0.12207538562705239
+knee,carbon,"data centre, IT capacity",15398643.50050173,33.854944945695124
+knee,carbon,"data centre, cooling consumables",2746556.4543090775,6.038487581574813
+min_gwp,cost,wind,103275356.9229238,44.77217521665835
 min_gwp,cost,offshore wind,0.0,0.0
-min_gwp,cost,solar,8946665.359163882,4.438432677654924
-min_gwp,cost,battery,1171051.4811106392,0.5809575917192243
-min_gwp,cost,electrolyser,10515608.873532658,5.2167841509707795
-min_gwp,cost,H2 tank,3117391.653801284,1.5465352094686404
-min_gwp,cost,fuel cell,48114461.20716569,23.869541143718614
-min_gwp,cost,grid connection,11628.709970547072,0.00576899260900391
+min_gwp,cost,solar,10268376.578056112,4.4515707235605975
+min_gwp,cost,battery,882775.0139873727,0.3827026967588013
+min_gwp,cost,electrolyser,14259006.628396168,6.18159803270881
+min_gwp,cost,H2 tank,4639599.915538032,2.0113702488454317
+min_gwp,cost,fuel cell,49564110.91161475,21.4871497355255
+min_gwp,cost,grid connection,11628.637270927155,0.005041274132932569
 min_gwp,cost,grid winter-peak charge,0.0,0.0
-min_gwp,cost,grid connection fixed charges,323418.6069172431,0.16044768144063876
-min_gwp,cost,grid energy + network,3054.3278581896952,0.0015152493169061421
-min_gwp,cost,bought H2 (green),29653540.86047229,14.711095081754118
+min_gwp,cost,grid connection fixed charges,323418.6069172431,0.14020919383540018
+min_gwp,cost,grid energy + network,3344.348040005123,0.0014498496146021181
+min_gwp,cost,bought H2 (green),47088583.94542556,20.413953472776164
 min_gwp,cost,"bought H2, second colour",0.0,0.0
-min_gwp,cost,electrolyser stacks and water,229060.22241031245,0.11363657133498162
+min_gwp,cost,electrolyser stacks and water,294377.1798425917,0.12761908618272463
 min_gwp,cost,unserved (VoLL),0.0,0.0
 min_gwp,cost,export credit,-0.0,-0.0
-min_gwp,cost,major-hazard compliance,58037.3065443089,0.028792255834794108
-min_gwp,carbon,wind,11216997.639076764,26.466786479728157
+min_gwp,cost,major-hazard compliance,58037.3065443089,0.025160469400691433
+min_gwp,carbon,wind,11650955.242837183,26.94643486234271
 min_gwp,carbon,offshore wind,0.0,0.0
-min_gwp,carbon,solar,2771595.4083723356,6.539648686921112
-min_gwp,carbon,battery cells and container,269322.1468753621,0.6354723416166187
-min_gwp,carbon,battery power conversion,19126.131597595748,0.045128585871612344
-min_gwp,carbon,electrolyser,105994.7289507197,0.25009721401227447
-min_gwp,carbon,electrolyser stack replacements,539841.8283793074,1.2737702961411312
-min_gwp,carbon,H2 tank,755623.2592449833,1.7829119792165078
-min_gwp,carbon,fuel cell stack replacements,1281454.5022534188,3.02362394875382
-min_gwp,carbon,fuel cell BoP replacements,334118.8612466573,0.788361809817858
-min_gwp,carbon,grid connection,182.97215149011492,0.000431727367790008
-min_gwp,carbon,wind step-up transformers,151454.62176101643,0.3573609681036485
-min_gwp,carbon,solar step-up transformers,49309.6010633194,0.11634723700012002
-min_gwp,carbon,battery step-up transformers,10338.237191333434,0.024393329224443636
-min_gwp,carbon,fuel cell step-up transformers,113256.5489011582,0.26723165981200675
-min_gwp,carbon,grid connection cable,69372.49682814283,0.16368614135388157
-min_gwp,carbon,grid import,2129.895295772385,0.005025541221565677
-min_gwp,carbon,bought H2 (green),6323245.188546884,14.919855174188424
+min_gwp,carbon,solar,3181049.500865436,7.357160111112456
+min_gwp,carbon,battery cells and container,201780.60675870813,0.4666800157738363
+min_gwp,carbon,battery power conversion,13819.894765558343,0.03196277784463144
+min_gwp,carbon,electrolyser,139269.169900577,0.3221029981524993
+min_gwp,carbon,electrolyser stack replacements,709311.9069246452,1.6405030058612289
+min_gwp,carbon,H2 tank,907176.574216934,2.098126201352315
+min_gwp,carbon,fuel cell stack replacements,1297962.097867878,3.001938501608166
+min_gwp,carbon,fuel cell BoP replacements,338422.9540091584,0.7827076746978133
+min_gwp,carbon,grid connection,182.97100759660458,0.00042317700438599293
+min_gwp,carbon,wind step-up transformers,157314.0225429944,0.36383729685975846
+min_gwp,carbon,solar step-up transformers,56594.22056210663,0.13089162615223462
+min_gwp,carbon,battery step-up transformers,7470.059970912749,0.017276822391687135
+min_gwp,carbon,fuel cell step-up transformers,114715.51081253459,0.2653150729173676
+min_gwp,carbon,grid connection cable,69372.49682814283,0.16044533929240415
+min_gwp,carbon,grid import,2351.0260216685942,0.005437474287055829
+min_gwp,carbon,bought H2 (green),5736629.683537668,13.267729115332731
 min_gwp,carbon,"bought H2, second colour",0.0,0.0
-min_gwp,carbon,electrolyser consumables,194241.73795151024,0.45831823891130524
-min_gwp,carbon,fuel cell maintenance,373.27299236318333,0.0008807469614782508
+min_gwp,carbon,electrolyser consumables,465855.5554271557,1.077434950005134
+min_gwp,carbon,fuel cell maintenance,342.874793877969,0.0007930039302873484
 min_gwp,carbon,unserved (VoLL),0.0,0.0
-min_gwp,carbon,H2 leaked from tank,28232.278638912627,0.06661476757106564
-min_gwp,carbon,"data centre, IT capacity",15398643.50050173,36.33348447765007
-min_gwp,carbon,"data centre, cooling consumables",2746556.4543090775,6.480568648555113
+min_gwp,carbon,H2 leaked from tank,41688.30622784525,0.09641709240799338
+min_gwp,carbon,"data centre, IT capacity",15398643.50050173,35.614122224853986
+min_gwp,carbon,"data centre, cooling consumables",2746556.4543090775,6.352260655819322

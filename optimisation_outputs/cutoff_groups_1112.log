@@ -1,0 +1,194 @@
+groups: ['gwp_batt_e', 'gwp_tx_fc_per_mw', 'gwp_tank', 'gwp_tx_wind_per_mw', 'gwp_tx_solar_per_mwp', 'dc_fixed_gwp_per_year']
+Current Brightway project: hydrogen-smr-sources
+Using ecoinvent database: ecoinvent-3.9.1-apos
+Using biosphere database: ecoinvent-3.9.1-biosphere
+Using foreground database: hydrogen foreground
+Using LCIA method: ('ecoinvent-3.9.1', 'IPCC 2021', 'climate change', 'global warming potential (GWP100)')
+[norfolk_grid_green 1/8] min_gwp central
+Set parameter Username
+Set parameter LicenseID to value 2883216
+Academic license - for non-commercial use only - expires 2027-11-10
+Set parameter MIPGap to value 0.001
+Set parameter Username
+Set parameter LicenseID to value 2883216
+Academic license - for non-commercial use only - expires 2027-11-10
+Set parameter MIPGap to value 0.001
+Set parameter Username
+Set parameter LicenseID to value 2883216
+Academic license - for non-commercial use only - expires 2027-11-10
+Set parameter MIPGap to value 0.001
+[norfolk_grid_green] the central points chose local network | 11 kV | HV2 | STODY PRIMARY 33/11kV; the other variants are solved on that list
+[norfolk_grid_green 2/8] min_gwp cutoff=upper
+Set parameter Username
+Set parameter LicenseID to value 2883216
+Academic license - for non-commercial use only - expires 2027-11-10
+Set parameter MIPGap to value 1e-07
+Set parameter Username
+Set parameter LicenseID to value 2883216
+Academic license - for non-commercial use only - expires 2027-11-10
+Set parameter MIPGap to value 1e-07
+Set parameter Username
+Set parameter LicenseID to value 2883216
+Academic license - for non-commercial use only - expires 2027-11-10
+Set parameter MIPGap to value 1e-07
+[norfolk_grid_green 3/8] min_gwp cutoff=upper:gwp_batt_e
+Set parameter Username
+Set parameter LicenseID to value 2883216
+Academic license - for non-commercial use only - expires 2027-11-10
+Set parameter MIPGap to value 1e-07
+Set parameter Username
+Set parameter LicenseID to value 2883216
+Academic license - for non-commercial use only - expires 2027-11-10
+Set parameter MIPGap to value 1e-07
+Set parameter Username
+Set parameter LicenseID to value 2883216
+Academic license - for non-commercial use only - expires 2027-11-10
+Set parameter MIPGap to value 1e-07
+[norfolk_grid_green 4/8] min_gwp cutoff=upper:gwp_tx_fc_per_mw
+Set parameter Username
+Set parameter LicenseID to value 2883216
+Academic license - for non-commercial use only - expires 2027-11-10
+Set parameter MIPGap to value 1e-07
+Set parameter Username
+Set parameter LicenseID to value 2883216
+Academic license - for non-commercial use only - expires 2027-11-10
+Set parameter MIPGap to value 1e-07
+Set parameter Username
+Set parameter LicenseID to value 2883216
+Academic license - for non-commercial use only - expires 2027-11-10
+Set parameter MIPGap to value 1e-07
+[norfolk_grid_green 5/8] min_gwp cutoff=upper:gwp_tank
+Set parameter Username
+Set parameter LicenseID to value 2883216
+Academic license - for non-commercial use only - expires 2027-11-10
+Set parameter MIPGap to value 1e-07
+Set parameter Username
+Set parameter LicenseID to value 2883216
+Academic license - for non-commercial use only - expires 2027-11-10
+Set parameter MIPGap to value 1e-07
+Set parameter Username
+Set parameter LicenseID to value 2883216
+Academic license - for non-commercial use only - expires 2027-11-10
+Set parameter MIPGap to value 1e-07
+[norfolk_grid_green 6/8] min_gwp cutoff=upper:gwp_tx_wind_per_mw
+Set parameter Username
+Set parameter LicenseID to value 2883216
+Academic license - for non-commercial use only - expires 2027-11-10
+Set parameter MIPGap to value 1e-07
+Set parameter Username
+Set parameter LicenseID to value 2883216
+Academic license - for non-commercial use only - expires 2027-11-10
+Set parameter MIPGap to value 1e-07
+Set parameter Username
+Set parameter LicenseID to value 2883216
+Academic license - for non-commercial use only - expires 2027-11-10
+Set parameter MIPGap to value 1e-07
+[norfolk_grid_green 7/8] min_gwp cutoff=upper:gwp_tx_solar_per_mwp
+Set parameter Username
+Set parameter LicenseID to value 2883216
+Academic license - for non-commercial use only - expires 2027-11-10
+Set parameter MIPGap to value 1e-07
+Set parameter Username
+Set parameter LicenseID to value 2883216
+Academic license - for non-commercial use only - expires 2027-11-10
+Set parameter MIPGap to value 1e-07
+Set parameter Username
+Set parameter LicenseID to value 2883216
+Academic license - for non-commercial use only - expires 2027-11-10
+Set parameter MIPGap to value 1e-07
+[norfolk_grid_green 8/8] min_gwp cutoff=upper:dc_fixed_gwp_per_year
+Set parameter Username
+Set parameter LicenseID to value 2883216
+Academic license - for non-commercial use only - expires 2027-11-10
+Set parameter MIPGap to value 1e-07
+Set parameter Username
+Set parameter LicenseID to value 2883216
+Academic license - for non-commercial use only - expires 2027-11-10
+Set parameter MIPGap to value 1e-07
+Set parameter Username
+Set parameter LicenseID to value 2883216
+Academic license - for non-commercial use only - expires 2027-11-10
+Set parameter MIPGap to value 1e-07
+wrote optimisation_outputs\sensitivity_cutoff_groups_1112_norfolk_grid_green_4h.csv
+[islanded_h2 1/8] min_gwp central
+Set parameter Username
+Set parameter LicenseID to value 2883216
+Academic license - for non-commercial use only - expires 2027-11-10
+Set parameter Username
+Set parameter LicenseID to value 2883216
+Academic license - for non-commercial use only - expires 2027-11-10
+Set parameter Username
+Set parameter LicenseID to value 2883216
+Academic license - for non-commercial use only - expires 2027-11-10
+[islanded_h2 2/8] min_gwp cutoff=upper
+Set parameter Username
+Set parameter LicenseID to value 2883216
+Academic license - for non-commercial use only - expires 2027-11-10
+Set parameter Username
+Set parameter LicenseID to value 2883216
+Academic license - for non-commercial use only - expires 2027-11-10
+Set parameter Username
+Set parameter LicenseID to value 2883216
+Academic license - for non-commercial use only - expires 2027-11-10
+[islanded_h2 3/8] min_gwp cutoff=upper:gwp_batt_e
+Set parameter Username
+Set parameter LicenseID to value 2883216
+Academic license - for non-commercial use only - expires 2027-11-10
+Set parameter Username
+Set parameter LicenseID to value 2883216
+Academic license - for non-commercial use only - expires 2027-11-10
+Set parameter Username
+Set parameter LicenseID to value 2883216
+Academic license - for non-commercial use only - expires 2027-11-10
+[islanded_h2 4/8] min_gwp cutoff=upper:gwp_tx_fc_per_mw
+Set parameter Username
+Set parameter LicenseID to value 2883216
+Academic license - for non-commercial use only - expires 2027-11-10
+Set parameter Username
+Set parameter LicenseID to value 2883216
+Academic license - for non-commercial use only - expires 2027-11-10
+Set parameter Username
+Set parameter LicenseID to value 2883216
+Academic license - for non-commercial use only - expires 2027-11-10
+[islanded_h2 5/8] min_gwp cutoff=upper:gwp_tank
+Set parameter Username
+Set parameter LicenseID to value 2883216
+Academic license - for non-commercial use only - expires 2027-11-10
+Set parameter Username
+Set parameter LicenseID to value 2883216
+Academic license - for non-commercial use only - expires 2027-11-10
+Set parameter Username
+Set parameter LicenseID to value 2883216
+Academic license - for non-commercial use only - expires 2027-11-10
+[islanded_h2 6/8] min_gwp cutoff=upper:gwp_tx_wind_per_mw
+Set parameter Username
+Set parameter LicenseID to value 2883216
+Academic license - for non-commercial use only - expires 2027-11-10
+Set parameter Username
+Set parameter LicenseID to value 2883216
+Academic license - for non-commercial use only - expires 2027-11-10
+Set parameter Username
+Set parameter LicenseID to value 2883216
+Academic license - for non-commercial use only - expires 2027-11-10
+[islanded_h2 7/8] min_gwp cutoff=upper:gwp_tx_solar_per_mwp
+Set parameter Username
+Set parameter LicenseID to value 2883216
+Academic license - for non-commercial use only - expires 2027-11-10
+Set parameter Username
+Set parameter LicenseID to value 2883216
+Academic license - for non-commercial use only - expires 2027-11-10
+Set parameter Username
+Set parameter LicenseID to value 2883216
+Academic license - for non-commercial use only - expires 2027-11-10
+[islanded_h2 8/8] min_gwp cutoff=upper:dc_fixed_gwp_per_year
+Set parameter Username
+Set parameter LicenseID to value 2883216
+Academic license - for non-commercial use only - expires 2027-11-10
+Set parameter Username
+Set parameter LicenseID to value 2883216
+Academic license - for non-commercial use only - expires 2027-11-10
+Set parameter Username
+Set parameter LicenseID to value 2883216
+Academic license - for non-commercial use only - expires 2027-11-10
+wrote optimisation_outputs\sensitivity_cutoff_groups_1112_islanded_h2_4h.csv
+ALL DONE
