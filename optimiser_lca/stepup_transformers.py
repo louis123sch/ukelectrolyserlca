@@ -180,7 +180,7 @@ TX_MEDIUM_VOLTAGE_BAND_KV = (1.0, 24.0)  # TRANSCRIBED - ecoinvent GB MV market 
 # voltage, its mass set by its rating and its losses (Reg. 548/2014 Tier 2) the same
 # for any winding up to 24 kV, so 11 or 20 kV changes none of them. The gas engines
 # generate at up to 11 kV and join the bus with no step-up (user, 13 Nov 2026).
-TX_SITE_COLLECTION_KV = 20.0
+TX_SITE_COLLECTION_KV = 20.0      # ASSUMED - a point in the 1-24 kV band (above)
 
 # --- wind: Leng Table S1, box transformers, the whole population on one farm ---
 TX_LENG_FARM_MW    = 100.0     # TRANSCRIBED - Gaoyou, fifty 2 MW turbines
