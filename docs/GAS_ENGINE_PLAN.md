@@ -8,12 +8,14 @@ is not part of the change.
 
 ## 1. What it is
 - Gas engine generators ("gas engines"; not combined heat and power — no heat is used), modular
-  ~3.45 MW engines, generating at up to 11 kV (Jenbacher J620 data: 600 V – 11 kV), built with
-  **no step-up transformer**. **Open (found by the review of the build, 13 Nov):** the model's site
-  bus is 20 kV (`stepup_transformers.TX_SITE_COLLECTION_KV`), so 11 kV generators would need an
-  11/20 kV step-up; the agreement to leave it out rested on "11 kV is the site's voltage", which is
-  not the model's. For the user to decide: add a step-up (carbon and losses, as the fuel cell's),
-  or state that the engines are taken to generate at the bus voltage.
+  ~3.45 MW engines, generating at up to 11 kV (Jenbacher J620 data: 600 V – 11 kV), with
+  **no step-up transformer** (user, 13 Nov, after the build review found the model's bus is
+  "20 kV"): the 20 kV of `stepup_transformers.TX_SITE_COLLECTION_KV` is an assumed point in the
+  medium-voltage band (1–24 kV), chosen because the IEA PVPS unit is wound 20/0.4 kV; a GB site
+  would more likely run at 11 kV, which the engines generate at. The other step-ups stand: they
+  take low voltage (400–690 V) to medium voltage at any bus voltage, their mass is set by their
+  rating, and Reg. 548/2014 Tier 2 sets the same loss limits for every winding up to 24 kV. Had an
+  11/20 kV unit been charged: about 0.6 t CO2e per MW a year and about 0.8 % of output.
 - Asset flag `gas_engine`, **off in every existing scenario**; available as a tick-box.
 - LP: capacity `cap_ge` (MW), dispatch `p_ge` (MW per step), replacement count `ge_units`.
   Linear: no minimum load, no start-up cost (engines come in small blocks). No availability

@@ -175,7 +175,11 @@ from optimiser_lca.common import Activity, Inventory, Process
 TX_TURBINE_TERMINAL_V     = 690.0        # TRANSCRIBED - Teffera Table 2, all four models
 TX_MEDIUM_VOLTAGE_BAND_KV = (1.0, 24.0)  # TRANSCRIBED - ecoinvent GB MV market comment
 # ASSUMED. The site collects inside the band the data centre draws at, so the
-# chain closes with no further transformation to charge.
+# chain closes with no further transformation to charge. A point in the band, not a
+# GB standard (GB distributes at 11 and 33 kV): every step-up here is low to medium
+# voltage, its mass set by its rating and its losses (Reg. 548/2014 Tier 2) the same
+# for any winding up to 24 kV, so 11 or 20 kV changes none of them. The gas engines
+# generate at up to 11 kV and join the bus with no step-up (user, 13 Nov 2026).
 TX_SITE_COLLECTION_KV = 20.0
 
 # --- wind: Leng Table S1, box transformers, the whole population on one farm ---

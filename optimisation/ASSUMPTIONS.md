@@ -494,9 +494,12 @@ on the gas network, with no fuel stored on site; ecoinvent's engine data are
 version-2 data, its methane slip one estimate for every lean-burn size; the levy
 exemption and carbon price support apply from 2 MW and the UK ETS above 20 MW
 thermal, but the linear model charges the GB carbon price at any size; the hall
-is carbon only (the study's capital is taken whole). **Open**: the engines are
-built with no step-up, but the model's site bus is 20 kV and the engines
-generate at up to 11 kV (TODO.md).
+is carbon only (the study's capital is taken whole); no step-up transformer:
+the engines generate at up to 11 kV and the model's "20 kV" bus is an assumed
+point in the medium-voltage band, which a GB site would more likely run at 11 kV
+(user, 13 Nov 2026). The other step-ups are unaffected: they take low voltage to
+medium voltage at any bus voltage, and their loss limits (Reg. 548/2014 Tier 2)
+are the same for every winding up to 24 kV.
 
 <!-- cutoff:begin -->
 ## 8. Cut-off rule

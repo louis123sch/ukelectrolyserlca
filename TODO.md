@@ -37,9 +37,6 @@ Work where a number the study reports is not currently defensible.
 - [ ] **Gas engines, once the user says to test** (13 Nov 2026, docs/GAS_ENGINE_PLAN.md): a run with the engines
       offered and built (not London); the input screen with them on; the cut-off rule's design test (rule 3); rebuild
       both maps and the workbooks; the sign-off; the 26-site study with `gas_engine` in `scripts/uk_sites.py`'s flags.
-- [ ] **Gas engines' voltage** (user's word needed, found by the build review 13 Nov): the engines are built with no
-      step-up, agreed on "11 kV is the site's voltage", but the model's site bus is 20 kV. Add an 11/20 kV step-up
-      (carbon and losses, as the fuel cell's), or state that the engines generate at the bus voltage.
 - [ ] **Gas engine land** (user's word needed): development is taken excluding land; the study's land is about 2.6 % of
       the engines' yearly cost (1.9 % of the full yearly cost), above the 1 % cost rule. Carry it, or keep the stated choice (`cost_exclusions.py`).
 

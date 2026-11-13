@@ -1112,7 +1112,7 @@ Decision record: `docs/GAS_ENGINE_PLAN.md`. Off in every named architecture.
 | Running carbon | ~560 kg CO2e per MWh: gas supply chain 82, burning and exhaust 477, oil 1 | derived | ecoinvent 3.9.1 `market for natural gas, high pressure` GB; the exhaust of `heat and power co-generation, natural gas, 1MW electrical, lean burn` (Europe w/o CH) per m³; CO2 from the gas's carbon balance. Checked against DESNZ GHG conversion factors 2026 (burning within 5 %, supply chain within 15 %) |
 | Maintenance carbon | ~0.77 kg CO2e per MWh | derived | the set's maintenance (2.89 per 1 MW set) over 100,000 h, its car trips out |
 | Plant carbon | ~244 t CO2e per MW, per replacement | derived | ecoinvent's 1 MW set, shared and electricity-only parts, less its maintenance and its trips to site; a steel hall at 166.7 m² per MW (ecoinvent's 3 MW organic Rankine cycle unit's 500 m² building, a stand-in) |
-| No step-up transformer | generators at up to 11 kV; **open**: the model's site bus is 20 kV, so an 11/20 kV step-up may be needed (TODO.md) | transcribed | Jenbacher J620 data (generator voltage 600 V – 11 kV) |
+| No step-up transformer | generators at up to 11 kV, joining the site's medium-voltage bus directly: the model's "20 kV" is an assumed point in the 1–24 kV band (`TX_SITE_COLLECTION_KV`); a GB site would more likely run at 11 kV (user, 13 Nov 2026) | transcribed | Jenbacher J620 data (generator voltage 600 V – 11 kV) |
 
 Why ecoinvent's engine and not the government's conversion factors for the gas: one gas
 for every use in the model (the grid's gas stations and the hydrogen routes are ecoinvent's
