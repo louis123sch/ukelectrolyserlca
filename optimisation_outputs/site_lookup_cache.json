@@ -39,6 +39,30 @@
     "region_name": "South West England",
     "tnuos_zone": 14
   },
+  "50.7,-1.3": {
+    "carbon_api_region": 12,
+    "outcode": "PO30",
+    "place": "Isle of Wight",
+    "postcode": "PO30 5ED",
+    "region_name": "South England",
+    "tnuos_zone": 13
+  },
+  "50.7,-2.4": {
+    "carbon_api_region": 12,
+    "outcode": "DT2",
+    "place": "Dorset",
+    "postcode": "DT2 8NZ",
+    "region_name": "South England",
+    "tnuos_zone": 13
+  },
+  "50.7,-3.2": {
+    "carbon_api_region": 11,
+    "outcode": "EX10",
+    "place": "East Devon",
+    "postcode": "EX10 0PA",
+    "region_name": "South West England",
+    "tnuos_zone": 14
+  },
   "50.72,-3.53": {
     "carbon_api_region": 11,
     "outcode": "EX1",
@@ -62,6 +86,22 @@
     "postcode": "SO15 2AN",
     "region_name": "South England",
     "tnuos_zone": 13
+  },
+  "51.2,0.0": {
+    "carbon_api_region": 14,
+    "outcode": "RH7",
+    "place": "Tandridge",
+    "postcode": "RH7 6LU",
+    "region_name": "South East England",
+    "tnuos_zone": 11
+  },
+  "51.2,0.8": {
+    "carbon_api_region": 14,
+    "outcode": "TN27",
+    "place": "Ashford",
+    "postcode": "TN27 0EB",
+    "region_name": "South East England",
+    "tnuos_zone": 11
   },
   "51.3,-0.128": {
     "carbon_api_region": 14,
@@ -103,6 +143,46 @@
     "region_name": "South England",
     "tnuos_zone": 13
   },
+  "51.7,-0.8": {
+    "carbon_api_region": 10,
+    "outcode": "HP27",
+    "place": "Buckinghamshire",
+    "postcode": "HP27 0PX",
+    "region_name": "East England",
+    "tnuos_zone": 9
+  },
+  "51.7,-1.6": {
+    "carbon_api_region": 12,
+    "outcode": "OX18",
+    "place": "West Oxfordshire",
+    "postcode": "OX18 2RZ",
+    "region_name": "South England",
+    "tnuos_zone": 13
+  },
+  "51.7,-2.4": {
+    "carbon_api_region": 8,
+    "outcode": "GL13",
+    "place": "Stroud",
+    "postcode": "GL13 9HB",
+    "region_name": "West Midlands",
+    "tnuos_zone": 8
+  },
+  "51.7,-4.8": {
+    "carbon_api_region": 7,
+    "outcode": "SA70",
+    "place": "Pembrokeshire",
+    "postcode": "SA70 8SD",
+    "region_name": "South Wales",
+    "tnuos_zone": 10
+  },
+  "51.7,0.8": {
+    "carbon_api_region": 10,
+    "outcode": "CM0",
+    "place": "Maldon",
+    "postcode": "CM0 7JY",
+    "region_name": "East England",
+    "tnuos_zone": 9
+  },
   "51.732,-0.371": {
     "carbon_api_region": 10,
     "outcode": "AL2",
@@ -116,6 +196,22 @@
     "outcode": "SA44",
     "place": "Carmarthenshire",
     "postcode": "SA44 5JB",
+    "region_name": "South Wales",
+    "tnuos_zone": 10
+  },
+  "52.2,-0.8": {
+    "carbon_api_region": 9,
+    "outcode": "NN7",
+    "place": "West Northamptonshire",
+    "postcode": "NN7 2BA",
+    "region_name": "East Midlands",
+    "tnuos_zone": 7
+  },
+  "52.2,-3.2": {
+    "carbon_api_region": 7,
+    "outcode": "LD8",
+    "place": "Powys",
+    "postcode": "LD8 2TR",
     "region_name": "South Wales",
     "tnuos_zone": 10
   },
@@ -151,6 +247,22 @@
     "region_name": "East England",
     "tnuos_zone": 9
   },
+  "52.7,-1.6": {
+    "carbon_api_region": 9,
+    "outcode": "B79",
+    "place": "Lichfield",
+    "postcode": "B79 0BE",
+    "region_name": "East Midlands",
+    "tnuos_zone": 7
+  },
+  "52.7,-3.2": {
+    "carbon_api_region": 6,
+    "outcode": "SY21",
+    "place": "Powys",
+    "postcode": "SY21 9DG",
+    "region_name": "North Wales",
+    "tnuos_zone": 6
+  },
   "52.85,1.04": {
     "carbon_api_region": 10,
     "outcode": "NR24",
@@ -174,6 +286,14 @@
     "postcode": "NG1 5AQ",
     "region_name": "East Midlands",
     "tnuos_zone": 7
+  },
+  "53.2,-4.0": {
+    "carbon_api_region": 6,
+    "outcode": "LL33",
+    "place": "Conwy",
+    "postcode": null,
+    "region_name": "North Wales",
+    "tnuos_zone": 6
   },
   "53.227,-4.129": {
     "carbon_api_region": 6,
@@ -199,6 +319,30 @@
     "region_name": "North West England",
     "tnuos_zone": 4
   },
+  "53.7,-1.6": {
+    "carbon_api_region": 5,
+    "outcode": "WF12",
+    "place": "Kirklees",
+    "postcode": "WF12 7FH",
+    "region_name": "Yorkshire",
+    "tnuos_zone": 5
+  },
+  "53.7,-2.4": {
+    "carbon_api_region": 3,
+    "outcode": "BB1",
+    "place": "Rossendale",
+    "postcode": "BB1 2PQ",
+    "region_name": "North West England",
+    "tnuos_zone": 4
+  },
+  "53.7,0.0": {
+    "carbon_api_region": 5,
+    "outcode": "HU12",
+    "place": "East Riding of Yorkshire",
+    "postcode": "HU12 0NT",
+    "region_name": "Yorkshire",
+    "tnuos_zone": 5
+  },
   "53.801,-1.549": {
     "carbon_api_region": 5,
     "outcode": "LS1",
@@ -214,6 +358,22 @@
     "postcode": "HG3 5EX",
     "region_name": "North East England",
     "tnuos_zone": 3
+  },
+  "54.2,-1.6": {
+    "carbon_api_region": 4,
+    "outcode": "HG4",
+    "place": "North Yorkshire",
+    "postcode": "HG4 5LB",
+    "region_name": "North East England",
+    "tnuos_zone": 3
+  },
+  "54.2,-3.2": {
+    "carbon_api_region": 3,
+    "outcode": "LA17",
+    "place": "Westmorland and Furness",
+    "postcode": "LA17 7TU",
+    "region_name": "North West England",
+    "tnuos_zone": 4
   },
   "54.5,-3.1": {
     "carbon_api_region": 3,
@@ -238,6 +398,22 @@
     "postcode": "NE1 4LQ",
     "region_name": "North East England",
     "tnuos_zone": 3
+  },
+  "55.2,-1.6": {
+    "carbon_api_region": 4,
+    "outcode": "NE61",
+    "place": "Northumberland",
+    "postcode": "NE61 6PY",
+    "region_name": "North East England",
+    "tnuos_zone": 3
+  },
+  "55.2,-3.2": {
+    "carbon_api_region": 2,
+    "outcode": "DG13",
+    "place": "Dumfries and Galloway",
+    "postcode": "DG13 0PQ",
+    "region_name": "South Scotland",
+    "tnuos_zone": 2
   },
   "55.3,-2.0": {
     "carbon_api_region": 4,
@@ -279,6 +455,14 @@
     "region_name": "North Scotland",
     "tnuos_zone": 1
   },
+  "55.7,-4.8": {
+    "carbon_api_region": 2,
+    "outcode": "KA24",
+    "place": "North Ayrshire",
+    "postcode": "KA24 5HL",
+    "region_name": "South Scotland",
+    "tnuos_zone": 2
+  },
   "55.7,-6.48": {
     "carbon_api_region": 1,
     "outcode": "PA47",
@@ -302,6 +486,22 @@
     "postcode": "G1 1DG",
     "region_name": "South Scotland",
     "tnuos_zone": 2
+  },
+  "56.7,-4.0": {
+    "carbon_api_region": 1,
+    "outcode": "PH16",
+    "place": "Perth and Kinross",
+    "postcode": "PH16 5NT",
+    "region_name": "North Scotland",
+    "tnuos_zone": 1
+  },
+  "56.7,-5.8": {
+    "carbon_api_region": 1,
+    "outcode": "PH36",
+    "place": "Highland",
+    "postcode": "PH36 4JN",
+    "region_name": "North Scotland",
+    "tnuos_zone": 1
   },
   "56.85,-4.0": {
     "carbon_api_region": 1,
@@ -348,6 +548,14 @@
     "outcode": "IV27",
     "place": "Highland",
     "postcode": null,
+    "region_name": "North Scotland",
+    "tnuos_zone": 1
+  },
+  "58.2,-6.4": {
+    "carbon_api_region": 1,
+    "outcode": "HS1",
+    "place": "Na h-Eileanan Siar",
+    "postcode": "HS1 2XS",
     "region_name": "North Scotland",
     "tnuos_zone": 1
   }
