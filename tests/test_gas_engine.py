@@ -32,8 +32,7 @@ from optimiser_lca import gas_engine as gl  # noqa: E402
 # =============================================================================
 def test_desnz_2026_figures_are_the_tables():
     assert ge.CAPEX_GBP_PER_KW == {"low": 450.0, "central": 529.0, "high": 609.0}           # Table 3.25
-    assert ge.DEV_EXCL_LAND_GBP_PER_KW["low"] == 8.9 and ge.DEV_EXCL_LAND_GBP_PER_KW["high"] == 12.2   # Table 5.4
-    assert ge.DEV_EXCL_LAND_GBP_PER_KW["central"] == pytest.approx(10.55)                    # midpoint (user)
+    assert ge.DEV_GBP_PER_KW == {"low": 12.7, "central": 29.5, "high": 34.6}    # Table 3.25, land included (user)
     assert ge.FIXED_FEE_GBP_PER_MW_YEAR == {"low": 12_400.0, "central": 14_630.0, "high": 16_820.0}   # Table 3.27
     assert ge.VARIABLE_500H_GBP_PER_MWH == {"low": 5.72, "central": 6.73, "high": 7.74}     # Table 3.27
     assert ge.VARIABLE_1500H_GBP_PER_MWH == {"low": 3.45, "central": 4.06, "high": 4.67}    # Table 3.28

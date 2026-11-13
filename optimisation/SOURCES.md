@@ -1100,7 +1100,7 @@ Decision record: `docs/GAS_ENGINE_PLAN.md`. Off in every named architecture.
 | Input | Value | Grade | Source |
 |---|---|---|---|
 | Capital | £450 / 529 / 609 per kW (2024 £), excluding connections | transcribed | DESNZ, *Unabated gas: electricity generation cost study* (CEPA and GHD, 14 Jan 2026), Generation Option 5, Table 3.25; Table 5.4 confirms it excludes connections |
-| Development | £8.9 / 10.55 / 12.2 per kW, excluding land (central the midpoint, user) | transcribed | Table 5.4 |
+| Development | £12.7 / 29.5 / 34.6 per kW, land included (user, 13 Nov 2026: land is sourced, so it is in) | transcribed | Table 3.25; Table 5.4 splits out land |
 | Fixed fee | £12,400 / 14,630 / 16,820 per MW a year: core engine and generator costs only (p. 32) | transcribed | Table 3.27 |
 | Variable fee | the line through the 500 h and 1,500 h rows: £1.7k / 2.0k / 2.3k per MW-yr + £2.32 / 2.73 / 3.14 per MWh; extrapolated beyond 1,500 h | derived | Tables 3.27 and 3.28 |
 | Insurance; construction | 0.3 / 0.4 / 0.5 % of capital and development a year; 0.4 / 1.0 / 1.3 years, all carried as one (the finance factor takes whole years) | transcribed | Tables 3.27, 3.23 |

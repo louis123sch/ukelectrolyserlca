@@ -14,7 +14,7 @@ Carbon, split by what each part scales with (the fuel cell's pattern):
 | the plant: engines, generators, controls, pads, hall | replacements, max(25 calendar years, 100,000 h) |
 
 Cost, from DESNZ's *Unabated gas: electricity generation cost study* (CEPA and GHD, 14 Jan 2026),
-Generation Option 5, reciprocating engines, 2024 prices: capital and development (excluding land)
+Generation Option 5, reciprocating engines, 2024 prices: capital and development (land included)
 on the same replacement count, with the hurdle rate carried over the build and a capital recovery
 factor over 25 years; the fixed fee, the fixed part of the variable fee, insurance and business
 rates per MW-year; the per-MWh part of the variable fee, the gas and the carbon price per MWh.
@@ -49,7 +49,7 @@ CASES = ("low", "central", "high")
 PRICE_YEAR = 2024
 CALENDAR_YEARS = 25.0                                        # Table 3.23, operation, medium
 CAPEX_GBP_PER_KW = {"low": 450.0, "central": 529.0, "high": 609.0}          # Table 3.25, capital cost
-DEV_EXCL_LAND_GBP_PER_KW = {"low": 8.9, "central": (8.9 + 12.2) / 2.0, "high": 12.2}   # Table 5.4, excl. land
+DEV_GBP_PER_KW = {"low": 12.7, "central": 29.5, "high": 34.6}     # Table 3.25 / 5.4, development, land included
 FIXED_FEE_GBP_PER_MW_YEAR = {"low": 12_400.0, "central": 14_630.0, "high": 16_820.0}  # Table 3.27
 VARIABLE_500H_GBP_PER_MWH = {"low": 5.72, "central": 6.73, "high": 7.74}     # Table 3.27, 500 h
 VARIABLE_1500H_GBP_PER_MWH = {"low": 3.45, "central": 4.06, "high": 4.67}    # Table 3.28, 1,500 h
@@ -257,10 +257,12 @@ def cost(case: str) -> dict:
     capex = T.cost("cost.gas_engine.capex_per_kW", CAPEX_GBP_PER_KW[case], "GBP per kW (2024)",
                    "Capital cost of a 20 MW gas engine plant, turnkey, excluding connections", grade="transcribed",
                    cites=[(cite, f"Table 3.25, {loc}, capital cost, {case}; Table 5.4 excl. connections")])
-    dev = T.cost("cost.gas_engine.development_per_kW", DEV_EXCL_LAND_GBP_PER_KW[case], "GBP per kW (2024)",
-                 "Development cost excluding land", grade="transcribed",
-                 cites=[(cite, "Table 5.4, development costs (excl. land) GBP 8.9-12.2/kW")],
-                 note="Land excluded as for the fuel cell and battery; the central case is the midpoint (user)")
+    dev = T.cost("cost.gas_engine.development_per_kW", DEV_GBP_PER_KW[case], "GBP per kW (2024)",
+                 "Development cost, land included", grade="transcribed",
+                 cites=[(cite, f"Table 3.25, project development, {case}; Table 5.4, development costs (incl. land)")],
+                 note="Land is sourced here, so it is in (the cost rule; user, 13 Nov 2026): about GBP 4-22/kW of it. "
+                      "Spread over 25 years with the capital, as the study's own cost basis does, though land does "
+                      "not wear out")
     to25 = P.to_2025(PRICE_YEAR)
     life = T.cost("cost.gas_engine.life_years", CALENDAR_YEARS, "years",
                   "Engine plant calendar life, the life the carbon side replaces it on", grade="transcribed",

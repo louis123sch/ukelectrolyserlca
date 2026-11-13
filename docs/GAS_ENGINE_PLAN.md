@@ -29,7 +29,7 @@ Source: DESNZ, *Unabated gas: electricity generation cost study* (CEPA and GHD),
 | Item | Low / central / high | Table |
 |---|---|---|
 | Capital (EPC, excludes connections) | £450 / 529 / 609 per kW | 3.25, 5.4 |
-| Development, **excluding land** | £8.9 / 10.55 / 12.2 per kW (central = midpoint, user) | 5.4 |
+| Development, **land included** | £12.7 / 29.5 / 34.6 per kW (user, 13 Nov: land is sourced, so it is in) | 3.25, 5.4 |
 | Fixed fee | £12,400 / 14,630 / 16,820 per MW per year | 3.27 |
 | Variable fee, split into fixed + per MWh from the 500 h and 1,500 h rows | £1,700 / 2,002 / 2,300 per MW-yr + £2.32 / 2.73 / 3.14 per MWh | 3.27, 3.28 |
 | Insurance | 0.3 / 0.4 / 0.5 % of capital and development per year | 3.27 |
@@ -40,10 +40,12 @@ Source: DESNZ, *Unabated gas: electricity generation cost study* (CEPA and GHD),
 - Discount rate 8.9 %: CEPA for DESNZ 2025, Table E.1 "Gas generation – unabated" (defined to
   include gas reciprocating engines) — the same report every other asset's rate comes from.
 - Business rates: the hydrogen plant's estimate (`h2_capex.rates_frac`), user 13 Nov, on capital and development.
-- **Land (open, found in the build):** the user chose development excluding land. The study's land
-  (£3.8–22.4/kW once) is about 2.6 % of `cost_ge` and 1.9 % of the engines' full yearly cost at the
-  calendar floor (`cost_ge + cost_ge_per_mw / 25`): above the 1 % cost rule. Carry it, or keep the
-  stated choice (`cost_exclusions.py`, TODO.md).
+- **Land (decided 13 Nov, after the build):** first taken excluding land, on the mistaken reading that
+  the fuel cell and battery leave land out by rule (they leave it out only because their unsourced
+  estimates passed 1 %). The study itemises the engines' land (Table 5.4: £3.8–22.4/kW), and a sourced
+  cost inside the boundary goes in whatever its size, so development is taken **including land**
+  (about 2 % of the engines' full yearly cost). Spread over 25 years with the capital, as the study's
+  cost basis does, though land does not wear out.
 - The levy exemption and carbon price support apply to stations of **2 MW or more**, and the UK ETS
   to combustion of more than **20 MW thermal** (~9 MW of engines); the linear model applies the GB
   total carbon price at any size. Stated, not modelled.

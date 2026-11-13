@@ -106,11 +106,6 @@ REGISTER = (
              "12 Nov 2026: not sized. The network operator's upkeep of its own assets is in the use-of-system charges "
              "the model already pays; whether a customer-owned intake substation's maintenance is anywhere is not "
              "checked"),
-    CostFlow("gas engine land", "", "cutoff", "open", None,
-             "13 Nov 2026: left out with the user's choice of DESNZ 2026's development cost excluding land (Table 5.4, "
-             "£8.9-12.2/kW against £12.7-34.6/kW including it). Land is £3.8-22.4/kW once, about £1.5k per MW a year at "
-             "the midpoints: ~2.6 % of cost_ge, ~1.9 % of the engines' full yearly cost (cost_ge + cost_ge_per_mw / "
-             "25). Above the 1 % rule, so it needs the user's word (carry it, or keep the stated choice)"),
     CostFlow("land at an urban site", "", "cutoff", "open", None,
              "Every land figure charged is a rural rent and dc_model has no area limit. Left so by the user (4 Nov 2026): "
              "a central-London run is illustrative, not a use case. MHCLG industrial land values are in "

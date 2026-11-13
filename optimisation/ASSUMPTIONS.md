@@ -473,7 +473,7 @@ record; `optimisation/gas_engine.py`, `optimiser_lca/gas_engine.py`).
 
 - **Plant and costs**: DESNZ, *Unabated gas: electricity generation cost study*
   (CEPA and GHD, 14 Jan 2026), reciprocating engines, 2024 prices: capital,
-  development excluding land, fixed and variable fees, insurance, construction
+  development with land, fixed and variable fees, insurance, construction
   time, 44.6 % net efficiency, 25 years or 100,000 running hours whichever comes
   first. CEPA's 8.9 % for unabated gas. Business rates as the hydrogen plant's.
 - **Gas** at the site price without the Climate Change Levy (HMRC CCL1/6 §4.1),
@@ -487,9 +487,9 @@ record; `optimisation/gas_engine.py`, `optimiser_lca/gas_engine.py`).
 *Limitations, stated*: the variable fee is extrapolated beyond the study's
 1,500 h; no availability derating (as the fuel cell); linear, so no minimum
 load or start-up; the plant's connection to the gas network is left out in cost
-and carbon (user, recorded in TODO.md), which errs in favour of gas; land is
-left out with the development cost the user chose (an open item in
-`cost_exclusions.py`, about 2.6 % of cost_ge, 1.9 % of the full yearly cost); the engines depend
+and carbon (user, recorded in TODO.md), which errs in favour of gas; land is in
+the development cost and so spread over 25 years like the capital, though it
+does not wear out; the engines depend
 on the gas network, with no fuel stored on site; ecoinvent's engine data are
 version-2 data, its methane slip one estimate for every lean-burn size; the levy
 exemption and carbon price support apply from 2 MW and the UK ETS above 20 MW
