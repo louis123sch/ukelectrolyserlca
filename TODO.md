@@ -34,6 +34,10 @@ Work where a number the study reports is not currently defensible.
 - [ ] **Run the first full sign-off** (`docs/TESTING.md`). Nothing has been signed off yet. Commit first, then allow a
       night. Replaces the overnight hourly assumption files, which predate the seven new rows.
 
+- [ ] **Weekend 14-16 Nov 2026 (user): what gets built with everything on the table.** After the sign-off:
+      `python scripts/uk_sites.py --set present` (gas engines, green only), then `--set blue` (the what-if: blue
+      beside green); then, if time remains, the fixed choices at 4 sites (alkaline / solid-oxide, low / high cost
+      case, gas price range, 200 bar tank). Read `hydrogen_limits.csv` in each set's folder.
 - [ ] **Gas engines, once the user says to test** (13 Nov 2026, docs/GAS_ENGINE_PLAN.md): a run with the engines
       offered and built (not London); the input screen with them on; the cut-off rule's design test (rule 3); rebuild
       both maps and the workbooks; the sign-off; the 26-site study with `gas_engine` in `scripts/uk_sites.py`'s flags.

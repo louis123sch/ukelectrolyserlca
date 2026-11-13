@@ -272,3 +272,20 @@ def test_transport_lines_are_accounted_for():
         assert net == pytest.approx(0.0, abs=1e-6), f"{code}: trips to site not netted out: {net:.6g} km"
     for parent, child in leftover:
         assert "production" in parent or parent.startswith("market"), (parent, child)
+
+
+def test_frontier_points_can_be_packed_at_the_low_carbon_end(setup):
+    """dc_pareto.front(eps_fracs=...) (13 Nov 2026): points where asked, as fractions of the carbon span."""
+    from optimisation import dc_pareto as P
+    series, tech = setup
+    fracs = (0.05, 0.2, 0.6)
+    r = P.front(series, M.Assets(grid=True, wind=True, solar=True, battery=True, gas_engine=True), tech,
+                eps_fracs=fracs)
+    f = r["front"]
+    lo, hi = r["min_gwp"]["gwp_kgco2e_per_year"], r["min_cost"]["gwp_kgco2e_per_year"]
+    eps = f[f.point.str.startswith("eps_")].sort_values("gwp_kgco2e_per_year")
+    assert len(eps) == len(fracs)
+    for frac, g in zip(fracs, eps.gwp_kgco2e_per_year):
+        assert g <= lo + frac * (hi - lo) * (1 + 1e-6)             # the cap binds or is slack, never broken
+    with pytest.raises(ValueError):
+        P.front(series, M.Assets(grid=True, gas_engine=True), tech, eps_fracs=(0.0, 0.5))

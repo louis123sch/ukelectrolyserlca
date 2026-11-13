@@ -128,9 +128,12 @@ CASES = {
         flags=_EVERY_ASSET, size_mw_it=150.0, pue=1.2,
         series_kwargs={"connection_mode": "room"}),
     # Grid-connected with every asset and bought green hydrogen on offer: where
-    # the published figures' kind of answer comes from (was london_grid).
+    # the published figures' kind of answer comes from (was london_grid). Since 13 Nov
+    # 2026 the gas engines too ("everything on the table", user), so the sign-off's
+    # cut-off and screened-input tests reach their figures; res_h2_grid until then.
     "norfolk_grid_green": Case(
-        name="norfolk_grid_green", site=(52.85, 1.04), architecture="res_h2_grid",
+        name="norfolk_grid_green", site=(52.85, 1.04), architecture="custom",
+        flags={**_EVERY_ASSET, "buy_h2": True, "gas_engine": True},
         h2_colour="green", series_kwargs={"connection_mode": "room"}),
     # One price list fixed by the rule before solving (was london_150_single).
     "norfolk_150_single": Case(
@@ -557,9 +560,15 @@ SHAKY_KNOBS = {
                                   "onshore_wind.parts_fraction",
                                   "coefficient.gwp_fc_stack_per_mw",
                                   # since 12 Nov 2026: battery sized to end of life, calendar rate assumed
-                                  "battery.capacity_fade_at_end_of_life")
+                                  "battery.capacity_fade_at_end_of_life",
+                                  # since 13 Nov 2026: the gas engine plant's carbon (ecoinvent v2 set,
+                                  # the hall a stand-in)
+                                  "coefficient.gwp_ge_per_mw")
              for f in (0.5, 1.5)],
     "green_h2_grid_share": [0.0, 1.0],          # the electricity the seller runs on
+    # since 13 Nov 2026: DESNZ's published gas range (low / high over central), now that the
+    # engines make gas a fuel the optimiser chooses
+    "gas_price_case": ["low", "high"],
     # act through how the plant runs: only a solve can judge them
     "fc_stack_calendar_years": [5.0, 15.0],
     "fc_stack_duty_hours": [20_000.0, 40_000.0],

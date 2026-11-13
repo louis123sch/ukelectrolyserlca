@@ -2,6 +2,10 @@
 
 Agreed 5 Nov 2026. **Work on the 4-hour rig. Nothing is called passed, final or quotable until the full sign-off below has run on the committed code.**
 
+**Since 13 Nov 2026 everything is on the table in the sign-off (user):** the reference run (step R) and the
+grid-connected sweep case `norfolk_grid_green` include the gas engines, and the screened inputs add the gas price
+range (DESNZ low/high) and the engine plant's carbon at ×0.5/×1.5. `islanded_h2` stays the hydrogen-only case.
+
 ## While working: the rig
 
 Every sweep defaults to the whole of 2025 in 4-hour steps (`sensitivity.SWEEP_HOURS`), written to `sensitivity_<name>_4h.csv`. It stays a whole year because the tank works across seasons. Use it for anything still changing: trying an input, seeing whether a change matters, comparing options.

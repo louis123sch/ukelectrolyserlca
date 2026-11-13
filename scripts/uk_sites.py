@@ -20,6 +20,17 @@ picked from the 2025 Renewables.ninja map of 76 wind and 19 solar points (gb_lay
     python scripts/uk_sites.py                      # every site, every level
     python scripts/uk_sites.py --levels offgrid limited --sites 23
     python scripts/uk_sites.py --summary            # only rebuild the summary table
+    python scripts/uk_sites.py --set present        # 13 Nov: everything on the table, green only
+    python scripts/uk_sites.py --set blue           # 13 Nov: the same with blue on offer too (a what-if)
+
+Sets (13 Nov 2026). ``base`` is the 12 Nov study as run (no gas engines, green, 5 even points).
+``present`` puts everything on the table that can be bought today: the gas engines added,
+bought hydrogen green only (no UK blue plant is running and no CO2 store is open; grey is
+beaten by the engines on cost and carbon; turquoise is not for sale). ``blue`` is the what-if
+"blue hydrogen becomes available" (from about 2028 on current plans), priced at the
+government's modelled cost, as a second contract beside green. Both take their frontier
+points packed at the low-carbon end (``EPS_FRACS``), where hydrogen hands over to other kit.
+Each set writes its own folder, so the 12 Nov results are left as they are.
 
 Writes optimisation_outputs/uk_sites_2025/<level>/<site>/... (one dc_runner folder per
 run, dispatch saved) and optimisation_outputs/uk_sites_2025/summary.csv. A run whose
@@ -39,7 +50,18 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from optimisation import dc_architectures as A, dc_runner, sites  # noqa: E402
 
-OUT = ROOT / "optimisation_outputs" / "uk_sites_2025"
+SETS = {
+    "base":    {"gas": False, "blue": False, "out": "uk_sites_2025"},
+    "present": {"gas": True,  "blue": False, "out": "uk_sites_2025_present"},
+    "blue":    {"gas": True,  "blue": True,  "out": "uk_sites_2025_blue"},
+}
+OUT = ROOT / "optimisation_outputs" / SETS["base"]["out"]
+SET = "base"
+# Fractions of the carbon span above the lowest-carbon point (dc_pareto.front eps_fracs): a dozen
+# points, most of them in the first fifth, where the North Norfolk rig showed hydrogen giving way
+# to gas between 35 and ~52 g/kWh on a 35-169 g span.
+EPS_FRACS = (0.01, 0.02, 0.04, 0.06, 0.09, 0.13, 0.18, 0.25, 0.35, 0.5, 0.7, 0.85)
+ENTRY_SHARE = 0.01          # hydrogen "used" when the fuel cell serves 1 % of supply (thresholds.py's)
 ROUTE_KM = 2.0
 LIMITED_MW = 25.0
 START, END = "2025-01-01", "2025-12-29"
@@ -77,10 +99,14 @@ LEVELS = ("offgrid", "limited", "full")
 
 
 def scenario(level: str) -> A.Scenario:
+    cfg = SETS[SET]
     flags = dict(grid=level != "offgrid", wind=True, offshore_wind=False, solar=True, battery=True,
-                 electrolyser=True, tank=True, fuel_cell=True, buy_h2=True, buy_h2_2=False)
-    return A.Scenario(n=0, architecture="custom", label=f"UK site study, {level}",
-                      assets=flags, ely_tech="PEM operation", h2_colour="green", strategy="free")
+                 electrolyser=True, tank=True, fuel_cell=True, buy_h2=True, buy_h2_2=cfg["blue"])
+    if cfg["gas"]:
+        flags["gas_engine"] = True
+    return A.Scenario(n=0, architecture="custom", label=f"UK site study, {level}, {SET}",
+                      assets=flags, ely_tech="PEM operation", h2_colour="green",
+                      h2_colour_2="blue" if cfg["blue"] else None, strategy="free")
 
 
 def site_for(n, label, lat, lon, region, level):
@@ -112,7 +138,8 @@ def run(level, row):
         connection_mode=None if level == "offgrid" else "cap", connection_solve="loose",
         size_mw_it=100.0, pue=None, resample_hours=1.0, points=5, cost_case="central",
         horizon_years=25.0, unserved_fraction=0.0, out_root=folder(level, n),
-        save_dispatch=True, refresh=False, progress=lambda t: print("   ", t, flush=True))
+        save_dispatch=True, refresh=False, progress=lambda t: print("   ", t, flush=True),
+        eps_fracs=None if SET == "base" else EPS_FRACS)
     print(f"   done in {(time.time() - t0) / 60:.1f} min", flush=True)
 
 
@@ -135,6 +162,11 @@ def summary() -> pd.DataFrame:
                         "cap_ge": r.get("cap_ge", 0.0),
                         "gas_engine_share_of_supply": r.get("cap_ge_MWh_per_year", 0.0) / served,
                         "h2_bought_t_per_year": r.get("h2_bought_kg_per_year", 0.0) / 1000.0,
+                        "h2_bought_blue_t_per_year": r.get("h2_bought_2_kg_per_year", 0.0) / 1000.0,
+                        # made on site = burned less bought (storage is cyclic; leaks are tiny)
+                        "h2_made_t_per_year": max(0.0, r.get("h2_to_fuel_cell_kg_per_year", 0.0)
+                                                  - r.get("h2_bought_kg_per_year", 0.0)
+                                                  - r.get("h2_bought_2_kg_per_year", 0.0)) / 1000.0,
                         "fuel_cell_share_of_supply": r.get("cap_fc_MWh_per_year", 0.0) / served,
                         "import_share_of_supply": r.get("import_MWh_per_year", 0.0) / served,
                         "hydrogen_used": bool(r["cap_fc"] > 1e-3),
@@ -144,7 +176,33 @@ def summary() -> pd.DataFrame:
     out = pd.DataFrame(rows)
     OUT.mkdir(parents=True, exist_ok=True)
     out.to_csv(OUT / "summary.csv", index=False)
+    if len(out):
+        hydrogen_limits(out).to_csv(OUT / "hydrogen_limits.csv", index=False)
     return out
+
+
+def hydrogen_limits(out: pd.DataFrame) -> pd.DataFrame:
+    """One row per site and grid level: where hydrogen stops being used along the frontier.
+
+    ``h2_up_to_g_per_kWh`` is the highest-carbon frontier point at which the fuel cell still serves
+    ENTRY_SHARE of supply: below it the cheapest designs use hydrogen, above it they do not. Exact
+    only to the frontier's own points (EPS_FRACS)."""
+    rows = []
+    for (n, level), g in out.groupby(["site", "level"]):
+        g = g.sort_values("gwp_g_per_kWh")
+        used = g[g.fuel_cell_share_of_supply >= ENTRY_SHARE]
+        lo, hi = g.iloc[0], g.iloc[-1]
+        rows.append({
+            "site": n, "place": g.place.iloc[0], "level": level, "region": g.region.iloc[0],
+            "min_gwp_g_per_kWh": lo.gwp_g_per_kWh, "min_gwp_cost_GBP_per_MWh": lo.cost_GBP_per_MWh,
+            "min_cost_g_per_kWh": hi.gwp_g_per_kWh, "min_cost_GBP_per_MWh": hi.cost_GBP_per_MWh,
+            "h2_up_to_g_per_kWh": used.gwp_g_per_kWh.max() if len(used) else float("nan"),
+            "h2_points": len(used), "points": len(g),
+            "h2_share_at_min_gwp": lo.fuel_cell_share_of_supply,
+            "gas_share_at_min_cost": hi.gas_engine_share_of_supply,
+            "blue_t_at_min_cost": hi.h2_bought_blue_t_per_year,
+        })
+    return pd.DataFrame(rows)
 
 
 def main(argv=None):
@@ -152,7 +210,10 @@ def main(argv=None):
     ap.add_argument("--levels", nargs="*", default=list(LEVELS), choices=LEVELS)
     ap.add_argument("--sites", nargs="*", type=int, default=None)
     ap.add_argument("--summary", action="store_true")
+    ap.add_argument("--set", default="base", choices=list(SETS))
     a = ap.parse_args(argv)
+    global OUT, SET
+    SET, OUT = a.set, ROOT / "optimisation_outputs" / SETS[a.set]["out"]
     if not a.summary:
         for level in a.levels:
             for row in SITES:

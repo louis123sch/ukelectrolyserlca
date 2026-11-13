@@ -229,7 +229,7 @@ def front(series, assets, tech, *, points: int = DEFAULT_POINTS,
           ely_strategy: str = "free", unserved_fraction: float = 0.0,
           gwp_target: float | None = None, progress=None,
           keep_dispatch: bool = False, mip_rel_gap: float | None = None,
-          on_solution=None) -> dict:
+          on_solution=None, eps_fracs=None) -> dict:
     """Solve the exact cost/carbon frontier for one configuration.
 
     ``on_solution(tag, V)`` is called after each solve with the point's tag (the
@@ -242,6 +242,10 @@ def front(series, assets, tech, *, points: int = DEFAULT_POINTS,
     lot of memory: one frame per solved point, held until the knee is known —
     which it is not until the sweep is finished, since the knee is chosen from
     the front rather than solved for.
+
+    ``eps_fracs`` (13 Nov 2026): where to put the epsilon points, as fractions of the carbon span
+    above the min-GWP anchor (0 < f < 1), instead of ``points`` even steps — for packing points at
+    the low-carbon end, where hydrogen hands over to other kit and even steps jump past it.
     """
     frames: dict[str, pd.DataFrame] = {}
 
@@ -300,9 +304,14 @@ def front(series, assets, tech, *, points: int = DEFAULT_POINTS,
     degenerate = span <= DEGENERATE_REL_TOL * max(abs(g_hi), 1.0)
 
     rows = [anchor_gwp, anchor_cost]
+    fracs = (sorted(float(f) for f in eps_fracs) if eps_fracs is not None
+             else [k / points for k in range(1, points)])
+    if any(not 0.0 < f < 1.0 for f in fracs):
+        raise ValueError(f"eps_fracs must lie strictly between 0 and 1, got {fracs}")
+    points = len(fracs) + 1                  # for the progress tags
     if not degenerate:
-        for k in range(1, points):
-            limit = g_lo + (k / points) * span
+        for k, frac in enumerate(fracs, start=1):
+            limit = g_lo + frac * span
             if progress: progress(f"eps {k}/{points}")
             V, obj = solve_one("cost", gwp_limit=limit)
             rows.append(_extract(V, obj, series, f"eps_{k}"))

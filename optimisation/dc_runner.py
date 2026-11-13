@@ -115,7 +115,7 @@ def run_one(scenario: A.Scenario, *, site, start: str, end: str,
             ccl_under_cca: bool | None = None,
             gas_price_case: str | None = None,
             save_dispatch: bool = False, refresh: bool = False,
-            progress=None, notice=None) -> dict:
+            progress=None, notice=None, eps_fracs=None) -> dict:
     """Solve one configuration's Pareto front and write it to disk.
 
     ``progress`` is called with a short tag per LP ("min_cost", "eps 3/12").
@@ -143,6 +143,8 @@ def run_one(scenario: A.Scenario, *, site, start: str, end: str,
         "start": start, "end": end,
         "size_mw_it": size_mw_it, "pue": pue, "resample_hours": resample_hours,
         "points": points, "cost_case": cost_case, "horizon_years": horizon_years,
+        # Hashed only when given, so every run cached before 13 Nov 2026 keeps its key.
+        **({"eps_fracs": [float(f) for f in eps_fracs]} if eps_fracs is not None else {}),
         "unserved_fraction": unserved_fraction,
         # Hashed as asked; the value actually used is recorded on the site
         # below, after the series is built.
@@ -224,7 +226,7 @@ def run_one(scenario: A.Scenario, *, site, start: str, end: str,
                                              ely_strategy=scenario.strategy, unserved_fraction=unserved_fraction,
                                              progress=(notice if notice else None))
     gap = M.LOOSE_MIP_REL_GAP if connection_solve == "loose" and n_lists > 1 else None
-    result = P.front(series, assets, tech, points=points,
+    result = P.front(series, assets, tech, points=points, eps_fracs=eps_fracs,
                      ely_strategy=scenario.strategy,
                      unserved_fraction=unserved_fraction,
                      gwp_target=gwp_target_kg_per_year,

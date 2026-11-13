@@ -40,7 +40,8 @@ sys.path.insert(0, r"{root}")
 from optimisation import dc_runner, sites
 from optimisation import dc_architectures as A
 flags = dict(grid=True, wind=True, offshore_wind=False, solar=True, battery=True,
-             electrolyser=True, tank=True, fuel_cell=True, buy_h2=True, buy_h2_2=False)
+             electrolyser=True, tank=True, fuel_cell=True, buy_h2=True, buy_h2_2=False,
+             gas_engine=True)    # since 13 Nov 2026: everything on the table (user)
 scen = A.Scenario(n=0, architecture="custom", label="every asset (North Norfolk reference)",
                   assets=flags, ely_tech="PEM operation", h2_colour="green", strategy="free")
 site = sites.get("north_norfolk")
