@@ -4,9 +4,13 @@
     python scripts/weekend_queue.py                          # waits for SIGNOFF_RUNNING to go, then runs
     python scripts/weekend_queue.py --stop-at 2026-11-17T08:00
 
-Order (user's priority): what gets built today at every site, then the hydrogen break-even
-prices (every site on the rig, then hourly at four), then the fixed-choice checks, then the
-blue what-if if there is time. Each step resumes where it stopped, so the queue can be run
+Order (user, revised 13 Nov 2026 evening): what gets built today at every site, then the
+fixed-choice checks, then the hydrogen break-even prices hourly (the four representative sites
+first, then every site and level; the second step reuses the first's results). No rig pass:
+hourly everywhere instead. The blue what-if is dropped for this weekend (``scripts/uk_sites.py
+--set blue`` later). The break-even goes last because it is the longest (estimated 20-50 h) and
+resumes where it stopped; note a step already running carries on past ``--stop-at``.
+Each step resumes where it stopped, so the queue can be run
 again after an interruption. A step that fails is logged and the next one still runs; nothing
 new starts after ``--stop-at``. Logs: ``optimisation_outputs/weekend_2026-11-14/``. Nothing here
 commits, pushes or deletes anything. Remove ``WEEKEND_RUNNING`` in the tree's root only if the
@@ -30,12 +34,11 @@ REP = ["2", "15", "18", "23"]
 
 STEPS = [
     ("1_present", "26 sites, everything on the table, green only", ["scripts/uk_sites.py", "--set", "present"]),
-    ("2_breakeven_rig", "Break-even green price, every site and level, with and without engines (rig)",
-     ["scripts/breakeven_sites.py", "--rig"]),
-    ("3_breakeven_hourly", "Break-even green price, 4 sites, 25 MW and full grid (hourly)",
+    ("2_checks", "Fixed choices one at a time, 4 sites, 25 MW and full grid", ["scripts/fixed_choice_checks.py"]),
+    ("3_breakeven_hourly_rep", "Break-even green price, 4 sites, 25 MW and full grid (hourly)",
      ["scripts/breakeven_sites.py", "--sites", *REP, "--levels", "limited", "full"]),
-    ("4_checks", "Fixed choices one at a time, 4 sites, 25 MW and full grid", ["scripts/fixed_choice_checks.py"]),
-    ("5_blue", "26 sites, the blue what-if (green and blue)", ["scripts/uk_sites.py", "--set", "blue"]),
+    ("4_breakeven_hourly_all", "Break-even green price, every site and level, with and without engines (hourly)",
+     ["scripts/breakeven_sites.py"]),
 ]
 
 

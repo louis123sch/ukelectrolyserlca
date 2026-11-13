@@ -35,10 +35,16 @@ Work where a number the study reports is not currently defensible.
       night. Replaces the overnight hourly assumption files, which predate the seven new rows.
 
 - [ ] **Weekend 14-16 Nov 2026 (user): what gets built with everything on the table, and hydrogen's break-even
-      price.** `scripts/weekend_queue.py`, after the sign-off: 26 sites `--set present`; break-even green price
-      (`scripts/breakeven_sites.py`, rig everywhere, hourly at 4 sites); the fixed choices
-      (`scripts/fixed_choice_checks.py`); the blue what-if if time remains. Logs in
-      `optimisation_outputs/weekend_2026-11-14/`; read `hydrogen_limits.csv` and the break-even `summary.csv`.
+      price.** `scripts/weekend_queue.py`, after the sign-off (revised 13 Nov evening): 26 sites `--set present`;
+      the fixed choices (`scripts/fixed_choice_checks.py`); break-even green price hourly, the 4 sites first, then
+      every site and level (`scripts/breakeven_sites.py`, no rig pass). Blue what-if dropped for this weekend.
+      Logs in `optimisation_outputs/weekend_2026-11-14/`; read `hydrogen_limits.csv` and the break-even
+      `summary.csv` (there, an `already_viable` row's price is today's price, i.e. "at least this", not a break-even).
+- [ ] **After the weekend, break-even follow-ups (user, 13 Nov: later):** (a) summary table: blank the price on
+      `already_viable` rows, add hydrogen's share at today's price (both from the saved `h2_price.json`, no re-run),
+      fix "not_found" -> "not_reached" in the script's docstring; (b) the price *above* which hydrogen drops out
+      for `already_viable` cases (needs runs); (c) a gas-price break-even: a `thresholds` knob on the engines' gas
+      (and/or carbon) price, multiple of today's, searched upward; (d) the blue what-if (`uk_sites.py --set blue`).
 - [ ] **Gas engines, once the user says to test** (13 Nov 2026, docs/GAS_ENGINE_PLAN.md): a run with the engines
       offered and built (not London); the input screen with them on; the cut-off rule's design test (rule 3); rebuild
       both maps and the workbooks; the sign-off; the 26-site study with `gas_engine` in `scripts/uk_sites.py`'s flags.
