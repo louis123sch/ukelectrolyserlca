@@ -16,7 +16,7 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "optimisation_outputs"
-CAPS = ["cap_wind", "cap_offshore", "cap_solar", "cap_batt_p", "cap_batt_e", "cap_ely", "cap_tank", "cap_fc", "cap_grid"]
+CAPS = ["cap_wind", "cap_offshore", "cap_solar", "cap_batt_p", "cap_batt_e", "cap_ely", "cap_tank", "cap_fc", "cap_ge", "cap_grid"]
 TOL = 0.05
 # Size floor (user, 12 Nov 2026): a capacity counts in the test only where the asset is
 # material in that design, at least 1 % of its supply carbon (the building's constant left
@@ -35,12 +35,13 @@ GWP_PARTS = {
     "cap_ely": ["electrolyser", "electrolyser stack replacements"],
     "cap_tank": ["H2 tank"],
     "cap_fc": ["fuel cell stack replacements", "fuel cell BoP replacements", "fuel cell step-up transformers"],
+    "cap_ge": ["gas engines"],
     "cap_grid": ["grid connection", "grid connection cable"],
 }
 COST_PARTS = {  # the battery's cost is one line for both of its capacities
     "cap_wind": ["wind"], "cap_offshore": ["offshore wind"], "cap_solar": ["solar"],
     "cap_batt_e": ["battery"], "cap_batt_p": ["battery"], "cap_ely": ["electrolyser"],
-    "cap_tank": ["H2 tank"], "cap_fc": ["fuel cell"], "cap_grid": ["grid connection", "fixed charges and cable"],
+    "cap_tank": ["H2 tank"], "cap_fc": ["fuel cell"], "cap_ge": ["gas engines"], "cap_grid": ["grid connection", "fixed charges and cable"],
 }
 
 

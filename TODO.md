@@ -34,6 +34,15 @@ Work where a number the study reports is not currently defensible.
 - [ ] **Run the first full sign-off** (`docs/TESTING.md`). Nothing has been signed off yet. Commit first, then allow a
       night. Replaces the overnight hourly assumption files, which predate the seven new rows.
 
+- [ ] **Gas engines, once the user says to test** (13 Nov 2026, docs/GAS_ENGINE_PLAN.md): a run with the engines
+      offered and built (not London); the input screen with them on; the cut-off rule's design test (rule 3); rebuild
+      both maps and the workbooks; the sign-off; the 26-site study with `gas_engine` in `scripts/uk_sites.py`'s flags.
+- [ ] **Gas engines' voltage** (user's word needed, found by the build review 13 Nov): the engines are built with no
+      step-up, agreed on "11 kV is the site's voltage", but the model's site bus is 20 kV. Add an 11/20 kV step-up
+      (carbon and losses, as the fuel cell's), or state that the engines generate at the bus voltage.
+- [ ] **Gas engine land** (user's word needed): development is taken excluding land; the study's land is about 2.6 % of
+      the engines' yearly cost (1.9 % of the full yearly cost), above the 1 % cost rule. Carry it, or keep the stated choice (`cost_exclusions.py`).
+
 ## Cheap wins
 
 Either the source is named and public, or no new sourcing is needed at all.
@@ -126,6 +135,10 @@ the bound now covers only what is left. Recorded in `DATA_GAPS.md`. Since 22 Oct
 the estimates were accepted as final on 23 Oct.
 
 ## Parked
+
+- Gas engines' connection to the gas network (user, 13 Nov 2026: left out, "record for later"): DESNZ 2026's
+  infrastructure line is gas and power together (£1.1/2.1/4.2 m per 20 MW); a gas network's connection charges
+  would give the gas pipe alone. `cost_exclusions.py`, `exclusions.py`, docs/GAS_ENGINE_PLAN.md.
 
 No public source found. Revisit if the item becomes load-bearing in a result.
 

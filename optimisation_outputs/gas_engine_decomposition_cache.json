@@ -1,0 +1,39 @@
+{
+  "running_kgco2e_per_MWh": 559.6730133645182,
+  "running_parts_kgco2e_per_MWh": {
+    "gas supply chain": 81.83315880424627,
+    "burning and exhaust": 476.8376789576139,
+    "oil": 1.0021677590557763
+  },
+  "maintenance_kgco2e_per_MWh": 0.7687694330264514,
+  "plant_kgco2e_per_MW": 243862.40567897842,
+  "plant_parts_kgco2e_per_MW": {
+    "heat and power co-generation unit construction, 1MW electrical, common components for heat+electricity": 205603.7980203988,
+    "heat and power co-generation unit construction, 1MW electrical, components for electricity only": 54073.44398052036,
+    "maintenance, heat and power co-generation unit, 160kW electrical": -83099.71251233993,
+    "market for transport, passenger car": -1685.9618630631082,
+    "market for building, hall, steel construction": 68970.83896507772
+  },
+  "gas_m3_per_MWh": 224.21477578574215,
+  "gas_MWh_HHV_per_MWh": 2.4912805181863473,
+  "co2_kg_per_MWh": 444.0550123752047,
+  "duty_hours": 100000.0,
+  "reconciliation_kgco2e_per_m3": [
+    [
+      "ecoinvent lean-burn engine, as published (European gas)",
+      3.0883626906092414
+    ],
+    [
+      "British high-pressure gas for European",
+      2.8553921323079985
+    ],
+    [
+      "CO2 from the gas's carbon balance",
+      2.6518816465206543
+    ],
+    [
+      "low-pressure network methane out",
+      2.496146846520654
+    ]
+  ]
+}

@@ -624,19 +624,7 @@ def site_gas_gbp_per_mwh(ccl_under_cca: bool | None = None, gas_price_case: str 
     value = ((ely.LARGE_SITE_GAS_GBP_PER_MWH - levy_2025) * P.FACTOR_2025_TO_2026 * to_2026_market * mult
              + levy_now)
     if record and T.active():
-        T.cost("cost.gas.delivered_2025", ely.LARGE_SITE_GAS_GBP_PER_MWH, "GBP per MWh (HHV)",
-               "Gas delivered to a large site, including the levy, 2025", grade="transcribed",
-               cites=[("desnz_nondomestic_prices", "table 3.4.2, annual, 2025, gas, large, 4.149 p/kWh")])
-        T.cost("cost.gas.levy_in_2025_price", levy_2025, "GBP per MWh",
-               "Climate Change Levy on gas in force all through 2025", grade="transcribed",
-               cites=[("govuk_ccl_rates", "gas, rates from 1 April 2024 and 1 April 2025: £0.00775/kWh")],
-               note="Taken at the full rate: DESNZ's average does not say how many buyers held an agreement")
-        T.cost("cost.gas.market_2026_over_2025", to_2026_market, "multiplier",
-               "DESNZ's central NBP gas, 2026 over 2025 (real)", grade="derived",
-               cites=[("desnz_fossil_fuel_prices_2025", "sheet Gas, case B: 85 p/therm 2026, 94 p/therm 2025")])
-        T.cost("cost.gas.price_case_multiplier", mult, "multiplier",
-               f"Gas price case: {case}, DESNZ's 2026 case over its central", grade="derived",
-               cites=[("desnz_fossil_fuel_prices_2025", "sheet Gas, 2026: A 52, B 85, C 143 p/therm")])
+        _record_gas_base(case, mult, to_2026_market, levy_2025)
         T.cost("cost.levy.CCL_gas", levy_now, "GBP per MWh", "Climate Change Levy on the site's gas, 2026/27",
                uses=["cost.levy.CCL_under_agreement"],
                cites=[("govuk_ccl_rates", f"gas, £{levies.CCL_GAS_GBP_PER_KWH}/kWh from 1 April 2026; "
@@ -646,6 +634,53 @@ def site_gas_gbp_per_mwh(ccl_under_cca: bool | None = None, gas_price_case: str 
                "scaled by the gas case, plus the 2026/27 levy",
                uses=["cost.gas.delivered_2025", "cost.gas.levy_in_2025_price", P.KEY_2025_TO_2026,
                      "cost.gas.market_2026_over_2025", "cost.gas.price_case_multiplier", "cost.levy.CCL_gas"])
+    return value
+
+
+def _record_gas_base(case: str, mult: float, to_2026_market: float, levy_2025: float) -> None:
+    """The steps every gas price here shares: DESNZ's 2025 large-site price, its levy, the market move, the case."""
+    from optimisation import electrolysers as ely
+    T.cost("cost.gas.delivered_2025", ely.LARGE_SITE_GAS_GBP_PER_MWH, "GBP per MWh (HHV)",
+           "Gas delivered to a large site, including the levy, 2025", grade="transcribed",
+           cites=[("desnz_nondomestic_prices", "table 3.4.2, annual, 2025, gas, large, 4.149 p/kWh")])
+    T.cost("cost.gas.levy_in_2025_price", levy_2025, "GBP per MWh",
+           "Climate Change Levy on gas in force all through 2025", grade="transcribed",
+           cites=[("govuk_ccl_rates", "gas, rates from 1 April 2024 and 1 April 2025: £0.00775/kWh")],
+           note="Taken at the full rate: DESNZ's average does not say how many buyers held an agreement")
+    T.cost("cost.gas.market_2026_over_2025", to_2026_market, "multiplier",
+           "DESNZ's central NBP gas, 2026 over 2025 (real)", grade="derived",
+           cites=[("desnz_fossil_fuel_prices_2025", "sheet Gas, case B: 85 p/therm 2026, 94 p/therm 2025")])
+    T.cost("cost.gas.price_case_multiplier", mult, "multiplier",
+           f"Gas price case: {case}, DESNZ's 2026 case over its central", grade="derived",
+           cites=[("desnz_fossil_fuel_prices_2025", "sheet Gas, 2026: A 52, B 85, C 143 p/therm")])
+
+
+def engine_gas_gbp_per_mwh(gas_price_case: str | None = None, record: bool = False) -> float:
+    """Gas for the site's gas engines, GBP per MWh (HHV), in 2026 pounds.
+
+    The site gas price (``site_gas_gbp_per_mwh``) without the Climate Change Levy: gas supplied to a
+    generating station of 2 MW or more, auto-generators included, is exempt from the main rates
+    and liable to carbon price support instead (HMRC Excise Notice CCL1/6, §4.1, §6), which the
+    engines pay inside the carbon price (``build_tech``). Its own function, so the levy-agreement
+    switch (``ccl_under_cca``) cannot touch it."""
+    from optimisation import electrolysers as ely
+    from optimisation import h2_prices
+    from optimisation import levies
+    case = GAS_PRICE_DEFAULT if gas_price_case is None else str(gas_price_case)
+    to_2026_market = h2_prices.gas_gbp_per_mwh(2026) / h2_prices.gas_gbp_per_mwh(2025)
+    levy_2025 = levies.CCL_GAS_2025_GBP_PER_KWH * 1000.0
+    value = ((ely.LARGE_SITE_GAS_GBP_PER_MWH - levy_2025) * P.FACTOR_2025_TO_2026 * to_2026_market
+             * GAS_PRICE_MULTIPLIER[case])
+    if record and T.active():
+        # only the shared steps: the site's levied price is not the engines', and recording it here
+        # would put a levy no term uses on the cost map (and clash with a levy-agreement run's)
+        _record_gas_base(case, GAS_PRICE_MULTIPLIER[case], to_2026_market, levy_2025)
+        T.cost("cost.gas_engine.gas_per_MWh_HHV", value, "GBP per MWh (HHV)",
+               "Gas for the engines in 2026 pounds: the site price without the Climate Change Levy",
+               uses=["cost.gas.delivered_2025", "cost.gas.levy_in_2025_price", P.KEY_2025_TO_2026,
+                     "cost.gas.market_2026_over_2025", "cost.gas.price_case_multiplier"],
+               cites=[("hmrc_ccl16", "§4.1, gas to a generating station of 2 MW or more, auto-generators "
+                                     "included: exempt from the main rates, liable to carbon price support")])
     return value
 
 
@@ -958,6 +993,26 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
                         inputs={"kW_per_container": fc_kw_box}, grade="assumed")
     fcr = pd.Series(hc.fuel_cell_cost(cost_case, bop_calendar_years=fc_bop_years))
 
+    # gas engines (gas_engine.py, docs/GAS_ENGINE_PLAN.md)
+    from optimisation import gas_engine as ge
+    from optimisation import h2_prices as _hp
+    from optimiser_lca import gas_engine as ge_inv
+    gd = ge.decompose()
+    gcr = pd.Series(ge.cost(cost_case))
+    ge_gas = engine_gas_gbp_per_mwh(gas_case, record=True)
+    ge_gas_mwh = T.step("gas_engine.gas_MWh_HHV_per_MWh", ge_inv.GE_GAS_MWH_HHV_PER_MWH, "MWh of gas (HHV) per MWh",
+                        "Gas burned per MWh made, on the gas bill's (gross) basis: 44.6 % net efficiency and "
+                        "ecoinvent's GB gas at 36.0 MJ/m3 net, 40.0 gross", grade="derived")
+    carbon_t = T.cost("cost.carbon_price.gb_total_2026", _hp.carbon_gbp_per_t_2026(), "GBP per t CO2 (2026)",
+                      "NESO's GB total carbon price for 2026: UK ETS plus carbon price support", grade="derived",
+                      cites=[("neso_tyo_2026_workbook", "CP2 base case, GB total carbon price 2026 EUR 80.94/t; "
+                                                        "CP1 2026 GBP 1 = EUR 1.12")])
+    ge_co2_t = T.cost("cost.gas_engine.co2_t_per_MWh",
+                      ge_inv.GE_GAS_C_KG_PER_KWH * ge_inv.CO2_PER_KG_C, "t CO2 per MWh",
+                      "CO2 the carbon price falls on: all the gas's fossil carbon, as the trading scheme counts it",
+                      grade="derived", note="Oxidation factor 1; ~0.4 % above the inventory's CO2, which nets the "
+                                            "carbon leaving as methane and carbon monoxide")
+
     T.cost("cost.unserved.voll_per_MWh", dc_model.VOLL_GBP_PER_MWH, "GBP per MWh",
            "Value of lost load: the penalty on a MWh of demand left unserved", grade="assumed",
            note="dc_model.VOLL_GBP_PER_MWH. Not a market number: large enough that shortfall is a last resort; "
@@ -1188,6 +1243,17 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
                                          "duty_hours": d["stack_lifetime_hours"]}),
         gwp_fc_maint_per_mwh=step("gwp_fc_maint_per_mwh", d["maintenance_kgco2e_per_MWh"], "kg CO2e per MWh",
                                   "Fuel cell service, per MWh delivered", ["fuel_cell.maintenance_per_MWh"]),
+        gwp_ge_per_mw=step("gwp_ge_per_mw", gd["plant_kgco2e_per_MW"], "kg CO2e per MW replaced",
+                           "Gas engine plant (engines, generators, controls, pads, hall), per replacement "
+                           "(max of calendar and duty)", ["gas_engine.plant_per_MW"],
+                           inputs={"calendar_years": ge.CALENDAR_YEARS, "duty_hours": gd["duty_hours"]}),
+        gwp_ge_running_per_mwh=step("gwp_ge_running_per_mwh", gd["running_kgco2e_per_MWh"], "kg CO2e per MWh",
+                                    "Gas engines running: British gas's supply chain, burning, exhaust and oil, "
+                                    "per MWh made", ["gas_engine.running_per_MWh"]),
+        gwp_ge_maint_per_mwh=step("gwp_ge_maint_per_mwh", gd["maintenance_kgco2e_per_MWh"], "kg CO2e per MWh",
+                                  "Gas engine maintenance, per MWh made", ["gas_engine.maintenance_per_MWh"]),
+        ge_calendar_years=ge.CALENDAR_YEARS,
+        ge_duty_hours=gd["duty_hours"],
         gwp_grid_per_mw=step("gwp_grid_per_mw", gc.kgco2e_per_mw_year(), "kg CO2e per MW per year",
                              "Grid connection, per MW of cap_grid", ["grid_connection.per_MW_year"]),
         # The cable to the connection substation over its real route (the
@@ -1278,6 +1344,21 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
                                    "Fuel cell stack, per replacement", ["cost.fuel_cell.stack_per_MW", *k26]),
         cost_fc_bop_per_mw=cstep("cost_fc_bop_per_mw", float(fcr.bop_GBP_per_MW) * to26, "GBP per MW replaced",
                                  "Fuel cell balance of plant, per replacement", ["cost.fuel_cell.bop_per_MW", *k26]),
+        cost_ge=cstep("cost_ge", float(gcr.annual_GBP_per_MW_year) * to26, "GBP per MW per year",
+                      "Gas engines, per MW: capital recovery and fixed opex, net of the calendar replacement",
+                      ["cost.gas_engine.annual_per_MW", *k26]),
+        cost_ge_per_mw=cstep("cost_ge_per_mw", float(gcr.capital_GBP_per_MW) * to26, "GBP per MW replaced",
+                             "Gas engines, capital and development per replacement",
+                             ["cost.gas_engine.capital_per_MW", *k26]),
+        cost_ge_gas_per_mwh=cstep("cost_ge_gas_per_mwh", ge_gas * ge_gas_mwh, "GBP per MWh made",
+                                  "Gas for the engines, per MWh made",
+                                  ["cost.gas_engine.gas_per_MWh_HHV", "gas_engine.gas_MWh_HHV_per_MWh"]),
+        cost_ge_carbon_per_mwh=cstep("cost_ge_carbon_per_mwh", carbon_t * ge_co2_t, "GBP per MWh made",
+                                     "The carbon price on the engines' CO2, per MWh made",
+                                     ["cost.carbon_price.gb_total_2026", "cost.gas_engine.co2_t_per_MWh"]),
+        cost_ge_maint_per_mwh=cstep("cost_ge_maint_per_mwh", float(gcr.maintenance_GBP_per_MWh) * to26,
+                                    "GBP per MWh made", "Gas engine running maintenance, per MWh made",
+                                    ["cost.gas_engine.maintenance_per_MWh", *k26]),
         # Use of system (network_charges) plus the connection's own capital
         # (connection_cost), the same per-MW / fixed split as the carbon side.
         # The HH locational TNUoS tariff comes out of the per-MW charge and is
@@ -1486,6 +1567,7 @@ CUTOFF_FIELD = {
     ("battery", "power"): "gwp_tx_batt_per_mw", ("battery", "energy"): "gwp_batt_e",
     ("electrolyser", None): "gwp_ely", ("hydrogen tank", None): "gwp_tank",
     ("fuel cell", None): "gwp_tx_fc_per_mw", ("grid connection", None): "gwp_grid_per_mw",
+    ("gas engine", None): "gwp_ge_per_mw",     # per MW replaced, as the register's gas engine entries
     ("facility", None): "dc_fixed_gwp_per_year",
 }
 CUTOFF_MODES = (None, "central", "upper", "none")

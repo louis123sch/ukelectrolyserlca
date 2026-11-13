@@ -1034,7 +1034,7 @@ function routePanel(k) {
 function flowOverview() {
   const el = document.getElementById("panel");
   let h = `<button class="btn close" id="closep">Close</button><h2>How energy reaches the data centre</h2>
-    <div class="prose">Six routes in, read top to bottom: the resource, each conversion step, the voltage it arrives at, the 20 kV site bus (the LP's single node), then the facility. Storage routes run both ways through the bus. Every rating and loss is read from the model's own constants, so this is what the optimiser does, not a generic plant.</div>
+    <div class="prose">Seven routes in, read top to bottom: the resource, each conversion step, the voltage it arrives at, the 20 kV site bus (the LP's single node), then the facility. Storage routes run both ways through the bus. Every rating and loss is read from the model's own constants, so this is what the optimiser does, not a generic plant.</div>
     <section><h3>The routes</h3>${Object.entries(EN.routes).map(([k, r]) => `<div class="prose"><strong>${esc(r.label)}.</strong> ${inline(r.chain)}</div>`).join("")}</section>
     <section><h3>Not in the model</h3><div class="bars">${EN.nodes.filter(n => n.status === "not").map(n => `<div class="barrow"><button data-node="${n.id}"><span class="bn">${esc(n.name)}</span></button><span></span></div>`).join("")}</div></section>`;
   el.innerHTML = h; wirePanel(el);

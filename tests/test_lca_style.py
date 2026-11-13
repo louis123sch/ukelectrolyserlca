@@ -68,6 +68,7 @@ MODULE_SOURCES = {
     "fuel_cell": ("Babatunde", "Usai", "Gramc", "ecoinvent"),
     "h2_tank": ("Gandiglio",),
     "stepup_transformers": ("Leng", "IEA PVPS", "Jasper", "Smith"),
+    "gas_engine": ("ecoinvent", "DESNZ"),
 }
 # Processes that may carry an identity without a query, and why.
 ALLOWED_NO_QUERY: dict[tuple[str, str], str] = {}

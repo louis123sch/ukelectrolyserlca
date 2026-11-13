@@ -132,7 +132,7 @@ _RATES_CITE = [("desnz_arup_2024_onshore_solar",
 def rates_frac() -> float:
     """Business rates as a fraction of capital a year (traced once per build)."""
     return T.cost("cost.hydrogen_plant.rates_frac", RATES_FRAC_OF_CAPITAL, "fraction of capital per year",
-                  "Business rates on the electrolyser, fuel cell and tank, at solar's ratio to capital",
+                  "Business rates on the electrolyser, fuel cell, tank and gas engines, at solar's ratio to capital",
                   grade="proxy", cites=_RATES_CITE,
                   note="Solar's 2.5k high case gives 0.38 %; rateable value of hydrogen plant is not sourced")
 # Stack's share of fuel-cell capital, since 4 Nov 2026 (evening): the Clean

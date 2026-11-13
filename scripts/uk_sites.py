@@ -132,6 +132,8 @@ def summary() -> pd.DataFrame:
                         "gwp_g_per_kWh": r["gwp_g_per_kWh"], "gwp_supply_g_per_kWh": r.get("gwp_supply_g_per_kWh"),
                         **{c: r[c] for c in ("cap_wind", "cap_solar", "cap_batt_p", "cap_batt_e", "cap_ely",
                                              "cap_tank", "cap_fc", "cap_grid")},
+                        "cap_ge": r.get("cap_ge", 0.0),
+                        "gas_engine_share_of_supply": r.get("cap_ge_MWh_per_year", 0.0) / served,
                         "h2_bought_t_per_year": r.get("h2_bought_kg_per_year", 0.0) / 1000.0,
                         "fuel_cell_share_of_supply": r.get("cap_fc_MWh_per_year", 0.0) / served,
                         "import_share_of_supply": r.get("import_MWh_per_year", 0.0) / served,

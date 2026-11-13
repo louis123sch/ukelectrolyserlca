@@ -73,11 +73,12 @@ CAPS = [("cap_grid", "Grid connection", "MW"),
         ("cap_batt_e", "Battery energy", "MWh"),
         ("cap_ely", "Electrolyser", "MW"),
         ("cap_tank", "Hydrogen storage", "kg"),
-        ("cap_fc", "Fuel cell", "MW")]
+        ("cap_fc", "Fuel cell", "MW"),
+        ("cap_ge", "Gas engines", "MW")]
 
 # Capacities that have a matching annual-energy figure from dc_pareto.ENERGY_VARS.
 # cap_batt_e and cap_tank are absent by design — see the note in that module.
-ENERGY_CAPS = {"cap_grid", "cap_wind", "cap_solar", "cap_batt_p", "cap_ely", "cap_fc"}
+ENERGY_CAPS = {"cap_grid", "cap_wind", "cap_solar", "cap_batt_p", "cap_ely", "cap_fc", "cap_ge"}
 NA = float("nan")
 
 # Sentinel for the TNUoS band control: derive the band rather than pin one.
@@ -87,7 +88,7 @@ TDR_AUTO = "Auto — from the load"
 FLAG_CAPS = {"grid": ["cap_grid"], "wind": ["cap_wind"], "solar": ["cap_solar"],
              "battery": ["cap_batt_p", "cap_batt_e"],
              "electrolyser": ["cap_ely"], "tank": ["cap_tank"],
-             "fuel_cell": ["cap_fc"], "buy_h2": [], "buy_h2_2": []}
+             "fuel_cell": ["cap_fc"], "buy_h2": [], "buy_h2_2": [], "gas_engine": ["cap_ge"]}
 
 
 @st.cache_resource(show_spinner="Connecting to Brightway…")
@@ -128,7 +129,7 @@ def _console(text: str, label: str = "Module output — cross-checks and caveats
 # state of charge are visibly the same asset.
 SOURCE_COLOURS = {
     "Solar PV": "#e8b833", "Wind": "#4c9f70", "Offshore wind": "#2f6f8f",
-    "Battery": "#8a63b8", "Fuel cell": "#4bacc6", "Grid import": "#9aa0a6",
+    "Battery": "#8a63b8", "Fuel cell": "#4bacc6", "Gas engines": "#b5651d", "Grid import": "#9aa0a6",
     "Unserved": "#d62728",
 }
 
@@ -861,7 +862,7 @@ st.markdown(
 
 st.session_state.setdefault("kit_strategy", "free")
 for _k, _default in (("wind", True), ("solar", True), ("battery", True),
-                     ("fuel_cell", False), ("tank", False)):
+                     ("fuel_cell", False), ("tank", False), ("gas_engine", False)):
     st.session_state.setdefault(f"kit_{_k}", _default)
 
 ELY_MAP = {"SOEC": "SOEC operation", "Alk": "AE operation", "PEM": "PEM operation"}
@@ -881,6 +882,12 @@ with c2:
         "Battery (Li-ion LFP)", key="kit_battery", disabled=any_renewable,
         help="Required automatically whenever wind or solar is ticked."
         if any_renewable else None)
+    st.markdown("**Gas**")
+    f_ge = st.checkbox(
+        "Gas engines", key="kit_gas_engine",
+        help="Natural-gas engine generators on site, behind the meter, on the site's gas "
+             "price without the climate change levy plus the carbon price. Off by default "
+             "(docs/GAS_ENGINE_PLAN.md).")
 with c3:
     st.markdown("**Hydrogen**")
     ely_choice = st.pills(
@@ -941,7 +948,7 @@ ely_tech = ELY_MAP.get(ely_choice)
 
 flags = {"grid": not run_islanded, "wind": f_wind, "offshore_wind": False, "solar": f_solar,
          "battery": f_batt, "electrolyser": f_ely, "tank": f_tank,
-         "fuel_cell": f_fc, "buy_h2": f_buy, "buy_h2_2": colour_2 is not None}
+         "fuel_cell": f_fc, "buy_h2": f_buy, "buy_h2_2": colour_2 is not None, "gas_engine": f_ge}
 
 # --- how bought green hydrogen reaches its electrolyser ----------------------
 # Only asked when green is actually being bought: it is the one colour whose
@@ -1044,7 +1051,7 @@ LABELS = {"grid": "grid", "wind": "wind", "solar": "solar", "battery": "battery"
                           + (" (electric boiler)" if soec_heat == "electric_boiler" else ""),
           "tank": "H₂ storage", "fuel_cell": "fuel cell",
           "buy_h2": f"bought {colour} H₂",
-          "buy_h2_2": f"bought {colour_2} H₂"}
+          "buy_h2_2": f"bought {colour_2} H₂", "gas_engine": "gas engines"}
 label = " + ".join(LABELS[k] for k in kit_on) or "nothing"
 
 scenario = A.Scenario(

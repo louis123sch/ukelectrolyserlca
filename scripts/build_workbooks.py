@@ -482,19 +482,24 @@ def point_quantities(row: pd.Series, disp: pd.DataFrame, series, tech, assets) -
     dt, scale = series.dt_hours, series.annual_scale
     sc, notes = {}, {}
     for k in ("cap_wind", "cap_offshore", "cap_solar", "cap_batt_p", "cap_batt_e", "cap_ely",
-              "cap_tank", "cap_fc", "cap_grid"):
+              "cap_tank", "cap_fc", "cap_ge", "cap_grid"):
         sc[k] = float(row.get(k, 0.0) or 0.0)
         notes[k] = "built, from the run (pareto.parquet)"
     hr = {k: disp[k].to_numpy(dtype=float) for k in disp.columns
           if k not in ("t", "point") and pd.api.types.is_numeric_dtype(disp[k])}
     fc_mwh = float(hr["p_fc"].sum() * dt * scale)
+    if "p_ge" not in hr:                       # runs saved before 13 Nov 2026 have no gas engines
+        hr["p_ge"] = np.zeros_like(hr["p_fc"])
+    ge_mwh = float(hr["p_ge"].sum() * dt * scale)
     ely_mwh = float(hr["p_ely"].sum() * dt * scale)
     sc["fc_stack_units"] = max(sc["cap_fc"] / tech.fc_stack_calendar_years, fc_mwh / tech.fc_stack_duty_hours)
     sc["fc_bop_units"] = max(sc["cap_fc"] / tech.fc_bop_calendar_years, fc_mwh / tech.fc_bop_duty_hours)
     sc["ely_stack_units"] = max(sc["cap_ely"] / tech.ely_stack_calendar_years, ely_mwh / tech.ely_stack_duty_hours)
+    sc["ge_units"] = max(sc["cap_ge"] / tech.ge_calendar_years, ge_mwh / tech.ge_duty_hours)
     for k, (cal, duty) in {"fc_stack_units": ("fc_stack_calendar_years", "fc_stack_duty_hours"),
                            "fc_bop_units": ("fc_bop_calendar_years", "fc_bop_duty_hours"),
-                           "ely_stack_units": ("ely_stack_calendar_years", "ely_stack_duty_hours")}.items():
+                           "ely_stack_units": ("ely_stack_calendar_years", "ely_stack_duty_hours"),
+                           "ge_units": ("ge_calendar_years", "ge_duty_hours")}.items():
         notes[k] = (f"replacements per year, from the run: the larger of capacity / {cal} and "
                     f"energy / {duty} (dc_model.build_model's constraints, tight at the optimum)")
     window = (np.ones(series.n, dtype=bool) if series.triad_window is None
@@ -537,7 +542,7 @@ def evaluate_terms(tech, series, sc, hr, pt, wb_cells, assets):
         xopts.append(dataclasses.replace(o, **rep))
     xtech = dataclasses.replace(tech, **coef, connection_options=tuple(xopts) if xopts else tech.connection_options)
     q = {k: XS(f"{pre}.{k}", v, refs={f"{pre}.{k}"}) for k, v in sc.items()}
-    for k in ("imp", "exp", "p_ely", "p_fc", "h2_buy", "h2_buy_2", "tank", "unserved", "demand"):
+    for k in ("imp", "exp", "p_ely", "p_fc", "p_ge", "h2_buy", "h2_buy_2", "tank", "unserved", "demand"):
         q[k] = hourly(f"{pre}.h.{k}", hr[k])
     groups = sorted({o.group for o in opts})
     gs = {}
@@ -628,7 +633,8 @@ def run_points(folder: Path, L, problems: list) -> dict:
                        served=float(row.get("served_MWh_per_year") or 0.0), connection_index=idx,
                        connection=row.get("connection_option"),
                        build={k: float(row[k]) for k in ("cap_wind", "cap_offshore", "cap_solar", "cap_batt_p",
-                                                         "cap_batt_e", "cap_ely", "cap_tank", "cap_fc", "cap_grid")
+                                                         "cap_batt_e", "cap_ely", "cap_tank", "cap_fc", "cap_ge",
+                                                         "cap_grid")
                               if k in row})
     return pts
 

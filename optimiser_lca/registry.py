@@ -22,13 +22,14 @@ TRANSFORMER_DB  = "transformer foreground"       # Leng 2026 wind + grid intake,
 SOLAR_DB        = "solar foreground"             # Smith et al. 2024 utility PV, on apos
 BESS_DB         = "battery foreground"           # Jasper 2026 container, Voß 2025 cell
 GRID_DB         = "grid foreground"              # the study's own GB grid, one kWh
+GAS_ENGINE_DB   = "gas engine foreground"        # ecoinvent lean-burn 1 MW gas engines, British gas
 
 # Build order. Later databases link into earlier ones (the fuel cell burns
 # hydrogen from HYDROGEN_DB, and sits in BESS_DB's container; the fossil
 # hydrogen routes take GRID_DB's electricity, whose solar share is SOLAR_DB's
 # plant), so this is a dependency order, not a preference.
 DATABASES = [SOLAR_DB, GRID_DB, HYDROGEN_DB, DATA_CENTRE_DB, BESS_DB, FUEL_CELL_DB,
-             H2_STORAGE_DB, TRANSFORMER_DB]
+             H2_STORAGE_DB, TRANSFORMER_DB, GAS_ENGINE_DB]
 
 # --- hydrogen: Hermesmann & Müller 2022 (fossil routes), Gerloff 2021 (electrolysers) ---
 SMR        = "smr_hermesmann_1kg_h2"
@@ -79,6 +80,11 @@ FC_STACK_GRAMC = "pemfc_stack_1kw_gramc"        # 1 kW of Gramc 2025's 48 kW sta
 FC_BOP     = "pemfc_bop_stationary_1kw"         # 1 kW of stationary H2 balance of plant
 FC_SERVICE = "pemfc_service_stationary_1kw"     # one service of 1 kW
 FC_OP      = "pemfc_op_1kwh_h2"                 # 1 kWh net AC from hydrogen
+
+# --- gas engines -------------------------------------------------------------
+GE_OP    = "gas_engine_op_1kwh"                  # 1 kWh net from the engines, running
+GE_MAINT = "gas_engine_maintenance_1kwh"         # their maintenance, per kWh run
+GE_PLANT = "gas_engine_plant_1mw"                # 1 MW of engines and hall, built
 
 # --- hydrogen storage ----------------------------------------------------------
 H2_TANK = "h2_tank_steel_1kg_capacity"          # per kg of storage capacity
@@ -140,4 +146,5 @@ CODES_BY_DATABASE = {
     FUEL_CELL_DB:   [FC_STACK, FC_STACK_GRAMC, FC_BOP, FC_SERVICE, FC_OP],
     H2_STORAGE_DB:  [H2_TANK],
     TRANSFORMER_DB: [TX_WIND, TX_SOLAR, TX_GRID, TX_LV_CONTAINER, TX_SOLAR_REPL30, TX_GRID_CIVILS],
+    GAS_ENGINE_DB:  [GE_OP, GE_MAINT, GE_PLANT],
 }

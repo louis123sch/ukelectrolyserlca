@@ -70,6 +70,11 @@ def tech():
         bought_h2_gbp_per_kg=3.0, bought_h2_gwp_per_kg=10.0,
         dc_fixed_gwp_per_year=999_453, dc_other_gwp_per_mwh=1.809,
         horizon_years=25.0,
+        # Gas engines, central, 13 Nov 2026 (gas_engine.py); off in every architecture below.
+        gwp_ge_per_mw=243_900, gwp_ge_running_per_mwh=559.7, gwp_ge_maint_per_mwh=0.77,
+        ge_calendar_years=25.0, ge_duty_hours=100_000.0,
+        cost_ge=59_240, cost_ge_per_mw=575_500, cost_ge_gas_per_mwh=78.2,
+        cost_ge_carbon_per_mwh=32.35, cost_ge_maint_per_mwh=2.91,
     )
 
 
@@ -692,6 +697,10 @@ PARITY = {
     "islanded": M.Assets(grid=False, wind=True, solar=True, battery=True,
                          electrolyser=True, tank=True, fuel_cell=True,
                          grid_limit_mw=0.0),
+    # the gas engines (13 Nov 2026), on the grid and islanded beside the fuel cell
+    "grid_gas": M.Assets(grid=True, gas_engine=True),
+    "islanded_gas": M.Assets(grid=False, wind=True, solar=True, battery=True, electrolyser=True,
+                             tank=True, fuel_cell=True, gas_engine=True, grid_limit_mw=0.0),
 }
 
 
@@ -841,7 +850,7 @@ def test_leaked_hydrogen_is_charged_at_its_gwp(series, tech):
     t = replace(tech, tank_leakage_per_hour=leak)
     q = {k: 0.0 for k in myopic.CAPACITIES}
     q.update({k: np.zeros(series.n) for k in myopic.FLOWS})
-    q["fc_bop_units"] = q["fc_stack_units"] = 0.0
+    q["fc_bop_units"] = q["fc_stack_units"] = q["ge_units"] = 0.0
     q["tank"] = np.full(series.n, 1_000.0)          # 1 t held all window
     got = M.score(q, series, t)["gwp_operational"]["H2 leaked from tank"]
     kg_leaked = series.annual_scale * leak * DT * 1_000.0 * series.n
@@ -910,9 +919,9 @@ def test_container_step_ups_are_charged_on_inverter_capacity(series, tech):
     import dataclasses
     t = dataclasses.replace(tech, gwp_tx_batt_per_mw=800.0, gwp_tx_fc_per_mw=600.0)
     q = {k: 0.0 for k in ("cap_wind", "cap_offshore", "cap_solar", "cap_batt_e", "cap_ely",
-                          "cap_tank", "fc_stack_units", "fc_bop_units", "cap_grid")}
+                          "cap_tank", "fc_stack_units", "fc_bop_units", "cap_grid", "cap_ge", "ge_units")}
     q.update(cap_batt_p=3.0, cap_fc=2.5)
-    for k in ("imp", "h2_buy", "h2_buy_2", "p_ely", "p_fc", "unserved", "tank", "exp"):
+    for k in ("imp", "h2_buy", "h2_buy_2", "p_ely", "p_fc", "p_ge", "unserved", "tank", "exp"):
         q[k] = np.zeros(series.n)
     e = M.score(q, series, t)["gwp_embodied"]
     assert e["battery step-up transformers"] == pytest.approx(800.0 * 3.0)

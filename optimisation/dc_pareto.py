@@ -60,7 +60,7 @@ DEGENERATE_REL_TOL = 1e-6
 LEX_TOL = 1e-6
 
 CAPACITY_VARS = ("cap_wind", "cap_offshore", "cap_solar", "cap_batt_p",
-                 "cap_batt_e", "cap_ely", "cap_tank", "cap_fc", "cap_grid")
+                 "cap_batt_e", "cap_ely", "cap_tank", "cap_fc", "cap_ge", "cap_grid")
 
 # Energy through each sized asset over a year, reported alongside the capacity
 # that carries it, because a capacity alone cannot say whether it was sized by
@@ -75,7 +75,7 @@ CAPACITY_VARS = ("cap_wind", "cap_offshore", "cap_solar", "cap_batt_p",
 ENERGY_VARS = {
     "cap_wind": "p_wind", "cap_offshore": "p_offshore", "cap_solar": "p_solar",
     "cap_batt_p": "dis",            # discharge; cap_batt_e shares this flow
-    "cap_ely": "p_ely", "cap_fc": "p_fc", "cap_grid": "imp",
+    "cap_ely": "p_ely", "cap_fc": "p_fc", "cap_ge": "p_ge", "cap_grid": "imp",
 }
 # cap_batt_e and cap_tank have no MWh of their own: the battery's energy rating
 # shares the power rating's flow, and the tank is sized in kg of stock, not MWh

@@ -197,7 +197,7 @@ def test_coefficient_table_covers_every_optimiser_asset():
         "onshore_wind", "offshore_wind", "solar_pv",
         "battery_power", "battery_energy",
         "electrolyser_ae", "electrolyser_pem", "electrolyser_soec",
-        "fuel_cell_bop", "fuel_cell_stack",
+        "fuel_cell_bop", "fuel_cell_stack", "gas_engine",
         "h2_tank_gandiglio_28bar", "h2_tank_type1_200bar",
     }
     assert required <= assets, f"missing: {sorted(required - assets)}"
@@ -341,6 +341,8 @@ def test_discount_rates_are_cepa_s_on_every_asset():
     assert battery.WACC_REAL == 0.089
     assert dc_inputs.DISCOUNT_RATE == 0.101
     assert hc.FC_DISCOUNT_RATE == 0.101
+    from optimisation import gas_engine as ge
+    assert ge.DISCOUNT_RATE == 0.089      # Table E.1, gas generation - unabated (engines included)
     # building finance: capital carried from mid-year of each build year
     assert tc.building_finance_factor(0.1, 1) == pytest.approx(1.1 ** 0.5)
     assert tc.building_finance_factor(0.1, 3) == pytest.approx((1.1 ** 2.5 + 1.1 ** 1.5 + 1.1 ** 0.5) / 3)

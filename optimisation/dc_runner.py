@@ -90,7 +90,7 @@ def _coefficient_identity() -> dict:
     for name in ("dc_model.py", "dc_pareto.py", "dc_inputs.py", "dc_architectures.py",
                  "grid_build.py", "profiles.py", "network_charges.py",
                  "battery.py", "tech_costs.py", "renewables.py", "transformers.py",
-                 "h2_prices.py", "h2_capex.py", "h2_storage.py", "fuel_cell.py",
+                 "h2_prices.py", "h2_capex.py", "h2_storage.py", "fuel_cell.py", "gas_engine.py",
                  "electrolysers.py", "grid_connection.py", "sites.py",
                  "conversion_losses.py"):
         out[name] = digest(ROOT / "optimisation" / name)
@@ -550,7 +550,7 @@ def comparison_table(summaries) -> pd.DataFrame:
                 # electricity supply alone, without the building (12 Nov 2026); absent in older runs
                 "gwp_supply_g_per_kWh": p.get("gwp_supply_g_per_kWh", float("nan")),
                 "cost_GBP_per_MWh": p["cost_GBP_per_MWh"],
-                **{k: p[k] for k in P.CAPACITY_VARS},
+                **{k: p.get(k, 0.0) for k in P.CAPACITY_VARS},      # cap_ge absent before 13 Nov 2026
             })
     df = pd.DataFrame(rows)
     return df.sort_values(["n", "point"]).reset_index(drop=True) if len(df) else df

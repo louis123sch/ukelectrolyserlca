@@ -58,6 +58,11 @@ def _tech(**kw):
         tank_leakage_per_hour=0.0, batt_rte=0.88, batt_leakage_per_hour=0.0, fc_kg_h2_per_mwh=63.164,
         bought_h2_gbp_per_kg=3.0, bought_h2_gwp_per_kg=10.0,
         dc_fixed_gwp_per_year=999_453, dc_other_gwp_per_mwh=1.809, horizon_years=25.0,
+        # Gas engines, central, 13 Nov 2026 (gas_engine.py); off in every architecture below.
+        gwp_ge_per_mw=243_900, gwp_ge_running_per_mwh=559.7, gwp_ge_maint_per_mwh=0.77,
+        ge_calendar_years=25.0, ge_duty_hours=100_000.0,
+        cost_ge=59_240, cost_ge_per_mw=575_500, cost_ge_gas_per_mwh=78.2,
+        cost_ge_carbon_per_mwh=32.35, cost_ge_maint_per_mwh=2.91,
     )
     base.update(kw)
     return M.Tech(**base)

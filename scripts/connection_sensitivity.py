@@ -25,9 +25,10 @@ OUT = ROOT / "optimisation_outputs"
 TOL = 0.05
 BUILT_ABOVE = 1e-3          # MW, MWh or kg: below this a capacity is the solver's rounding, not a build
 CAPS = {"cap_grid": "Grid MW", "cap_wind": "Wind MW", "cap_solar": "Solar MW", "cap_batt_p": "Battery MW",
-        "cap_batt_e": "Battery MWh", "cap_ely": "Electrolyser MW", "cap_tank": "Tank kg", "cap_fc": "Fuel cell MW"}
+        "cap_batt_e": "Battery MWh", "cap_ely": "Electrolyser MW", "cap_tank": "Tank kg", "cap_fc": "Fuel cell MW",
+        "cap_ge": "Gas engines MW"}
 SHORT = {"cap_grid": "grid", "cap_wind": "wind", "cap_solar": "solar", "cap_batt_p": "battery power",
-         "cap_batt_e": "battery energy", "cap_ely": "electrolyser", "cap_tank": "tank", "cap_fc": "fuel cell"}
+         "cap_batt_e": "battery energy", "cap_ely": "electrolyser", "cap_tank": "tank", "cap_fc": "fuel cell", "cap_ge": "gas engines"}
 POINTS = ("min_cost", "knee", "min_gwp")
 POINT_NAME = {"min_cost": "cheapest", "knee": "knee", "min_gwp": "lowest carbon"}
 KNOBS = {"connection_build_scale": "One-off build cost", "network_charges_scale": "Yearly network charges"}
@@ -43,7 +44,7 @@ CASES = {
 
 
 def built(row) -> set:
-    return {c for c in CAPS if row[c] > BUILT_ABOVE}
+    return {c for c in CAPS if row.get(c, 0.0) > BUILT_ABOVE}      # cap_ge absent before 13 Nov 2026
 
 
 def compare(central, row) -> dict:
@@ -100,7 +101,7 @@ def case_section(case: str, df: pd.DataFrame) -> tuple[list[str], list[dict]]:
                 if cs:
                     test += f"; {', '.join(SHORT[x] for x in cs)} {what}"
         lines.append(f"| {name} | {scale} | {POINT_NAME[r.objective]} | "
-                     + " | ".join(_fmt(r[c]) for c in CAPS)
+                     + " | ".join(_fmt(r.get(c, 0.0)) for c in CAPS)
                      + f" | {r.cost_m_GBP_per_year:,.2f} | {r.gwp_t_per_year:,.0f} | {test} |")
     return lines + [""], judged
 

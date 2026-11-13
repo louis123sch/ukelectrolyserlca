@@ -21,6 +21,8 @@ activities, inventory()):
     h2_tank               Gandiglio et al. 2022 steel vessel
     stepup_transformers   Leng et al. 2026 wind step-ups and grid intake, IEA
                           PVPS 2026 solar step-ups, Jasper's container unit
+    gas_engine            ecoinvent's 1 MW lean-burn gas engine set on British
+                          gas, power only, at DESNZ 2026's efficiency
     exclusions            the cut-off register: every flow left out, with its
                           upper estimate, tested by optimisation/cutoff.py
 

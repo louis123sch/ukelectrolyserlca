@@ -106,8 +106,9 @@ def test_one_delivery_basis_for_data_centre_and_hydrogen_seller():
 
 
 def test_module_checks_pass():
-    from optimiser_lca import fuel_cell, stepup_transformers, upv
+    from optimiser_lca import fuel_cell, gas_engine, stepup_transformers, upv
     assert fuel_cell.check_parameters().startswith("OK")
+    assert gas_engine.check().startswith("OK")
     assert stepup_transformers.check().startswith("OK")
     assert upv.check().startswith("OK")
 

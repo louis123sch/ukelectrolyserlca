@@ -56,7 +56,7 @@ GWP_GROUPS = ("gwp_embodied", "gwp_operational", "gwp_facility")
 # A coefficient's technology, for the "not built" flag: the capacity it multiplies.
 CAP_OF = {"wind": "cap_wind", "offshore": "cap_offshore", "solar": "cap_solar", "batt": "cap_batt_e",
           "battery": "cap_batt_e", "ely": "cap_ely", "electrolyser": "cap_ely", "tank": "cap_tank",
-          "fc": "cap_fc", "grid": "cap_grid"}
+          "fc": "cap_fc", "ge": "cap_ge", "gas_engine": "cap_ge", "grid": "cap_grid"}
 
 
 def totals(tech, series, pts, assets):

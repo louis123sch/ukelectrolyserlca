@@ -78,6 +78,7 @@ def dispatch(series: M.Series, tech: M.Tech, caps: dict,
     cap_bp, cap_be = caps.get("cap_batt_p", 0.0), caps.get("cap_batt_e", 0.0)
     cap_ely, cap_tank = caps.get("cap_ely", 0.0), caps.get("cap_tank", 0.0)
     cap_fc, cap_grid = caps.get("cap_fc", 0.0), caps.get("cap_grid", 0.0)
+    cap_ge = caps.get("cap_ge", 0.0)
 
     # The same transformer losses the LP applies: generation delivered net of
     # its step-up, imports net of the intake, the battery's and fuel cell's
@@ -98,7 +99,7 @@ def dispatch(series: M.Series, tech: M.Tech, caps: dict,
     tank_max = tech.tank_usable_fraction * cap_tank     # as the LP's tank_cap
     tank = initial_tank_frac * tank_max
     out = {k: np.zeros(n) for k in
-           ("direct", "ch", "dis", "soc", "p_ely", "tank", "p_fc", "h2_buy",
+           ("direct", "ch", "dis", "soc", "p_ely", "tank", "p_fc", "p_ge", "h2_buy",
             "imp", "unserved", "curtailed")}
 
     for i in range(n):
@@ -124,7 +125,7 @@ def dispatch(series: M.Series, tech: M.Tech, caps: dict,
             tank += p_ely * kg_per_mwh_in * dt
             surplus -= p_ely
 
-        # 3. shortfall: battery, then fuel cell, then grid
+        # 3. shortfall: battery, then fuel cell, then gas engines, then grid
         dis = 0.0
         if short > 0 and cap_be > 0:
             dis = min(short / eta_bt, cap_bp, soc * eta / dt)
@@ -142,29 +143,33 @@ def dispatch(series: M.Series, tech: M.Tech, caps: dict,
                 p_fc = min(short / eta_ft, cap_fc, tank / tech.fc_kg_h2_per_mwh / dt)
                 tank -= p_fc * tech.fc_kg_h2_per_mwh * dt
             short -= p_fc * eta_ft
+        # then the gas engines, at the site's own voltage (no step-up)
+        p_ge = min(short, cap_ge) if short > 0 and cap_ge > 0 else 0.0
+        short -= p_ge
         imp = min(short / eta_imp, cap_grid) if short > 0 else 0.0
         short -= imp * eta_imp
 
         out["direct"][i] = direct; out["ch"][i] = ch; out["dis"][i] = dis
         out["p_ely"][i] = p_ely; out["p_fc"][i] = p_fc; out["imp"][i] = imp
+        out["p_ge"][i] = p_ge
         out["h2_buy"][i] = h2_buy
         out["unserved"][i] = max(0.0, short); out["curtailed"][i] = surplus
         out["soc"][i] = soc; out["tank"][i] = tank
 
     df = pd.DataFrame(out, index=series.index)
     df["demand"] = series.demand_mw
-    served = df.direct + eta_bt * df.dis + eta_ft * df.p_fc + eta_imp * df.imp + df.unserved
+    served = df.direct + eta_bt * df.dis + eta_ft * df.p_fc + df.p_ge + eta_imp * df.imp + df.unserved
     if not np.allclose(served, demand, atol=1e-6):
         raise AssertionError("myopic dispatch broke the demand balance")
     return df
 
 
 CAPACITIES = ("cap_wind", "cap_offshore", "cap_solar", "cap_batt_p", "cap_batt_e",
-              "cap_ely", "cap_tank", "cap_fc", "cap_grid")
+              "cap_ely", "cap_tank", "cap_fc", "cap_ge", "cap_grid")
 # Every per-step quantity the shared objective reads. A dispatch that has no
 # column for one (the merit order never exports, nor buys on a second stream)
 # scores it as zero.
-FLOWS = ("imp", "exp", "p_ely", "p_fc", "h2_buy", "h2_buy_2", "unserved",
+FLOWS = ("imp", "exp", "p_ely", "p_fc", "p_ge", "h2_buy", "h2_buy_2", "unserved",
          "soc", "tank")
 
 
@@ -195,6 +200,9 @@ def evaluate(df: pd.DataFrame, series: M.Series, tech: M.Tech, caps: dict,
               for k in FLOWS})
     q["fc_bop_units"], q["fc_stack_units"] = bop_units, stack_units
     q["ely_stack_units"] = ely_stack_units
+    # the gas engines' replacements, the same rule
+    ge_mwh = float((df.p_ge * dt).sum()) * scale if "p_ge" in df else 0.0
+    q["ge_units"] = max(q["cap_ge"] / tech.ge_calendar_years, ge_mwh / tech.ge_duty_hours)
     window = (np.ones(series.n, dtype=bool) if series.triad_window is None
               else np.asarray(series.triad_window, dtype=bool))
     q["triad_mw"] = float(q["imp"][window].max()) if window.any() else 0.0
@@ -287,7 +295,7 @@ if __name__ == "__main__":
     M.solve(m)
     caps = {k: float(V[k].solution) for k in
             ("cap_wind", "cap_offshore", "cap_solar", "cap_batt_p", "cap_batt_e",
-             "cap_ely", "cap_tank", "cap_fc", "cap_grid")}
+             "cap_ely", "cap_tank", "cap_fc", "cap_ge", "cap_grid")}
     print("=" * 88)
     print("THE VALUE OF FORESIGHT — same build, two dispatch rules")
     print("=" * 88)

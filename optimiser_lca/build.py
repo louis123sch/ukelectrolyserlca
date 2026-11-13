@@ -2,7 +2,7 @@
 Write every foreground database, in dependency order.
 =============================================================================
 
-    python -m optimiser_lca.build                 # all eight
+    python -m optimiser_lca.build                 # all nine
     python -m optimiser_lca.build fuel_cell upv   # just these
     python -m optimiser_lca.build --check         # static checks only, no Brightway
 
@@ -39,6 +39,7 @@ MODULES = [
     ("fuel_cell",           registry.FUEL_CELL_DB),
     ("h2_tank",             registry.H2_STORAGE_DB),
     ("stepup_transformers", registry.TRANSFORMER_DB),
+    ("gas_engine",          registry.GAS_ENGINE_DB),
 ]
 
 

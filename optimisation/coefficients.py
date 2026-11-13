@@ -17,6 +17,7 @@ prints its own cross-checks:
 | battery power and energy | ``battery.py`` | per MW and per MWh |
 | AE / PEM / SOEC electrolysers | ``electrolysers.py`` | per MW installed |
 | PEM fuel cell stack and BoP | ``fuel_cell.py`` | per MW, replaced on max(calendar, duty) |
+| Gas engines | ``gas_engine.py`` | per MW, replaced on max(calendar, duty); running per MWh |
 | H2 storage, both designs | ``h2_storage.py`` | per kg of capacity |
 
 Reading the table
@@ -151,6 +152,17 @@ def build(cost_case: str = "central") -> pd.DataFrame:
                      throughput=d["maintenance_kgco2e_per_MWh"],
                      source="Usai 2021 air filter + coolant per 8,000 h",
                      grade="derived", note="pure throughput term"))
+
+    # --- gas engines ------------------------------------------------------
+    from optimisation import gas_engine as ge
+    g = ge.decompose()
+    rows.append(_row("gas_engine", "MW", g["plant_kgco2e_per_MW"],
+                     calendar=ge.CALENDAR_YEARS, duty=g["duty_hours"],
+                     throughput=g["running_kgco2e_per_MWh"] + g["maintenance_kgco2e_per_MWh"],
+                     source="ecoinvent 3.9.1 lean-burn 1 MW gas engine set on GB gas; DESNZ 2026 unabated gas study",
+                     grade="derived",
+                     note="plant incl. a steel hall (ecoinvent ORC unit's 500 m2 per 3 MW, a stand-in); "
+                          "throughput is running plus maintenance; docs/GAS_ENGINE_PLAN.md"))
 
     # --- hydrogen storage -----------------------------------------------
     for r in h2s.decompose():

@@ -462,6 +462,42 @@ back for a like-for-like comparison against a conventional facility.
 The UPS battery is **not** treated this way and stays in. Ride-through over
 seconds is a different function from bulk storage, so it is not a double count.
 
+The gas engines (§7a) do not change this: they are a separate plant the
+optimiser chooses, not the facility's emergency set.
+
+## 7a. Gas engines (13 Nov 2026)
+
+An optional technology, off in every named architecture: natural-gas engine
+generators on site, behind the meter (`docs/GAS_ENGINE_PLAN.md` is the decision
+record; `optimisation/gas_engine.py`, `optimiser_lca/gas_engine.py`).
+
+- **Plant and costs**: DESNZ, *Unabated gas: electricity generation cost study*
+  (CEPA and GHD, 14 Jan 2026), reciprocating engines, 2024 prices: capital,
+  development excluding land, fixed and variable fees, insurance, construction
+  time, 44.6 % net efficiency, 25 years or 100,000 running hours whichever comes
+  first. CEPA's 8.9 % for unabated gas. Business rates as the hydrogen plant's.
+- **Gas** at the site price without the Climate Change Levy (HMRC CCL1/6 §4.1),
+  plus NESO's GB carbon price on the CO2. The power the engines make for the
+  site is not charged the electricity levy (as wind, solar and fuel cell power).
+- **Carbon**: ecoinvent's 1 MW lean-burn gas engine on British high-pressure gas,
+  CO2 from the gas's carbon balance; the set's maintenance per running hour; its
+  building set (power parts) plus a steel hall at 500 m² per 3 MW, a stand-in.
+  About 560 kg CO2e per MWh running; about 244 t per MW of plant.
+
+*Limitations, stated*: the variable fee is extrapolated beyond the study's
+1,500 h; no availability derating (as the fuel cell); linear, so no minimum
+load or start-up; the plant's connection to the gas network is left out in cost
+and carbon (user, recorded in TODO.md), which errs in favour of gas; land is
+left out with the development cost the user chose (an open item in
+`cost_exclusions.py`, about 2.6 % of cost_ge, 1.9 % of the full yearly cost); the engines depend
+on the gas network, with no fuel stored on site; ecoinvent's engine data are
+version-2 data, its methane slip one estimate for every lean-burn size; the levy
+exemption and carbon price support apply from 2 MW and the UK ETS above 20 MW
+thermal, but the linear model charges the GB carbon price at any size; the hall
+is carbon only (the study's capital is taken whole). **Open**: the engines are
+built with no step-up, but the model's site bus is 20 kV and the engines
+generate at up to 11 kV (TODO.md).
+
 <!-- cutoff:begin -->
 ## 8. Cut-off rule
 
@@ -488,6 +524,7 @@ ceiling. A flow that fails is included (status below). Register:
 | battery | container switchgear (MV, one per container) | cutoff | included_estimate | 102 | 186 | kg CO2e per MW per year | 1.44% | included (estimate) |
 | fuel cell | container switchgear (MV, one per container) | cutoff | included_estimate | 76.2 | 139 | kg CO2e per MW per year, calendar replacements | 1.06% | included (estimate) |
 | fuel cell | balance-of-plant assembly energy | cutoff | excluded | 50.8 | 127 | kg CO2e per MW per year, calendar replacements | 0.97% | pass |
+| gas engine | medium-voltage switchgear, one breaker per engine onto the 11 kV bus | cutoff | included_estimate | 1.52e+03 | 2.79e+03 | kg CO2e per MW replaced (the plant coefficient's own unit) | 1.14% | included (estimate) |
 | hydrogen tank | forming of the vessel steel (rolling, welding) | cutoff | included_inventory | 1.83 | 13.3 | kg CO2e per kg of capacity per year | — | in the inventory |
 | hydrogen tank | valves, pipework and fittings | cutoff | included_estimate | 0.132 | 0.265 | kg CO2e per kg of capacity per year | 1.42% | included (estimate) |
 | hydrogen tank | compressor hardware | cutoff | excluded | 0.01 | 0.03 | kg CO2e per kg of capacity per year | 0.16% | pass |
@@ -514,6 +551,7 @@ ceiling. A flow that fails is included (status below). Register:
 | electrolyser | 1.98e+04 | kg CO2e/MW/yr | 1 | 0 | 0.00% | n/a |
 | hydrogen tank | 18.7 | kg CO2e per kg capacity/yr | 3 | 1 | 0.16% | pass |
 | fuel cell | 1.31e+04 | kg CO2e/MW/yr, calendar replacements | 2 | 1 | 0.97% | pass |
+| gas engine | 2.45e+05 | kg CO2e per MW replaced | 1 | 0 | 0.00% | n/a |
 | grid connection | 305 | kg CO2e/MW/yr | 3 | 0 | 0.00% | n/a |
 | grid electricity | — | kg CO2e/kWh (series mean; no entries) | 0 | 0 | 0.00% | n/a |
 | bought hydrogen | 1.29 | kg CO2e/kg | 0 | 0 | 0.00% | n/a |
@@ -533,7 +571,9 @@ ceiling. A flow that fails is included (status below). Register:
 | wind | delivery to site — Leng Table S2 to-site legs (both transformers) | ASSUMPTIONS.md §6; Leng et al. 2026 Table S2 |
 | wind | on-site transport — Leng Table S2 'intra-site transport' (300 km) and the booster station's 3 km on-site construction leg | ASSUMPTIONS.md §6; Leng et al. 2026 Table S2 and SI p. 4 — read as part of getting the equipment to and around a site that is not known: the same boundary as delivery to site (user, 26 Oct 2026). Serves the step-ups and the grid connection |
 | bought hydrogen | road haulage from the seller to the site | ASSUMPTIONS.md §3; TODO.md (parked) — trailer compression is charged; the journey depends on where the seller is |
-| facility | standby diesel generator — Zhang's 8.6e6 MJ | ASSUMPTIONS.md §7 — scored and reported by data_centre.py / dc_inputs; out of every objective because backup is a decision variable |
+| facility | standby diesel generator — Zhang's 8.6e6 MJ | ASSUMPTIONS.md §7 — scored and reported by data_centre.py / dc_inputs; out of every objective because backup is a decision variable. The gas engines (13 Nov 2026) are a separate plant the optimiser chooses, not this emergency set |
+| gas engine | travel and delivery to site — the engine set's construction-work and start-up car trips (4,698 km per MW) and its maintenance visits' (6,000 km each); delivery of the plant | ASSUMPTIONS.md §6; ecoinvent 3.9.1 '...160kW electrical' construction work, start-up and maintenance datasets — taken back out of the ecoinvent set by negative rows (optimiser_lca/gas_engine.py); the car trips inside the production of the electric parts and air units are upstream and stay in |
+| gas engine | the pipe from the gas network to the site | user decision, 13 Nov 2026 (docs/GAS_ENGINE_PLAN.md); TODO.md carries it — not delivery to site: a capital asset left out by choice, as its cost is (cost_exclusions.py); the grid cable is in, so this errs in favour of gas |
 
 ### Rule 3 — the design-change test
 

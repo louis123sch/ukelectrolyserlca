@@ -1093,6 +1093,34 @@ case. Both are built; run both.
 
 ---
 
+## Gas engines (13 Nov 2026)
+
+Decision record: `docs/GAS_ENGINE_PLAN.md`. Off in every named architecture.
+
+| Input | Value | Grade | Source |
+|---|---|---|---|
+| Capital | £450 / 529 / 609 per kW (2024 £), excluding connections | transcribed | DESNZ, *Unabated gas: electricity generation cost study* (CEPA and GHD, 14 Jan 2026), Generation Option 5, Table 3.25; Table 5.4 confirms it excludes connections |
+| Development | £8.9 / 10.55 / 12.2 per kW, excluding land (central the midpoint, user) | transcribed | Table 5.4 |
+| Fixed fee | £12,400 / 14,630 / 16,820 per MW a year: core engine and generator costs only (p. 32) | transcribed | Table 3.27 |
+| Variable fee | the line through the 500 h and 1,500 h rows: £1.7k / 2.0k / 2.3k per MW-yr + £2.32 / 2.73 / 3.14 per MWh; extrapolated beyond 1,500 h | derived | Tables 3.27 and 3.28 |
+| Insurance; construction | 0.3 / 0.4 / 0.5 % of capital and development a year; 0.4 / 1.0 / 1.3 years, all carried as one (the finance factor takes whole years) | transcribed | Tables 3.27, 3.23 |
+| Life | 25 years, or 100,000 running hours, whichever first | transcribed | Table 3.23; §3.5; ecoinvent's Jakobsberg comments |
+| Discount rate | 8.9 % | transcribed | CEPA for DESNZ 2025, Table E.1, "Gas generation – unabated" (glossary: CCGT, OCGT and gas reciprocating engines) |
+| Efficiency | 44.6 % net, lower heating value, all cases | transcribed | Table 3.24 |
+| Gas price | the site price less the Climate Change Levy | derived | `dc_inputs.engine_gas_gbp_per_mwh`; HMRC Excise Notice CCL1/6 §4.1, §6 |
+| Carbon price | NESO's GB total for 2026 on all the gas's fossil carbon | derived | NESO Ten Year Outlook 2026 workbook, CP2 |
+| Running carbon | ~560 kg CO2e per MWh: gas supply chain 82, burning and exhaust 477, oil 1 | derived | ecoinvent 3.9.1 `market for natural gas, high pressure` GB; the exhaust of `heat and power co-generation, natural gas, 1MW electrical, lean burn` (Europe w/o CH) per m³; CO2 from the gas's carbon balance. Checked against DESNZ GHG conversion factors 2026 (burning within 5 %, supply chain within 15 %) |
+| Maintenance carbon | ~0.77 kg CO2e per MWh | derived | the set's maintenance (2.89 per 1 MW set) over 100,000 h, its car trips out |
+| Plant carbon | ~244 t CO2e per MW, per replacement | derived | ecoinvent's 1 MW set, shared and electricity-only parts, less its maintenance and its trips to site; a steel hall at 166.7 m² per MW (ecoinvent's 3 MW organic Rankine cycle unit's 500 m² building, a stand-in) |
+| No step-up transformer | generators at up to 11 kV; **open**: the model's site bus is 20 kV, so an 11/20 kV step-up may be needed (TODO.md) | transcribed | Jenbacher J620 data (generator voltage 600 V – 11 kV) |
+
+Why ecoinvent's engine and not the government's conversion factors for the gas: one gas
+for every use in the model (the grid's gas stations and the hydrogen routes are ecoinvent's
+GB gas); the government factors are the check. Why a lean-burn engine set: ecoinvent has no
+power-only gas engine; the heat-only parts are left out.
+
+---
+
 ## Demand-side network charges
 `network_charges.py`
 

@@ -60,6 +60,8 @@ def denominators(tech) -> dict[str, dict]:
                          "unit": "kg CO2e/MW/yr"},
         "hydrogen tank": {"value": tech.gwp_tank, "unit": "kg CO2e per kg capacity/yr"},
         "fuel cell": {"value": fc, "unit": "kg CO2e/MW/yr, calendar replacements"},
+        # per MW replaced, the plant coefficient's own unit; the register's entries are on it too
+        "gas engine": {"value": getattr(tech, "gwp_ge_per_mw", None), "unit": "kg CO2e per MW replaced"},
         "grid connection": {"value": tech.gwp_grid_per_mw, "unit": "kg CO2e/MW/yr"},
         "grid electricity": {"value": None, "unit": "kg CO2e/kWh (series mean; no entries)"},
         "bought hydrogen": {"value": tech.bought_h2_gwp_per_kg, "unit": "kg CO2e/kg"},
@@ -242,7 +244,8 @@ def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
     from optimisation import dc_inputs as I
     meta = {"capacity_GBP_per_MW_year": 0.0, "fixed_GBP_per_year": 0.0}
-    tech = I.build_tech("london", meta, h2_colour="green")
+    # North Norfolk, not London (user rule, 9 Nov 2026: London is illustrative only)
+    tech = I.build_tech("north_norfolk", meta, h2_colour="green")
     df = check(tech)
     with pd.option_context("display.width", 220, "display.max_columns", 20, "display.max_colwidth", 48):
         print(df[["technology", "flow", "status", "central", "upper", "share_upper", "break_even_h", "rule_1"]]

@@ -72,6 +72,8 @@ SOLVE_HOURS = 2.0
 SIDES = ("cost_capital", "cost_operational")
 NEEDS_SOURCE = ("transcribed", "proxy")
 TERM_NAMES = {
+    "gas engines": "Gas engines, with plant replacements", "gas": "Gas for the engines",
+    "gas carbon price": "Carbon price on the engines' CO2", "gas engine running maintenance": "Gas engine running maintenance",
     "wind": "Onshore wind", "offshore wind": "Offshore wind", "solar": "Solar PV",
     "battery": "Battery (power and energy)", "electrolyser": "Electrolyser",
     "H2 tank": "Hydrogen tank", "fuel cell": "Fuel cell, with stack and balance-of-plant replacements",

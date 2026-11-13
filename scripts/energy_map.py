@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 from lp_terms import (T_BATT_E, T_BATT_P, T_BOUGHT, T_DC_ENERGY, T_DC_IT, T_ELY_STACK, T_FC_BOP, T_FC_STACK,  # noqa: E402
-                      T_TX_BATT, T_TX_FC, T_TX_SOLAR, T_TX_WIND)
+                      T_GE_RUN, T_TX_BATT, T_TX_FC, T_TX_SOLAR, T_TX_WIND)
 
 
 def _x_eff(cf):
@@ -253,10 +253,10 @@ def energy_section(gap_ids=lambda *k: []):
       lp="cap_ely (MW), p_ely[t]; ely_stack_units = max(calendar, running hours / 50,000)", term=T_ELY_STACK,
       source="Gerloff 2021; electrolysers.DELIVERY_PRESSURE_BAR",
       gaps=("electrolyser", "alkaline", "soec"))
-    n("gas", "Natural gas supply", 4, 0, "source", route=("hydrogen",), status="option",
-      rating="GB gas network, high pressure (SOEC only)",
-      model="Fuel for the SOEC's boiler. Bought fuel: its carbon is in the electrolyser's "
-            "consumables term; it does not pass through the site bus.",
+    n("gas", "Natural gas supply", 4, 0, "source", route=("hydrogen", "gas"), status="option",
+      rating="GB gas network, high pressure (SOEC heat; gas engines)",
+      model="Fuel for the SOEC's boiler, and for the gas engines when they are offered. Bought fuel: "
+            "its carbon is in the electrolyser's consumables term and the engines' running term.",
       source="Mehmeti et al. 2018; ecoinvent heat production, natural gas, at boiler", gaps=("consumables",))
     n("soec_heat", "SOEC external heat: gas boiler", 4, 3, "component", route=("hydrogen",),
       status="option", rating="5.24 kWh heat per kg H₂ (SOEC only)",
@@ -321,8 +321,18 @@ def energy_section(gap_ids=lambda *k: []):
       model="Not modelled: no fuel, no losses. Arriving hydrogen enters the tank at coefficient 1.",
       gaps=("haulage",))
 
+    from optimiser_lca import gas_engine as gel
+    n("gas_engine", "Gas engines, ~3.45 MW each, generating at 11 kV", 4, 2, "component", route=("gas",),
+      status="option",
+      rating=f"{pc(gel.GE_ETA_NET_LHV, 1)} net (lower heating value), {gel.GE_GAS_M3_PER_KWH * 1000:.1f} m³ of gas "
+             "per MWh (DESNZ 2026, Table 3.24)",
+      model="p_ge[t] ≤ cap_ge, into the bus with no step-up and no loss (the generators run at the site's own "
+            "voltage). Plant replaced on max(25 y, 100,000 h). Off unless ticked.",
+      lp="cap_ge (MW), p_ge[t], ge_units", term=T_GE_RUN,
+      source="DESNZ 2026 unabated gas study; ecoinvent lean-burn 1 MW engine; Jenbacher J620 (to 11 kV)")
+
     # ================================================================ bus and data centre
-    ALL = ("solar", "wind", "grid", "battery", "hydrogen", "bought")
+    ALL = ("solar", "wind", "grid", "battery", "hydrogen", "bought", "gas")
     n("bus", f"{tx.TX_SITE_COLLECTION_KV:g} kV site bus — the LP's single node", 3.5, 5, "bus", route=ALL,
       rating="every source in, every load out, each half-hour",
       model="Σ supply − charging − electrolysis − no-load losses = demand, each half-hour. A copper "
@@ -393,6 +403,9 @@ def energy_section(gap_ids=lambda *k: []):
     e("fc_inv", "fc_tx", "lv", "LV AC", route=("hydrogen", "bought"))
     e("fc_tx", "bus", "mv", "p_fc[t]", route=("hydrogen", "bought"), loss=f"×{1 - lfc['load_loss_fraction']:.4f}")
 
+    e("gas", "gas_engine", "gas", "natural gas", route=("gas",), status="option")
+    e("gas_engine", "bus", "mv", "p_ge[t]", route=("gas",), status="option")
+
     e("h2_seller", "trailer_comp", "h2", "H₂ at 20–30 bar", route=("bought",))
     e("trailer_comp", "haulage", "h2", "H₂ at 200 bar", route=("bought",))
     e("haulage", "tank", "h2", "h2_buy[t]", route=("bought",), status="not")
@@ -417,8 +430,11 @@ def energy_section(gap_ids=lambda *k: []):
                      f"({p2p:.1%} round trip; SOEC {p2p_soec:.1%} plus heat)"},
         "bought": {"label": "Hydrogen, bought", "chain": f"1 kg delivered → {1000 / fc_kg_mwh:.1f} kWh at the bus "
                    f"(fuel cell {fcl.FC_ETA_NET_MEAN:.1%} net)"},
+        "gas": {"label": "Gas engines", "chain": f"1 MWh of gas (gross) → {1 / gel.GE_GAS_MWH_HHV_PER_MWH:.3f} MWh "
+                f"at the bus ({pc(gel.GE_ETA_NET_LHV, 1)} net on the lower heating value)"},
     }
-    lanes = ["Solar", "Wind", "GB grid", "Battery", "Gas (SOEC heat)", "H₂ made on site", "H₂ used", "H₂ bought"]
+    lanes = ["Solar", "Wind", "GB grid", "Battery", "Gas (SOEC heat, engines)", "H₂ made on site", "H₂ used",
+             "H₂ bought"]
     rows_ = ["Resource", "", "", "", "Into the site", "Site bus", "Facility", "Data centre"]
     return {"nodes": N, "edges": E, "routes": routes, "lanes": lanes, "rows": rows_}
 

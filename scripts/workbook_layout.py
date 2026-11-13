@@ -39,6 +39,9 @@ SHARED, OTHER, HOURLY, SUMMARY = "Shared figures", "Other figures", "Hourly", "S
 POINT_LABEL = {"knee": "Knee", "min_cost": "Lowest cost", "min_gwp": "Lowest carbon"}
 
 TERM_NAMES = {
+    "gas engines": "Gas engines (plant, per replacement)", "gas burned": "Gas burned in the engines",
+    "gas engine maintenance": "Gas engine maintenance", "gas": "Gas for the engines",
+    "gas carbon price": "Carbon price on the engines' CO2", "gas engine running maintenance": "Gas engine running maintenance",
     "wind": "Onshore wind", "offshore wind": "Offshore wind", "solar": "Solar panels",
     "wind step-up transformers": "Wind step-up transformers", "solar step-up transformers": "Solar step-up transformers",
     "battery": "Battery (power and energy)", "battery cells and container": "Battery cells and container",
@@ -63,13 +66,14 @@ TERM_NAMES = {
 AMOUNTS = {
     "cap_wind": "Onshore wind built (MW)", "cap_offshore": "Offshore wind built (MW)", "cap_solar": "Solar built (MWp)",
     "cap_batt_p": "Battery power (MW)", "cap_batt_e": "Battery energy (MWh)", "cap_ely": "Electrolyser (MW)",
-    "cap_tank": "Hydrogen tank (kg it holds)", "cap_fc": "Fuel cell (MW)", "cap_grid": "Grid connection (MW)",
+    "cap_tank": "Hydrogen tank (kg it holds)", "cap_fc": "Fuel cell (MW)", "cap_ge": "Gas engines (MW)",
+    "cap_grid": "Grid connection (MW)", "ge_units": "Gas engine plant replaced per year (MW)",
     "fc_stack_units": "Fuel cell stacks replaced per year (MW)", "fc_bop_units": "Fuel cell balance of plant replaced per year (MW)",
     "ely_stack_units": "Electrolyser stacks replaced per year (MW)", "triad_mw": "Import at the winter peak (MW)",
     "grid_on": "Grid connected (1 = yes)",
 }
 HOURLY_NAMES = {"imp": "Imports (MW)", "exp": "Exports (MW)", "p_ely": "Electrolyser power (MW)",
-                "p_fc": "Fuel cell output (MW)", "h2_buy": "Hydrogen bought (kg)", "h2_buy_2": "Second hydrogen bought (kg)",
+                "p_fc": "Fuel cell output (MW)", "p_ge": "Gas engine output (MW)", "h2_buy": "Hydrogen bought (kg)", "h2_buy_2": "Second hydrogen bought (kg)",
                 "tank": "Hydrogen in the tank (kg)", "unserved": "Load not served (MW)", "demand": "Data centre demand (MW)",
                 "price": "Import price (£/MWh)", "ci": "Grid carbon (kg CO2e/MWh)"}
 KIND_WORDS = {"transcribed": "from a source", "assumed": "assumption", "proxy": "stand-in estimate",

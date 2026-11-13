@@ -212,7 +212,7 @@ def check_cheap_clean_grid_builds_nothing(series, tech):
     m, V, obj = M.build_model(s2, assets, t2, objective="cost")
     M.solve(m)
     built = {k: float(V[k].solution) for k in
-             ("cap_wind", "cap_solar", "cap_batt_e", "cap_ely", "cap_tank", "cap_fc")}
+             ("cap_wind", "cap_solar", "cap_batt_e", "cap_ely", "cap_tank", "cap_fc", "cap_ge")}
     worst = max(built.values())
     return record(
         "free zero-carbon grid",

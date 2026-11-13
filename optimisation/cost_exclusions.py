@@ -106,6 +106,11 @@ REGISTER = (
              "12 Nov 2026: not sized. The network operator's upkeep of its own assets is in the use-of-system charges "
              "the model already pays; whether a customer-owned intake substation's maintenance is anywhere is not "
              "checked"),
+    CostFlow("gas engine land", "", "cutoff", "open", None,
+             "13 Nov 2026: left out with the user's choice of DESNZ 2026's development cost excluding land (Table 5.4, "
+             "£8.9-12.2/kW against £12.7-34.6/kW including it). Land is £3.8-22.4/kW once, about £1.5k per MW a year at "
+             "the midpoints: ~2.6 % of cost_ge, ~1.9 % of the engines' full yearly cost (cost_ge + cost_ge_per_mw / "
+             "25). Above the 1 % rule, so it needs the user's word (carry it, or keep the stated choice)"),
     CostFlow("land at an urban site", "", "cutoff", "open", None,
              "Every land figure charged is a rural rent and dc_model has no area limit. Left so by the user (4 Nov 2026): "
              "a central-London run is illustrative, not a use case. MHCLG industrial land values are in "
@@ -120,6 +125,13 @@ REGISTER = (
     CostFlow("selling power to the grid", "", "boundary", "boundary", None,
              "The model refuses export (dc_model.build_model), because it has no export price or carbon credit. Surplus "
              "power is worth nothing, so a design with spare generation reads dearer than it would be"),
+    CostFlow("the gas engines' connection to the gas network", "", "boundary", "boundary", None,
+             "User decision, 13 Nov 2026 (docs/GAS_ENGINE_PLAN.md; TODO.md carries it): DESNZ 2026's infrastructure line "
+             "(gas and power, £1.1/2.1/4.2 m per 20 MW) left out. The power half is not needed behind the meter; the gas "
+             "pipe is a choice, not delivery to site, and the grid cable is costed, so this errs in favour of gas"),
+    CostFlow("the electricity levy on power the gas engines make for the site", "", "boundary", "boundary", None,
+             "User decision, 13 Nov 2026: treated as wind, solar and fuel cell power used on site are. HMRC CCL1/6 §4.1 "
+             "says electricity made from carbon-price-taxed fuel is 'generally liable'; about £8/MWh if it applies"),
     CostFlow("the time to get a grid connection", "", "boundary", "boundary", None,
              "Not a price per MW, and the study has one period. Published room is taken as available; a site with room may "
              "still wait in the queue"),

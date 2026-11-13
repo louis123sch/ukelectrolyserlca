@@ -64,6 +64,7 @@ CARBON_EXEMPT: dict[str, str] = {}
 CARBON_VIA: dict[str, tuple[str, ...]] = {
     "cap_fc": ("fc_bop_units", "fc_stack_units"),
     "cap_ely": ("ely_stack_units",),        # the stacks; the plant is charged on cap_ely directly
+    "cap_ge": ("ge_units",),                # the gas engine plant, per replacement
 }
 
 # How hard an asset is run can reach an objective through a linked variable
@@ -75,6 +76,7 @@ CARBON_VIA: dict[str, tuple[str, ...]] = {
 DUTY_VIA: dict[str, tuple[str, ...]] = {
     "p_fc": ("fc_bop_units", "fc_stack_units"),
     "p_ely": ("ely_stack_units",),
+    "p_ge": ("ge_units",),
 }
 
 # Capacities whose flow the model bounds *directly* (flow <= capacity), so
@@ -86,6 +88,7 @@ DIRECT_BOUND: dict[str, tuple[str, ...]] = {
     "cap_batt_p": ("ch", "dis"),
     "cap_ely": ("p_ely",),
     "cap_fc": ("p_fc",),
+    "cap_ge": ("p_ge",),
 }
 
 # Capacities sized by a *stock* rather than a flow: the energy a store can
@@ -97,9 +100,9 @@ STOCK_BOUND: dict[str, str] = {
 
 # Variables that are accounting devices rather than kit, so an objective may
 # reasonably ignore them.
-NOT_ASSETS = {"fc_bop_units", "fc_stack_units", "ely_stack_units", "soc", "tank",
+NOT_ASSETS = {"fc_bop_units", "fc_stack_units", "ely_stack_units", "ge_units", "soc", "tank",
               "exp", "imp", "ch", "dis", "h2_fc",
-              "p_wind", "p_offshore", "p_solar", "p_ely", "p_fc"}
+              "p_wind", "p_offshore", "p_solar", "p_ely", "p_fc", "p_ge"}
 
 # Streams that are neither kit nor dispatch of kit, but are still something the
 # site *gets* — energy or fuel from outside, or demand it fails to meet. Each
@@ -435,6 +438,8 @@ def check_lifetime_agreement():
                   float(fc.decompose()["bop_calendar_lifetime_years"])))
     pairs.append(("battery", float(batt.ASSET_LIFE_YEARS),
                   float(batt.ASSET_LIFE_YEARS)))
+    from optimisation import gas_engine as ge
+    pairs.append(("gas_engine", float(ge.costs().iloc[1].lifetime_years), float(ge.CALENDAR_YEARS)))
     # The step-up transformers have no cost line of their own: DESNZ/Arup
     # capex already reaches the point of connection, so each is paid for inside
     # its generator's annuity. Their carbon life must therefore match the life

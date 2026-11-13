@@ -61,14 +61,16 @@ STRATEGIES = ("baseload", "flexible", "free")
 # first. See ASSUMPTIONS.md.
 OFFSHORE_IN_SCOPE = False
 
-# The nine things that can be built, in the order they are shown to the user.
+# The things that can be built, in the order they are shown to the user.
 # A named architecture is one particular subset of these; a custom one is any
 # subset at all, which is what the Streamlit page hands over.
+# gas_engine (13 Nov 2026, docs/GAS_ENGINE_PLAN.md) is last so every key written
+# before it keeps its letters; it is in no named architecture, only a tick-box.
 ASSET_FLAGS = ("grid", "wind", "offshore_wind", "solar", "battery",
-               "electrolyser", "tank", "fuel_cell", "buy_h2", "buy_h2_2")
+               "electrolyser", "tank", "fuel_cell", "buy_h2", "buy_h2_2", "gas_engine")
 _SHORT = dict(grid="g", wind="w", offshore_wind="o", solar="s", battery="b",
               electrolyser="e", tank="t", fuel_cell="f", buy_h2="x",
-              buy_h2_2="y")
+              buy_h2_2="y", gas_engine="n")
 
 
 def custom(flags: dict, *, grid_limit_mw=None, grid_floor_mw=0.0, offshore=False,

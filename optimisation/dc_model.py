@@ -136,6 +136,9 @@ class Assets:
     # cost/carbon sweep answers. With one colour this stays off and nothing
     # about the model changes.
     buy_h2_2: bool = False
+    # Natural-gas engine generators on site, behind the meter (docs/GAS_ENGINE_PLAN.md). Off unless
+    # asked for, so every architecture written before 13 Nov 2026 builds exactly as it did.
+    gas_engine: bool = False
 
     grid_limit_mw: float | None = None
     # The smallest connection in the band the charges were read for
@@ -200,6 +203,10 @@ class Tech:
     gwp_grid_per_mw: float
     fc_bop_calendar_years: float; fc_bop_duty_hours: float
     fc_stack_calendar_years: float; fc_stack_duty_hours: float
+    # Gas engines (gas_engine.py): the plant per replacement on ge_units = max(cap/calendar,
+    # MWh/duty); running (gas supply chain, burning, exhaust, oil) and maintenance per MWh made.
+    gwp_ge_per_mw: float; gwp_ge_running_per_mwh: float; gwp_ge_maint_per_mwh: float
+    ge_calendar_years: float; ge_duty_hours: float
     # cost, GBP per MW (or MWh / kg) per year
     cost_wind: float; cost_offshore: float; cost_solar: float
     cost_batt_p: float; cost_batt_e: float
@@ -209,6 +216,11 @@ class Tech:
     # then charges — see h2_capex.fuel_cell_costs. Not defaulted, so a Tech
     # that forgets one fails loudly instead of running the fuel cell for free.
     cost_fc_stack_per_mw: float; cost_fc_bop_per_mw: float
+    # Gas engines: cost_ge is the annuity and fixed opex net of the calendar replacement, which
+    # cost_ge_per_mw charges on ge_units; gas, carbon price and running maintenance per MWh made.
+    # Not defaulted, like the fuel cell's, so a Tech that forgets one fails loudly.
+    cost_ge: float; cost_ge_per_mw: float
+    cost_ge_gas_per_mwh: float; cost_ge_carbon_per_mwh: float; cost_ge_maint_per_mwh: float
     cost_grid_per_mw_year: float; cost_grid_fixed_per_year: float
     # flows
     ely_kwh_per_kg: float; ely_variable_gwp_per_kg: float
@@ -440,6 +452,7 @@ def build_model(series: Series, assets: Assets, tech: Tech, *,
         "cap_ely": cap(assets.electrolyser, "cap_ely"),
         "cap_tank": cap(assets.tank, "cap_tank"),
         "cap_fc": cap(assets.fuel_cell, "cap_fc"),
+        "cap_ge": cap(assets.gas_engine, "cap_ge"),
         "cap_grid": cap(assets.grid, "cap_grid", grid_upper,
                         min(assets.grid_floor_mw, grid_upper)),
         # Demand in the Triad window: >= import in every candidate step (below).
@@ -463,6 +476,7 @@ def build_model(series: Series, assets: Assets, tech: Tech, *,
         "tank": flow(assets.tank, "tank"),
         "h2_fc": flow(assets.fuel_cell, "h2_fc"),
         "p_fc": flow(assets.fuel_cell, "p_fc"),
+        "p_ge": flow(assets.gas_engine, "p_ge"),
         "imp": flow(assets.grid, "imp"),
         "exp": flow(assets.grid and assets.allow_export, "exp"),
         "unserved": m.add_variables(lower=0.0, coords=[t], name="unserved"),
@@ -470,6 +484,8 @@ def build_model(series: Series, assets: Assets, tech: Tech, *,
     # fuel cell replacement counts — the convex max(calendar, duty) rule
     V["fc_bop_units"] = m.add_variables(lower=0.0, name="fc_bop_units")
     V["fc_stack_units"] = m.add_variables(lower=0.0, name="fc_stack_units")
+    # gas engine replacements, the same rule
+    V["ge_units"] = m.add_variables(lower=0.0, name="ge_units")
     # electrolyser stack replacements, the same rule
     V["ely_stack_units"] = m.add_variables(lower=0.0, name="ely_stack_units")
 
@@ -486,6 +502,7 @@ def build_model(series: Series, assets: Assets, tech: Tech, *,
     m.add_constraints(
         V["p_wind"] + V["p_offshore"] + V["p_solar"]
         + (1.0 - lf["battery"]) * V["dis"] + (1.0 - lf["fc"]) * V["p_fc"]
+        + V["p_ge"]                       # at 11 kV, the site's own voltage: no step-up, no loss
         + (1.0 - lf["grid"]) * V["imp"] + V["unserved"]
         - V["ch"] / (1.0 - lf["battery"]) - V["p_ely"] - V["exp"]
         - tech.loss_wind_noload * (V["cap_wind"] + V["cap_offshore"])
@@ -520,6 +537,7 @@ def build_model(series: Series, assets: Assets, tech: Tech, *,
     kg_per_mwh_in = 1000.0 / kwh_per_kg
     m.add_constraints(V["p_ely"] - V["cap_ely"] <= 0, name="ely_cap")
     m.add_constraints(V["p_fc"] - V["cap_fc"] <= 0, name="fc_cap")
+    m.add_constraints(V["p_ge"] - V["cap_ge"] <= 0, name="ge_cap")
     m.add_constraints(
         V["h2_fc"] - tech.fc_kg_h2_per_mwh * dt * V["p_fc"] == 0, name="fc_fuel")
     keep_h = 1.0 - tech.tank_leakage_per_hour * dt
@@ -603,6 +621,11 @@ def build_model(series: Series, assets: Assets, tech: Tech, *,
         name="fc_stack_calendar")
     m.add_constraints(
         V["fc_stack_units"] - fc_mwh / tech.fc_stack_duty_hours >= 0, name="fc_stack_duty")
+
+    # --- gas engine replacements: max(calendar, duty), exactly ------------
+    ge_mwh = (V["p_ge"] * dt).sum() * series.annual_scale
+    m.add_constraints(V["ge_units"] - V["cap_ge"] / tech.ge_calendar_years >= 0, name="ge_calendar")
+    m.add_constraints(V["ge_units"] - ge_mwh / tech.ge_duty_hours >= 0, name="ge_duty")
 
     # --- electrolyser stack replacements: max(calendar, duty), exactly ----
     ely_mwh = (V["p_ely"] * dt).sum() * series.annual_scale
@@ -788,6 +811,8 @@ def objective_terms(q, series: Series, tech: Tech, *, price, ci, group_series=No
         # rating each container carries (Jasper 2026's unit, transformers.py).
         "battery step-up transformers": tech.gwp_tx_batt_per_mw * q["cap_batt_p"],
         "fuel cell step-up transformers": tech.gwp_tx_fc_per_mw * q["cap_fc"],
+        # The engines, generators, controls, pads and hall, per replacement (max of calendar and duty).
+        "gas engines": tech.gwp_ge_per_mw * q["ge_units"],
     }
     # The cable to the connection substation: on grid_on (1 while the grid is
     # on, a fixed variable so linopy takes it) with one price list, on the
@@ -806,6 +831,8 @@ def objective_terms(q, series: Series, tech: Tech, *, price, ci, group_series=No
         "electrolyser consumables": scale * (tech.ely_variable_gwp_per_kg
                                              * kg_per_mwh_in * q["p_ely"] * dt).sum(),
         "fuel cell maintenance": scale * (tech.gwp_fc_maint_per_mwh * q["p_fc"] * dt).sum(),
+        "gas burned": scale * (tech.gwp_ge_running_per_mwh * q["p_ge"] * dt).sum(),
+        "gas engine maintenance": scale * (tech.gwp_ge_maint_per_mwh * q["p_ge"] * dt).sum(),
         "unserved (VoLL)": scale * (VOLL_KGCO2E_PER_MWH * q["unserved"] * dt).sum(),
         # The tank loses leakage x dt of the previous step's stock each step.
         # Storage is cyclic, so summed over the window the previous steps'
@@ -826,6 +853,7 @@ def objective_terms(q, series: Series, tech: Tech, *, price, ci, group_series=No
         "fuel cell": (tech.cost_fc * q["cap_fc"]
                       + tech.cost_fc_stack_per_mw * q["fc_stack_units"]
                       + tech.cost_fc_bop_per_mw * q["fc_bop_units"]),
+        "gas engines": tech.cost_ge * q["cap_ge"] + tech.cost_ge_per_mw * q["ge_units"],
         "grid connection": (tech.cost_grid_per_mw_year * q["cap_grid"] if opts is None else
                             _sum(o.cost_per_mw_year * q[f"cap_conn_{i}"] for i, o in enumerate(opts))),
         "grid winter-peak charge": tech.cost_grid_triad_per_mw_year * q.get("triad_mw", 0.0),
@@ -843,6 +871,9 @@ def objective_terms(q, series: Series, tech: Tech, *, price, ci, group_series=No
         buy_2: scale * (tech.bought_h2_2_gbp_per_kg * q["h2_buy_2"]).sum(),
         "electrolyser stacks and water": scale * (tech.cost_ely_variable_per_kg
                                                   * kg_per_mwh_in * q["p_ely"] * dt).sum(),
+        "gas": scale * (tech.cost_ge_gas_per_mwh * q["p_ge"] * dt).sum(),
+        "gas carbon price": scale * (tech.cost_ge_carbon_per_mwh * q["p_ge"] * dt).sum(),
+        "gas engine running maintenance": scale * (tech.cost_ge_maint_per_mwh * q["p_ge"] * dt).sum(),
         "unserved (VoLL)": scale * (VOLL_GBP_PER_MWH * q["unserved"] * dt).sum(),
         "export credit": -scale * (price * q["exp"] * dt).sum(),
     }
@@ -870,6 +901,8 @@ CHAINS = {
     "hydrogen tank": {"H2 tank", "H2 leaked from tank", "major-hazard compliance"},
     "fuel cell": {"fuel cell", "fuel cell stack replacements", "fuel cell BoP replacements",
                   "fuel cell maintenance", "fuel cell step-up transformers"},
+    "gas engines": {"gas engines", "gas burned", "gas engine maintenance", "gas", "gas carbon price",
+                    "gas engine running maintenance"},
     "unserved load": {"unserved (VoLL)"},
 }
 CHAIN_PREFIXES = {"bought hydrogen": "bought H2"}       # colour-named keys
@@ -1203,7 +1236,7 @@ def score(q: dict, series: Series, tech: Tech) -> dict:
 # only reading of a half-hour in which both renewables and imports are flowing
 # that does not imply the site curtailed its own free energy to buy some.
 SERVE_SOURCES = ("Solar PV", "Wind", "Offshore wind", "Battery", "Fuel cell",
-                 "Grid import", "Unserved")
+                 "Gas engines", "Grid import", "Unserved")
 
 
 def serve_stack(df: pd.DataFrame) -> pd.DataFrame:
@@ -1217,7 +1250,7 @@ def serve_stack(df: pd.DataFrame) -> pd.DataFrame:
 
     The convention here: renewables serve load first (split pro rata between
     solar, onshore and offshore by their output in that period, so no
-    technology is privileged), then the battery, then the fuel cell, then the
+    technology is privileged), then the battery, then the fuel cell, then the gas engines, then the
     grid takes the residual. Unserved demand is carried as its own band, so the
     bands always sum to demand rather than to what happened to be generated.
 
@@ -1235,7 +1268,10 @@ def serve_stack(df: pd.DataFrame) -> pd.DataFrame:
     batt = pd.concat([df.dis, rem], axis=1).min(axis=1)
     rem = rem - batt
     fc = pd.concat([df.p_fc, rem], axis=1).min(axis=1)
-    rem = (rem - fc).clip(lower=0.0)          # the grid is the residual
+    rem = rem - fc
+    p_ge = df.p_ge if "p_ge" in df else rem * 0.0       # runs saved before 13 Nov 2026 have none
+    ge = pd.concat([p_ge, rem], axis=1).min(axis=1)
+    rem = (rem - ge).clip(lower=0.0)          # the grid is the residual
 
     bands = {
         "Solar PV": (df.p_solar * share).fillna(0.0),
@@ -1243,6 +1279,7 @@ def serve_stack(df: pd.DataFrame) -> pd.DataFrame:
         "Offshore wind": (df.p_offshore * share).fillna(0.0),
         "Battery": batt,
         "Fuel cell": fc,
+        "Gas engines": ge,
         "Grid import": rem,
         "Unserved": df.unserved,
     }
@@ -1265,7 +1302,7 @@ def dispatch_frame(V, series, tech=None) -> pd.DataFrame:
     the transformer losses count as curtailment.
     """
     cols = ("p_wind", "p_offshore", "p_solar", "ch", "dis", "soc", "p_ely",
-            "h2_buy", "h2_buy_2", "tank", "h2_fc", "p_fc", "imp", "exp",
+            "h2_buy", "h2_buy_2", "tank", "h2_fc", "p_fc", "p_ge", "imp", "exp",
             "unserved")
     df = pd.DataFrame({k: V[k].solution.values for k in cols}, index=series.index)
     for k in V:                               # imports by voltage group, when the price list is chosen

@@ -25,6 +25,9 @@ T_IMPORT = "Grid imports (half-hourly, regional)"
 T_ELY_CONS = "Electrolyser consumables (water, heat)"
 T_FC_MAINT = "Fuel cell service"
 T_LEAK = "Hydrogen leaked from the tank"
+T_GE = "Gas engine plant replacements (max(calendar, duty))"
+T_GE_RUN = "Gas burned in the engines (supply chain, burning, exhaust, oil)"
+T_GE_MAINT = "Gas engine maintenance"
 T_VOLL = "Unserved load (penalty, not an emission)"
 T_BOUGHT = "Bought hydrogen — one term per stream, keyed 'bought H2 (<colour>)'; one or two streams"      # a group of the four colour boxes, not a term of its own
 T_DC_IT = "Data centre, IT capacity"
@@ -42,5 +45,6 @@ KEY_TO_NAME = {
     "fuel cell stack replacements": T_FC_STACK, "fuel cell BoP replacements": T_FC_BOP,
     "grid import": T_IMPORT, "electrolyser consumables": T_ELY_CONS,
     "fuel cell maintenance": T_FC_MAINT, "H2 leaked from tank": T_LEAK, "unserved (VoLL)": T_VOLL,
+    "gas engines": T_GE, "gas burned": T_GE_RUN, "gas engine maintenance": T_GE_MAINT,
 }
 CONSTANTS = {"data centre, IT capacity": T_DC_IT, "data centre, cooling consumables": T_DC_ENERGY}

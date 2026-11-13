@@ -7,7 +7,9 @@ The rule (CUTOFF_RULE_PLAN.md, user, 20 Oct 2026)
 A flow that is in a held source and inside the study's boundary is **always
 in**, whatever its size. The boundary excludes exactly three things:
 end-of-life, delivery to site (the site is not known) and the facility's
-standby generator. Those are ``boundary`` entries here: reported, never tested.
+standby generator; and, by the user's decision of 13 Nov 2026, the gas engines'
+connection to the gas network. Those are ``boundary`` entries here: reported,
+never tested.
 
 The cut-off test applies only to flows **no held source itemises** — things a
 real build has that the sources leave out (switchgear, forming of the tank
@@ -46,7 +48,8 @@ scored factor (kg CO₂e per unit, this study's method, ``scored_on`` a date;
 dict or docstring that states the exclusion today, so the register and the
 modules cannot drift (``tests/test_cutoff.py``). Lives: wind 35 y, solar 38 y,
 battery 15 y, fuel cell BoP 20 y, tank 25 y, grid connection 40 y, facility
-25 y — the same amortisation each coefficient uses.
+25 y — the same amortisation each coefficient uses. The gas engines' entries are
+per MW *replaced*, as their coefficient is (``gwp_ge_per_mw``, max(25 y, 100,000 h)).
 """
 from __future__ import annotations
 
@@ -68,6 +71,7 @@ TECHNOLOGIES = {
     "electrolyser":     ("electrolyser",  "kg CO2e per MW per year"),
     "hydrogen tank":    ("hydrogen tank", "kg CO2e per kg of capacity per year"),
     "fuel cell":        ("fuel cell",     "kg CO2e per MW per year, calendar replacements"),
+    "gas engine":       ("gas engines",   "kg CO2e per MW replaced (the plant coefficient's own unit)"),
     "grid connection":  ("grid",          "kg CO2e per MW of connection per year"),
     "grid electricity": ("grid",          "kg CO2e per kWh delivered"),
     "bought hydrogen":  (None,            "kg CO2e per kg delivered"),
@@ -236,6 +240,16 @@ REGISTER: list[Exclusion] = [
         basis="2 % (central) to 5 % (upper) of the BoP's 50,807 kg CO2e per MW per replacement, over its 20-year "
               "calendar life, ASSUMED. The literal follows the BoP coefficient of 21 Oct 2026.",
         where=("fuel_cell", "docstring", "balance of plant")),
+    # ------------------------------------------------------------ gas engines
+    Exclusion(
+        "gas engine", "medium-voltage switchgear, one breaker per engine onto the 11 kV bus",
+        "cutoff", status="included_estimate", method="assumed",
+        central=SWITCHGEAR_KG_PER_MW * SWITCHGEAR_KGCO2E_PER_KG[0],
+        upper=SWITCHGEAR_KG_PER_MW * SWITCHGEAR_KGCO2E_PER_KG[1],
+        source="Teffera et al. 2021 Table 5 (mass); no switchgear dataset in ecoinvent 3.9.1",
+        basis="0.61 t per MW, per replacement (the plant coefficient's unit), at 2.5-4.57 kg CO2e/kg: about "
+              "0.6-1.1 % of the plant. The ecoinvent set's 'electric parts' are a 160 kW unit's LV board.",
+        where=("gas_engine", "docstring", "switchgear")),
     # ------------------------------------------------------------ hydrogen tank
     Exclusion(
         "hydrogen tank", "forming of the vessel steel (rolling, welding)",
@@ -395,7 +409,8 @@ REGISTER: list[Exclusion] = [
               source="ASSUMPTIONS.md §6", note="cradle-to-gate throughout; APOS carries some EoL in the background",
               where=(("bess", "BESS_SCOPE", "end_of_life"), ("upv", "UPV_PV_SCOPE", "end_of_life"),
                      ("hydrogen", "H2_SCOPE", "end_of_life"), ("h2_tank", "TANK_SCOPE", "end_of_life"),
-                     ("data_centre", "DC_SCOPE", "end_of_life"), ("stepup_transformers", "TX_SCOPE", "end_of_life"))),
+                     ("data_centre", "DC_SCOPE", "end_of_life"), ("stepup_transformers", "TX_SCOPE", "end_of_life"),
+                     ("gas_engine", "GE_SCOPE", "end_of_life"))),
     Exclusion("electrolyser", "delivery to site — Gerloff's second 250 km lorry leg", "boundary",
               source="ASSUMPTIONS.md §6; Gerloff 2021 §2.1", note="the first leg, to assembly, is in",
               where=("hydrogen", "H2_SCOPE", "transport")),
@@ -425,8 +440,22 @@ REGISTER: list[Exclusion] = [
               where=("hydrogen", "H2_SCOPE", "haulage")),
     Exclusion("facility", "standby diesel generator — Zhang's 8.6e6 MJ", "boundary",
               source="ASSUMPTIONS.md §7",
-              note="scored and reported by data_centre.py / dc_inputs; out of every objective because backup is a decision variable",
+              note="scored and reported by data_centre.py / dc_inputs; out of every objective because backup is a "
+                   "decision variable. The gas engines (13 Nov 2026) are a separate plant the optimiser chooses, "
+                   "not this emergency set",
               where=("data_centre", "DC_SCOPE", "genset")),
+    Exclusion("gas engine", "travel and delivery to site — the engine set's construction-work and start-up car trips "
+              "(4,698 km per MW) and its maintenance visits' (6,000 km each); delivery of the plant", "boundary",
+              source="ASSUMPTIONS.md §6; ecoinvent 3.9.1 '...160kW electrical' construction work, start-up and "
+                     "maintenance datasets",
+              note="taken back out of the ecoinvent set by negative rows (optimiser_lca/gas_engine.py); the car trips "
+                   "inside the production of the electric parts and air units are upstream and stay in",
+              where=("gas_engine", "GE_SCOPE", "transport")),
+    Exclusion("gas engine", "the pipe from the gas network to the site", "boundary",
+              source="user decision, 13 Nov 2026 (docs/GAS_ENGINE_PLAN.md); TODO.md carries it",
+              note="not delivery to site: a capital asset left out by choice, as its cost is (cost_exclusions.py); "
+                   "the grid cable is in, so this errs in favour of gas",
+              where=("gas_engine", "GE_SCOPE", "gas_connection")),
 ]
 
 

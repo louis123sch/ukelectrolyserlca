@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 OUT = ROOT / "optimisation_outputs"
 CASES = ("islanded_h2", "norfolk_grid")
-CAPS = ["cap_wind", "cap_offshore", "cap_solar", "cap_batt_p", "cap_batt_e", "cap_ely", "cap_tank", "cap_fc", "cap_grid"]
+CAPS = ["cap_wind", "cap_offshore", "cap_solar", "cap_batt_p", "cap_batt_e", "cap_ely", "cap_tank", "cap_fc", "cap_ge", "cap_grid"]
 HIGHS_DIR = Path(next((a.split("=", 1)[1] for a in sys.argv if a.startswith("--highs-dir=")),
                       r"C:\Users\ls1524\Desktop\ukdclca-signoff\optimisation_outputs\signoff\2026-11-10_0831\results"))
 
@@ -56,8 +56,8 @@ def judge():
         h = h[h.variant == "central"]
         for anchor in ("min_cost", "min_gwp"):
             gr, hr = g[g.objective == anchor].iloc[0], h[h.objective == anchor].iloc[0]
-            bg = {k for k in CAPS if gr[k] > 1e-6}
-            bh = {k for k in CAPS if hr[k] > 1e-6}
+            bg = {k for k in CAPS if gr.get(k, 0.0) > 1e-6}         # cap_ge absent before 13 Nov 2026
+            bh = {k for k in CAPS if hr.get(k, 0.0) > 1e-6}
             diffs = {k: gr[k] / hr[k] - 1 for k in bg & bh}
             worst = max(diffs.items(), key=lambda kv: abs(kv[1])) if diffs else ("", 0.0)
             lines.append(

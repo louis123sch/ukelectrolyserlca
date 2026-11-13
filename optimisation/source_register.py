@@ -321,6 +321,20 @@ _FIXED = [
     Source("govuk_ccl_rates", "Climate Change Levy rates", "GOV.UK (HMRC)", "from 1 April 2026", "document",
            held=f"{ONEDRIVE}/5 levies and losses",
            note="Electricity £0.00801/kWh; 92 % discount under a Climate Change Agreement"),
+    Source("hmrc_ccl16", "Excise Notice CCL1/6: a guide to carbon price floor", "GOV.UK (HMRC)",
+           "as published, read 13 Nov 2026", "document",
+           link="https://www.gov.uk/government/publications/excise-notice-ccl16-a-guide-to-carbon-price-floor/"
+                "excise-notice-ccl16-a-guide-to-carbon-price-floor",
+           note="§4.1: gas supplied to a generating station, auto-generators included, is exempt from the main CCL "
+                "rates and liable to carbon price support; §6.1: not below 2 MW combined capacity; §6.3: stand-by "
+                "generators used only when the usual supply fails are outside"),
+    # --- gas engines ---------------------------------------------------------
+    Source("desnz_unabated_gas_2026", "Unabated gas: electricity generation cost study",
+           "DESNZ / CEPA and GHD", "14 January 2026", "document",
+           link="https://www.gov.uk/government/publications/unabated-gas-cost-and-technical-assumptions",
+           basis="real 2024 £",
+           note="Generation Option 5, reciprocating engines, 20 MW (six 3.45 MW containerised engines): Tables "
+                "3.23-3.28 (pp. 29-32) and Table 5.4 (p. 40); Appendices A and C are a separate attachment"),
     Source("elexon_tlf_guidance", "Guidance document for Transmission Loss Factors v1.0", "Elexon",
            "January 2026", "document", held=f"{ONEDRIVE}/5 levies and losses",
            note="Offtaking TLM = 1 + TLF(zone, season) + TLMO−; losses split 45 % delivering, 55 % offtaking; "
