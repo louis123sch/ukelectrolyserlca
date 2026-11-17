@@ -30,3 +30,6 @@ carbon_intensity_api_cache/
 # What is in the foreground databases right now — scripts/snapshot_foreground.py
 # regenerates it, and it is only for diffing before/after an inventory change.
 optimisation_outputs/foreground_snapshot*.json
+
+# Cluster job folders (scripts/cluster/*.pbs): logs and timings, one folder per job.
+cluster_jobs/

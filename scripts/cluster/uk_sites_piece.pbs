@@ -1,0 +1,46 @@
+#!/bin/bash
+# One piece of the 26-site study (scripts/uk_sites.py) on Imperial's CX3 cluster: one site at
+# one grid level, its whole frontier (cheapest, lowest carbon and four between), hourly.
+# Submit from ~/ukdclca on a login node, for example Builth Wells at 25 MW:
+#   qsub -v SITE=13,LEVEL=limited scripts/cluster/uk_sites_piece.pbs
+# Optional: SET=present (default) or another uk_sites.py set.
+# Do not name a queue (Imperial: the scheduler picks it from the request).
+#
+# Request sized for a first run (Imperial's advice: a little generous at first, then trim to
+# what the log says was used). The laptop took 13-72 min a piece on Gurobi with 12 threads.
+#PBS -N uksite
+#PBS -l select=1:ncpus=8:mem=32gb
+#PBS -l walltime=03:00:00
+#PBS -j oe
+
+set -e
+SET=${SET:-present}
+: "${SITE:?pass SITE with qsub -v SITE=..,LEVEL=..}"
+: "${LEVEL:?pass LEVEL (offgrid, limited or full)}"
+REPO="$HOME/ukdclca"
+
+eval "$("$HOME/miniforge3/bin/conda" shell.bash hook)"
+conda activate ukdclca   # also puts the environment's own C++ library first (see setup.sh)
+
+export DC_BW_PROJECT=hydrogen-smr-sources   # this branch's life-cycle database
+export DC_SOLVER=gurobi
+export GRB_LICENSE_FILE=/sw-eb/software/Gurobi/13.0.1-GCCcore-14.3.0/gurobi.lic  # Imperial's licence server
+export PYTHONIOENCODING=utf-8
+# Only the cores asked for: one maths thread, and Gurobi told the core count through a
+# gurobi.env file in the folder it starts in (Gurobi reads it from there).
+export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+JOBDIR="$REPO/cluster_jobs/${PBS_JOBID%%.*}_${SET}_${LEVEL}_${SITE}"
+mkdir -p "$JOBDIR"
+cd "$JOBDIR"
+echo "Threads ${NCPUS:-8}" > gurobi.env
+
+echo "job ${PBS_JOBID} on $(hostname) | ${NCPUS} cores | set ${SET} site ${SITE} ${LEVEL} | $(date)"
+echo "code: $(git -C "$REPO" log --oneline -1)"
+# Can this machine reach the internet? (Recorded only; the runs read saved data.)
+curl -sS -m 10 -o /dev/null -w "internet check (renewables.ninja): HTTP %{http_code}\n" \
+     https://www.renewables.ninja/ || echo "internet check: no connection"
+
+/usr/bin/time -v python "$REPO/scripts/uk_sites.py" --set "$SET" --levels "$LEVEL" --sites "$SITE" \
+    2> >(tee time.txt >&2)
+echo "finished $(date)"
+grep -E "Elapsed|Maximum resident" time.txt || true
