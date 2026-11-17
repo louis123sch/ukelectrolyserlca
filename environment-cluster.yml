@@ -48,9 +48,9 @@ dependencies:
   - matplotlib=3.9.1
   # linopy's helpers, from conda-forge so pip does not fetch them: on 17 Nov pip's
   # versions pulled numpy up to 2.5 over the 1.26.4 pinned above.
-  - numexpr=2.14.2
-  - bottleneck=1.6.0
-  - polars=1.44.1
+  - numexpr
+  - bottleneck
+  - polars
   - dask
   - tqdm
   - pytest
