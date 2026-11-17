@@ -15,9 +15,11 @@
 # This branch's Brightway project is hydrogen-smr-sources: set DC_BW_PROJECT to it in
 # every job, as scripts/weekend_queue.py does on the laptop.
 #
-# HiGHS needs no licence. gurobipy is installed so imports work, but the laptop's
-# academic Gurobi licence is tied to the laptop: run on the cluster with
-# DC_SOLVER=highs unless a licence that covers the cluster is in place.
+# Gurobi: Imperial's licence server (gurobi.cc.ic.ac.uk, 4,096 places, checked 17 Nov
+# 2026) covers the cluster; the newest Gurobi it offers is 13.0.1, so gurobipy is pinned
+# to 13.0.1 here (the laptop runs 14). Every job points at the licence with
+#   export GRB_LICENSE_FILE=/sw-eb/software/Gurobi/13.0.1-GCCcore-14.3.0/gurobi.lic
+# (what "module load Gurobi/13.0.1-GCCcore-14.3.0" sets). DC_SOLVER=highs still works.
 name: ukdclca
 channels:
   - conda-forge
@@ -43,4 +45,4 @@ dependencies:
   - pip:
       - linopy==0.9.1
       - highspy==1.15.1
-      - gurobipy==14.0.0
+      - gurobipy==13.0.1
