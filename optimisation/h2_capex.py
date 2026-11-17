@@ -14,20 +14,25 @@ floor for a grid-scale system, and one real plant, each with about £485/kW of
 purification for pipeline hydrogen. This study's hydrogen is made on site or
 delivered as pure trailer gas, so the purification comes off in low and central
 and stays in high. Neither figure carries a stack share or a life:
-``FC_STACK_COST_FRACTION`` is read off Element Energy's chart (45 %), the top of
-the non-government range.
+``FC_STACK_COST_FRACTION`` is the Clean Hydrogen Partnership's 21.1 % (EUR 400 of
+EUR 1,900 per kW) since 4 Nov 2026; Element Energy's 45 %, read off a chart and
+above every other share read, is the high case of a sweep
+(``FC_STACK_COST_FRACTION_UK_HIGH``).
 
 **Hydrogen vessel.** Element Energy for BEIS (2018) rests on one supplier's quote
 for a 95 m³ vessel at 50-80 bar, taken as 2017 pounds, installed; a vessel at
-this study's 28 bar holds less but has a thinner wall. It is not the vessel the
-carbon side inventories (Gandiglio's small stainless buffer, 313 kg of steel per
-kg of hydrogen): a stated mismatch. There is no UK range, so the low and high
-cases are not government figures.
+this study's 28 bar holds less but has a thinner wall. The carbon side inventories
+the same bulk carbon-steel vessel class (161 kg of steel per kg of hydrogen, by
+the thin-wall formula); Gandiglio's small stainless buffer is its sensitivity.
+There is no UK range, so the low and high cases are not government figures: the
+Clean Hydrogen Partnership's 2030 target (a floor) and the Danish Energy Agency's
+200 bar rack.
 
-**SOEC.** BEIS's 2021 annex assumes a mature plant. Its level is dated (its PEM
-is a third of NESO's 2025 figure), so the central case is its ratio to PEM on
-NESO's PEM, which lands above every non-government range read; the low case is
-its level as printed. Treat cost-optimal SOEC with care: the bracket is 3x.
+**SOEC.** The central case is NESO's FES 2025 figure for a plant built in 2026
+(high: built in 2025), brought to per kWe on the BEIS 2021 annex's conversion
+because NESO prints no SOE efficiency; the low case is the Danish Energy
+Agency's, about half the central. Treat cost-optimal SOEC with care: the high
+case is over twice the low.
 
 Run the cost case as a sensitivity, not as a scenario label — if a conclusion
 flips between low and high, it is not a conclusion.
@@ -42,9 +47,12 @@ Sources
 fuel cell     Baringa Partners for DESNZ, *Hydrogen to Power Costs and Barriers*
               (9 Dec 2025), §4.4 and §5, capital. Element Energy for BEIS,
               *Hydrogen supply chain evidence base* (Nov 2018), p. 94,
-              maintenance at 1.4 MWe.
-H2 vessel     Element Energy, p. 109, central. Rozzi et al. 2024 dataset
-              (30 bar, 50 t), low; the older literature's EUR 1,040/kg, high.
+              maintenance at 1.4 MWe. Clean Hydrogen Partnership SRIA KPIs,
+              Table 21, stack share.
+H2 vessel     Element Energy, p. 109, central. Clean Hydrogen Partnership SRIA
+              KPIs, Table 11 (EUR 600/kg at 20 t, a 2030 target), low; Danish
+              Energy Agency, 200 bar Type I rack, Table 6 (EUR 600/kg plus
+              piping), high.
               Element Energy p. 112, running cost; p. 110, footprint.
 SOEC          NESO, FES 2025 Economics Inputs Data Workbook v2, sheet H.02
               (central: built 2026; high: built 2025; 2025 prices), per kWe on
@@ -373,7 +381,7 @@ def _tank_capex_recorded(case: str) -> float:
         price = T.cost("cost.h2_tank.vessel_installed", TANK_VESSEL_INSTALLED_GBP, "GBP per vessel",
                        "Installed price of a 95 m³ vessel at 50-80 bar", grade="transcribed",
                        cites=[("element_energy_2018", "p. 109, £182k per vessel, a supplier's quote × 1.3")],
-                       note="Not the carbon side's 28 bar Gandiglio vessel: a stated mismatch")
+                       note="The carbon side inventories the same bulk carbon-steel vessel class")
         kg = T.cost("cost.h2_tank.vessel_kg", TANK_VESSEL_KG, "kg of hydrogen per vessel", "What the vessel holds",
                     grade="transcribed", cites=[("element_energy_2018", "p. 109, ~405 kg")])
         P.to_2025(ELEMENT_ENERGY_PRICE_YEAR)

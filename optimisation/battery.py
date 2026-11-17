@@ -77,7 +77,7 @@ from optimisation import trace as T  # noqa: E402
 CASES = ("low", "central", "high")
 
 # =============================================================================
-# Cost — BEIS 2022, with Modo Energy as the low case; real 2025 GBP
+# Cost — NESO FES 2025, with Modo/Ember as the low case and NREL ATB as the high; real 2025 GBP
 # =============================================================================
 # Central since 4 Nov 2026 (UK government sources first, COST_GOV_FIGURES_PLAN.md):
 # BEIS, Benefits of Long Duration Electricity Storage (2022), Exhibit 3.11, p. 30,

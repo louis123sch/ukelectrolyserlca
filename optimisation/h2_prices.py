@@ -73,8 +73,10 @@ NESO_BLUE_RESOURCE = "3f3b1bf0-4664-494f-a501-a39adabecd0d"
 
 # --- reference point -------------------------------------------------------
 BUILD_YEAR = 2025
-# NESO's grid starts at 0.06. The study's own hurdle rates are 5.0-6.2 %, so
-# 0.06 is the closest consistent choice; 0.08/0.10 read as merchant-risk.
+# NESO's grid starts at 0.06, its lowest rate, so 0.06 is the closest it comes to
+# the study's own; 0.08/0.10 read as merchant-risk. Used only for the NESO LCOH
+# cross-check. The study's assets are annualised at CEPA's 2025 hurdle rates
+# (tech_costs; 10.1 % for an electrolyser), which NESO's grid does not reach.
 DISCOUNT = {"low": 0.06, "central": 0.06, "high": 0.08}
 GREEN_TECH = "PEM"          # matches registry.PEM_OP
 GREEN_SCENARIO = "Central"

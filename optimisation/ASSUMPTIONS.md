@@ -5,18 +5,23 @@ here so the write-up and the optimiser cannot disagree about them.
 
 ## 1. Data centre runs flat at 100 %
 
-Continuous draw of **7,306 kW**. This is not an added assumption: the Zhang et
-al. foreground's own operation exchange is 1.60e9 kWh over a 25-year life,
-which is 7,306 kW continuous. It is where the old `dashboard_config.SYS_DC_DEMAND_MW
-= 7.31` came from.
+The default facility is **100 MW of IT** (`dc_inputs.build_tech`,
+`dc_runner.run_matrix`) at a PUE of **1.4** (`dc_config.DC_REFERENCE_PUE`): a
+flat **140 MW** draw in every step. `size_mw_it` is an IT load and is multiplied
+by the PUE to get demand. The sensitivity reference cases set their own, 150 MW
+of IT at PUE 1.2 (`sensitivity.py`).
 
-That figure is the **whole facility**, at Zhang's own PUE of 1.4, so the IT load
-behind it is **5,219 kW**. The two must not be confused: `size_mw_it` is an IT
-load and is multiplied by the caller's PUE to get demand, so passing 7.31 with a
-PUE above 1.0 models a facility larger than Zhang's. `DC_REFERENCE_PUE` exists to
-make the conversion explicit and is the only place Zhang's PUE is used — the
-facility's embodied burden is anchored on IT capacity, not on facility draw, so
-improving PUE no longer shrinks the building.
+1.4 is Zhang et al.'s own PUE, the facility the inventory describes, and the one
+default for every entry point that does not choose its own
+(`dc_inputs.build_series`). Two places still differ: the page offers 1.5 as its
+starting value, and `availability.PUE_DEFAULT` is 1.2.
+
+Zhang's inventory gives the facility's **carbon only**, scaled per MW of IT. Its
+operation exchange (1.60e9 kWh over 25 years: 7,306 kW continuous at PUE 1.4,
+5,219 kW of IT) is where the old `dashboard_config.SYS_DC_DEMAND_MW = 7.31` came
+from; that figure no longer sizes anything. The IT-driven burden is anchored on
+IT capacity (Zhang's 5.38 MW, §2), not on facility draw, so improving PUE does
+not shrink the building.
 
 *Consequence*: no load-shifting option, and no diurnal or seasonal demand
 shape. Storage is therefore sized purely against supply variability, never
