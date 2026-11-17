@@ -1,0 +1,46 @@
+# The Python setup for running the model on Imperial's cluster (CX3, Linux).
+# It copies the laptop's "brightway" conda environment, pinned to the versions
+# in use there on 17 Nov 2026, without the notebook and web-page tools.
+#
+# On the cluster, once (Imperial's conda guide: their miniforge, conda-forge only,
+# because Anaconda's licence rules out its "defaults" channel):
+#   module load miniforge/3
+#   miniforge-setup
+#   eval "$(~/miniforge3/bin/conda shell.bash hook)"
+#   conda config --remove channels defaults
+#   conda config --add channels conda-forge
+#   conda env create -f environment-cluster.yml
+#   conda activate ukdclca
+#
+# This branch's Brightway project is hydrogen-smr-sources: set DC_BW_PROJECT to it in
+# every job, as scripts/weekend_queue.py does on the laptop.
+#
+# HiGHS needs no licence. gurobipy is installed so imports work, but the laptop's
+# academic Gurobi licence is tied to the laptop: run on the cluster with
+# DC_SOLVER=highs unless a licence that covers the cluster is in place.
+name: ukdclca
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - brightway25=1.1.1
+  - bw2data=4.7
+  - bw2calc=2.4.0
+  - bw2io=0.9.17
+  - numpy=1.26.4
+  - pandas=2.3.3
+  - scipy=1.17.1
+  - xarray=2026.4.0
+  - pypardiso=0.4.7
+  - openpyxl=3.1.5
+  - xlsxwriter=3.2.9
+  - requests=2.34.2
+  - python-dotenv=1.2.2
+  - matplotlib=3.9.1
+  - tqdm
+  - pytest
+  - pip
+  - pip:
+      - linopy==0.9.1
+      - highspy==1.15.1
+      - gurobipy==14.0.0
