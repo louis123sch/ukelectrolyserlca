@@ -1,8 +1,8 @@
 #!/bin/bash
 # One piece of the 26-site study (scripts/uk_sites.py) on Imperial's CX3 cluster: one site at
 # one grid level, its whole frontier (cheapest, lowest carbon and four between), hourly.
-# Submit from ~/ukdclca on a login node, for example Builth Wells at 25 MW:
-#   qsub -v SITE=13,LEVEL=limited scripts/cluster/uk_sites_piece.pbs
+# Submit from ~/ukdclca on a login node (submit.sh adds the end-of-job email), e.g. Builth Wells at 25 MW:
+#   bash scripts/cluster/submit.sh -v SITE=13,LEVEL=limited scripts/cluster/uk_sites_piece.pbs
 # Optional: SET=present (default) or another uk_sites.py set.
 # Do not name a queue (Imperial: the scheduler picks it from the request).
 #
