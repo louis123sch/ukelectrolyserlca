@@ -1,0 +1,43 @@
+#!/bin/bash
+# A batch of independent pieces on Imperial's CX3 cluster, one per array sub-job.
+# PIECES names a text file in scripts/cluster/pieces/: one piece per line, the script and its
+# arguments relative to the repository (lines starting with # are skipped and not counted).
+# Submit from ~/ukdclca on a login node, with -J 1-<number of pieces>:
+#   bash scripts/cluster/submit.sh -J 1-60 -v PIECES=present_12packed.txt scripts/cluster/batch.pbs
+# Do not name a queue (Imperial: the scheduler picks it from the request).
+#
+# Sizing from the first cluster test (17 Nov 2026, Builth Wells at 25 MW): 31 min, 2.5 GB, about
+# one core busy on average. Two cores and 16 GB leave room; the time limit covers full-grid
+# pieces (up to 72 min on the laptop, about 1.35 times that here).
+#PBS -N batch
+#PBS -l select=1:ncpus=2:mem=16gb
+#PBS -l walltime=06:00:00
+#PBS -j oe
+#PBS -koed
+
+set -e
+: "${PIECES:?pass PIECES=<file in scripts/cluster/pieces/> with qsub -v}"
+REPO="$HOME/ukdclca"
+I=${PBS_ARRAY_INDEX:?submit as an array job with -J 1-N}
+LINE=$(grep -v '^\s*#' "$REPO/scripts/cluster/pieces/$PIECES" | grep -v '^\s*$' | sed -n "${I}p")
+[ -n "$LINE" ] || { echo "no piece $I in $PIECES"; exit 1; }
+
+eval "$("$HOME/miniforge3/bin/conda" shell.bash hook)"
+conda activate ukdclca   # also puts the environment's own C++ library first (see setup.sh)
+export DC_BW_PROJECT=hydrogen-smr-sources DC_SOLVER=gurobi PYTHONIOENCODING=utf-8
+export GRB_LICENSE_FILE=/sw-eb/software/Gurobi/13.0.1-GCCcore-14.3.0/gurobi.lic
+export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+
+JOB=$(echo "$PBS_JOBID" | sed 's/[^0-9].*//')   # "8400[5].pbs-8" -> 8400
+JOBDIR="$REPO/cluster_jobs/${JOB}_${PIECES%.txt}/$(printf %03d "$I")"
+mkdir -p "$JOBDIR"
+cd "$JOBDIR"
+echo "Threads ${NCPUS:-2}" > gurobi.env   # Gurobi reads this from the folder it starts in
+
+echo "piece $I of $PIECES on $(hostname), ${NCPUS} cores, $(date)"
+echo "code: $(git -C "$REPO" log --oneline -1)"
+echo "run:  python $LINE"
+# shellcheck disable=SC2086  # the line holds the script and its arguments
+/usr/bin/time -v python "$REPO"/$LINE 2> >(tee time.txt >&2)
+echo "finished $(date)"
+grep -E "Elapsed|Maximum resident" time.txt || true

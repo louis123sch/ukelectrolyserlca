@@ -84,18 +84,26 @@ def main(argv=None):
     ap.add_argument("--levels", nargs="*", default=list(U.LEVELS), choices=U.LEVELS)
     ap.add_argument("--sites", nargs="*", type=int, default=None)
     ap.add_argument("--summary", action="store_true")
+    # One site, level and engine choice per call lets the cluster run the searches side by side
+    # (scripts/cluster/); --no-summary leaves summary.csv to one --summary call at the end.
+    ap.add_argument("--gas", choices=("both", "with", "without"), default="both",
+                    help="gas engines on offer: both runs (default), only with, or only without")
+    ap.add_argument("--no-summary", action="store_true", help="run only; leave summary.csv alone")
     a = ap.parse_args(argv)
     kind = "rig" if a.rig else "hourly"
+    gases = {"both": GAS, "with": (True,), "without": (False,)}[a.gas]
     if not a.summary:
         for level in a.levels:
             for row in U.SITES:
                 if a.sites and row[0] not in a.sites:
                     continue
-                for gas in GAS:
+                for gas in gases:
                     try:
                         run(kind, level, row, gas)
                     except Exception as exc:  # noqa: BLE001 - one search's failure must not stop the night
                         print(f"   FAILED site {row[0]} {level} gas={gas}: {type(exc).__name__}: {exc}", flush=True)
+    if a.no_summary:
+        return
     s = summary(kind)
     print(f"summary: {len(s)} rows -> {OUT / kind / 'summary.csv'}", flush=True)
 

@@ -28,12 +28,15 @@ Sets (13 Nov 2026). ``base`` is the 12 Nov study as run (no gas engines, green, 
 bought hydrogen green only (no UK blue plant is running and no CO2 store is open; grey is
 beaten by the engines on cost and carbon; turquoise is not for sale). ``blue`` is the what-if
 "blue hydrogen becomes available" (from about 2028 on current plans), priced at the
-government's modelled cost, as a second contract beside green. Every set takes the same
-six frontier points as the 12 Nov study: cheapest, lowest carbon and four evenly spaced
-between (user, 16 Nov 2026). A 12-point frontier packed at the low-carbon end was tried on
-13-16 Nov and dropped as too slow (about five times the 12 Nov run time); its 17 finished
-off-grid sites are kept in ``uk_sites_2025_present_packed13``.
+government's modelled cost, as a second contract beside green. Both take their frontier
+points packed at the low-carbon end (``EPS_FRACS``), where hydrogen hands over to other kit.
+(User, 17 Nov 2026: back to the 12 packed points after a day on 6 even. The "five times slower"
+was against the 12 Nov run without gas engines; with today's options 12 packed took about
+16 min an off-grid site on the laptop against about 21 for 6 even. The 6-even results of
+16-17 Nov are kept in ``uk_sites_2025_present_even6``.)
 Each set writes its own folder, so the 12 Nov results are left as they are.
+``--no-summary`` skips rewriting summary.csv, for pieces run side by side on the cluster
+(scripts/cluster/); run ``--summary`` once when they are all in.
 
 Writes optimisation_outputs/uk_sites_2025/<level>/<site>/... (one dc_runner folder per
 run, dispatch saved) and optimisation_outputs/uk_sites_2025/summary.csv. A run whose
@@ -60,6 +63,10 @@ SETS = {
 }
 OUT = ROOT / "optimisation_outputs" / SETS["base"]["out"]
 SET = "base"
+# Fractions of the carbon span above the lowest-carbon point (dc_pareto.front eps_fracs): a dozen
+# points, most of them in the first fifth, where the North Norfolk rig showed hydrogen giving way
+# to gas between 35 and ~52 g/kWh on a 35-169 g span.
+EPS_FRACS = (0.01, 0.02, 0.04, 0.06, 0.09, 0.13, 0.18, 0.25, 0.35, 0.5, 0.7, 0.85)
 ENTRY_SHARE = 0.01          # hydrogen "used" when the fuel cell serves 1 % of supply (thresholds.py's)
 ROUTE_KM = 2.0
 LIMITED_MW = 25.0
@@ -137,7 +144,8 @@ def run(level, row):
         connection_mode=None if level == "offgrid" else "cap", connection_solve="loose",
         size_mw_it=100.0, pue=None, resample_hours=1.0, points=5, cost_case="central",
         horizon_years=25.0, unserved_fraction=0.0, out_root=folder(level, n),
-        save_dispatch=True, refresh=False, progress=lambda t: print("   ", t, flush=True))
+        save_dispatch=True, refresh=False, progress=lambda t: print("   ", t, flush=True),
+        eps_fracs=None if SET == "base" else EPS_FRACS)
     print(f"   done in {(time.time() - t0) / 60:.1f} min", flush=True)
 
 
@@ -184,7 +192,7 @@ def hydrogen_limits(out: pd.DataFrame) -> pd.DataFrame:
 
     ``h2_up_to_g_per_kWh`` is the highest-carbon frontier point at which the fuel cell still serves
     ENTRY_SHARE of supply: below it the cheapest designs use hydrogen, above it they do not. Exact
-    only to the frontier's own points (four evenly spaced between the two ends)."""
+    only to the frontier's own points (EPS_FRACS)."""
     rows = []
     for (n, level), g in out.groupby(["site", "level"]):
         g = g.sort_values("gwp_g_per_kWh")
@@ -208,6 +216,7 @@ def main(argv=None):
     ap.add_argument("--levels", nargs="*", default=list(LEVELS), choices=LEVELS)
     ap.add_argument("--sites", nargs="*", type=int, default=None)
     ap.add_argument("--summary", action="store_true")
+    ap.add_argument("--no-summary", action="store_true", help="run only; leave summary.csv alone")
     ap.add_argument("--set", default="base", choices=list(SETS))
     a = ap.parse_args(argv)
     global OUT, SET
@@ -224,6 +233,8 @@ def main(argv=None):
                     run(level, row)
                 except Exception as exc:  # noqa: BLE001 - one site's failure must not stop the night
                     print(f"   FAILED site {row[0]} {level}: {type(exc).__name__}: {exc}", flush=True)
+    if a.no_summary:
+        return
     s = summary()
     print(f"summary: {len(s)} rows -> {OUT / 'summary.csv'}", flush=True)
 

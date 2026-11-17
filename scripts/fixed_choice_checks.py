@@ -18,8 +18,7 @@ This changes each one alone, at four sites and two grid levels, and solves the f
 
 Sites: Isle of Lewis (windiest, North Scotland), Lichfield (least windy, West Midlands), Essex coast
 (windy, East England) and East Grinstead (typical South East); 25 MW and full grid. Frontier points:
-cheapest, lowest carbon and four evenly spaced between, as in the 26-site sets (user, 16 Nov 2026);
-compare a variant with this script's own central.
+``CHECK_FRACS``, fewer than the 26-site sets, so compare a variant with this script's own central.
 Writes ``optimisation_outputs/uk_sites_2025_checks/<variant>/<level>/<site>/``; resumes.
 """
 from __future__ import annotations
@@ -41,6 +40,7 @@ from optimisation import dc_architectures as A, dc_runner  # noqa: E402
 OUT = ROOT / "optimisation_outputs" / "uk_sites_2025_checks"
 SITES = (2, 15, 18, 23)
 LEVELS = ("limited", "full")
+CHECK_FRACS = (0.02, 0.06, 0.13, 0.25, 0.5)
 VARIANTS = {          # name -> (Scenario fields, run_one keyword arguments)
     "central":       ({}, {}),
     "ely_ae":        ({"ely_tech": "AE operation"}, {}),
@@ -80,7 +80,7 @@ def run(variant: str, level: str, row):
         connection_mode="cap", connection_solve="loose", size_mw_it=100.0, pue=None, resample_hours=1.0,
         points=5, cost_case=kwargs.get("cost_case", "central"), horizon_years=25.0, unserved_fraction=0.0,
         gas_price_case=kwargs.get("gas_price_case"), out_root=folder(variant, level, n), save_dispatch=False,
-        refresh=False, progress=lambda t: None)
+        refresh=False, progress=lambda t: None, eps_fracs=CHECK_FRACS)
     print(f"   done in {(time.time() - t0) / 60:.1f} min", flush=True)
 
 
@@ -106,16 +106,23 @@ def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--variants", nargs="*", default=list(VARIANTS), choices=list(VARIANTS))
     ap.add_argument("--summary", action="store_true")
+    # One variant, site and level per call lets the cluster run the 64 pieces side by side
+    # (scripts/cluster/); --no-summary leaves summary.csv to one --summary call at the end.
+    ap.add_argument("--sites", nargs="*", type=int, default=list(SITES), choices=list(SITES))
+    ap.add_argument("--levels", nargs="*", default=list(LEVELS), choices=list(LEVELS))
+    ap.add_argument("--no-summary", action="store_true", help="run only; leave summary.csv alone")
     a = ap.parse_args(argv)
     if not a.summary:
-        rows = [r for r in U.SITES if r[0] in SITES]
+        rows = [r for r in U.SITES if r[0] in a.sites]
         for variant in a.variants:
-            for level in LEVELS:
+            for level in a.levels:
                 for row in rows:
                     try:
                         run(variant, level, row)
                     except Exception as exc:  # noqa: BLE001 - one run's failure must not stop the night
                         print(f"   FAILED {variant} site {row[0]} {level}: {type(exc).__name__}: {exc}", flush=True)
+    if a.no_summary:
+        return
     s = summary()
     print(f"summary: {len(s)} rows -> {OUT / 'summary.csv'}", flush=True)
 
