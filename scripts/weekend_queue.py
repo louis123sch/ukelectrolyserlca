@@ -3,6 +3,7 @@
 
     python scripts/weekend_queue.py                          # waits for SIGNOFF_RUNNING to go, then runs
     python scripts/weekend_queue.py --stop-at 2026-11-17T08:00
+    pythonw scripts/weekend_queue.py --stop-at ...          # windowless; how it should be started
 
 Order (user, revised 13 Nov 2026 evening): what gets built today at every site, then the
 fixed-choice checks, then the hydrogen break-even prices hourly (the four representative sites
@@ -20,13 +21,23 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import os
 import subprocess
 import sys
 import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-PY = sys.executable
+PY = str(Path(sys.executable).with_name("python.exe"))  # steps run on python.exe even when the queue is on pythonw.exe
+# 16 Nov 2026: the first start (13 Nov) ran on main's Brightway project ("hydrogen-smr"), which
+# has no gas engine database and none of this branch's new inventories. Every step now gets
+# the branch's project and the settings the runs need, whatever shell started the queue.
+BRANCH_PROJECT = "hydrogen-smr-sources"
+ENV = dict(os.environ, DC_BW_PROJECT=BRANCH_PROJECT, MKL_THREADING_LAYER="TBB", PYTHONIOENCODING="utf-8")
+# 16 Nov 2026: the queue died twice (Fri 18:36, Mon 14:11) from a stray Ctrl+C reaching the console
+# window it ran in. Start it windowless (pythonw.exe) and give each step its own hidden console, so
+# nothing else shares a window with the runs.
+NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 SIGNOFF_LOCK = ROOT / "SIGNOFF_RUNNING"
 LOCK = ROOT / "WEEKEND_RUNNING"
 LOGDIR = ROOT / "optimisation_outputs" / "weekend_2026-11-14"
@@ -44,7 +55,8 @@ STEPS = [
 
 def log(msg: str):
     line = f"[{dt.datetime.now():%a %H:%M}] {msg}"
-    print(line, flush=True)
+    if sys.stdout is not None:  # None when started windowless with pythonw.exe
+        print(line, flush=True)
     with open(LOGDIR / "queue.log", "a", encoding="utf-8") as f:
         f.write(line + "\n")
 
@@ -65,7 +77,7 @@ def main(argv=None):
                 log("stop time reached while waiting for the sign-off; nothing run")
                 return 1
             time.sleep(120)
-        log("sign-off finished; starting the queue")
+        log(f"sign-off finished; starting the queue (Brightway project {BRANCH_PROJECT}, stop at {stop_at:%a %d %b %H:%M})")
         for key, title, cmd in STEPS:
             if a.only and key not in a.only:
                 continue
@@ -75,7 +87,8 @@ def main(argv=None):
             log(f"{key}: {title}")
             t0 = time.time()
             with open(LOGDIR / f"{key}.log", "a", encoding="utf-8") as out:
-                rc = subprocess.run([PY, *cmd], cwd=ROOT, stdout=out, stderr=subprocess.STDOUT).returncode
+                rc = subprocess.run([PY, *cmd], cwd=ROOT, env=ENV, stdout=out, stderr=subprocess.STDOUT,
+                                    creationflags=NO_WINDOW).returncode
             log(f"{key}: exit {rc} after {(time.time() - t0) / 3600:.1f} h")
         log("queue finished")
     finally:
