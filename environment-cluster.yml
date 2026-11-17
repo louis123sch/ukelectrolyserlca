@@ -43,6 +43,8 @@ dependencies:
   - pypardiso=0.4.7
   - openpyxl=3.1.5
   - xlsxwriter=3.2.9
+  # Writes the runs' .parquet results; on the laptop it came in with streamlit (left out here).
+  - pyarrow=24.0.0
   - requests=2.34.2
   - python-dotenv=1.2.2
   - matplotlib=3.9.1
