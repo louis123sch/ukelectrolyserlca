@@ -46,10 +46,17 @@ dependencies:
   - requests=2.34.2
   - python-dotenv=1.2.2
   - matplotlib=3.9.1
+  # linopy's helpers, from conda-forge so pip does not fetch them: on 17 Nov pip's
+  # versions pulled numpy up to 2.5 over the 1.26.4 pinned above.
+  - numexpr=2.14.2
+  - bottleneck=1.6.0
+  - polars=1.44.1
+  - dask
   - tqdm
   - pytest
   - pip
   - pip:
+      - numpy==1.26.4     # held here too, so pip cannot replace it
       - linopy==0.9.1
       - highspy==1.15.1
       - gurobipy==13.0.1
