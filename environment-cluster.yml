@@ -25,10 +25,17 @@ channels:
   - conda-forge
 dependencies:
   - python=3.12
-  - brightway25=1.1.1
+  # brightway25 (laptop 1.1.1) is only a bundle from the cmutel channel; its parts are
+  # on conda-forge, so they are listed one by one instead.
   - bw2data=4.7
   - bw2calc=2.4.0
   - bw2io=0.9.17
+  - bw2parameters=1.1.0
+  - bw_processing=1.2
+  - matrix_utils=0.7.1
+  - bw_migrations=0.2
+  - randonneur=0.7.2
+  - ecoinvent_interface=3.1
   - numpy=1.26.4
   - pandas=2.3.3
   - scipy=1.17.1
