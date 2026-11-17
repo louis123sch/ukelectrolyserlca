@@ -12,12 +12,12 @@ echo "batch $JOB: $TOTAL pieces"
 echo "  waiting:  $(echo "$STATES" | grep -cx Q)"
 echo "  running:  $(echo "$STATES" | grep -cx R)"
 echo "  finished: $(echo "$STATES" | grep -cxE 'X|F')"
-# Each piece's log is batch.o<batch>.<piece>, written live in ~/ukdclca.
-FAILED=$(grep -l -e 'FAILED' -e 'Traceback' batch.o"${JOB}".* 2>/dev/null)
+# Each piece's log is <name>.o<batch>.<piece> (name: batch, checks, breakeven), written live in ~/ukdclca.
+FAILED=$(grep -l -e 'FAILED' -e 'Traceback' *.o"${JOB}".* 2>/dev/null)
 if [ -n "$FAILED" ]; then
     echo "  PIECES WITH ERRORS:"
     for f in $FAILED; do echo "    $f: $(grep -m1 -e FAILED -e Error "$f")"; done
 else
     echo "  no errors so far"
 fi
-echo "  results folders with an answer: $(find optimisation_outputs/uk_sites_2025_present -name pareto.parquet 2>/dev/null | wc -l)"
+echo "  pieces whose log reached the end: $(grep -l "^finished" *.o"${JOB}".* 2>/dev/null | wc -l)"
