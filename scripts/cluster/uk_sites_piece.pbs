@@ -12,6 +12,9 @@
 #PBS -l select=1:ncpus=8:mem=32gb
 #PBS -l walltime=03:00:00
 #PBS -j oe
+# Write the log straight to ~/ukdclca as the job runs, so progress can be read live
+# (Imperial's "Controlling Job Log Files" page); by default it only appears at the end.
+#PBS -koed
 
 set -e
 SET=${SET:-present}
