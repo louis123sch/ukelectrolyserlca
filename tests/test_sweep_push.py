@@ -40,6 +40,16 @@ def test_a_push_on_a_key_nobody_records_hits_nothing_and_a_flag_is_not_scaled():
     assert hits == [False]
 
 
+def test_pushes_nest_and_each_moves_its_own_step():
+    """Bundles (fixed_choice_checks.BUNDLES, 18 Nov 2026) push several inputs at once."""
+    with T.pushed("toy.a", 1.5) as ha, T.pushed("toy.b", 0.5) as hb:
+        assert _made_from(3.0) == pytest.approx(4.5)     # 4.5 * 1.0
+    assert ha == [True] and hb == [True]
+    with T.pushed("toy.a", 2.0), T.pushed("toy.a", 2.0):
+        assert _made_from(3.0) == pytest.approx(24.0)    # the same key twice takes both
+    assert _made_from(3.0) == 6.0
+
+
 def test_a_push_scales_arrays():
     with T.pushed("toy.series", 2.0):
         v = T.step("toy.series", np.array([1.0, 2.0]), "unit", "a series")

@@ -138,9 +138,10 @@ def active() -> bool:
 
 
 # A sweep's "push": one recorded number times a factor, through the real code.
-# (key, factor, hits) - hits records, per call under that key, whether the value
-# was a number that could be scaled.
-_PUSH: contextvars.ContextVar[tuple | None] = contextvars.ContextVar("trace_push", default=None)
+# A tuple of (key, factor, hits) - hits records, per call under that key, whether
+# the value was a number that could be scaled. Pushes nest: inside two ``pushed``
+# blocks both keys move (the bundles in optimisation/sensitivity.py).
+_PUSH: contextvars.ContextVar[tuple] = contextvars.ContextVar("trace_push", default=())
 
 
 @contextmanager
@@ -151,9 +152,10 @@ def pushed(key: str, factor: float):
     not a number (a flag, a label, a table). Used by the input screen
     (``scripts/screen_inputs.py``) and by a sweep's ``push`` knob
     (``optimisation/sensitivity.py``). A step the code only records, going on
-    with another figure, moves nothing when pushed."""
+    with another figure, moves nothing when pushed. Blocks nest, each adding its
+    own key; the same key pushed twice takes both factors."""
     hits: list[bool] = []
-    token = _PUSH.set((key, float(factor), hits))
+    token = _PUSH.set(_PUSH.get() + ((key, float(factor), hits),))
     try:
         yield hits
     finally:
@@ -199,12 +201,12 @@ def step(key: str, value, unit: str, title: str, *, uses=(), inputs: dict | None
     depth    frames to skip when a module wraps ``step`` in its own helper, so
              the record points at the helper's caller
     """
-    push = _PUSH.get()
-    if push is not None and key == push[0]:
-        scaled = _scaled(value, push[1])
-        push[2].append(scaled is not None)
-        if scaled is not None:
-            value = scaled
+    for push_key, push_factor, hits in _PUSH.get():
+        if key == push_key:
+            scaled = _scaled(value, push_factor)
+            hits.append(scaled is not None)
+            if scaled is not None:
+                value = scaled
     rec = _CURRENT.get()
     if rec is None:
         return value

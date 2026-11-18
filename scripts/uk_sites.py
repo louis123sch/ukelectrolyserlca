@@ -58,12 +58,15 @@ sys.path.insert(0, str(ROOT))
 from optimisation import dc_architectures as A, dc_runner, sites  # noqa: E402
 
 SETS = {
-    "base":    {"gas": False, "blue": False, "out": "uk_sites_2025"},
-    "present": {"gas": True,  "blue": False, "out": "uk_sites_2025_present"},
-    "blue":    {"gas": True,  "blue": True,  "out": "uk_sites_2025_blue"},
+    # The sets run before 18 Nov 2026 bought hydrogen just in time, and keep doing so, so
+    # their folders stay what they hold ("jit": now the hydrogen-pipeline what-if).
+    "base":    {"gas": False, "blue": False, "supply": "jit", "out": "uk_sites_2025"},
+    "present": {"gas": True,  "blue": False, "supply": "jit", "out": "uk_sites_2025_present"},
+    "blue":    {"gas": True,  "blue": True,  "supply": "jit", "out": "uk_sites_2025_blue"},
     # 18 Nov 2026 (user): ``present`` with bought hydrogen on a steady contract, the same
-    # rate every hour into the tank (dc_model.Assets.h2_buy_steady), as a scenario.
-    "steady":  {"gas": True,  "blue": False, "steady_h2": True, "out": "uk_sites_2025_present_steady"},
+    # rate every hour into the tank (dc_model.Assets.h2_buy_steady) - the model's default
+    # from that evening, so this is the central 26-site result.
+    "steady":  {"gas": True,  "blue": False, "supply": "steady", "out": "uk_sites_2025_present_steady"},
 }
 OUT = ROOT / "optimisation_outputs" / SETS["base"]["out"]
 SET = "base"
@@ -117,7 +120,7 @@ def scenario(level: str) -> A.Scenario:
     return A.Scenario(n=0, architecture="custom", label=f"UK site study, {level}, {SET}",
                       assets=flags, ely_tech="PEM operation", h2_colour="green",
                       h2_colour_2="blue" if cfg["blue"] else None, strategy="free",
-                      h2_supply="steady" if cfg.get("steady_h2") else "jit")
+                      h2_supply=cfg["supply"])
 
 
 def site_for(n, label, lat, lon, region, level):

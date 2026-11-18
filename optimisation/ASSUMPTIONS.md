@@ -101,17 +101,24 @@ this scale, but it is an assumption, not a finding. The "off-site green
 hydrogen" option is now "green hydrogen bought at a price, with its production
 burden and its compression, but no haulage".
 
-**When bought hydrogen arrives: just in time by default, a steady contract as a scenario**
-(18 Nov 2026, user). By default any amount arrives in any hour it is wanted, with no
-delivery limit and no stock held ahead (decided 12 Nov). At the 26 sites that means
+**When bought hydrogen arrives: on a steady contract** (the default since the evening of
+18 Nov 2026, user; until then just in time). Just in time, any amount arrived in any hour it
+was wanted, with no delivery limit and no stock held ahead (decided 12 Nov). The user's reason
+for the change: it made hydrogen an almost free backup, which only a pipeline could give; the
+UK's tube-trailer fleet and first-round green hydrogen (about 120 MW, mostly not yet running)
+could not supply it either, and blue was left out for not existing today. At the 26 sites just
+in time meant
 2.3-8.6 kt a year at the lowest-carbon point, bought in 1,000-1,900 hours, up to about
 200 t in a day, where published system models fix hydrogen imports as a steady flow
 (PyPSA-Spain; the Dunkelflaute storage study) or cap them. The `steady` set of
 `scripts/uk_sites.py` (`Scenario.h2_supply="steady"`, `dc_model.Assets.h2_buy_steady`)
 makes the optimiser choose one rate, the same every hour, banked in the existing tank.
 It is a rule on *when* hydrogen is supplied, not on how it travels: haulage stays out,
-and the price stays the strike price, with no premium for steady supply. Which of the
-two is central is decided on the 26-site result. The tank is costed per 405 kg vessel
+and the price stays the strike price, with no premium for steady supply. Just in time is
+kept as the "a hydrogen pipeline reaches the site" what-if (`Scenario.h2_supply="jit"`;
+the 26-site `present` set and the checks of 13 Nov ran on it). On the 4-hour North Norfolk
+check the steady contract buys no hydrogen at all: the electrolyser doubles and the tank
+grows about five-fold instead. The tank is costed per 405 kg vessel
 with its land at rural rent and no area limit (land is a stated limit, §4), so a very
 large tank is reported with its vessel count and footprint, not capped.
 

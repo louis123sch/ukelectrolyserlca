@@ -16,6 +16,12 @@ This changes each one alone, at four sites and two grid levels, and solves the f
     python scripts/fixed_choice_checks.py
     python scripts/fixed_choice_checks.py --summary
 
+Since 18 Nov 2026 (user) bought hydrogen comes on a steady contract, the model's new default
+(``dc_architectures.Scenario.h2_supply``), and the checks run off-grid too; they write
+``uk_sites_2025_checks_steady``. The just-in-time checks of 13 Nov stay in ``uk_sites_2025_checks``.
+Bundles (``BUNDLES``) push several screened inputs at once, all against hydrogen or all for it, at
+30 % and 50 % (the user's option B): pushes through ``trace.pushed``, the same as a sweep's.
+
 Sites: Isle of Lewis (windiest, North Scotland), Lichfield (least windy, West Midlands), Essex coast
 (windy, East England) and East Grinstead (typical South East); 25 MW and full grid. Frontier points:
 ``CHECK_FRACS``, fewer than the 26-site sets, so compare a variant with this script's own central.
@@ -24,6 +30,7 @@ Writes ``optimisation_outputs/uk_sites_2025_checks/<variant>/<level>/<site>/``; 
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import sys
 import time
@@ -35,11 +42,11 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 import uk_sites as U  # noqa: E402
-from optimisation import dc_architectures as A, dc_runner  # noqa: E402
+from optimisation import dc_architectures as A, dc_runner, trace as T  # noqa: E402
 
-OUT = ROOT / "optimisation_outputs" / "uk_sites_2025_checks"
+OUT = ROOT / "optimisation_outputs" / "uk_sites_2025_checks_steady"
 SITES = (2, 15, 18, 23)
-LEVELS = ("limited", "full")
+LEVELS = ("offgrid", "limited", "full")
 CHECK_FRACS = (0.02, 0.06, 0.13, 0.25, 0.5)
 VARIANTS = {          # name -> (Scenario fields, run_one keyword arguments)
     "central":       ({}, {}),
@@ -52,6 +59,10 @@ VARIANTS = {          # name -> (Scenario fields, run_one keyword arguments)
     "gas_high":      ({}, {"gas_price_case": "high"}),
     "tank_200bar":   ({"tank_design": "type1_200bar"}, {}),
 }
+# name -> (pushes as (recorded step key, factor), run_one keyword arguments). Filled from the
+# screen of the steady-contract North Norfolk run (18 Nov 2026); each is also a variant.
+BUNDLES: dict[str, tuple[list[tuple[str, float]], dict]] = {}
+VARIANTS.update({k: ({}, kw) for k, (_, kw) in BUNDLES.items()})
 
 
 def scenario(level: str, fields: dict) -> A.Scenario:
@@ -72,15 +83,22 @@ def run(variant: str, level: str, row):
         print(f"{variant} site {n} {level}: already done", flush=True)
         return
     fields, kwargs = VARIANTS[variant]
+    pushes = BUNDLES[variant][0] if variant in BUNDLES else []
     site = U.site_for(n, label, lat, lon, region, level)
     t0 = time.time()
     print(f"[{time.strftime('%a %H:%M')}] {variant} site {n} {label} {level}", flush=True)
-    dc_runner.run_one(
-        scenario(level, fields), site=site, start=U.START, end=U.END,
-        connection_mode="cap", connection_solve="loose", size_mw_it=100.0, pue=None, resample_hours=1.0,
-        points=5, cost_case=kwargs.get("cost_case", "central"), horizon_years=25.0, unserved_fraction=0.0,
-        gas_price_case=kwargs.get("gas_price_case"), out_root=folder(variant, level, n), save_dispatch=False,
-        refresh=False, progress=lambda t: None, eps_fracs=CHECK_FRACS)
+    with contextlib.ExitStack() as stack:
+        hits = [(key, stack.enter_context(T.pushed(key, f))) for key, f in pushes]
+        dc_runner.run_one(
+            scenario(level, fields), site=site, start=U.START, end=U.END,
+            connection_mode=None if level == "offgrid" else "cap", connection_solve="loose", size_mw_it=100.0,
+            pue=None, resample_hours=1.0, points=5, cost_case=kwargs.get("cost_case", "central"),
+            horizon_years=25.0, unserved_fraction=0.0, gas_price_case=kwargs.get("gas_price_case"),
+            tank_leakage_per_hour=kwargs.get("tank_leakage_per_hour"), out_root=folder(variant, level, n),
+            save_dispatch=False, refresh=False, progress=lambda t: None, eps_fracs=CHECK_FRACS)
+    missed = [key for key, h in hits if not any(h)]
+    if missed:
+        raise ValueError(f"{variant}: no recorded step {missed} ran while building the coefficients")
     print(f"   done in {(time.time() - t0) / 60:.1f} min", flush=True)
 
 

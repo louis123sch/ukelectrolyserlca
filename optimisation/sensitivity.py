@@ -101,6 +101,9 @@ class Case:
     series_kwargs: dict = field(default_factory=dict)
     # Fields to set on the site once resolved: a picked substation, say.
     site_kwargs: dict = field(default_factory=dict)
+    # How bought hydrogen arrives where the case buys it (dc_architectures.H2_SUPPLIES):
+    # a steady contract by default since 18 Nov 2026 (user).
+    h2_supply: str = "steady"
 
 
 _EVERY_ASSET = dict(grid=True, wind=True, solar=True, battery=True, electrolyser=True,
@@ -182,6 +185,10 @@ def prepare(case: Case, **series_kwargs):
                             grid_floor_mw=meta.get("connection_floor_mw", 0.0), flags=case.flags)
     if case.h2_colour is None and assets.buy_h2:
         assets = replace(assets, buy_h2=False)
+    if case.h2_supply not in A.H2_SUPPLIES:
+        raise ValueError(f"h2_supply must be one of {A.H2_SUPPLIES}, got {case.h2_supply!r}")
+    if case.h2_supply == "steady" and assets.buy_h2:
+        assets = replace(assets, h2_buy_steady=True)
     return site, series, meta, assets
 
 

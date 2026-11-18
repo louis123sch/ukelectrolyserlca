@@ -1041,9 +1041,9 @@ def test_myopic_steady_contract_takes_the_rate_and_loses_what_will_not_fit(serie
     assert df.h2_buy.sum() + start == pytest.approx(burnt + df.tank.iloc[-1] + df.h2_wasted.sum(), rel=1e-6)
 
 
-def test_steady_supply_changes_the_scenario_key_only_when_on():
+def test_supply_changes_the_scenario_key_only_off_the_default():
     from optimisation import dc_architectures as A
     base = A.Scenario(n=0, architecture="custom", label="x", assets={"buy_h2": True}, h2_colour="green")
     import dataclasses
-    assert "steady" not in base.key
-    assert dataclasses.replace(base, h2_supply="steady").key == base.key + "_steadyh2"
+    assert base.h2_supply == "steady" and "h2" not in base.key.split("_")[-1]
+    assert dataclasses.replace(base, h2_supply="jit").key == base.key + "_jith2"
