@@ -258,6 +258,7 @@ def run_one(scenario: A.Scenario, *, site, start: str, end: str,
         "batt_standing_loss_per_hour": tech.labels.get("batt_standing_loss_per_hour"),
         "tank_leakage_per_hour": tech.labels.get("tank_leakage_per_hour"),
         "strategy": scenario.strategy,
+        "h2_supply": scenario.h2_supply,
         "site": site.key, "site_name": site.name,
         "lat": site.lat, "lon": site.lon,
         "carbon_api_region": site.carbon_api_region, "tnuos_zone": site.tnuos_zone,
@@ -367,6 +368,10 @@ def build_inputs(scenario: A.Scenario, *, site, start: str, end: str, size_mw_it
         assets = _replace(assets, buy_h2=False)
     if scenario.h2_colour_2 is None and assets.buy_h2_2:
         assets = _replace(assets, buy_h2_2=False)
+    if scenario.h2_supply not in A.H2_SUPPLIES:
+        raise ValueError(f"h2_supply must be one of {A.H2_SUPPLIES}, got {scenario.h2_supply!r}")
+    if scenario.h2_supply == "steady":
+        assets = _replace(assets, h2_buy_steady=True)
     return series, meta, tech, assets
 
 

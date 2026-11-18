@@ -125,6 +125,10 @@ def architecture(name: str, *, grid_limit_mw=None, grid_floor_mw=0.0, offshore=F
     raise ValueError(f"Unknown architecture {name!r}")
 
 
+# How bought hydrogen may arrive (Scenario.h2_supply).
+H2_SUPPLIES = ("jit", "steady")
+
+
 @dataclass(frozen=True)
 class Scenario:
     n: int
@@ -143,6 +147,10 @@ class Scenario:
     # How SOEC's external heat is raised; None is the inventoried gas boiler.
     # See electrolysers.SOEC_HEAT_SOURCES. Meaningless for AE and PEM.
     soec_heat: str | None = None
+    # How bought hydrogen is supplied (dc_model.Assets.h2_buy_steady): "jit", any
+    # amount in any hour (the model before 18 Nov 2026), or "steady", one rate the
+    # same every hour, chosen by the optimiser. See H2_SUPPLIES.
+    h2_supply: str = "jit"
 
     @property
     def key(self) -> str:
@@ -163,6 +171,9 @@ class Scenario:
             bits.append(self.h2_colour_2)
         if self.strategy != "free" or not self.h2_colour:
             bits.append(self.strategy)
+        # Only the non-default supply changes the key, as with soec_heat.
+        if self.h2_supply != "jit":
+            bits.append(f"{self.h2_supply}h2")
         return "_".join(bits)
 
 

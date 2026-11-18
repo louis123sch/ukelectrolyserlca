@@ -22,6 +22,7 @@ picked from the 2025 Renewables.ninja map of 76 wind and 19 solar points (gb_lay
     python scripts/uk_sites.py --summary            # only rebuild the summary table
     python scripts/uk_sites.py --set present        # 13 Nov: everything on the table, green only
     python scripts/uk_sites.py --set blue           # 13 Nov: the same with blue on offer too (a what-if)
+    python scripts/uk_sites.py --set steady         # 18 Nov: present, bought hydrogen on a steady contract
 
 Sets (13 Nov 2026). ``base`` is the 12 Nov study as run (no gas engines, green, 5 even points).
 ``present`` puts everything on the table that can be bought today: the gas engines added,
@@ -60,6 +61,9 @@ SETS = {
     "base":    {"gas": False, "blue": False, "out": "uk_sites_2025"},
     "present": {"gas": True,  "blue": False, "out": "uk_sites_2025_present"},
     "blue":    {"gas": True,  "blue": True,  "out": "uk_sites_2025_blue"},
+    # 18 Nov 2026 (user): ``present`` with bought hydrogen on a steady contract, the same
+    # rate every hour into the tank (dc_model.Assets.h2_buy_steady), as a scenario.
+    "steady":  {"gas": True,  "blue": False, "steady_h2": True, "out": "uk_sites_2025_present_steady"},
 }
 OUT = ROOT / "optimisation_outputs" / SETS["base"]["out"]
 SET = "base"
@@ -112,7 +116,8 @@ def scenario(level: str) -> A.Scenario:
         flags["gas_engine"] = True
     return A.Scenario(n=0, architecture="custom", label=f"UK site study, {level}, {SET}",
                       assets=flags, ely_tech="PEM operation", h2_colour="green",
-                      h2_colour_2="blue" if cfg["blue"] else None, strategy="free")
+                      h2_colour_2="blue" if cfg["blue"] else None, strategy="free",
+                      h2_supply="steady" if cfg.get("steady_h2") else "jit")
 
 
 def site_for(n, label, lat, lon, region, level):

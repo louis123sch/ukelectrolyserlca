@@ -50,7 +50,8 @@ from optimisation import dc_model as M
 def dispatch(series: M.Series, tech: M.Tech, caps: dict,
              initial_soc_frac: float = 0.5,
              initial_tank_frac: float = 0.5,
-             buy_h2: bool = False) -> pd.DataFrame:
+             buy_h2: bool = False,
+             buy_h2_rate: float | None = None) -> pd.DataFrame:
     """Chronological merit-order dispatch of a fixed build. No foresight.
 
     Storage starts part-full because a myopic operator has no reason to start
@@ -64,6 +65,14 @@ def dispatch(series: M.Series, tech: M.Tech, caps: dict,
     stored hydrogen buys the rest at the gate, as an operator with a supply
     contract would; nothing is bought to fill the tank ahead of need, since
     that would take a forecast.
+
+    ``buy_h2_rate``: a steady contract (``dc_model.Assets.h2_buy_steady``), kg
+    per hour, normally the LP's own ``h2_buy_rate``. That much arrives every
+    step whatever the hour needs: it goes into the tank first, the fuel cell
+    draws only on the tank, and nothing more can be bought at the gate. Any
+    that will not fit once the step is over is lost (``h2_wasted``), still paid
+    for and still charged its burden, since it was delivered. Overrides
+    ``buy_h2``.
     """
     dt = series.dt_hours
     n = series.n
@@ -100,11 +109,14 @@ def dispatch(series: M.Series, tech: M.Tech, caps: dict,
     tank = initial_tank_frac * tank_max
     out = {k: np.zeros(n) for k in
            ("direct", "ch", "dis", "soc", "p_ely", "tank", "p_fc", "p_ge", "h2_buy",
-            "imp", "unserved", "curtailed")}
+            "h2_wasted", "imp", "unserved", "curtailed")}
+    steady_kg = None if buy_h2_rate is None else max(0.0, float(buy_h2_rate)) * dt
 
     for i in range(n):
         soc *= keep_b
         tank *= keep_h
+        if steady_kg is not None:           # the contract's delivery, before anything else
+            tank += steady_kg
         gen = avail[i]
         need = demand[i]
 
@@ -120,7 +132,7 @@ def dispatch(series: M.Series, tech: M.Tech, caps: dict,
             surplus -= ch / eta_bt
         p_ely = 0.0
         if surplus > 0 and cap_ely > 0 and cap_tank > 0:
-            room_kg = tank_max - tank
+            room_kg = max(0.0, tank_max - tank)
             p_ely = min(surplus, cap_ely, room_kg / kg_per_mwh_in / dt)
             tank += p_ely * kg_per_mwh_in * dt
             surplus -= p_ely
@@ -133,7 +145,7 @@ def dispatch(series: M.Series, tech: M.Tech, caps: dict,
             short -= dis * eta_bt
         p_fc = h2_buy = 0.0
         if short > 0 and cap_fc > 0:
-            if buy_h2:
+            if buy_h2 and steady_kg is None:
                 p_fc = min(short / eta_ft, cap_fc)
                 need_kg = p_fc * tech.fc_kg_h2_per_mwh * dt
                 from_tank = min(tank, need_kg)
@@ -148,6 +160,11 @@ def dispatch(series: M.Series, tech: M.Tech, caps: dict,
         short -= p_ge
         imp = min(short / eta_imp, cap_grid) if short > 0 else 0.0
         short -= imp * eta_imp
+        if steady_kg is not None:
+            h2_buy = steady_kg
+            if tank > tank_max:             # what the tank cannot hold is lost
+                out["h2_wasted"][i] = tank - tank_max
+                tank = tank_max
 
         out["direct"][i] = direct; out["ch"][i] = ch; out["dis"][i] = dis
         out["p_ely"][i] = p_ely; out["p_fc"][i] = p_fc; out["imp"][i] = imp
@@ -230,6 +247,8 @@ def evaluate(df: pd.DataFrame, series: M.Series, tech: M.Tech, caps: dict,
         "unserved_MWh_per_year": unserved,
         "curtailed_MWh_per_year": (float((df.curtailed * dt).sum()) * scale
                                    if "curtailed" in df else float("nan")),
+        # A steady contract's deliveries the tank could not hold (dispatch's buy_h2_rate)
+        "h2_wasted_kg_per_year": (float(df.h2_wasted.sum()) * scale if "h2_wasted" in df else 0.0),
         "soc_end_frac": (df.soc.iloc[-1] / caps["cap_batt_e"]) if caps.get("cap_batt_e") else float("nan"),
         "tank_end_frac": (df.tank.iloc[-1] / caps["cap_tank"]) if caps.get("cap_tank") else float("nan"),
     }
@@ -247,7 +266,13 @@ def bracket(series, tech, caps, lp_totals, lp_vars=None, assets=None) -> pd.Data
     ``assets``: the architecture, so the merit order may buy hydrogen when the
     LP could, and the connection charge follows the same flag.
     """
-    dis = dispatch(series, tech, caps, buy_h2=bool(assets and assets.buy_h2))
+    steady = bool(assets and assets.buy_h2 and assets.h2_buy_steady)
+    rate = None
+    if steady:
+        if lp_vars is None or "h2_buy_rate" not in lp_vars:
+            raise ValueError("a steady hydrogen contract needs the LP's h2_buy_rate (lp_vars)")
+        rate = float(lp_vars["h2_buy_rate"].solution)
+    dis = dispatch(series, tech, caps, buy_h2=bool(assets and assets.buy_h2), buy_h2_rate=rate)
     chosen = M.chosen_option(lp_vars, M.connection_options_of(tech)) if lp_vars is not None else None
     myo = evaluate(dis, series, tech, caps,
                    grid=(assets.grid if assets is not None else None),

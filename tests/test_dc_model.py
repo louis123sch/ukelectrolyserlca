@@ -994,3 +994,56 @@ def test_baseload_electrolyser_pays_for_its_extra_stacks(series, tech):
     u = float(V["ely_stack_units"].solution)
     assert u * 25.0 / cap >= 0.85 * 8760 * 25 / 50_000 - 1e-6
     assert u * 25.0 / cap > 3.0
+
+
+# =============================================================================
+# A steady hydrogen contract (Assets.h2_buy_steady, user 18 Nov 2026)
+# =============================================================================
+# Wind, a tank, a fuel cell and bought hydrogen, no grid: the lulls must be met
+# from hydrogen, so a contract that delivers the same every step has to bank it.
+_STEADY_BASE = M.Assets(grid=False, wind=True, battery=False, tank=True, fuel_cell=True,
+                        buy_h2=True, grid_limit_mw=0.0)
+
+
+def test_steady_contract_delivers_the_same_every_step(series, tech):
+    import dataclasses
+    V, _ = _solve(series, tech, dataclasses.replace(_STEADY_BASE, h2_buy_steady=True),
+                  objective="cost", unserved_fraction=0.0)
+    buy = V["h2_buy"].solution.values
+    rate = float(V["h2_buy_rate"].solution)
+    assert rate > 0.0
+    assert np.allclose(buy, rate * DT, rtol=1e-6, atol=1e-6)
+    # what arrives over the window is what the fuel cell burns (cyclic tank, no leakage here)
+    assert buy.sum() == pytest.approx(V["h2_fc"].solution.values.sum(), rel=1e-6)
+
+
+def test_steady_contract_banks_more_than_just_in_time(series, tech):
+    import dataclasses
+    V0, o0 = _solve(series, tech, _STEADY_BASE, objective="cost", unserved_fraction=0.0)
+    V1, o1 = _solve(series, tech, dataclasses.replace(_STEADY_BASE, h2_buy_steady=True),
+                    objective="cost", unserved_fraction=0.0)
+    assert "h2_buy_rate" not in V0                      # off: the model as before
+    assert float(V1["cap_tank"].solution) > float(V0["cap_tank"].solution)
+    assert np.ptp(V0["h2_buy"].solution.values) > 0.0  # just in time: it varies
+
+
+def test_myopic_steady_contract_takes_the_rate_and_loses_what_will_not_fit(series, tech):
+    from optimisation import myopic
+    caps = {"cap_wind": 10.0, "cap_fc": 8.0, "cap_tank": 2_000.0, "cap_grid": 0.0}
+    rate = 150.0                                        # kg per hour
+    df = myopic.dispatch(series, tech, caps, buy_h2=True, buy_h2_rate=rate)
+    assert np.allclose(df.h2_buy, rate * DT)
+    assert (df.h2_wasted >= -1e-9).all()
+    assert (df.tank <= tech.tank_usable_fraction * caps["cap_tank"] + 1e-6).all()
+    # every kilo delivered is burnt, still in the tank, or lost
+    start = 0.5 * tech.tank_usable_fraction * caps["cap_tank"]
+    burnt = (df.p_fc * tech.fc_kg_h2_per_mwh * DT).sum()
+    assert df.h2_buy.sum() + start == pytest.approx(burnt + df.tank.iloc[-1] + df.h2_wasted.sum(), rel=1e-6)
+
+
+def test_steady_supply_changes_the_scenario_key_only_when_on():
+    from optimisation import dc_architectures as A
+    base = A.Scenario(n=0, architecture="custom", label="x", assets={"buy_h2": True}, h2_colour="green")
+    import dataclasses
+    assert "steady" not in base.key
+    assert dataclasses.replace(base, h2_supply="steady").key == base.key + "_steadyh2"

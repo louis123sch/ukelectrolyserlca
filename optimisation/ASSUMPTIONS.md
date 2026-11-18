@@ -101,6 +101,20 @@ this scale, but it is an assumption, not a finding. The "off-site green
 hydrogen" option is now "green hydrogen bought at a price, with its production
 burden and its compression, but no haulage".
 
+**When bought hydrogen arrives: just in time by default, a steady contract as a scenario**
+(18 Nov 2026, user). By default any amount arrives in any hour it is wanted, with no
+delivery limit and no stock held ahead (decided 12 Nov). At the 26 sites that means
+2.3-8.6 kt a year at the lowest-carbon point, bought in 1,000-1,900 hours, up to about
+200 t in a day, where published system models fix hydrogen imports as a steady flow
+(PyPSA-Spain; the Dunkelflaute storage study) or cap them. The `steady` set of
+`scripts/uk_sites.py` (`Scenario.h2_supply="steady"`, `dc_model.Assets.h2_buy_steady`)
+makes the optimiser choose one rate, the same every hour, banked in the existing tank.
+It is a rule on *when* hydrogen is supplied, not on how it travels: haulage stays out,
+and the price stays the strike price, with no premium for steady supply. Which of the
+two is central is decided on the 26-site result. The tank is costed per 405 kg vessel
+with its land at rural rent and no area limit (land is a stated limit, §4), so a very
+large tank is reported with its vessel count and footprint, not capped.
+
 Storage compression is still counted where it applies, via
 `h2_storage.compression_kwh_per_kg` from the electrolyser's delivery pressure
 to the tank's — zero for the 28 bar design, since the electrolyser already

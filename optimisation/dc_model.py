@@ -139,6 +139,14 @@ class Assets:
     # Natural-gas engine generators on site, behind the meter (docs/GAS_ENGINE_PLAN.md). Off unless
     # asked for, so every architecture written before 13 Nov 2026 builds exactly as it did.
     gas_engine: bool = False
+    # Bought hydrogen arrives at one steady rate, the same every hour of the year,
+    # into the tank; the optimiser chooses the rate with everything else (user,
+    # 18 Nov 2026). Off, any amount arrives in any hour it is wanted. Steady supply
+    # is how sellers contract and how published system models fix imports (PyPSA-
+    # Spain, the Dunkelflaute storage study). A rule on when hydrogen is supplied,
+    # not on how it travels: road haulage stays outside the boundary (ASSUMPTIONS.md
+    # §3). A setting rather than an asset, so it is not in dc_architectures.ASSET_FLAGS.
+    h2_buy_steady: bool = False
 
     grid_limit_mw: float | None = None
     # The smallest connection in the band the charges were read for
@@ -481,6 +489,14 @@ def build_model(series: Series, assets: Assets, tech: Tech, *,
         "exp": flow(assets.grid and assets.allow_export, "exp"),
         "unserved": m.add_variables(lower=0.0, coords=[t], name="unserved"),
     })
+    # A steady contract: each stream bought takes one rate, kg per hour, the same
+    # in every step (Assets.h2_buy_steady). The tank, already where bought hydrogen
+    # goes (tank_soc), holds whatever the hour does not use.
+    if assets.h2_buy_steady:
+        for var, on in (("h2_buy", assets.buy_h2), ("h2_buy_2", assets.buy_h2_2)):
+            if on:
+                V[f"{var}_rate"] = m.add_variables(lower=0.0, name=f"{var}_rate")
+                m.add_constraints(V[var] - dt * V[f"{var}_rate"] == 0, name=f"{var}_steady")
     # fuel cell replacement counts — the convex max(calendar, duty) rule
     V["fc_bop_units"] = m.add_variables(lower=0.0, name="fc_bop_units")
     V["fc_stack_units"] = m.add_variables(lower=0.0, name="fc_stack_units")
