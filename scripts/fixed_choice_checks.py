@@ -59,10 +59,93 @@ VARIANTS = {          # name -> (Scenario fields, run_one keyword arguments)
     "gas_high":      ({}, {"gas_price_case": "high"}),
     "tank_200bar":   ({"tank_design": "type1_200bar"}, {}),
 }
-# name -> (pushes as (recorded step key, factor), run_one keyword arguments). Filled from the
-# screen of the steady-contract North Norfolk run (18 Nov 2026); each is also a variant.
-BUNDLES: dict[str, tuple[list[tuple[str, float]], dict]] = {}
-VARIANTS.update({k: ({}, kw) for k, (_, kw) in BUNDLES.items()})
+
+# --- the screened inputs, one at a time (user, 18 Nov 2026: robustness at four sites) ----------
+# Everything sensitivity.SHAKY_KNOBS pushes (the 10 Nov screen's shortlist, run at North Norfolk
+# until now) plus the tank's installed cost, which carries a tank about five times bigger under a
+# steady contract (one supplier's quote, Element Energy 2018). Wider than a fresh screen would
+# pick, so nothing it would add is missed. x0.5 / x1.5 on our own figure; published ranges where
+# they exist (percentage tests only, user 11 Nov 2026). Run keyword arguments go to run_one:
+# "tech" to build_tech, "pushes" through trace.pushed.
+PUSHED = {            # short name -> recorded step key
+    "fc_capex":     "cost.fuel_cell.capex_per_kW",
+    "batt_carbon":  "battery.energy_per_usable_kWh",
+    "ely_cost":     "coefficient.cost_ely",
+    "h2_price":     "cost.bought_h2.green.delivered",
+    "tank_carbon":  "coefficient.gwp_tank",
+    "tank_cost":    "cost.h2_tank.capex_per_kg",
+    "wind_parts":   "onshore_wind.parts_fraction",
+    "stack_carbon": "coefficient.gwp_fc_stack_per_mw",
+    "batt_fade":    "battery.capacity_fade_at_end_of_life",
+    "ge_carbon":    "coefficient.gwp_ge_per_mw",
+}
+for _name, _key in PUSHED.items():
+    for _f in (0.5, 1.5):
+        VARIANTS[f"{_name}_x{_f:g}"] = ({}, {"pushes": [(_key, _f)]})
+
+
+def _centrals() -> dict:
+    """Central values of the inputs swept on a range, as build_tech takes them."""
+    from optimisation import battery, fuel_cell, h2_prices, h2_storage
+    return {"fc_stack_calendar_years": fuel_cell.STACK_CALENDAR_LIFETIME_YEARS,
+            "fc_stack_duty_hours": float(fuel_cell.decompose()["stack_lifetime_hours"]),
+            "tank_leakage_per_hour": h2_storage.LEAKAGE_FRAC_PER_HOUR,
+            "green_h2_grid_share": h2_prices.GREEN_H2_GRID_SHARE,
+            "batt_standing_loss_per_hour": battery.STANDING_LOSS_PER_HOUR}
+
+
+# Range ends, as sensitivity.SHAKY_KNOBS has them: (end that hurts hydrogen, end that helps it).
+RANGES = {
+    "fc_stack_calendar_years": (5.0, 15.0),
+    "fc_stack_duty_hours": (20_000.0, 40_000.0),
+    "tank_leakage_per_hour": (0.01 / 100, 0.0),
+    "green_h2_grid_share": (1.0, 0.0),          # the seller on the grid: more carbon per kg bought
+    "batt_standing_loss_per_hour": (0.0, None),  # None: twice the central (filled below)
+}
+RUN_ARGS = ("tank_leakage_per_hour", "green_h2_grid_share", "batt_standing_loss_per_hour")
+for _name, (_lo, _hi) in RANGES.items():
+    for _end, _v in (("against", _lo), ("for", _hi)):
+        VARIANTS[f"{_name}_{_end}_h2"] = ({}, {"range": (_name, _end)})
+VARIANTS["batt_tx_x_eff_1"] = ({}, {"tech": {"batt_tx_x_eff": 1.0}})
+VARIANTS["fc_tx_x_eff_0.5"] = ({}, {"tech": {"fc_tx_x_eff": 0.5}})
+
+# --- bundles: every one of them at once, all against hydrogen or all for it (option B) ----------
+# The pushed inputs move by the bundle's share (30 % or 50 %) in the direction that hurts (or
+# helps) hydrogen against its rivals; the ranged ones go that share of the way to the range's end
+# over its x0.5 distance (so the 50 % bundle reaches the ends). Hurts hydrogen: dearer fuel cell,
+# electrolyser, tank and bought hydrogen, more carbon in the tank and stacks; and its rivals helped:
+# less battery carbon and fade, less gas engine carbon. Wind parts are left out: wind serves both.
+AGAINST_UP = ("fc_capex", "ely_cost", "h2_price", "tank_carbon", "tank_cost", "stack_carbon")
+AGAINST_DOWN = ("batt_carbon", "batt_fade", "ge_carbon")
+for _share in (0.3, 0.5):
+    for _end, _sign in (("against", 1.0), ("for", -1.0)):
+        pushes = ([(PUSHED[n], 1.0 + _sign * _share) for n in AGAINST_UP]
+                  + [(PUSHED[n], 1.0 - _sign * _share) for n in AGAINST_DOWN])
+        VARIANTS[f"bundle_{_end}_h2_{round(_share * 100)}"] = ({}, {"pushes": pushes, "bundle": (_end, _share)})
+
+
+def run_args(kwargs: dict) -> tuple[dict, dict, list]:
+    """A variant's (run_one arguments, build_tech overrides, pushes), ranges resolved."""
+    run, tech, pushes = {}, dict(kwargs.get("tech", {})), list(kwargs.get("pushes", []))
+    for k in ("cost_case", "gas_price_case"):
+        if k in kwargs:
+            run[k] = kwargs[k]
+    picks = []
+    if "range" in kwargs:
+        picks = [(kwargs["range"][0], kwargs["range"][1], 1.0)]
+    elif "bundle" in kwargs:
+        end, share = kwargs["bundle"]
+        picks = [(name, end, share / 0.5) for name in RANGES]
+    if picks:
+        c = _centrals()
+        for name, end, frac in picks:
+            lo, hi = RANGES[name]
+            if hi is None:
+                hi = 2.0 * c[name]
+            target = lo if end == "against" else hi
+            value = c[name] + frac * (target - c[name])
+            (run if name in RUN_ARGS else tech)[name] = value
+    return run, tech, pushes
 
 
 def scenario(level: str, fields: dict) -> A.Scenario:
@@ -83,7 +166,7 @@ def run(variant: str, level: str, row):
         print(f"{variant} site {n} {level}: already done", flush=True)
         return
     fields, kwargs = VARIANTS[variant]
-    pushes = BUNDLES[variant][0] if variant in BUNDLES else []
+    run_kw, tech, pushes = run_args(kwargs)
     site = U.site_for(n, label, lat, lon, region, level)
     t0 = time.time()
     print(f"[{time.strftime('%a %H:%M')}] {variant} site {n} {label} {level}", flush=True)
@@ -92,9 +175,12 @@ def run(variant: str, level: str, row):
         dc_runner.run_one(
             scenario(level, fields), site=site, start=U.START, end=U.END,
             connection_mode=None if level == "offgrid" else "cap", connection_solve="loose", size_mw_it=100.0,
-            pue=None, resample_hours=1.0, points=5, cost_case=kwargs.get("cost_case", "central"),
-            horizon_years=25.0, unserved_fraction=0.0, gas_price_case=kwargs.get("gas_price_case"),
-            tank_leakage_per_hour=kwargs.get("tank_leakage_per_hour"), out_root=folder(variant, level, n),
+            pue=None, resample_hours=1.0, points=5, cost_case=run_kw.get("cost_case", "central"),
+            horizon_years=25.0, unserved_fraction=0.0, gas_price_case=run_kw.get("gas_price_case"),
+            tank_leakage_per_hour=run_kw.get("tank_leakage_per_hour"),
+            green_h2_grid_share=run_kw.get("green_h2_grid_share"),
+            batt_standing_loss_per_hour=run_kw.get("batt_standing_loss_per_hour"),
+            tech_overrides=tech or None, out_root=folder(variant, level, n),
             save_dispatch=False, refresh=False, progress=lambda t: None, eps_fracs=CHECK_FRACS)
     missed = [key for key, h in hits if not any(h)]
     if missed:
