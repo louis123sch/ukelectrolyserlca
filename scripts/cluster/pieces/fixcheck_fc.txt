@@ -1,0 +1,26 @@
+# Fuel-cell stack interest before/after (docs/FUEL_CELL_STACK_AND_EQUATIONS_PLAN.md step 6, 19 Nov 2026),
+# the code WITH the stack fix, at East Grinstead. The same as fixcheck_after.txt less the slow
+# configurations 2, 3 and 21, which go with 8 cores from fixcheck_slow_after.txt (fixcheck_fc_setup.sh).
+# Compare with the "after" run (~/fix-after): configurations that build no fuel cell must match exactly.
+scripts/cluster/fixcheck_site.py refcases
+scripts/cluster/fixcheck_site.py scenario 1
+scripts/cluster/fixcheck_site.py scenario 4
+scripts/cluster/fixcheck_site.py scenario 6
+scripts/cluster/fixcheck_site.py scenario 7
+scripts/cluster/fixcheck_site.py scenario 8
+scripts/cluster/fixcheck_site.py scenario 9
+scripts/cluster/fixcheck_site.py scenario 10
+scripts/cluster/fixcheck_site.py scenario 11
+scripts/cluster/fixcheck_site.py scenario 12
+scripts/cluster/fixcheck_site.py scenario 13
+scripts/cluster/fixcheck_site.py scenario 14
+scripts/cluster/fixcheck_site.py scenario 15
+scripts/cluster/fixcheck_site.py scenario 16
+scripts/cluster/fixcheck_site.py scenario 17
+scripts/cluster/fixcheck_site.py scenario 18
+scripts/cluster/fixcheck_site.py scenario 19
+scripts/cluster/fixcheck_site.py scenario 20
+scripts/cluster/fixcheck_site.py scenario 22
+scripts/cluster/fixcheck_site.py scenario 23
+scripts/cluster/fixcheck_site.py scenario 24
+scripts/cluster/fixcheck_site.py scenario 25

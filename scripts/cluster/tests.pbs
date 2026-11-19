@@ -1,0 +1,23 @@
+#!/bin/bash
+# The whole test suite as one job on Imperial's CX3 cluster (some tests solve small models, so
+# they run here, not on the laptop or a login node). Submit from ~/ukdclca:
+#   bash scripts/cluster/submit.sh -v REPO=$HOME/fix-fc scripts/cluster/tests.pbs
+# The result is the job's output file: pytest's summary line at the end.
+#PBS -N tests
+#PBS -l select=1:ncpus=4:mem=16gb
+#PBS -l walltime=03:00:00
+#PBS -j oe
+#PBS -koed
+
+set -e
+REPO="${REPO:-$HOME/ukdclca}"
+eval "$("$HOME/miniforge3/bin/conda" shell.bash hook)"
+conda activate ukdclca
+export DC_BW_PROJECT=hydrogen-smr-sources DC_SOLVER=gurobi PYTHONIOENCODING=utf-8
+export GRB_LICENSE_FILE=/sw-eb/software/Gurobi/13.0.1-GCCcore-14.3.0/gurobi.lic
+export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1
+cd "$REPO"
+echo "tests on $(hostname), $(date)"
+echo "code: $(git log --oneline -1)"
+python -m pytest -q -rs -p no:cacheprovider tests || echo "PYTEST EXIT $?"
+echo "finished $(date)"
