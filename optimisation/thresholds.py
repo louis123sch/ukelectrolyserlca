@@ -483,7 +483,7 @@ def prepare(scenario, *, site, start, end, size_mw_it, pue, resample_hours,
                         green_h2_grid_share=green_h2_grid_share,
                         cost_case=cost_case, horizon_years=horizon_years,
                         size_mw_it=size_mw_it, pue=pue)
-    assets = A.architecture(scenario.architecture, offshore=site.offshore_wind,
+    assets = A.architecture(scenario.architecture,
                             grid_limit_mw=meta["connection_limit_mw"],
                             grid_floor_mw=meta.get("connection_floor_mw", 0.0),
                             flags=scenario.assets)
@@ -592,8 +592,7 @@ def applicable_knobs(scenario) -> list[str]:
     one that cannot buy hydrogen has no purchase price to sweep. Offering those
     anyway costs a solve each to be told ``not_applicable``.
     """
-    assets = A.architecture(scenario.architecture, flags=scenario.assets,
-                            offshore=True)
+    assets = A.architecture(scenario.architecture, flags=scenario.assets)
     # Buying needs a priced colour, exactly as prepare() enforces.
     can = {f: bool(getattr(assets, f)) for f in
            ("battery", "electrolyser", "tank", "fuel_cell")}

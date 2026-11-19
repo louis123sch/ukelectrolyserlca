@@ -150,7 +150,7 @@ def run_args(kwargs: dict) -> tuple[dict, dict, list]:
 
 
 def scenario(level: str, fields: dict) -> A.Scenario:
-    flags = dict(grid=level != "offgrid", wind=True, offshore_wind=False, solar=True, battery=True,
+    flags = dict(grid=level != "offgrid", wind=True, solar=True, battery=True,
                  electrolyser=True, tank=True, fuel_cell=True, buy_h2=True, buy_h2_2=False, gas_engine=True)
     base = dict(ely_tech="PEM operation", h2_colour="green", strategy="free", h2_supply="steady")
     return A.Scenario(n=0, architecture="custom", label=f"fixed-choice check, {level}", assets=flags,

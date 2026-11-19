@@ -54,9 +54,9 @@ def denominators(tech) -> dict[str, dict]:
         "solar": {"value": tech.gwp_solar + tech.gwp_tx_solar_per_mwp, "unit": "kg CO2e/MWp/yr"},
         "battery": {"p": tech.gwp_batt_p + tech.gwp_tx_batt_per_mw, "e": tech.gwp_batt_e,
                     "unit": "kg CO2e/MW/yr (p) and per usable MWh/yr (e)"},
-        # plant + stacks at the calendar floor (Tech defaults the stack term to zero)
+        # plant + stacks at the calendar floor, one per plant life (Tech defaults the stack term to zero)
         "electrolyser": {"value": tech.gwp_ely + getattr(tech, "gwp_ely_stack_per_mw", 0.0)
-                         / getattr(tech, "ely_stack_calendar_years", 25.0 / 3.0),
+                         / getattr(tech, "ely_stack_calendar_years", 25.0),
                          "unit": "kg CO2e/MW/yr"},
         "hydrogen tank": {"value": tech.gwp_tank, "unit": "kg CO2e per kg capacity/yr"},
         "fuel cell": {"value": fc, "unit": "kg CO2e/MW/yr, calendar replacements"},

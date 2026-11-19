@@ -128,7 +128,7 @@ def _console(text: str, label: str = "Module output — cross-checks and caveats
 # One colour per source, used by both charts so the battery's band and its
 # state of charge are visibly the same asset.
 SOURCE_COLOURS = {
-    "Solar PV": "#e8b833", "Wind": "#4c9f70", "Offshore wind": "#2f6f8f",
+    "Solar PV": "#e8b833", "Wind": "#4c9f70",
     "Battery": "#8a63b8", "Fuel cell": "#4bacc6", "Gas engines": "#b5651d", "Grid import": "#9aa0a6",
     "Unserved": "#d62728",
 }
@@ -935,7 +935,7 @@ with c3:
         "Electrolyser running strategy", list(A.STRATEGIES), key="kit_strategy",
         horizontal=True, disabled=not bool(ely_choice),
         help="baseload holds a capacity-factor floor; flexible runs on surplus "
-             "only; free lets the LP decide.")
+             "only (off-grid: with a grid it runs as free); free lets the LP decide.")
 
 # Kept in the pills' own order so the label and the LP's two streams agree, and
 # so ticking the same pair twice gives the same run key and hits the cache.
@@ -946,7 +946,7 @@ colour_2 = buy_colours[1] if len(buy_colours) > 1 else None
 f_ely, f_buy = bool(ely_choice), bool(buy_colours)
 ely_tech = ELY_MAP.get(ely_choice)
 
-flags = {"grid": not run_islanded, "wind": f_wind, "offshore_wind": False, "solar": f_solar,
+flags = {"grid": not run_islanded, "wind": f_wind, "solar": f_solar,
          "battery": f_batt, "electrolyser": f_ely, "tank": f_tank,
          "fuel_cell": f_fc, "buy_h2": f_buy, "buy_h2_2": colour_2 is not None, "gas_engine": f_ge}
 

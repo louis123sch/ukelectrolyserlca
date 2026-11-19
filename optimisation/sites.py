@@ -181,10 +181,6 @@ def max_connection_mw(load_mw: float,
         f"connection ceiling {h:.3g}x the {load_mw:,.1f} MW load, from {how}; "
         f"see sites.CONNECTION_HEADROOM_ASSUMED")
 
-# Offshore wind needs a credible coastal connection. Judged by the resolved
-# region rather than by distance to water, which would need a coastline dataset.
-OFFSHORE_REGIONS = {1, 2, 4, 5, 6, 7, 10, 11, 12, 14}
-
 CONNECTION_LIMITS_ARE_ASSUMED = True
 
 
@@ -227,10 +223,6 @@ class Site:
     def region_name(self) -> str:
         return CARBON_API_REGIONS.get(self.carbon_api_region, "?")
 
-    @property
-    def offshore_wind(self) -> bool:
-        return self.carbon_api_region in OFFSHORE_REGIONS
-
     # kept so older call sites reading .grid_connection_limit_mw still work
     @property
     def grid_connection_limit_mw(self) -> float | None:
@@ -240,7 +232,6 @@ class Site:
         return (f"{self.name or f'{self.lat:.4f}, {self.lon:.4f}'} — "
                 f"CI region {self.carbon_api_region} ({self.region_name}), "
                 f"TNUoS zone {self.tnuos_zone}, "
-                f"{'offshore available' if self.offshore_wind else 'no offshore option'}, "
                 f"connection "
                 f"{'unconstrained' if self.connection_limit_mw is None else f'{self.connection_limit_mw:g} MW'}")
 
@@ -736,7 +727,7 @@ def run():
     tariff = hh.set_index("zone_no").tariff_GBP_per_kW
 
     print(f"\n  {'preset':<14}{'lat':>9}{'lon':>9}  {'CI region':<22}"
-          f"{'zone':>5}{'£/kW':>7}{'offshore':>10}")
+          f"{'zone':>5}{'£/kW':>7}")
     rows = []
     for k in PRESETS:
         try:
@@ -747,11 +738,10 @@ def run():
         t = float(tariff.get(s.tnuos_zone, float("nan")))
         rows.append({"preset": k, "lat": s.lat, "lon": s.lon,
                      "ci_region": s.carbon_api_region, "region": s.region_name,
-                     "tnuos_zone": s.tnuos_zone, "tnuos_GBP_per_kW": t,
-                     "offshore": s.offshore_wind})
+                     "tnuos_zone": s.tnuos_zone, "tnuos_GBP_per_kW": t})
         print(f"  {k:<14}{s.lat:>9.4f}{s.lon:>9.4f}  "
               f"{str(s.carbon_api_region) + ' ' + s.region_name:<22}"
-              f"{s.tnuos_zone:>5}{t:>7.2f}{str(s.offshore_wind):>10}")
+              f"{s.tnuos_zone:>5}{t:>7.2f}")
 
     print("\n  Presets are shortcuts. Any GB coordinate works:")
     print("    sites.resolve(51.51, -0.60)      # or sites.get('51.51,-0.60')")

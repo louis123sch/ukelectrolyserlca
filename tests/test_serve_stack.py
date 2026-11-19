@@ -15,7 +15,7 @@ import pytest
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 from optimisation import dc_model as M
 
-COLS = ("demand", "p_wind", "p_offshore", "p_solar", "dis", "p_fc", "unserved")
+COLS = ("demand", "p_wind", "p_solar", "dis", "p_fc", "unserved")
 
 
 def frame(**cols) -> pd.DataFrame:

@@ -112,7 +112,7 @@ LEVELS = ("offgrid", "limited", "full")
 
 def scenario(level: str) -> A.Scenario:
     cfg = SETS[SET]
-    flags = dict(grid=level != "offgrid", wind=True, offshore_wind=False, solar=True, battery=True,
+    flags = dict(grid=level != "offgrid", wind=True, solar=True, battery=True,
                  electrolyser=True, tank=True, fuel_cell=True, buy_h2=True, buy_h2_2=cfg["blue"])
     if cfg["gas"]:
         flags["gas_engine"] = True

@@ -59,14 +59,14 @@ flatter the result.
 
 So there are two bases, and the second exists only to reproduce older runs.
 Pass ``solar_basis="ecoinvent"`` for that; both live in
-``SOLAR_EMBODIED_BASES``. Wind and offshore wind are mostly steel and concrete
+``SOLAR_EMBODIED_BASES``. Wind turbines are mostly steel and concrete
 and ageing far more slowly than a PV module, so their capital dominates - but
 the boundary still has to match solar's. IEA PVPS's per-kWh figure is a
 **full-scope** footprint (module, BOS, inverter, install, EOL); a capital-only
 wind figure restated on top of it would be comparing different things. So
 ``restate()`` adds ecoinvent's own non-capital consumables (lubricating oil,
 water - the ~1 % ``residual_per_kWh`` from ``decompose()``) back on top of
-wind and offshore's restated capital by default, making both technologies
+wind's restated capital by default, making both technologies
 full-scope. It is skipped only where the capital figure is already full-scope
 itself (solar under its default IEA basis); it still applies under
 ``solar_basis="ecoinvent"``, since that basis is capital-only too.
@@ -74,7 +74,7 @@ itself (solar under its default IEA basis); it still applies under
 Sources
 -------
 embodied carbon   ecoinvent 3.9.1 apos, IPCC 2021 GWP100. Activities are the
-wind, offshore    GB per-kWh generation datasets and the capital "unit"
+wind              GB per-kWh generation datasets and the capital "unit"
                   exchanges they draw on.
 embodied carbon   IEA PVPS Task 12, "Environmental Life Cycle Assessment of
 solar             Electricity from PV systems - 2023 data update", Stucki M.,
@@ -100,8 +100,6 @@ from optimisation import trace as T  # noqa: E402
 TECHNOLOGIES = {
     "onshore_wind": (
         "electricity production, wind, 1-3MW turbine, onshore", "GB", 2000.0),
-    "offshore_wind": (
-        "electricity production, wind, 1-3MW turbine, offshore", "GB", 2000.0),
     "solar_pv": (
         "electricity production, photovoltaic, 570kWp open ground installation, "
         "multi-Si", "GB", 570.0),
@@ -111,7 +109,6 @@ TECHNOLOGIES = {
 # its amortisation implies. Not used in any calculation.
 ECOINVENT_LIFETIME_YEARS = {
     "onshore_wind": 20.0,     # ecoinvent wind turbine, onshore
-    "offshore_wind": 20.0,
     "solar_pv": 30.0,         # ecoinvent open-ground PV
 }
 
@@ -397,7 +394,7 @@ def decompose(tech, ei, H, method):
         "ecoinvent_capital_kgco2e_per_MW": capital_per_mw,
         # Consumables (lubricating oil, water, ...) ecoinvent reports per kWh
         # rather than per unit. Added back on top of capital wherever the study
-        # is using a capital-only basis, so wind/offshore are full-scope like
+        # is using a capital-only basis, so wind is full-scope like
         # solar's published figure rather than missing this ~1 % tail.
         "residual_per_kWh": total_per_kwh - capital_per_kwh,
         "ecoinvent_lifetime_kWh_per_kW": lifetime_kwh_per_kw,
@@ -508,7 +505,7 @@ def apply_case(rows, case="central", solar_basis=None, wind_life_extension=None)
 
     ``wind_life_extension`` picks how wind's capital is grossed up for the parts
     a 20-y turbine needs to reach this study's life
-    (``WIND_LIFE_EXTENSION_BASES``); onshore and offshore alike.
+    (``WIND_LIFE_EXTENSION_BASES``).
     """
     import optimisation.tech_costs as tc
 
@@ -598,7 +595,7 @@ def apply_case(rows, case="central", solar_basis=None, wind_life_extension=None)
         # What the LP actually charges per MW built per year: the capital
         # annuity plus, where capital_only, the residual at this study's own
         # yield - so a capacity charge stays a capacity charge but is no
-        # longer missing wind/offshore's non-capital tail. Equivalent to
+        # longer missing wind's non-capital tail. Equivalent to
         # restated_kgco2e_per_kWh x this study's own annual generation per MW.
         row["annual_kgco2e_per_MW"] = T.step(
             f"{tech}.annual_per_MW",

@@ -45,13 +45,13 @@ def _series(demand=7.31, groups=None):
 
 def _tech(**kw):
     base = dict(
-        gwp_wind=19_244, gwp_offshore=26_408, gwp_solar=23_561, gwp_batt_p=2_124, gwp_batt_e=7_241,
+        gwp_wind=19_244, gwp_solar=23_561, gwp_batt_p=2_124, gwp_batt_e=7_241,
         gwp_ely=10_435, gwp_tank=63.8, gwp_fc_bop_per_mw=44_325, gwp_fc_stack_per_mw=97_431,
         gwp_fc_maint_per_mwh=0.0032, gwp_grid_per_mw=137.7,
         cost_fc_stack_per_mw=308_698.0, cost_fc_bop_per_mw=1_486_089.0,
         fc_bop_calendar_years=20.0, fc_bop_duty_hours=80_000.0,
         fc_stack_calendar_years=10.0, fc_stack_duty_hours=30_000.0,
-        cost_wind=147_073, cost_offshore=419_201, cost_solar=48_368,
+        cost_wind=147_073, cost_solar=48_368,
         cost_batt_p=34_903, cost_batt_e=11_634, cost_ely=212_511, cost_tank=64.6, cost_fc=99_842,
         cost_grid_per_mw_year=40_949, cost_grid_fixed_per_year=271_192,
         ely_kwh_per_kg=54.0, ely_variable_gwp_per_kg=0.1072, tank_compression_kwh_per_kg=0.0,

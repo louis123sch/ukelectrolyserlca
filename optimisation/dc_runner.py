@@ -2,7 +2,7 @@
 Running the matrix — caching, parallelism, and results on disk.
 =============================================================================
 
-25 configurations x a 13-point Pareto sweep is 325 LP solves. At half-hourly
+24 configurations x a 13-point Pareto sweep is 312 LP solves. At half-hourly
 resolution that is hours; hourly resampling and eight cores brings it to
 minutes. This module owns that arithmetic so neither the CLI nor the Streamlit
 page has to.
@@ -361,7 +361,6 @@ def build_inputs(scenario: A.Scenario, *, site, start: str, end: str, size_mw_it
     # Deriving one and optimising against the other is exactly the incoherence
     # this chain exists to remove.
     assets = A.architecture(scenario.architecture,
-                            offshore=site.offshore_wind,
                             grid_limit_mw=meta["connection_limit_mw"],
                             grid_floor_mw=meta.get("connection_floor_mw", 0.0),
                             flags=scenario.assets)

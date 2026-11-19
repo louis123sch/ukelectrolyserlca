@@ -53,40 +53,50 @@ BOUGHT_COLOURS = ("grey", "blue", "turquoise", "green")
 ONSITE_TECHS = ("PEM operation", "AE operation", "SOEC operation")
 STRATEGIES = ("baseload", "flexible", "free")
 
-# Offshore wind is out of scope: every site is on land (decided 3 Sep), and the
-# LP has no offshore profile — cap_offshore runs on the onshore series, so in
-# the high cost case it was building offshore on onshore yield. Held off here,
-# at the one place every caller's asset bounds pass through, rather than at
-# each caller. Turning it back on needs an offshore capacity-factor series
-# first. See ASSUMPTIONS.md.
-OFFSHORE_IN_SCOPE = False
+# Offshore wind was removed as a buildable asset on 19 Nov 2026
+# (docs/CODE_CHECK_FIX_PLAN.md step 2). Every site is on land, it had been
+# held off since 3 Sep, and the LP had no offshore profile of its own.
+# Offshore wind in the GB grid mix (optimiser_lca/grid.py) is untouched.
 
 # The things that can be built, in the order they are shown to the user.
 # A named architecture is one particular subset of these; a custom one is any
 # subset at all, which is what the Streamlit page hands over.
 # gas_engine (13 Nov 2026, docs/GAS_ENGINE_PLAN.md) is last so every key written
 # before it keeps its letters; it is in no named architecture, only a tick-box.
-ASSET_FLAGS = ("grid", "wind", "offshore_wind", "solar", "battery",
+# The letters are unchanged by offshore's removal: it was never on, so no
+# saved key ever carried its "o".
+ASSET_FLAGS = ("grid", "wind", "solar", "battery",
                "electrolyser", "tank", "fuel_cell", "buy_h2", "buy_h2_2", "gas_engine")
-_SHORT = dict(grid="g", wind="w", offshore_wind="o", solar="s", battery="b",
+_SHORT = dict(grid="g", wind="w", solar="s", battery="b",
               electrolyser="e", tank="t", fuel_cell="f", buy_h2="x",
               buy_h2_2="y", gas_engine="n")
 
 
-def custom(flags: dict, *, grid_limit_mw=None, grid_floor_mw=0.0, offshore=False,
+def strategy_for(strategy: str, grid: bool) -> str:
+    """The electrolyser strategy a run actually uses.
+
+    ``flexible`` is an off-grid rule: surplus-only, the data centre first on the
+    site's own renewables (dc_model.apply_strategy). With a grid it runs as
+    ``free`` (decided 19 Nov 2026, docs/CODE_CHECK_FIX_PLAN.md step 4): the
+    carbon objective already charges every MWh the electrolyser imports at that
+    half-hour's grid intensity, so the trade-off curve itself shows how much
+    grid-heavy running each point accepts.
+    """
+    return "free" if (strategy == "flexible" and grid) else strategy
+
+
+def custom(flags: dict, *, grid_limit_mw=None, grid_floor_mw=0.0,
            allow_export=False) -> M.Assets:
     """Asset bounds for an arbitrary tick-box combination.
 
     Same contract as a named architecture — everything is an upper bound, so a
     ticked asset the LP does not want is still sized to zero. The one lower
     bound is the grid's band floor, which only applies while the grid is
-    ticked (``dc_model.Assets.grid_floor_mw``). Two things are
-    enforced rather than trusted to the caller: offshore wind is only available
-    where the site has it, and unticking the grid means a hard zero import
+    ticked (``dc_model.Assets.grid_floor_mw``). Unticking the grid is
+    enforced rather than trusted to the caller: it means a hard zero import
     limit and no export, not merely a grid the LP is free to use.
     """
     f = {k: bool(flags.get(k)) for k in ASSET_FLAGS}
-    f["offshore_wind"] = f["offshore_wind"] and offshore and OFFSHORE_IN_SCOPE
     assets = M.Assets(**f, grid_limit_mw=grid_limit_mw, grid_floor_mw=grid_floor_mw,
                       allow_export=allow_export)
     if not f["grid"]:
@@ -94,32 +104,30 @@ def custom(flags: dict, *, grid_limit_mw=None, grid_floor_mw=0.0, offshore=False
     return assets
 
 
-def architecture(name: str, *, grid_limit_mw=None, grid_floor_mw=0.0, offshore=False,
+def architecture(name: str, *, grid_limit_mw=None, grid_floor_mw=0.0,
                  allow_export=False, flags: dict | None = None) -> M.Assets:
     """Asset bounds for one named power option, or for ``custom`` flags."""
     base = dict(grid_limit_mw=grid_limit_mw, grid_floor_mw=grid_floor_mw,
                 allow_export=allow_export)
-    offshore = offshore and OFFSHORE_IN_SCOPE
     if name == "custom":
         return custom(flags or {}, grid_limit_mw=grid_limit_mw, grid_floor_mw=grid_floor_mw,
-                      offshore=offshore, allow_export=allow_export)
+                      allow_export=allow_export)
     if name == "grid_only":
         return M.Assets(grid=True, **base)
     if name == "grid_battery":
         return M.Assets(grid=True, battery=True, **base)
     if name == "grid_res_battery":
-        return M.Assets(grid=True, wind=True, solar=True, offshore_wind=offshore,
-                        battery=True, **base)
+        return M.Assets(grid=True, wind=True, solar=True, battery=True, **base)
     if name == "grid_h2":
         return M.Assets(grid=True, electrolyser=True, tank=True, fuel_cell=True, **base)
     if name == "grid_h2_bought":
         return M.Assets(grid=True, fuel_cell=True, buy_h2=True, **base)
     if name == "res_h2":
-        assets = M.Assets(grid=False, wind=True, solar=True, offshore_wind=offshore,
+        assets = M.Assets(grid=False, wind=True, solar=True,
                           electrolyser=True, tank=True, fuel_cell=True)
         return replace(assets, grid_limit_mw=0.0, allow_export=False)
     if name == "res_h2_grid":
-        return M.Assets(grid=True, wind=True, solar=True, offshore_wind=offshore,
+        return M.Assets(grid=True, wind=True, solar=True,
                         battery=True, electrolyser=True, tank=True, fuel_cell=True,
                         buy_h2=True, **base)
     raise ValueError(f"Unknown architecture {name!r}")
@@ -153,6 +161,15 @@ class Scenario:
     # an optional setting. See H2_SUPPLIES.
     h2_supply: str = "jit"
 
+    def __post_init__(self):
+        # Grid + flexible is run, and labelled, as free (strategy_for).
+        if self.strategy == "flexible":
+            grid = architecture(self.architecture, flags=self.assets).grid
+            if grid:
+                object.__setattr__(self, "strategy", "free")
+                object.__setattr__(self, "note", (self.note + "; " if self.note else "")
+                                   + "asked for flexible: with a grid that runs as free")
+
     @property
     def key(self) -> str:
         bits = [f"{self.n:02d}", self.architecture]
@@ -179,14 +196,22 @@ class Scenario:
 
 
 def core_matrix() -> list[Scenario]:
-    """The 25 configurations. 22 involve hydrogen; all six pathways appear, and
-    SOEC appears with both heat sources."""
+    """The 24 configurations. 21 involve hydrogen; all six pathways appear, and
+    SOEC appears with both heat sources.
+
+    With a grid, the electrolyser runs either at baseload or freely
+    (strategy_for, 19 Nov 2026): the grid rows that were ``flexible`` are now
+    ``free``. Grid + PEM free is already the control row (n = 20), so its
+    duplicate, n = 5, is left out. Numbers are never reused or shifted: n is
+    part of every cached run's key.
+    """
     S, n = [], 0
 
-    def add(**kw):
+    def add(skip=False, **kw):
         nonlocal n
         n += 1
-        S.append(Scenario(n=n, **kw))
+        if not skip:
+            S.append(Scenario(n=n, **kw))
 
     add(architecture="grid_only", label="Grid only", note="reference — the grid-only baseline")
     add(architecture="grid_battery", label="Grid + battery",
@@ -194,9 +219,11 @@ def core_matrix() -> list[Scenario]:
     add(architecture="grid_res_battery", label="Grid + renewables + battery")
 
     for tech in ONSITE_TECHS:
-        for strat in ("baseload", "flexible"):
+        for strat in ("baseload", "free"):
             add(architecture="grid_h2", label=f"Grid + H2 ({tech.split()[0]})",
-                ely_tech=tech, strategy=strat)
+                ely_tech=tech, strategy=strat,
+                # Grid + PEM free is the control row below (n = 20).
+                skip=(strat == "free" and tech == "PEM operation"))
     for tech in ONSITE_TECHS:
         for strat in ("baseload", "flexible"):
             add(architecture="res_h2", label=f"Renewables + H2 ({tech.split()[0]}), islanded",
@@ -218,7 +245,7 @@ def core_matrix() -> list[Scenario]:
     # Appended rather than placed beside the gas-boiler SOEC rows so that no
     # earlier scenario is renumbered: n is part of every cached run's key.
     for arch, where in (("grid_h2", "Grid"), ("res_h2", "Renewables")):
-        for strat in ("baseload", "flexible"):
+        for strat in ("baseload", "free" if arch == "grid_h2" else "flexible"):
             add(architecture=arch,
                 label=f"{where} + H2 (SOEC, electric boiler)"
                       + (", islanded" if arch == "res_h2" else ""),
@@ -231,7 +258,7 @@ def core_matrix() -> list[Scenario]:
 def table() -> pd.DataFrame:
     rows = []
     for s in core_matrix():
-        a = architecture(s.architecture, flags=s.assets, offshore=True)
+        a = architecture(s.architecture, flags=s.assets)
         rows.append({
             "n": s.n, "key": s.key, "architecture": s.architecture,
             "label": s.label, "ely": s.ely_tech.split()[0] if s.ely_tech else "-",

@@ -80,7 +80,8 @@ def main(argv=None):
         wanted = set(args.only)
         scenarios = [s for s in scenarios if s.n in wanted]
         if not scenarios:
-            ap.error(f"No scenarios match {sorted(wanted)}; matrix is 1..{len(A.core_matrix())}")
+            ap.error(f"No scenarios match {sorted(wanted)}; matrix numbers are "
+                     f"{[s.n for s in A.core_matrix()]}")
 
     print(f"{len(scenarios)} configuration(s) x {args.points + 1} solves = "
           f"{len(scenarios) * (args.points + 1)} LPs")

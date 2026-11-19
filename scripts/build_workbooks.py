@@ -481,7 +481,7 @@ def point_quantities(row: pd.Series, disp: pd.DataFrame, series, tech, assets) -
     from optimisation import dc_model as M
     dt, scale = series.dt_hours, series.annual_scale
     sc, notes = {}, {}
-    for k in ("cap_wind", "cap_offshore", "cap_solar", "cap_batt_p", "cap_batt_e", "cap_ely",
+    for k in ("cap_wind", "cap_solar", "cap_batt_p", "cap_batt_e", "cap_ely",
               "cap_tank", "cap_fc", "cap_ge", "cap_grid"):
         sc[k] = float(row.get(k, 0.0) or 0.0)
         notes[k] = "built, from the run (pareto.parquet)"
@@ -632,7 +632,7 @@ def run_points(folder: Path, L, problems: list) -> dict:
                        cost=float(row["cost_GBP_per_year"]), gwp=float(row["gwp_kgco2e_per_year"]),
                        served=float(row.get("served_MWh_per_year") or 0.0), connection_index=idx,
                        connection=row.get("connection_option"),
-                       build={k: float(row[k]) for k in ("cap_wind", "cap_offshore", "cap_solar", "cap_batt_p",
+                       build={k: float(row[k]) for k in ("cap_wind", "cap_solar", "cap_batt_p",
                                                          "cap_batt_e", "cap_ely", "cap_tank", "cap_fc", "cap_ge",
                                                          "cap_grid")
                               if k in row})

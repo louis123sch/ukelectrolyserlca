@@ -214,13 +214,11 @@ weekdays 11:00–14:00 and 16:00–19:00), so in summer every band moves by an h
 
 ## 3c. Generation is onshore wind and ground-mount solar only
 
-Every site is on land (decided 3 Sep), so offshore wind is out of scope and
-`dc_architectures.OFFSHORE_IN_SCOPE` holds it off for every architecture and
-every caller. It used to be unlocked wherever `sites.Site.offshore_wind` flagged
-a coastal region, and the LP has no offshore profile — `cap_offshore` ran on the
-*onshore* capacity-factor series, so in the high cost case it built offshore on
-onshore yield. The offshore coefficients are still built and reported; turning
-the switch back on needs an offshore series first.
+Every site is on land (decided 3 Sep), so offshore wind is out of scope. It was
+held off by a switch from 3 Sep and removed from the model entirely on 19 Nov
+2026 (`docs/CODE_CHECK_FIX_PLAN.md` step 2): no capacity, flow, coefficient or
+cost line remains. Offshore wind as part of the GB grid mix
+(`optimiser_lca/grid.py`) is real data and is unchanged.
 
 ## 4. Cost basis
 

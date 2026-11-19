@@ -59,7 +59,7 @@ DEGENERATE_REL_TOL = 1e-6
 # carbon" infeasible. Far tighter than anything that moves a result.
 LEX_TOL = 1e-6
 
-CAPACITY_VARS = ("cap_wind", "cap_offshore", "cap_solar", "cap_batt_p",
+CAPACITY_VARS = ("cap_wind", "cap_solar", "cap_batt_p",
                  "cap_batt_e", "cap_ely", "cap_tank", "cap_fc", "cap_ge", "cap_grid")
 
 # Energy through each sized asset over a year, reported alongside the capacity
@@ -73,7 +73,7 @@ CAPACITY_VARS = ("cap_wind", "cap_offshore", "cap_solar", "cap_batt_p",
 # 3.3 MW — but it is invisible in a capacity column on its own.
 # Keyed by the capacity variable so the UI can pair them without a second map.
 ENERGY_VARS = {
-    "cap_wind": "p_wind", "cap_offshore": "p_offshore", "cap_solar": "p_solar",
+    "cap_wind": "p_wind", "cap_solar": "p_solar",
     "cap_batt_p": "dis",            # discharge; cap_batt_e shares this flow
     "cap_ely": "p_ely", "cap_fc": "p_fc", "cap_ge": "p_ge", "cap_grid": "imp",
 }
@@ -377,8 +377,8 @@ def special_points(df: pd.DataFrame, degenerate: bool) -> dict:
 
     c = df["cost_GBP_per_year"].to_numpy()
     g = df["gwp_kgco2e_per_year"].to_numpy()
-    cn = (c - c.min()) / max(c.ptp(), 1e-12)
-    gn = (g - g.min()) / max(g.ptp(), 1e-12)
+    cn = (c - c.min()) / max(np.ptp(c), 1e-12)
+    gn = (g - g.min()) / max(np.ptp(g), 1e-12)
 
     knee_i = int(np.argmin(np.hypot(cn, gn)))
 

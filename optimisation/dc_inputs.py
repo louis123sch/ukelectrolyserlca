@@ -716,6 +716,7 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
                batt_standing_loss_per_hour: float | None = None,
                tank_leakage_per_hour: float | None = None,
                fc_stack_calendar_years: float | None = None,
+               ely_stack_calendar_years: float | None = None,
                fc_bop_calendar_years: float | None = None,
                fc_kw_per_container: float | None = None,
                batt_usable_fraction: float | None = None,
@@ -799,6 +800,11 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
     The two push in opposite directions in the hydrogen-versus-battery seasonal
     contest. A %/day figure converts as ``pct / 100 / 24``.
 
+    ``ely_stack_calendar_years`` overrides the electrolyser stack's calendar
+    floor (``electrolysers.STACK_CALENDAR_YEARS``, one stack per plant life since
+    19 Nov 2026); ``electrolysers.STACK_CALENDAR_YEARS_THREE_STACKS`` is the
+    earlier three-stack rule, kept as a named sensitivity.
+
     ``fc_stack_calendar_years``, ``fc_bop_calendar_years``,
     ``fc_kw_per_container`` and ``batt_usable_fraction`` override four more
     ASSUMED constants for a sweep (``optimisation/sensitivity.py``): the fuel
@@ -848,6 +854,7 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
     _standing_loss(batt_standing_loss_per_hour, "batt_standing_loss_per_hour")
     _standing_loss(tank_leakage_per_hour, "tank_leakage_per_hour")
     for name, v in (("fc_stack_calendar_years", fc_stack_calendar_years),
+                    ("ely_stack_calendar_years", ely_stack_calendar_years),
                     ("fc_bop_calendar_years", fc_bop_calendar_years),
                     ("fc_kw_per_container", fc_kw_per_container),
                     ("fc_stack_duty_hours", fc_stack_duty_hours),
@@ -901,7 +908,7 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
 
     def gen_gwp(asset):
         r = emb.loc[asset]
-        # Capital annuity plus, for wind/offshore, the non-capital residual
+        # Capital annuity plus, for wind, the non-capital residual
         # ecoinvent reports per kWh - see renewables.apply_case.
         return float(r.annual_kgco2e_per_MW)
 
@@ -983,6 +990,7 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
         d = fc.decompose(refresh=True)
     fc_bop_years = float(fc_bop_calendar_years or d["bop_calendar_lifetime_years"])
     fc_stack_years = float(fc_stack_calendar_years or d["stack_calendar_lifetime_years"])
+    ely_stack_years = float(ely_stack_calendar_years or ely.STACK_CALENDAR_YEARS)
     fc_kw_box = float(fc_kw_per_container or d["bop_kw_per_container"])
     gwp_fc_bop = T.step("fuel_cell.bop_per_MW_charged",
                         (d["bop_kgco2e_per_MW"] - d["bop_container_kgco2e_per_MW"]
@@ -1199,8 +1207,6 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
     tech = dc_model.Tech(
         gwp_wind=step("gwp_wind", gen_gwp("onshore_wind"), "kg CO2e per MW per year",
                       "Onshore wind, per MW built", ["onshore_wind.annual_per_MW"]),
-        gwp_offshore=step("gwp_offshore", gen_gwp("offshore_wind"), "kg CO2e per MW per year",
-                          "Offshore wind, per MW built", ["offshore_wind.annual_per_MW"]),
         gwp_solar=step("gwp_solar", gen_gwp("solar_pv"), "kg CO2e per MWp per year",
                        "Solar PV, per MWp built", ["solar_pv.annual_per_MW"]),
         gwp_batt_p=step("gwp_batt_p", be["power_kgco2e_per_kW"] * 1000.0 / batt.ASSET_LIFE_YEARS,
@@ -1213,8 +1219,8 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
                         ["battery.energy_per_usable_kWh", "battery.end_of_life_oversize"],
                         inputs={"asset_life_years": batt.ASSET_LIFE_YEARS}),
         # The balance of plant once over the plant's life; the stacks by replacement
-        # (gwp_ely_stack_per_mw x ely_stack_units, dc_model). At the calendar floor the
-        # two add back to the whole unit over 25 years, as charged before 26 Oct 2026.
+        # (gwp_ely_stack_per_mw x ely_stack_units, dc_model): at least the first stack
+        # over the plant's life, more by running hours (one-stack floor, 19 Nov 2026).
         gwp_ely=step("gwp_ely", ely_row["plant_kgco2e_per_MW"] / ely.PLANT_LIFETIME_YEARS * stack_share,
                      "kg CO2e per MW per year", f"{ely_tech.split()[0]} electrolyser balance of plant, "
                      "per MW of cap_ely, over the plant's life",
@@ -1224,9 +1230,9 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
                                   "kg CO2e per MW replaced", f"One {ely_tech.split()[0]} stack per MW "
                                   "of cap_ely, charged per replacement (max of calendar and duty)",
                                   [f"{eb}.stack_per_MW", "electrolyser.stack_share"],
-                                  inputs={"calendar_years": ely.STACK_CALENDAR_YEARS,
+                                  inputs={"calendar_years": ely_stack_years,
                                           "duty_hours": ely.STACK_DUTY_HOURS}),
-        ely_stack_calendar_years=ely.STACK_CALENDAR_YEARS,
+        ely_stack_calendar_years=ely_stack_years,
         ely_stack_duty_hours=ely.STACK_DUTY_HOURS,
         gwp_tank=step("gwp_tank", tank_row["kgco2e_per_kg_capacity_year"], "kg CO2e per kg of capacity per year",
                       f"Hydrogen tank ({tank_design}), per kg it holds",
@@ -1301,8 +1307,6 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
         batt_max_duration_hours=float(batt_max_duration_hours or np.inf),
         cost_wind=cstep("cost_wind", gen_cost("onshore_wind") * to26, "GBP per MW per year", "Onshore wind, per MW built",
                         ["cost.onshore_wind.annual_per_MW", *k26]),
-        cost_offshore=cstep("cost_offshore", gen_cost("offshore_wind") * to26, "GBP per MW per year",
-                            "Offshore wind, per MW built", ["cost.offshore_wind.annual_per_MW", *k26]),
         cost_solar=cstep("cost_solar", gen_cost("solar_pv") * to26, "GBP per MWp per year", "Solar PV, per MWp built",
                          ["cost.solar_pv.annual_per_MWp", *k26]),
         cost_batt_p=cstep("cost_batt_p", bcost["power_GBP_per_MW_year"] * to26, "GBP per MW per year",
@@ -1447,7 +1451,7 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
                     if "green" in (h2_colour, h2_colour_2) else None)},
     )
     # Transformer conversion losses, on the units the capital terms above
-    # already charge. Offshore shares wind's: it is the same turbine step-up.
+    # already charge.
     from dataclasses import replace as _replace
     from optimisation import conversion_losses as cl
     lw, ls, lg = cl.stepup("onshore_wind"), cl.stepup("solar_pv"), cl.grid_intake()

@@ -122,7 +122,8 @@ class Assets:
     """
     grid: bool = True
     wind: bool = False
-    offshore_wind: bool = False
+    # Offshore wind was removed 19 Nov 2026 (docs/CODE_CHECK_FIX_PLAN.md step 2):
+    # every site is on land and it had been switched off since 3 Sep 2026.
     solar: bool = False
     battery: bool = False
     electrolyser: bool = False
@@ -203,7 +204,7 @@ class Tech:
     here touches Brightway or the network-charge APIs during a solve.
     """
     # carbon, per MW (or per MWh / per kg) per year
-    gwp_wind: float; gwp_offshore: float; gwp_solar: float
+    gwp_wind: float; gwp_solar: float
     gwp_batt_p: float; gwp_batt_e: float
     gwp_ely: float; gwp_tank: float
     gwp_fc_bop_per_mw: float; gwp_fc_stack_per_mw: float
@@ -216,7 +217,7 @@ class Tech:
     gwp_ge_per_mw: float; gwp_ge_running_per_mwh: float; gwp_ge_maint_per_mwh: float
     ge_calendar_years: float; ge_duty_hours: float
     # cost, GBP per MW (or MWh / kg) per year
-    cost_wind: float; cost_offshore: float; cost_solar: float
+    cost_wind: float; cost_solar: float
     cost_batt_p: float; cost_batt_e: float
     cost_ely: float; cost_tank: float; cost_fc: float
     # Per replacement, on fc_stack_units / fc_bop_units. cost_fc is the BoP
@@ -288,7 +289,8 @@ class Tech:
     # connection (DUoS capacity, connection capital). Zero is the model before
     # 28 Oct 2026, when the tariff sat inside cost_grid_per_mw_year.
     cost_grid_triad_per_mw_year: float = 0.0
-    ely_stack_calendar_years: float = 25.0 / 3.0
+    # One stack per 25-year plant life (19 Nov 2026, electrolysers.STACK_CALENDAR_YEARS).
+    ely_stack_calendar_years: float = 25.0
     ely_stack_duty_hours: float = 50_000.0
     # Transformer conversion losses (conversion_losses.py). No-load: MW drawn
     # at the node per MW installed, every step. Load: share of delivered power
@@ -453,7 +455,6 @@ def build_model(series: Series, assets: Assets, tech: Tech, *,
     grid_upper = assets.grid_limit_mw if assets.grid_limit_mw is not None else inf
     V = {
         "cap_wind": cap(assets.wind, "cap_wind"),
-        "cap_offshore": cap(assets.offshore_wind, "cap_offshore"),
         "cap_solar": cap(assets.solar, "cap_solar"),
         "cap_batt_p": cap(assets.battery, "cap_batt_p"),
         "cap_batt_e": cap(assets.battery, "cap_batt_e"),
@@ -473,7 +474,6 @@ def build_model(series: Series, assets: Assets, tech: Tech, *,
     # --- flows ----------------------------------------------------------
     V.update({
         "p_wind": flow(assets.wind, "p_wind"),
-        "p_offshore": flow(assets.offshore_wind, "p_offshore"),
         "p_solar": flow(assets.solar, "p_solar"),
         "ch": flow(assets.battery, "ch"),
         "dis": flow(assets.battery, "dis"),
@@ -516,12 +516,12 @@ def build_model(series: Series, assets: Assets, tech: Tech, *,
     # no-load loss at the node, whether or not anything flows (the fuel cell's
     # stays energised on standby). conversion_losses.py.
     m.add_constraints(
-        V["p_wind"] + V["p_offshore"] + V["p_solar"]
+        V["p_wind"] + V["p_solar"]
         + (1.0 - lf["battery"]) * V["dis"] + (1.0 - lf["fc"]) * V["p_fc"]
-        + V["p_ge"]                       # at 11 kV, the site's own voltage: no step-up, no loss
+        + V["p_ge"]                       # at the site's own voltage (the 20 kV bus): no step-up, no loss
         + (1.0 - lf["grid"]) * V["imp"] + V["unserved"]
         - V["ch"] / (1.0 - lf["battery"]) - V["p_ely"] - V["exp"]
-        - tech.loss_wind_noload * (V["cap_wind"] + V["cap_offshore"])
+        - tech.loss_wind_noload * V["cap_wind"]
         - tech.loss_solar_noload * V["cap_solar"]
         - tech.loss_grid_noload * V["cap_grid"]
         - tech.loss_batt_noload * V["cap_batt_p"]
@@ -531,8 +531,6 @@ def build_model(series: Series, assets: Assets, tech: Tech, *,
     # p_* is power delivered to the node, after the generator's step-up.
     m.add_constraints(V["p_wind"] - (1.0 - lf["wind"]) * cf_w * V["cap_wind"] <= 0,
                       name="wind_cf")
-    m.add_constraints(V["p_offshore"] - (1.0 - lf["wind"]) * cf_w * V["cap_offshore"] <= 0,
-                      name="offshore_cf")
     m.add_constraints(V["p_solar"] - (1.0 - lf["solar"]) * cf_s * V["cap_solar"] <= 0,
                       name="solar_cf")
 
@@ -797,7 +795,6 @@ def objective_terms(q, series: Series, tech: Tech, *, price, ci, group_series=No
 
     gwp_embodied = {
         "wind": tech.gwp_wind * q["cap_wind"],
-        "offshore wind": tech.gwp_offshore * q["cap_offshore"],
         "solar": tech.gwp_solar * q["cap_solar"],
         "battery cells and container": tech.gwp_batt_e * q["cap_batt_e"],
         "battery power conversion": tech.gwp_batt_p * q["cap_batt_p"],
@@ -821,7 +818,7 @@ def objective_terms(q, series: Series, tech: Tech, *, price, ci, group_series=No
         # own lines rather than folded into wind and solar, so the provenance
         # (Leng's bill of materials, IEA PVPS's unit) and the audit's life check
         # stay visible; CHAINS puts each back with its technology for reporting.
-        "wind step-up transformers": tech.gwp_tx_wind_per_mw * (q["cap_wind"] + q["cap_offshore"]),
+        "wind step-up transformers": tech.gwp_tx_wind_per_mw * q["cap_wind"],
         "solar step-up transformers": tech.gwp_tx_solar_per_mwp * q["cap_solar"],
         # The battery's and fuel cell's own LV → 20 kV units, on the inverter
         # rating each container carries (Jasper 2026's unit, transformers.py).
@@ -858,7 +855,6 @@ def objective_terms(q, series: Series, tech: Tech, *, price, ci, group_series=No
     }
     cost_capital = {
         "wind": tech.cost_wind * q["cap_wind"],
-        "offshore wind": tech.cost_offshore * q["cap_offshore"],
         "solar": tech.cost_solar * q["cap_solar"],
         "battery": tech.cost_batt_p * q["cap_batt_p"] + tech.cost_batt_e * q["cap_batt_e"],
         "electrolyser": tech.cost_ely * q["cap_ely"],
@@ -905,7 +901,7 @@ def objective_terms(q, series: Series, tech: Tech, *, price, ci, group_series=No
 # for reporting. Every term key must appear in exactly one chain, or
 # ``chains()`` raises — so a new term cannot fall outside the view unnoticed.
 CHAINS = {
-    "wind": {"wind", "offshore wind", "wind step-up transformers"},
+    "wind": {"wind", "wind step-up transformers"},
     "solar": {"solar", "solar step-up transformers"},
     "grid": {"grid import", "grid energy + network", "grid connection", "connection fixed",
              "grid connection fixed charges", "grid connection cable", "grid winter-peak charge",
@@ -1001,7 +997,17 @@ def apply_strategy(m, V, series, assets, strategy, islanded_uses_cf_floor, tech=
     An unconstrained LP always picks the optimal dispatch itself, so a "running
     strategy" is not an algorithm to choose between — it is a constraint set
     imposed so the penalty of that mode becomes visible.
+
+    ``flexible`` is an off-grid rule (surplus-only). With a grid connection it
+    adds nothing and the run is ``free`` (19 Nov 2026,
+    dc_architectures.strategy_for): the carbon objective already prices every
+    MWh the electrolyser imports at that half-hour's grid intensity.
     """
+    if strategy not in ("baseload", "flexible", "free"):
+        raise ValueError(f"Unknown electrolyser strategy {strategy!r}. "
+                         "Use 'baseload', 'flexible' or 'free'.")
+    if strategy == "flexible" and assets.grid:
+        strategy = "free"
     if strategy == "free" or not assets.electrolyser:
         return
     n, dt = series.n, series.dt_hours
@@ -1016,7 +1022,7 @@ def apply_strategy(m, V, series, assets, strategy, islanded_uses_cf_floor, tech=
         m.add_constraints((V["p_ely"] * dt).sum() - 0.85 * V["cap_ely"] * series.hours >= 0,
                           name="baseload_cf")
     elif strategy == "flexible":
-        if not assets.grid:
+        if not assets.grid:          # always true here: grid + flexible returned above
             # Surplus-only: the data centre gets first claim on renewable output.
             #
             # Stated over the window, not per step, and that is deliberate. The
@@ -1045,7 +1051,7 @@ def apply_strategy(m, V, series, assets, strategy, islanded_uses_cf_floor, tech=
             # constraints state it.
             lf = loss_factors(series, tech) if tech is not None else \
                 {"wind": 0.0, "solar": 0.0}
-            available = (((1.0 - lf["wind"]) * cf_w * (V["cap_wind"] + V["cap_offshore"])
+            available = (((1.0 - lf["wind"]) * cf_w * V["cap_wind"]
                           + (1.0 - lf["solar"]) * cf_s * V["cap_solar"]) * dt).sum()
             served = float((series.demand_mw * dt).sum()) - (V["unserved"] * dt).sum()
             m.add_constraints((V["p_ely"] * dt).sum() - available + served <= 0,
@@ -1251,7 +1257,7 @@ def score(q: dict, series: Series, tech: Tech) -> dict:
 # UI shows. Renewables first is not an assumption about the solver — it is the
 # only reading of a half-hour in which both renewables and imports are flowing
 # that does not imply the site curtailed its own free energy to buy some.
-SERVE_SOURCES = ("Solar PV", "Wind", "Offshore wind", "Battery", "Fuel cell",
+SERVE_SOURCES = ("Solar PV", "Wind", "Battery", "Fuel cell",
                  "Gas engines", "Grid import", "Unserved")
 
 
@@ -1265,7 +1271,7 @@ def serve_stack(df: pd.DataFrame) -> pd.DataFrame:
     solution says which one served the load and which one charged the tank.
 
     The convention here: renewables serve load first (split pro rata between
-    solar, onshore and offshore by their output in that period, so no
+    solar and wind by their output in that period, so no
     technology is privileged), then the battery, then the fuel cell, then the gas engines, then the
     grid takes the residual. Unserved demand is carried as its own band, so the
     bands always sum to demand rather than to what happened to be generated.
@@ -1276,7 +1282,7 @@ def serve_stack(df: pd.DataFrame) -> pd.DataFrame:
     stack — ``dispatch_frame`` carries those columns for anyone who wants them.
     """
     served = (df.demand - df.unserved).clip(lower=0.0)
-    ren = df.p_solar + df.p_wind + df.p_offshore
+    ren = df.p_solar + df.p_wind
     to_load = pd.concat([ren, served], axis=1).min(axis=1)
     share = to_load / ren.where(ren > 0)
 
@@ -1292,7 +1298,6 @@ def serve_stack(df: pd.DataFrame) -> pd.DataFrame:
     bands = {
         "Solar PV": (df.p_solar * share).fillna(0.0),
         "Wind": (df.p_wind * share).fillna(0.0),
-        "Offshore wind": (df.p_offshore * share).fillna(0.0),
         "Battery": batt,
         "Fuel cell": fc,
         "Gas engines": ge,
@@ -1317,7 +1322,7 @@ def dispatch_frame(V, series, tech=None) -> pd.DataFrame:
     Pass ``tech`` to have ``curtailed`` net of the step-up losses; without it
     the transformer losses count as curtailment.
     """
-    cols = ("p_wind", "p_offshore", "p_solar", "ch", "dis", "soc", "p_ely",
+    cols = ("p_wind", "p_solar", "ch", "dis", "soc", "p_ely",
             "h2_buy", "h2_buy_2", "tank", "h2_fc", "p_fc", "p_ge", "imp", "exp",
             "unserved")
     df = pd.DataFrame({k: V[k].solution.values for k in cols}, index=series.index)
@@ -1335,7 +1340,7 @@ def dispatch_frame(V, series, tech=None) -> pd.DataFrame:
         df[f"grid_gwp_per_mwh_{v}"] = np.asarray(d["gwp_per_mwh"], dtype=float)
     lf = loss_factors(series, tech) if tech is not None else {"wind": 0.0, "solar": 0.0}
     df["curtailed"] = ((1.0 - lf["wind"]) * series.cf_wind
-                       * (float(V["cap_wind"].solution) + float(V["cap_offshore"].solution))
+                       * float(V["cap_wind"].solution)
                        + (1.0 - lf["solar"]) * series.cf_solar * float(V["cap_solar"].solution)
-                       - df.p_wind - df.p_offshore - df.p_solar)
+                       - df.p_wind - df.p_solar)
     return df

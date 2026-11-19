@@ -93,3 +93,29 @@ Re-solved, islanded_h2, PEM:
 | free | min carbon | 81.2 MW at 16.9 %, 1,611.6 t/yr | unchanged (calendar floor binds) |
 | baseload | min cost | 4.8 MW, 95.7 t/yr | same design, 115.0 t/yr (+20 %) |
 | baseload | min carbon | 80.1 MW; system 46,181 t/yr | 68.2 MW, battery 200 → 364 MWh; system 46,469 t/yr (+0.6 %) |
+
+## Change of 19 Nov 2026: a one-stack floor
+
+Decided 19 Nov 2026 (docs/CODE_CHECK_FIX_PLAN.md step 3, decision D2, option B).
+The calendar floor is now **one stack per 25-year plant life**
+(`electrolysers.STACK_CALENDAR_YEARS = PLANT_LIFETIME_YEARS`), not three.
+
+**Why.** The 8.33-year floor (25 y / 3 stacks) had no source of its own: it was
+chosen so low-use electrolysers kept the charge they had before the split. The
+cost side has no such floor. NESO's capex holds the first stack, and its variable
+opex per kg ("stack replacement and water") scales replacements with output only.
+So the two sides disagreed below about 68 % utilisation. Under option B both
+sides mean the same thing: the first stack is always built, and replacements
+follow running hours (Gerloff's 50,000 h on carbon, NESO per kg on cost). Every
+number is sourced.
+
+**What it changes.** Only electrolysers running below about 6,000 h a year
+(68 %). For the islanded PEM min-carbon design above (81 MW at 17 %), the
+charge falls from 3 stacks per 25 years to about 1 (duty would give 0.7), so
+roughly 1,000 t CO2e a year (about 2.3 % of the system) comes off, and the
+min-carbon electrolyser may grow. Not yet re-solved: that is step 5 of the plan.
+
+**What it leaves out.** Calendar ageing of membranes at low use. No held source
+quantifies it. The three-stack rule is kept as a named sensitivity,
+`electrolysers.STACK_CALENDAR_YEARS_THREE_STACKS`, passed as
+`build_tech(ely_stack_calendar_years=...)`, so the paper can report both.

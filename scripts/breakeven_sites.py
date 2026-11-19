@@ -38,7 +38,7 @@ GAS = (True, False)
 
 
 def scenario(level: str, gas: bool) -> A.Scenario:
-    flags = dict(grid=level != "offgrid", wind=True, offshore_wind=False, solar=True, battery=True,
+    flags = dict(grid=level != "offgrid", wind=True, solar=True, battery=True,
                  electrolyser=True, tank=True, fuel_cell=True, buy_h2=True, buy_h2_2=False, gas_engine=gas)
     return A.Scenario(n=0, architecture="custom", label=f"break-even, {level}, {'gas' if gas else 'no gas'}",
                       assets=flags, ely_tech="PEM operation", h2_colour="green", strategy="free")

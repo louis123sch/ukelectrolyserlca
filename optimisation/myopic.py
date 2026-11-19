@@ -82,7 +82,7 @@ def dispatch(series: M.Series, tech: M.Tech, caps: dict,
     keep_b = 1.0 - tech.batt_leakage_per_hour * dt
     keep_h = 1.0 - tech.tank_leakage_per_hour * dt
 
-    cap_w = caps.get("cap_wind", 0.0) + caps.get("cap_offshore", 0.0)
+    cap_w = caps.get("cap_wind", 0.0)
     cap_s = caps.get("cap_solar", 0.0)
     cap_bp, cap_be = caps.get("cap_batt_p", 0.0), caps.get("cap_batt_e", 0.0)
     cap_ely, cap_tank = caps.get("cap_ely", 0.0), caps.get("cap_tank", 0.0)
@@ -181,7 +181,7 @@ def dispatch(series: M.Series, tech: M.Tech, caps: dict,
     return df
 
 
-CAPACITIES = ("cap_wind", "cap_offshore", "cap_solar", "cap_batt_p", "cap_batt_e",
+CAPACITIES = ("cap_wind", "cap_solar", "cap_batt_p", "cap_batt_e",
               "cap_ely", "cap_tank", "cap_fc", "cap_ge", "cap_grid")
 # Every per-step quantity the shared objective reads. A dispatch that has no
 # column for one (the merit order never exports, nor buys on a second stream)
@@ -319,7 +319,7 @@ if __name__ == "__main__":
     m, V, obj = M.build_model(series, assets, tech, objective="cost")
     M.solve(m)
     caps = {k: float(V[k].solution) for k in
-            ("cap_wind", "cap_offshore", "cap_solar", "cap_batt_p", "cap_batt_e",
+            ("cap_wind", "cap_solar", "cap_batt_p", "cap_batt_e",
              "cap_ely", "cap_tank", "cap_fc", "cap_ge", "cap_grid")}
     print("=" * 88)
     print("THE VALUE OF FORESIGHT — same build, two dispatch rules")

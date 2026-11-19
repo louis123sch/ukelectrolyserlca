@@ -130,10 +130,10 @@ foreground databases do not exist yet, the first grid build runs
 
 ### Results
 
-25 configurations, 22 of them involving hydrogen, each solved as a linear
+24 configurations, 21 of them involving hydrogen, each solved as a linear
 program that sizes nine assets *jointly* with ~8,700 hourly dispatch decisions.
 Results land in `optimisation_outputs/dc_runs/`, which is **gitignored** —
-they are regenerable, and a 25-scenario matrix is ~110 files. The results that
+they are regenerable, and a 24-scenario matrix is ~105 files. The results that
 matter are tracked: `optimisation/VALIDATION.md` and the executed outputs in
 `6.datacentre_optimiser.ipynb`, both generated from a real run. A fresh clone
 has no `dc_runs/`; run the command above once (~15 min on 8 cores) and the

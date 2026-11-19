@@ -13,7 +13,7 @@ prints its own cross-checks:
 
 | assets | module | shape |
 |---|---|---|
-| onshore wind, offshore wind, solar PV | ``renewables.py`` | per MW installed |
+| onshore wind, solar PV | ``renewables.py`` | per MW installed |
 | battery power and energy | ``battery.py`` | per MW and per MWh |
 | AE / PEM / SOEC electrolysers | ``electrolysers.py`` | per MW installed |
 | PEM fuel cell stack and BoP | ``fuel_cell.py`` | per MW, replaced on max(calendar, duty) |
@@ -96,7 +96,7 @@ def build(cost_case: str = "central") -> pd.DataFrame:
             r["capital_kgco2e_per_MW"], calendar=r["study_lifetime_years"],
             # Non-capital consumables (lubricating oil, water) ecoinvent
             # reports per kWh, not per MW - blank where capital is already
-            # full-scope (solar's default IEA basis), so wind/offshore is not
+            # full-scope (solar's default IEA basis), so wind is not
             # capital-only against a full-scope solar figure. See renewables.py.
             throughput=(r["residual_per_kWh"] * 1000.0 if r["capital_only"] else None),
             source=(f"{r['embodied_basis_label']}; DESNZ/Arup 2024 lifetime"

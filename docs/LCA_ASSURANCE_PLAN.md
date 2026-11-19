@@ -249,21 +249,21 @@ All held, on OneDrive under `DC optimiser/`:
 
 | Source | File | Machine-readable |
 |---|---|---|
-| Jasper 2026 (battery container, racks, cooling, fire suppression, container transformer) | `sources/jasper grid storage lca.xlsx` (+ pdf) | yes |
-| Voß 2025 (LFP cell) | `sources/voss supplementary materials/d5ee00415b1_suppl.txt`, two pdfs | partly |
-| Smith 2024 (utility PV, A1–A16) | `sources/smith life-cycle-inventory.md` = `optimisation/data/smith-nrel-2024-life-cycle-inventory.md` (+ pdf) | yes |
+| Jasper 2026 (battery container, racks, cooling, fire suppression, container transformer) | `reading/07 Component LCA (model inventory sources)/Batteries/Jasper 2026 - supplementary inventory.xlsx` (+ pdf) | yes |
+| Voß 2025 (LFP cell) | `reading/07 Component LCA (model inventory sources)/Batteries/Voss 2025 - supplementary/Voss 2025 - SI 1 (figure note).txt`, two pdfs | partly |
+| Smith 2024 (utility PV, A1–A16) | `reading/07 Component LCA (model inventory sources)/Solar PV/Smith 2024 - inventory transcribed from Appendix A.md` = `optimisation/data/smith-nrel-2024-life-cycle-inventory.md` (+ pdf) | yes |
 | IEA PVPS T12-33:2026 (mounting Z-PV-239, transformer Z-PV-276, station Z-PV-238) | `optimisation/data/IEA-PVPS-T12-33-2026-LCI-PV-SupplyChains.xlsx` (shipped) | yes |
-| Usai 2021 (fuel-cell BoP) | `sources/usai supplementary materials/*.pdf`, `*.xlsx` | partly |
-| Babatunde 2024 (fuel-cell stack) | `data centre reading/fuel cell/hydrogen-3005656-supplementary.pdf` | no |
-| Gerloff 2021 (AE / PEM / SOEC bills) | `sources/gerlof electrolysis lca bop 200.docx`, pdf; the user's SimaPro exports in `Documents\brightway\*.XLSX` | partly |
+| Usai 2021 (fuel-cell BoP) | `reading/07 Component LCA (model inventory sources)/Fuel cells/Usai 2021 - supplementary/*.pdf`, `*.xlsx` | partly |
+| Babatunde 2024 (fuel-cell stack) | `reading/06 Hydrogen and fuel cell LCA/Babatunde 2024 - supplementary.pdf` | no |
+| Gerloff 2021 (AE / PEM / SOEC bills) | `reading/07 Component LCA (model inventory sources)/Electrolysers/Gerloff 2021 - inventory notes (BoP).docx`, pdf; the user's SimaPro exports in `Documents\brightway\*.XLSX` | partly |
 | Hermesmann & Müller 2022 (SMR, SMR-CCS, pyrolysis) | SimaPro exports `smr ccs.XLSX`, `ccs.XLSX`, …; paper | partly |
-| Zhang 2025 (facility) | `data centre reading/zhang virginia dat/*-mmc1.xlsx` (S1 inventory), mmc2, mmc3 | yes |
-| Gandiglio 2022 (tank) | `sources/gangliano fuel cell hydrogen tank*.pdf` | no |
-| Leng 2026 (wind step-ups, grid intake; S1 materials, S2 transport, S3 civils) | `sources/Leng supplementary.pdf`, paper | no |
-| Mehmeti 2018 (SOEC heat) | `sources/mehmeti soec heat.xlsx`, pdf | yes |
-| Vestas V162 (wind parts fraction, cut-off wording), Teffera 2021 (switchgear masses) | `sources/vestas lca 6.2MW wind.pdf`, `sources/teffera ethiopia wind farm LCA.pdf` | no |
+| Zhang 2025 (facility) | `reading/02 Data centre LCA, demand and flexibility/Zhang 2025 - LCA of a Virginia data centre (with data)/Zhang 2025 - supplementary S1.xlsx` (S1 inventory), S2, S3 | yes |
+| Gandiglio 2022 (tank) | `reading/07 Component LCA (model inventory sources)/Hydrogen storage/Gandiglio 2022 - *.pdf` | no |
+| Leng 2026 (wind step-ups, grid intake; S1 materials, S2 transport, S3 civils) | `reading/07 Component LCA (model inventory sources)/Wind/Leng 2026 - supplementary.pdf`, paper | no |
+| Mehmeti 2018 (SOEC heat) | `reading/07 Component LCA (model inventory sources)/Electrolysers/Mehmeti 2018 - supplementary inventory.xlsx`, pdf | yes |
+| Vestas V162 (wind parts fraction, cut-off wording), Teffera 2021 (switchgear masses) | `reading/07 Component LCA (model inventory sources)/Wind/Mali 2023 - Vestas LCA of V162-6.2 MW wind plant.pdf`, `reading/07 Component LCA (model inventory sources)/Wind/Teffera 2021 - LCA of wind farms in Ethiopia.pdf` | no |
 
-- [ ] `dc_config.SOURCE_DOCS_DIR` (default the OneDrive `DC optimiser/sources`
+- [ ] `dc_config.SOURCE_DOCS_DIR` (default the OneDrive `DC optimiser/reading/07 Component LCA (model inventory sources)`
       folder, overridable by environment variable). Tests and scripts that
       read a document skip when it is absent, and say so.
 - [ ] Decision for the user: copy the machine-readable files that may be

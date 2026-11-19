@@ -210,7 +210,7 @@ ASSUMED = ("stepup_transformers.TX_SITE_COLLECTION_KV",
 
 # The generators, per MW (MWp) of capacity; and the two containerised assets,
 # per MW of inverter rating (cap_batt_p, cap_fc), which share one unit.
-TECHNOLOGIES = ("onshore_wind", "offshore_wind", "solar_pv", "battery", "fuel_cell")
+TECHNOLOGIES = ("onshore_wind", "solar_pv", "battery", "fuel_cell")
 
 _MEMO: dict | None = None
 
@@ -402,7 +402,6 @@ def decompose(refresh: bool = False) -> dict:
         # each over the asset's own life (life_years=).
         "per_MW_year": {
             "onshore_wind": wind_per_mw / life,
-            "offshore_wind": wind_per_mw / life,
             "solar_pv": (solar_per_mwp / life + solar_repl_per_year if SOLAR_BASIS == "iea_pvps_2026"
                          else legacy_per_mva * SOLAR_MVA_PER_MWP / life),
             "battery": container_per_mw / life,
@@ -419,7 +418,7 @@ def kgco2e_per_mw_year(technology: str, refresh: bool = False,
                        life_years: float | None = None) -> float:
     """Annual embodied burden per unit of that technology's capacity variable.
 
-    ``onshore_wind`` and ``offshore_wind`` are per MW of nameplate and carry the
+    ``onshore_wind`` is per MW of nameplate and carry the
     turbine step-ups Leng measured. ``solar_pv`` is per MWp (DC) and carries
     IEA PVPS T12-33:2026's 2.5 MVA inverter-station units (``SOLAR_BASIS``);
     the legacy plant-rated unit is kept only to reproduce old runs.
@@ -471,7 +470,7 @@ def kgco2e_per_mw_year(technology: str, refresh: bool = False,
 
 def _trace_units(technology: str, d: dict) -> list:
     """Record the scored unit(s) behind one technology's step-up; their keys."""
-    if technology in ("onshore_wind", "offshore_wind"):
+    if technology == "onshore_wind":
         ref, w = T.activity(TRANSFORMER_DB, WIND_CODE), d["wind"]
         T.step("tx.wind.unit_per_MW", w["kgco2e_per_MW"], "kg CO2e per MW",
                "One turbine's step-up per MW of turbine, with its pad (Leng et al. 2026)",

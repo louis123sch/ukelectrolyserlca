@@ -345,7 +345,7 @@ def _config(tmp_path, **over):
         "scenario": {"n": 0, "architecture": "custom", "label": "grid + PEM + tank + FC",
                      "ely_tech": "PEM operation", "h2_colour": None, "strategy": "free",
                      "tank_design": None, "note": "",
-                     "assets": {"grid": True, "wind": False, "offshore_wind": False,
+                     "assets": {"grid": True, "wind": False,
                                 "solar": False, "battery": False, "electrolyser": True,
                                 "tank": True, "fuel_cell": True, "buy_h2": False}},
         "site": {"key": "r10_52.8500_1.0400", "name": "North Norfolk",

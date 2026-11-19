@@ -2,8 +2,8 @@
 Generation cost and technical assumptions — DESNZ/Arup 2024.
 =============================================================================
 
-Single source of truth for onshore wind, offshore wind and solar PV costs,
-transcribed from the two DESNZ/Arup "Cost of Electricity Report Update 2024"
+Single source of truth for onshore wind and solar PV costs,
+transcribed from the DESNZ/Arup "Cost of Electricity Report Update 2024"
 reports. Every value transcribed here is in **2023 real prices**; the coefficient
 ``annual_cost`` hands the LP is in 2025 pounds (``price_base``).
 
@@ -16,18 +16,10 @@ onshore wind, solar PV
     Onshore wind = Table 3 (p.6); Solar PV (>5MW) = Table 4 (p.7);
     LCOE = Table 5 (p.8).
 
-offshore wind
-    DESNZ / Ove Arup & Partners, "Renewable Energy Generation Cost and
-    Technical Assumptions - Offshore Wind, Cost of Electricity Report Update
-    2024", Final, 24 July 2025. Table 3 (p.6); LCOE = Table 4 (p.7).
-
 Notes on the numbers
 --------------------
 * Solar PV costs are per **kWp / MWp** (peak DC), not per MW AC. Anything that
   converts a PV build decision into MW AC has to apply its own DC:AC ratio.
-* Offshore wind infrastructure cost **excludes** OFTO transmission assets;
-  those are recovered through TNUoS inside the opex line instead (report
-  footnote 6). Do not add a separate transmission capex on top.
 * The report's hurdle rates (5.8 / 6.2 / 5.0 %, pre-tax real) are kept for
   its LCOE cross-check. The coefficient itself is annualised at CEPA's 2025
   rates for DESNZ (``CEPA_HURDLE_RATE``), the one method the study applies to
@@ -60,9 +52,6 @@ ONSHORE_SOLAR_SOURCE = (
     "DESNZ/Arup 2024 Onshore Wind and Solar PV cost report (ref 299867-00, "
     "Final 14 July 2025)"
 )
-OFFSHORE_SOURCE = (
-    "DESNZ/Arup 2024 Offshore Wind cost report (Final 24 July 2025)"
-)
 
 # Set to a number to use one project-wide discount rate for every technology
 # instead of the rates below. None = use CEPA's.
@@ -72,7 +61,7 @@ DISCOUNT_RATE_OVERRIDE = None
 # CEPA for DESNZ, hurdle rate estimates for electricity sector technologies
 # (2025), Table E.1, pre-tax real, 50 % gearing. The report's own hurdle rates
 # (5.8 / 6.2 / 5.0 %) are kept for the LCOE cross-check only.
-CEPA_HURDLE_RATE = {"onshore_wind": 0.076, "solar_pv": 0.076, "offshore_wind": 0.089}
+CEPA_HURDLE_RATE = {"onshore_wind": 0.076, "solar_pv": 0.076}
 
 
 # (parameter, unit, low, central, high)
@@ -95,23 +84,6 @@ ONSHORE_WIND = [
     # are the published range, central the average. §5.8.1 and §5.8.2.
     ("land",                  "kGBP_per_MW_year",   9.0,   19.5,    36.0),
     ("business_rates",        "kGBP_per_MW_year",  10.0,   12.0,    24.0),
-]
-
-OFFSHORE_WIND = [
-    ("predevelopment_capex",  "GBP_per_kW",       104.0,  216.0,   308.0),
-    ("construction_capex",    "GBP_per_kW",      2415.0, 2823.0,  3101.0),
-    ("infrastructure_capex",  "GBP_per_kW",       802.0,  937.0,  1030.0),
-    ("total_capex",           "GBP_per_kW",      3321.0, 3976.0,  4439.0),
-    ("insurance",             "kGBP_per_MW_year",   8.0,    8.6,     9.7),
-    ("connection_and_uos",    "kGBP_per_MW_year",  35.3,   83.4,   132.9),
-    ("om",                    "kGBP_per_MW_year",  30.5,   46.5,    64.6),
-    ("total_opex",            "kGBP_per_MW_year",  73.7,  138.5,   207.2),
-    ("net_load_factor",       "fraction",         0.460,  0.505,   0.561),
-    ("operating_lifetime",    "years",             35.0,   35.0,    35.0),
-    ("hurdle_rate",           "fraction",         0.062,  0.062,   0.062),
-    ("predevelopment_period", "years",              7.0,    7.0,    15.0),
-    ("construction_period",   "years",              4.0,    5.0,     5.0),
-    ("reported_lcoe",         "GBP_per_MWh",       55.4,   88.5,   124.0),
 ]
 
 # Per kWp / MWp of peak DC capacity, not MW AC.
@@ -145,16 +117,12 @@ SOLAR_ACRES_PER_MWP = 4.0
 PRICE_YEAR = 2023
 
 # Plant behind the data centre's meter, with export refused, pays no generator's
-# network charges (OBJECTIVE_AUDIT.md §3.1). Offshore keeps its line: its export
-# system is recovered through it (report footnote 6).
+# network charges (OBJECTIVE_AUDIT.md §3.1).
 BEHIND_THE_METER = ("onshore_wind", "solar_pv")
 
 TECHNOLOGIES = {
     "onshore_wind":  (ONSHORE_WIND,  ONSHORE_SOLAR_SOURCE,
                       "Table 3, p.6"),
-    "offshore_wind": (OFFSHORE_WIND, OFFSHORE_SOURCE,
-                      "Table 3, p.6; infrastructure excludes OFTO "
-                      "(recovered via TNUoS in opex)"),
     "solar_pv":      (SOLAR_PV,      ONSHORE_SOLAR_SOURCE,
                       "Table 4, p.7; >5MW; per kWp/MWp peak DC"),
 }
@@ -209,8 +177,7 @@ def _value(params, parameter, case):
 GENERATOR_CONNECTION_SHARE = {"onshore_wind": 0.05, "solar_pv": 0.12}
 
 INVERSE_CASE = {"low": "high", "central": "central", "high": "low"}
-SOURCE_KEY = {"onshore_wind": "desnz_arup_2024_onshore_solar", "solar_pv": "desnz_arup_2024_onshore_solar",
-              "offshore_wind": "desnz_arup_2024_offshore"}
+SOURCE_KEY = {"onshore_wind": "desnz_arup_2024_onshore_solar", "solar_pv": "desnz_arup_2024_onshore_solar"}
 
 
 def annual_cost(tech: str, case: str) -> dict:
@@ -248,8 +215,7 @@ def annual_cost(tech: str, case: str) -> dict:
     crf = T.cost(f"cost.{tech}.crf", capital_recovery_factor(rate, life), "per year",
                  "Capital recovery factor: the yearly repayment of £1 over the life at the rate",
                  uses=[f"cost.{tech}.discount_rate", f"cost.{tech}.lifetime_years"])
-    # Onshore and solar only: it brings them within 1 % of the report's LCOE, and
-    # takes offshore (out of scope, already 7 % above it) further away.
+    # It brings onshore wind and solar within 1 % of the report's LCOE.
     finance = 1.0
     finance_uses = []
     build_years = _value(params, "construction_period", case)

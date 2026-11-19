@@ -169,12 +169,25 @@ PLANT_LIFETIME_YEARS = 25.0
 # Gerloff's unit is a balance of plant plus three stacks for 20 years at 8,000 h/yr,
 # each stack good for "50,000 h or more" (§2.1.2). The optimiser charges the plant
 # once over PLANT_LIFETIME_YEARS and the stacks as max(calendar, duty) replacement
-# units, the fuel cell's rule: the calendar floor keeps today's three stacks per
-# 25-year plant (so nothing below ~68 % utilisation moves), and the duty term adds
-# stacks for a hard-run electrolyser.
+# units, the fuel cell's rule, and the duty term adds stacks for a hard-run
+# electrolyser.
+#
+# The calendar floor is one stack per plant life (19 Nov 2026, user: option B of
+# docs/CODE_CHECK_FIX_PLAN.md step 3; docs/ELECTROLYSER_STACKS.md). The first stack
+# is always built, and NESO's capex, which the cost side charges, holds exactly
+# that one stack; replacements then follow running hours on both sides (NESO's
+# variable opex per kg on cost, Gerloff's 50,000 h on carbon). From 26 Oct to
+# 19 Nov the floor was three stacks per 25 years (25 / 3 = 8.33 y), chosen so
+# low-use electrolysers kept the charge they had before the split. That number
+# had no source of its own and the cost side had no such floor, so the two sides
+# disagreed below ~68 % utilisation. It is kept as a named sensitivity,
+# STACK_CALENDAR_YEARS_THREE_STACKS (build_tech(ely_stack_calendar_years=...)).
+# Not covered by any held source: calendar ageing of membranes at low use.
 STACK_DUTY_HOURS = 50_000.0          # TRANSCRIBED - Gerloff 2021 §2.1.2, "50,000 h or more"
 STACKS_PER_PLANT_LIFE = 3            # TRANSCRIBED - Gerloff §2.1.2-2.1.3 (hydrogen.STACKS_PER_UNIT_LIFE)
-STACK_CALENDAR_YEARS = PLANT_LIFETIME_YEARS / STACKS_PER_PLANT_LIFE   # DERIVED - the floor: today's 3 per 25 y
+STACK_CALENDAR_YEARS = PLANT_LIFETIME_YEARS   # DERIVED - the floor: the first stack, one per plant life
+# Option A, the 26 Oct - 19 Nov rule, for the sensitivity only.
+STACK_CALENDAR_YEARS_THREE_STACKS = PLANT_LIFETIME_YEARS / STACKS_PER_PLANT_LIFE   # ASSUMED - 8.33 y
 
 HOURS_PER_YEAR = 8760.0
 CACHE_PATH = OUT_DIR / "electrolyser_decomposition_cache.json"

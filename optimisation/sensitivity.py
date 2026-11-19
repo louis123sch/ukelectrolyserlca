@@ -180,7 +180,7 @@ def prepare(case: Case, **series_kwargs):
                                   **{**case.series_kwargs, **series_kwargs})
     if case.resample_hours:
         series = I.resample(series, case.resample_hours)
-    assets = A.architecture(case.architecture, offshore=site.offshore_wind,
+    assets = A.architecture(case.architecture,
                             grid_limit_mw=meta["connection_limit_mw"],
                             grid_floor_mw=meta.get("connection_floor_mw", 0.0), flags=case.flags)
     if case.h2_colour is None and assets.buy_h2:

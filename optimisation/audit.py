@@ -81,7 +81,7 @@ DUTY_VIA: dict[str, tuple[str, ...]] = {
 
 # Capacities whose flow the model bounds *directly* (flow <= capacity), so
 # capacity above the peak flow is genuine slack. Deliberately excludes wind,
-# solar and offshore: those are bounded by cf[t] x capacity, so a peak far below
+# and solar: those are bounded by cf[t] x capacity, so a peak far below
 # the nameplate is the capacity factor doing its job, not padding.
 DIRECT_BOUND: dict[str, tuple[str, ...]] = {
     "cap_grid": ("imp",),
@@ -102,7 +102,7 @@ STOCK_BOUND: dict[str, str] = {
 # reasonably ignore them.
 NOT_ASSETS = {"fc_bop_units", "fc_stack_units", "ely_stack_units", "ge_units", "soc", "tank",
               "exp", "imp", "ch", "dis", "h2_fc",
-              "p_wind", "p_offshore", "p_solar", "p_ely", "p_fc", "p_ge"}
+              "p_wind", "p_solar", "p_ely", "p_fc", "p_ge"}
 
 # Streams that are neither kit nor dispatch of kit, but are still something the
 # site *gets* — energy or fuel from outside, or demand it fails to meet. Each
@@ -420,7 +420,7 @@ def check_lifetime_agreement():
     emb = ren.apply_case(ren.decompose_all(), "central").set_index("technology")
     ann = tc.annualised_table()
     pairs = []
-    for asset in ("onshore_wind", "offshore_wind", "solar_pv"):
+    for asset in ("onshore_wind", "solar_pv"):
         cost_life = float(ann[(ann.asset == asset) & (ann.case == "central")]
                           .iloc[0].lifetime_years)
         pairs.append((asset, cost_life, float(emb.loc[asset].study_lifetime_years)))

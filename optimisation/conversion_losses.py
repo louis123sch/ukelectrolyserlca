@@ -134,7 +134,7 @@ def stepup(technology: str) -> dict:
     power when the unit runs at its full MW rating. ``dc_model`` multiplies it
     by the profile's x_eff.
     """
-    if technology in ("onshore_wind", "offshore_wind"):
+    if technology == "onshore_wind":
         kva, mva_per_mw = WIND_UNIT_KVA, WIND_MVA_PER_MW
     elif technology == "solar_pv":
         kva, mva_per_mw = SOLAR_UNIT_KVA, SOLAR_MVA_PER_MWP

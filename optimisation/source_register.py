@@ -49,11 +49,6 @@ _FIXED = [
            "Cost of Electricity Report Update 2024 (ref 299867-00)",
            "DESNZ / Ove Arup & Partners", "Final, 14 July 2025", "document",
            basis="real 2023 £", note="Onshore wind Table 3 (p.6); solar PV >5 MW Table 4 (p.7); LCOE Table 5 (p.8)"),
-    Source("desnz_arup_2024_offshore",
-           "Renewable Energy Generation Cost and Technical Assumptions — Offshore Wind, "
-           "Cost of Electricity Report Update 2024",
-           "DESNZ / Ove Arup & Partners", "Final, 24 July 2025", "document",
-           basis="real 2023 £", note="Table 3 (p.6); infrastructure excludes offshore transmission assets"),
     # --- battery -----------------------------------------------------------
     Source("modo_bess_assumptions",
            "BESS Cost and Technical Assumptions (GB model assumptions)", "Modo Energy", "July 2026",

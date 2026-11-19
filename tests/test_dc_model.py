@@ -48,7 +48,7 @@ def tech():
     # synthetic solves exercise the magnitudes the study actually uses. Network
     # charges and bought hydrogen are the synthetic ones.
     return M.Tech(
-        gwp_wind=19_244, gwp_offshore=26_408, gwp_solar=23_561,
+        gwp_wind=19_244, gwp_solar=23_561,
         gwp_batt_p=2_124, gwp_batt_e=7_241,
         gwp_ely=10_435, gwp_tank=63.8,
         gwp_fc_bop_per_mw=44_325, gwp_fc_stack_per_mw=97_431,
@@ -59,7 +59,7 @@ def tech():
         cost_fc_stack_per_mw=308_698.0, cost_fc_bop_per_mw=1_486_089.0,
         fc_bop_calendar_years=20.0, fc_bop_duty_hours=80_000.0,
         fc_stack_calendar_years=10.0, fc_stack_duty_hours=30_000.0,
-        cost_wind=147_073, cost_offshore=419_201, cost_solar=48_368,
+        cost_wind=147_073, cost_solar=48_368,
         cost_batt_p=34_903, cost_batt_e=11_634,
         cost_ely=212_511, cost_tank=64.6, cost_fc=99_842,
         cost_grid_per_mw_year=40_949, cost_grid_fixed_per_year=271_192,
@@ -94,7 +94,7 @@ ALL = M.Assets(grid=True, wind=True, solar=True, battery=True, electrolyser=True
 def test_energy_balance_closes(series, tech):
     V, _ = _solve(series, tech, ALL, objective="cost")
     g = lambda k: V[k].solution.values
-    residual = (g("p_wind") + g("p_offshore") + g("p_solar") + g("dis") + g("p_fc")
+    residual = (g("p_wind") + g("p_solar") + g("dis") + g("p_fc")
                 + g("imp") + g("unserved") - g("ch") - g("p_ely") - g("exp")
                 - series.demand_mw)
     assert np.abs(residual).max() < 1e-6, f"max residual {np.abs(residual).max():.2e}"
@@ -292,8 +292,7 @@ def test_surplus_only_caps_the_electrolyser_at_leftover_generation(series, tech)
     # Available, not dispatched — curtailment is implicit, so measuring against
     # p_wind would let the constraint be satisfied by generating less.
     available = (series.cf_wind * float(V["cap_wind"].solution)
-                 + series.cf_solar * float(V["cap_solar"].solution)
-                 + series.cf_wind * float(V["cap_offshore"].solution)).sum() * DT
+                 + series.cf_solar * float(V["cap_solar"].solution)).sum() * DT
     served = series.demand_mw.sum() * DT - V["unserved"].solution.values.sum() * DT
     assert ely <= available - served + 1e-6, (
         f"electrolyser took {ely:.3f} MWh against {available - served:.3f} MWh "
@@ -312,6 +311,46 @@ def test_surplus_only_stays_feasible_when_generation_falls_short(series, tech):
 def test_unknown_strategy_is_refused(series, tech):
     with pytest.raises(ValueError, match="Unknown electrolyser strategy"):
         _solve(series, tech, ALL, objective="cost", ely_strategy="whatever")
+
+
+def test_grid_flexible_runs_as_free():
+    """With a grid, flexible is free (19 Nov 2026, CODE_CHECK_FIX_PLAN step 4)."""
+    from optimisation import dc_architectures as A
+    assert A.strategy_for("flexible", grid=True) == "free"
+    assert A.strategy_for("flexible", grid=False) == "flexible"
+    assert A.strategy_for("baseload", grid=True) == "baseload"
+    s = A.Scenario(n=99, architecture="grid_h2", label="x",
+                   ely_tech="PEM operation", strategy="flexible")
+    assert s.strategy == "free" and "runs as free" in s.note
+    custom = A.Scenario(n=98, architecture="custom", label="y", strategy="flexible",
+                        assets={"grid": True, "electrolyser": True, "tank": True, "fuel_cell": True})
+    assert custom.strategy == "free"
+    off = A.Scenario(n=97, architecture="res_h2", label="z",
+                     ely_tech="PEM operation", strategy="flexible")
+    assert off.strategy == "flexible"
+
+
+def test_scenario_list_has_no_grid_flexible_rows():
+    from optimisation import dc_architectures as A
+    S = A.core_matrix()
+    assert len(S) == 24
+    ns = [s.n for s in S]
+    assert len(set(ns)) == len(ns) and 5 not in ns and max(ns) == 25   # numbers never shift
+    for s in S:
+        grid = A.architecture(s.architecture, flags=s.assets).grid
+        assert not (grid and s.strategy == "flexible"), s.key
+    # the old grid + flexible rows (AE, SOEC, SOEC electric boiler) are now free
+    by_n = {s.n: s for s in S}
+    assert by_n[7].strategy == by_n[9].strategy == by_n[23].strategy == "free"
+    assert by_n[20].strategy == "free" and by_n[20].ely_tech == "PEM operation"
+
+
+def test_grid_flexible_solves_exactly_as_free(series, tech):
+    a = M.Assets(grid=True, wind=True, solar=True, electrolyser=True, tank=True,
+                 fuel_cell=True, grid_limit_mw=None)
+    _, flex = _solve(series, tech, a, objective="cost", ely_strategy="flexible")
+    _, free = _solve(series, tech, a, objective="cost", ely_strategy="free")
+    assert M.totals(flex)["cost_GBP_per_year"] == pytest.approx(M.totals(free)["cost_GBP_per_year"], rel=1e-9)
 
 
 # =============================================================================
@@ -393,11 +432,15 @@ def test_stack_calendar_life_is_not_the_horizon(series, tech):
         M.totals(b)["gwp_kgco2e_per_year"], rel=1e-9)
 
 
-def test_offshore_wind_is_out_of_scope():
-    """All sites are on land; there is no offshore profile to run it on."""
+def test_offshore_wind_is_not_a_buildable_asset():
+    """Removed 19 Nov 2026: all sites are on land (CODE_CHECK_FIX_PLAN step 2)."""
+    import dataclasses
     from optimisation import dc_architectures as A
-    assert not A.architecture("res_h2_grid", offshore=True).offshore_wind
-    assert not A.custom({"offshore_wind": True, "grid": True}, offshore=True).offshore_wind
+    assert not any("offshore" in f.name for f in dataclasses.fields(M.Assets))
+    assert not any("offshore" in f.name for f in dataclasses.fields(M.Tech))
+    assert not any("offshore" in k for k in A.ASSET_FLAGS)
+    # an old saved flag is ignored, not an error
+    assert A.custom({"offshore_wind": True, "grid": True}) == A.custom({"grid": True})
 
 
 def test_export_is_refused_until_it_is_modelled(series, tech):
@@ -497,7 +540,7 @@ def test_transformer_term_is_per_year_whatever_the_window(tech):
         assert scale > 1.5, "window is not shorter than a year, so nothing is tested"
 
         V, obj = _solve(s, t2, assets, objective="gwp")
-        cap_w = float(V["cap_wind"].solution) + float(V["cap_offshore"].solution)
+        cap_w = float(V["cap_wind"].solution)
         cap_s = float(V["cap_solar"].solution)
         e = M.contributions(V, obj, s, t2, assets)["gwp_embodied"]
         row = e["wind step-up transformers"] + e["solar step-up transformers"]
@@ -543,7 +586,7 @@ def test_step_up_transformers_are_charged_on_capacity(series, tech):
 
     e = M.contributions(V, obj, series, t2, assets)["gwp_embodied"]
     row = e["wind step-up transformers"] + e["solar step-up transformers"]
-    expected = (230.2 * (built + float(V["cap_offshore"].solution))
+    expected = (230.2 * built
                 + 184.2 * float(V["cap_solar"].solution))
     assert abs(row - expected) < 1e-6
 
@@ -884,7 +927,7 @@ def test_losses_close_the_balance_and_bind_availability(series, tech):
     lf = M.loss_factors(series, t)
     assert 0 < lf["wind"] < 0.01 and 0 < lf["solar"] < 0.01 and 0 < lf["grid"] < 0.01
     assert 0 < lf["battery"] < 0.01 and 0 < lf["fc"] < 0.01
-    noload = (t.loss_wind_noload * (c("cap_wind") + c("cap_offshore"))
+    noload = (t.loss_wind_noload * c("cap_wind")
               + t.loss_solar_noload * c("cap_solar") + t.loss_grid_noload * c("cap_grid")
               + t.loss_batt_noload * c("cap_batt_p") + t.loss_fc_noload * c("cap_fc"))
     residual = (g("p_wind") + g("p_solar") + (1 - lf["battery"]) * g("dis") + (1 - lf["fc"]) * g("p_fc")
@@ -918,7 +961,7 @@ def test_container_step_ups_are_charged_on_inverter_capacity(series, tech):
     cap_fc, annual, not scaled by the window, and inside their chains."""
     import dataclasses
     t = dataclasses.replace(tech, gwp_tx_batt_per_mw=800.0, gwp_tx_fc_per_mw=600.0)
-    q = {k: 0.0 for k in ("cap_wind", "cap_offshore", "cap_solar", "cap_batt_e", "cap_ely",
+    q = {k: 0.0 for k in ("cap_wind", "cap_solar", "cap_batt_e", "cap_ely",
                           "cap_tank", "fc_stack_units", "fc_bop_units", "cap_grid", "cap_ge", "ge_units")}
     q.update(cap_batt_p=3.0, cap_fc=2.5)
     for k in ("imp", "h2_buy", "h2_buy_2", "p_ely", "p_fc", "p_ge", "unserved", "tank", "exp"):
@@ -943,7 +986,7 @@ def test_chains_cover_every_term_and_sum_to_the_totals(series, tech):
     flat_c = sum(sum(c[g].values()) for g in ("cost_capital", "cost_operational"))
     assert sum(sum(d.values()) for d in c["cost_chains"].values()) == pytest.approx(flat_c, rel=1e-12)
     # the wind chain holds the turbine and its step-up, nothing else
-    assert set(c["gwp_chains"]["wind"]) == {"wind", "offshore wind", "wind step-up transformers"}
+    assert set(c["gwp_chains"]["wind"]) == {"wind", "wind step-up transformers"}
     with pytest.raises(KeyError):
         M.chains({"gwp_embodied": {"a new term": 1.0}}, "gwp")
 
@@ -976,15 +1019,38 @@ def test_electrolyser_stack_units_take_the_binding_limit(series, tech, strategy,
     assert (duty > calendar) == (binding == "duty")
 
 
-def test_electrolyser_calendar_floor_is_the_old_whole_unit_charge(series, tech):
-    """Below ~68 % utilisation the split charges exactly the unit over 25 years, as before."""
-    V, t = _solve_ely(series, tech, "free")
+def test_electrolyser_stack_floor_is_one_stack_per_plant_life():
+    """One-stack floor (19 Nov 2026, CODE_CHECK_FIX_PLAN step 3, option B).
+
+    At 10 % utilisation the duty term is 0.10 x 8,760 x 25 / 50,000 = 0.44 stacks
+    in 25 years, so the floor binds: one stack, the first one, which NESO's capex
+    also holds on the cost side. At 85 % the duty term binds: about 3.7 stacks.
+    """
+    from optimisation import electrolysers as ely
+    assert ely.STACK_CALENDAR_YEARS == ely.PLANT_LIFETIME_YEARS == 25.0
+    assert ely.STACK_CALENDAR_YEARS_THREE_STACKS == pytest.approx(25.0 / 3.0)
+    assert M.Tech.__dataclass_fields__["ely_stack_calendar_years"].default == 25.0
+
+    def stacks_per_life(utilisation):
+        per_year = max(1.0 / ely.STACK_CALENDAR_YEARS,
+                       utilisation * 8760.0 / ely.STACK_DUTY_HOURS)
+        return per_year * ely.PLANT_LIFETIME_YEARS
+    assert stacks_per_life(0.10) == pytest.approx(1.0)
+    assert stacks_per_life(0.85) == pytest.approx(0.85 * 8760 * 25 / 50_000)
+    assert stacks_per_life(0.85) == pytest.approx(3.72, abs=0.01)
+
+
+def test_electrolyser_one_stack_floor_in_the_model(series, tech):
+    """The LP's stack units are max(cap / 25 years, MWh / 50,000 h)."""
+    from dataclasses import replace
+    t = replace(tech, **{**ELY_STACK, "ely_stack_calendar_years": 25.0})
+    m, V, _ = M.build_model(series, ELY_ASSETS, t, objective="gwp", ely_strategy="free")
+    m.add_constraints(V["cap_ely"] >= 1.0, name="force_ely")
+    M.solve(m)
     cap = float(V["cap_ely"].solution)
-    q = M.solution_quantities(V)
-    terms = M.score(q, series, t)["gwp_embodied"]
-    whole = (t.gwp_ely + t.gwp_ely_stack_per_mw / t.ely_stack_calendar_years) * cap
-    assert terms["electrolyser"] + terms["electrolyser stack replacements"] == pytest.approx(whole, rel=1e-6)
-    assert t.gwp_ely + t.gwp_ely_stack_per_mw * 3 / 25.0 == pytest.approx(19_847.1, rel=1e-4)
+    mwh = V["p_ely"].solution.values.sum() * DT * series.annual_scale
+    u = float(V["ely_stack_units"].solution)
+    assert u == pytest.approx(max(cap / 25.0, mwh / 50_000.0), rel=1e-6)
 
 
 def test_baseload_electrolyser_pays_for_its_extra_stacks(series, tech):

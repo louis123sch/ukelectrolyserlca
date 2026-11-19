@@ -629,8 +629,6 @@ def build(run=None):
                 chain_nodes[chain] = gr.add(f"chain:{chain}", kind="chain", name=chain.capitalize())
                 gr.link(lp_root, chain_nodes[chain])
             note = None
-            if key == "offshore wind" and not dc_architectures.OFFSHORE_IN_SCOPE:
-                note = "dc_architectures.OFFSHORE_IN_SCOPE is False: cap_offshore is held at zero."
             amounts = {} if label else {pt: v["terms"][key] for pt, v in points.items() if key in v["terms"]}
             gr.add(tid, kind="term", name=name, key=key, side=t["side"], expr=t["expr"],
                    variables=t["vars"], variant=label or None, note=note,

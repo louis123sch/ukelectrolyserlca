@@ -194,7 +194,7 @@ def test_coefficient_table_covers_every_optimiser_asset():
     _cached(electrolysers); _cached(fuel_cell); _cached(h2_storage)
     assets = set(coefficients.build()["asset"])
     required = {
-        "onshore_wind", "offshore_wind", "solar_pv",
+        "onshore_wind", "solar_pv",
         "battery_power", "battery_energy",
         "electrolyser_ae", "electrolyser_pem", "electrolyser_soec",
         "fuel_cell_bop", "fuel_cell_stack", "gas_engine",
@@ -336,7 +336,7 @@ def test_cost_figures_on_uk_government_sources_are_pinned():
 def test_discount_rates_are_cepa_s_on_every_asset():
     """CEPA for DESNZ (2025), Table E.1, on every asset the study builds."""
     from optimisation import battery, dc_inputs, h2_capex as hc, tech_costs as tc
-    assert tc.CEPA_HURDLE_RATE == {"onshore_wind": 0.076, "solar_pv": 0.076, "offshore_wind": 0.089}
+    assert tc.CEPA_HURDLE_RATE == {"onshore_wind": 0.076, "solar_pv": 0.076}
     assert tc.annual_cost("onshore_wind", "central")["discount_rate"] == 0.076
     assert battery.WACC_REAL == 0.089
     assert dc_inputs.DISCOUNT_RATE == 0.101
@@ -386,10 +386,6 @@ def test_generation_scope_land_rates_in_own_network_charges_out():
     expected = (s["annualised_capex_GBP_per_MW_year"]
                 + (9.3 - 1.6 + 1.0 * 4.0 + 1.8) * 1000.0) * P.factor(2023)
     assert s["total_annual_cost_GBP_per_MW_year"] == pytest.approx(expected)
-    # offshore keeps its line: its export system is recovered through it
-    o = tc.annual_cost("offshore_wind", "central")
-    assert o["total_annual_cost_GBP_per_MW_year"] == pytest.approx(
-        (o["annualised_capex_GBP_per_MW_year"] + 138.5 * 1000.0) * P.factor(2023))
 
 
 def test_tank_usable_fraction_follows_the_design():

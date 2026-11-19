@@ -43,11 +43,11 @@ All three technologies are **transcribed**, real 2023 prices as published.
 |---|---|
 | Onshore wind | DESNZ / Ove Arup & Partners, *Renewable Energy Generation Cost and Technical Assumptions — Onshore Wind and Solar PV, Cost of Electricity Report Update 2024*, ref 299867-00, Final, 14 July 2025. **Table 3, p.6** |
 | Solar PV (>5 MW) | Same report, **Table 4, p.7**. Costs are per **kWp DC**, not kW AC |
-| Offshore wind | DESNZ / Ove Arup & Partners, *…— Offshore Wind, Cost of Electricity Report Update 2024*, Final, 24 July 2025. **Table 3, p.6**. Infrastructure **excludes** OFTO transmission, recovered via TNUoS inside opex |
-| LCOE cross-check | Onshore/solar **Table 5, p.8**; offshore **Table 4, p.7** |
+| LCOE cross-check | Onshore/solar **Table 5, p.8** |
 
-Hurdle rates are each report's own pre-tax real figure — onshore 5.8 %,
-offshore 6.2 %, solar 5.0 % — not a single project WACC.
+Hurdle rates are the report's own pre-tax real figure — onshore 5.8 %,
+solar 5.0 % — not a single project WACC. (Offshore wind was removed from the
+model on 19 Nov 2026; every site is on land.)
 
 **Verification built in.** `check_against_price_outputs()` asserts the onshore
 wind rows still match the independent transcription the retired `5.prices.ipynb`
@@ -457,7 +457,6 @@ not depend on how much it happens to generate.
 | Technology | Capital | ecoinvent implied LF | Restated at DESNZ LF | Grade |
 |---|---|---|---|---|
 | Onshore wind | 658 t CO₂e/MW | 26.2 % over 20 y | 5.6 g CO₂e/kWh (was 14.5) | transcribed / derived |
-| Offshore wind | 890 t CO₂e/MW | 30.0 % over 20 y | 5.7 g CO₂e/kWh (was 17.1) | transcribed / derived |
 | Solar PV | **1,048 t CO₂e/MWp** (IEA PVPS) | — | **25.8 g CO₂e/kWh** | transcribed / derived |
 | Solar PV, ecoinvent basis | 2,303 t CO₂e/MWp | 11.0 % over 30 y | 56.7 g CO₂e/kWh (was 79.8) | transcribed / derived |
 
@@ -708,7 +707,7 @@ study's own 35-year life:
 
 | capacity variable | kg CO₂e per unit per year | basis |
 |---|---|---|
-| `cap_wind`, `cap_offshore` (MW) | **328.6** = 278.7 transformers + 49.9 foundations | Leng turbine step-ups; Leng Table S3 box-transformer pads since 21 Oct 2026 |
+| `cap_wind` (MW) | **328.6** = 278.7 transformers + 49.9 foundations | Leng turbine step-ups; Leng Table S3 box-transformer pads since 21 Oct 2026 |
 | `cap_solar` (MWp) | **447.6** = 296.0 transformers + 47.3 station building + 104.4 replacements | IEA PVPS T12-33:2026 inverter-station step-ups; Z-PV-238 building and Smith A15's 30.2 % replacement over 30 y (its own activity, charged per year) since 21 Oct 2026. At solar's 38-y cost life the unit re-amortises to 420.5 |
 
 328.6 is **1.71 %** of onshore wind's 19,244 kg CO₂e/MW/year (the transformers
@@ -1523,7 +1522,6 @@ extra large, excluding CCL) = **£4.19/MWh**, grade proxy. Carried because it fa
 | Coordinate → outcode | reverse geocode, 2 km radius with an outcode fallback | transcribed | postcodes.io (Open Government Licence) |
 | Outcode → Carbon Intensity region | region id and name | transcribed | NESO Carbon Intensity API, `/regional/postcode/{outcode}` |
 | CI region → TNUoS demand zone | fixed 14→14 table | derived | Both schemes partition GB by **GSP group**, so the correspondence is structural. No open API publishes it. `check_zone_mapping()` asserts it is a bijection and that it agrees with three presets set independently from published sources |
-| Offshore availability | by resolved region | assumed | Judged by region rather than distance to coastline, which would need a coastline dataset |
 | Connection capacity | **not supplied**, defaults to unconstrained | — | No public register. See `DATA_GAPS.md` |
 
 Near a region boundary the nearest-postcode hop can land on the wrong side. The
