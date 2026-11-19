@@ -16,9 +16,10 @@ This changes each one alone, at four sites and two grid levels, and solves the f
     python scripts/fixed_choice_checks.py
     python scripts/fixed_choice_checks.py --summary
 
-Since 18 Nov 2026 (user) bought hydrogen comes on a steady contract, the model's new default
-(``dc_architectures.Scenario.h2_supply``), and the checks run off-grid too; they write
-``uk_sites_2025_checks_steady``. The just-in-time checks of 13 Nov stay in ``uk_sites_2025_checks``.
+These checks buy hydrogen on the steady contract (``dc_architectures.Scenario.h2_supply="steady"``,
+the default for one night, 18-19 Nov 2026, and an optional setting since), run off-grid too, and
+write ``uk_sites_2025_checks_steady`` (East Grinstead, batch of 18 Nov). The just-in-time checks of
+13 Nov stay in ``uk_sites_2025_checks``.
 Bundles (``BUNDLES``) push several screened inputs at once, all against hydrogen or all for it, at
 30 % and 50 % (the user's option B): pushes through ``trace.pushed``, the same as a sweep's.
 
@@ -151,7 +152,7 @@ def run_args(kwargs: dict) -> tuple[dict, dict, list]:
 def scenario(level: str, fields: dict) -> A.Scenario:
     flags = dict(grid=level != "offgrid", wind=True, offshore_wind=False, solar=True, battery=True,
                  electrolyser=True, tank=True, fuel_cell=True, buy_h2=True, buy_h2_2=False, gas_engine=True)
-    base = dict(ely_tech="PEM operation", h2_colour="green", strategy="free")
+    base = dict(ely_tech="PEM operation", h2_colour="green", strategy="free", h2_supply="steady")
     return A.Scenario(n=0, architecture="custom", label=f"fixed-choice check, {level}", assets=flags,
                       **{**base, **fields})
 

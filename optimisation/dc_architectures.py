@@ -126,7 +126,7 @@ def architecture(name: str, *, grid_limit_mw=None, grid_floor_mw=0.0, offshore=F
 
 
 # How bought hydrogen may arrive (Scenario.h2_supply); the first is the default.
-H2_SUPPLIES = ("steady", "jit")
+H2_SUPPLIES = ("jit", "steady")
 
 
 @dataclass(frozen=True)
@@ -147,11 +147,11 @@ class Scenario:
     # How SOEC's external heat is raised; None is the inventoried gas boiler.
     # See electrolysers.SOEC_HEAT_SOURCES. Meaningless for AE and PEM.
     soec_heat: str | None = None
-    # How bought hydrogen is supplied (dc_model.Assets.h2_buy_steady): "steady", one
-    # rate the same every hour, chosen by the optimiser - the default since 18 Nov
-    # 2026 (user) - or "jit", any amount in any hour, the model before that and now
-    # the "a hydrogen pipeline reaches the site" what-if. See H2_SUPPLIES.
-    h2_supply: str = "steady"
+    # How bought hydrogen is supplied (dc_model.Assets.h2_buy_steady): "jit", any
+    # amount in any hour - the default (back to it 19 Nov 2026, user, after one night
+    # on steady) - or "steady", one rate the same every hour, chosen by the optimiser,
+    # an optional setting. See H2_SUPPLIES.
+    h2_supply: str = "jit"
 
     @property
     def key(self) -> str:
@@ -173,7 +173,7 @@ class Scenario:
         if self.strategy != "free" or not self.h2_colour:
             bits.append(self.strategy)
         # Only the non-default supply changes the key, as with soec_heat.
-        if self.h2_supply != "steady":
+        if self.h2_supply != "jit":
             bits.append(f"{self.h2_supply}h2")
         return "_".join(bits)
 

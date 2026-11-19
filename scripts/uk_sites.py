@@ -58,14 +58,13 @@ sys.path.insert(0, str(ROOT))
 from optimisation import dc_architectures as A, dc_runner, sites  # noqa: E402
 
 SETS = {
-    # The sets run before 18 Nov 2026 bought hydrogen just in time, and keep doing so, so
-    # their folders stay what they hold ("jit": now the hydrogen-pipeline what-if).
+    # Bought hydrogen just in time, the model's default ("jit").
     "base":    {"gas": False, "blue": False, "supply": "jit", "out": "uk_sites_2025"},
     "present": {"gas": True,  "blue": False, "supply": "jit", "out": "uk_sites_2025_present"},
     "blue":    {"gas": True,  "blue": True,  "supply": "jit", "out": "uk_sites_2025_blue"},
     # 18 Nov 2026 (user): ``present`` with bought hydrogen on a steady contract, the same
-    # rate every hour into the tank (dc_model.Assets.h2_buy_steady) - the model's default
-    # from that evening, so this is the central 26-site result.
+    # rate every hour into the tank (dc_model.Assets.h2_buy_steady). Default for one night
+    # (18-19 Nov); an optional setting since 19 Nov (user), so this is the what-if set.
     "steady":  {"gas": True,  "blue": False, "supply": "steady", "out": "uk_sites_2025_present_steady"},
 }
 OUT = ROOT / "optimisation_outputs" / SETS["base"]["out"]

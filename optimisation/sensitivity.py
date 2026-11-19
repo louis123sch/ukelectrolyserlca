@@ -102,8 +102,8 @@ class Case:
     # Fields to set on the site once resolved: a picked substation, say.
     site_kwargs: dict = field(default_factory=dict)
     # How bought hydrogen arrives where the case buys it (dc_architectures.H2_SUPPLIES):
-    # a steady contract by default since 18 Nov 2026 (user).
-    h2_supply: str = "steady"
+    # just in time by default; "steady" is the optional contract (user, 19 Nov 2026).
+    h2_supply: str = "jit"
 
 
 _EVERY_ASSET = dict(grid=True, wind=True, solar=True, battery=True, electrolyser=True,

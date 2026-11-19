@@ -1045,5 +1045,5 @@ def test_supply_changes_the_scenario_key_only_off_the_default():
     from optimisation import dc_architectures as A
     base = A.Scenario(n=0, architecture="custom", label="x", assets={"buy_h2": True}, h2_colour="green")
     import dataclasses
-    assert base.h2_supply == "steady" and "h2" not in base.key.split("_")[-1]
-    assert dataclasses.replace(base, h2_supply="jit").key == base.key + "_jith2"
+    assert base.h2_supply == "jit" and "h2" not in base.key.split("_")[-1]
+    assert dataclasses.replace(base, h2_supply="steady").key == base.key + "_steadyh2"
