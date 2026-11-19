@@ -1,7 +1,20 @@
 #!/usr/bin/env python
-"""One page for both maps: optimisation_outputs/maps.html, five tabs.
+"""The model explainer: optimisation_outputs/model_explainer.html.
 
-    python scripts/build_maps_page.py
+    python scripts/build_model_explainer.py
+
+The one page that explains the model (user, 19 Nov 2026): it supersedes the
+separate maps pages and maps.html. Tabs: Equations, Cost graph, Cost sources,
+LCA graph, Energy flow, Code. It is tied to the model: it carries a model
+version, a digest of every file it copies (the Python in CODE_DIRS and the
+equations page), and tests/test_model_explainer.py fails as soon as the code
+differs from what the page was built from. scripts/hooks/pre-commit-model-explainer.sh,
+called from the local pre-commit hook, rebuilds it whenever a commit touches
+the model, so each new model gets a new page.
+
+What a rebuild cannot refresh without a run: the numbers in the two maps come
+from a saved run (scripts/build_cost_map.py, build_lca_map.py). The header says
+which run, when the maps were built, and whether the model has changed since.
 
 The cost map and the LCA map stay two pages of their own (their checks read
 them), each with two tabs. This wraps both, unchanged, in one file whose tab
@@ -32,10 +45,12 @@ ROOT = Path(__file__).resolve().parent.parent
 OUT_DIR = ROOT / "optimisation_outputs"
 COST = OUT_DIR / "cost_map.html"
 LCA = OUT_DIR / "lca_map.html"
-HTML_OUT = OUT_DIR / "maps.html"
+HTML_OUT = OUT_DIR / "model_explainer.html"
 EQ = ROOT / "docs" / "model_equations_explorer.html"
 # The Python files copied into the Code tab, so "Show in code" can open them.
+# They and the equations page are "the model" the explainer's version names.
 CODE_DIRS = ("optimisation", "optimiser_lca")
+MODEL_META = re.compile(r'<meta name="model-version" content="([0-9a-f]+)">')
 
 # Hides a map's own tab bar and lets the outer page switch its tab.
 _INJECT_HEAD = "<style>nav.tabs{display:none!important}</style>"
@@ -48,7 +63,8 @@ _PAGE = """<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Data Centre Maps</title>
+<title>Model explainer</title>
+<meta name="model-version" content="__VERSION__">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap">
@@ -77,6 +93,12 @@ body { background: var(--bg); color: var(--ink); font-family: var(--font-ui); di
 .tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
 .tabs button:hover { color: var(--accent); }
 .tabs .sep { width: 1px; background: var(--line); margin: 10px 6px; }
+.stamp { flex: 0 0 auto; font-size: 12px; line-height: 1.5; color: var(--muted); padding: 4px 16px;
+         background: var(--surface); border-bottom: 1px solid var(--line); }
+.stamp code { font-size: 11.5px; }
+.stamp .old { color: #9a4d12; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .stamp .old { color: #f0a868; } }
+:root[data-theme="dark"] .stamp .old { color: #f0a868; }
 .frames { flex: 1 1 auto; position: relative; min-height: 0; }
 .frames iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: var(--bg); }
 .frames iframe[hidden] { display: none; }
@@ -84,8 +106,8 @@ body { background: var(--bg); color: var(--ink); font-family: var(--font-ui); di
 </head>
 <body>
 <div class="top">
-  <h1>Data Centre Maps</h1>
-  <nav class="tabs" role="tablist" aria-label="Maps">
+  <h1>Model explainer</h1>
+  <nav class="tabs" role="tablist" aria-label="Model explainer">
     <button role="tab" data-tab="eq-main" aria-selected="true">Equations</button>
     <span class="sep" aria-hidden="true"></span>
     <button role="tab" data-tab="cost-tree" aria-selected="false">Cost graph</button>
@@ -97,6 +119,7 @@ body { background: var(--bg); color: var(--ink); font-family: var(--font-ui); di
     <button role="tab" data-tab="code-main" aria-selected="false">Code</button>
   </nav>
 </div>
+<div class="stamp">__STAMP__</div>
 <div class="frames">
   <iframe id="f-eq" title="Model equations"></iframe>
   <iframe id="f-cost" title="Cost map" hidden></iframe>
@@ -407,11 +430,67 @@ def _code() -> str:
     return json.dumps(page).replace("</", "<\\/")
 
 
+def model_version() -> str:
+    """A digest of the model as the explainer copies it: every .py file in
+    CODE_DIRS and the equations page, line endings normalised. Any edit to the
+    model's code or to its equations changes it."""
+    import hashlib
+    h = hashlib.sha256()
+    parts = dict(_code_files())
+    if EQ.exists():
+        parts["docs/model_equations_explorer.html"] = EQ.read_text(encoding="utf-8")
+    for name in sorted(parts):
+        h.update(name.encode())
+        h.update(parts[name].replace("\r\n", "\n").encode("utf-8"))
+    return h.hexdigest()[:12]
+
+
+def built_version(path: Path = HTML_OUT) -> str | None:
+    """The model version a built explainer says it describes."""
+    if not path.exists():
+        return None
+    with path.open(encoding="utf-8") as f:
+        m = MODEL_META.search(f.read(4000))
+    return m.group(1) if m else None
+
+
+def _map_status() -> str:
+    """Which run the map numbers come from, when the maps were built, and
+    whether the model's traced code has changed since (map_fingerprint)."""
+    from html import escape
+    try:
+        meta = json.loads((OUT_DIR / "lca_map.json").read_text(encoding="utf-8"))["meta"]
+    except (OSError, ValueError, KeyError):
+        return "map numbers: no saved map data"
+    run = (meta.get("run") or {}).get("label") or "a saved run"
+    built = meta.get("generated", "?")
+    try:
+        built = datetime.strptime(built, "%Y-%m-%d %H:%M").strftime("%d %b %Y")
+    except ValueError:
+        pass
+    text = f"map numbers: {escape(run)}, maps built {escape(built)}"
+    try:
+        from map_fingerprint import trace_code_digest
+        if (meta.get("fingerprint") or {}).get("trace_code") != trace_code_digest():
+            return (f'{text} · <span class="old" title="Rebuild the maps from a run made with this model: '
+                    f'scripts/build_cost_map.py and build_lca_map.py">made with an earlier model</span>')
+    except Exception:                                      # noqa: BLE001 - the stamp is a courtesy
+        pass
+    return text
+
+
 def write() -> Path | None:
-    """Write maps.html from the two map pages; None if either is missing."""
+    """Write the model explainer from the two map pages, the equations page and
+    the code; None if either map page is missing."""
     if not (COST.exists() and LCA.exists()):
         return None
-    HTML_OUT.write_text(_PAGE.replace("__COST__", _inner(COST)).replace("__LCA__", _inner(LCA))
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    version = model_version()
+    # No commit hash: the pre-commit hook builds this before its commit exists.
+    stamp = (f'model <code title="Digest of the code and equations this page shows">{version}</code>'
+             f' · built {datetime.now().strftime("%d %b %Y %H:%M")} · {_map_status()}')
+    HTML_OUT.write_text(_PAGE.replace("__VERSION__", version).replace("__STAMP__", stamp)
+                        .replace("__COST__", _inner(COST)).replace("__LCA__", _inner(LCA))
                         .replace("__EQ__", _equations()).replace("__CODE__", _code()), encoding="utf-8")
     return HTML_OUT
 
@@ -420,4 +499,4 @@ if __name__ == "__main__":
     out = write()
     if out is None:
         sys.exit("both optimisation_outputs/cost_map.html and lca_map.html are needed")
-    print(f"wrote {out.relative_to(ROOT)}: {out.stat().st_size / 1e6:.2f} MB")
+    print(f"wrote {out.relative_to(ROOT)}: {out.stat().st_size / 1e6:.2f} MB, model {built_version(out)}")

@@ -368,7 +368,7 @@ button.code-btn:hover { background: var(--accent); color: var(--surface); }
 <script>
 (() => {
 // "Show in code": only inside the maps page, whose Code tab holds a copy of
-// the Python (scripts/build_maps_page.py). The page opens the file and
+// the Python (scripts/build_model_explainer.py). The page opens the file and
 // highlights the statement. 19 Nov 2026.
 const IN_MAPS = window.parent !== window;
 function codeBtn(target) {
@@ -931,7 +931,7 @@ function initialOpen() { open.add(ROOT.id); open.add("lp"); }
 initialOpen();
 if (window.matchMedia("(max-width: 760px)").matches) document.getElementById("legend").open = false;
 // Open one box by its node id when the maps page asks (the Equations tab's
-// "Show in map" button; scripts/build_maps_page.py). 19 Nov 2026.
+// "Show in map" button; scripts/build_model_explainer.py). 19 Nov 2026.
 window.addEventListener("message", e => {
   const id = e.data && e.data.mapFocus; if (!id) return;
   const n = byId.get(id); if (!n) return;
