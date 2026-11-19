@@ -1,27 +1,27 @@
-# Before/after check (docs/CODE_CHECK_FIX_PLAN.md step 5, 19 Nov 2026), the code AFTER the fixes:
+# Before/after check (docs/CODE_CHECK_FIX_PLAN.md step 5, 19 Nov 2026), the code AFTER the fixes, at East Grinstead:
 # the same as fixcheck_before.txt, less configuration 5 (grid + PEM flexible, now a duplicate of 20).
-scripts/solver_compare.py solve
-scripts/run_dc_scenarios.py --workers 1 --only 1
-scripts/run_dc_scenarios.py --workers 1 --only 2
-scripts/run_dc_scenarios.py --workers 1 --only 3
-scripts/run_dc_scenarios.py --workers 1 --only 4
-scripts/run_dc_scenarios.py --workers 1 --only 6
-scripts/run_dc_scenarios.py --workers 1 --only 7
-scripts/run_dc_scenarios.py --workers 1 --only 8
-scripts/run_dc_scenarios.py --workers 1 --only 9
-scripts/run_dc_scenarios.py --workers 1 --only 10
-scripts/run_dc_scenarios.py --workers 1 --only 11
-scripts/run_dc_scenarios.py --workers 1 --only 12
-scripts/run_dc_scenarios.py --workers 1 --only 13
-scripts/run_dc_scenarios.py --workers 1 --only 14
-scripts/run_dc_scenarios.py --workers 1 --only 15
-scripts/run_dc_scenarios.py --workers 1 --only 16
-scripts/run_dc_scenarios.py --workers 1 --only 17
-scripts/run_dc_scenarios.py --workers 1 --only 18
-scripts/run_dc_scenarios.py --workers 1 --only 19
-scripts/run_dc_scenarios.py --workers 1 --only 20
-scripts/run_dc_scenarios.py --workers 1 --only 21
-scripts/run_dc_scenarios.py --workers 1 --only 22
-scripts/run_dc_scenarios.py --workers 1 --only 23
-scripts/run_dc_scenarios.py --workers 1 --only 24
-scripts/run_dc_scenarios.py --workers 1 --only 25
+scripts/cluster/fixcheck_site.py refcases
+scripts/cluster/fixcheck_site.py scenario 1
+scripts/cluster/fixcheck_site.py scenario 2
+scripts/cluster/fixcheck_site.py scenario 3
+scripts/cluster/fixcheck_site.py scenario 4
+scripts/cluster/fixcheck_site.py scenario 6
+scripts/cluster/fixcheck_site.py scenario 7
+scripts/cluster/fixcheck_site.py scenario 8
+scripts/cluster/fixcheck_site.py scenario 9
+scripts/cluster/fixcheck_site.py scenario 10
+scripts/cluster/fixcheck_site.py scenario 11
+scripts/cluster/fixcheck_site.py scenario 12
+scripts/cluster/fixcheck_site.py scenario 13
+scripts/cluster/fixcheck_site.py scenario 14
+scripts/cluster/fixcheck_site.py scenario 15
+scripts/cluster/fixcheck_site.py scenario 16
+scripts/cluster/fixcheck_site.py scenario 17
+scripts/cluster/fixcheck_site.py scenario 18
+scripts/cluster/fixcheck_site.py scenario 19
+scripts/cluster/fixcheck_site.py scenario 20
+scripts/cluster/fixcheck_site.py scenario 21
+scripts/cluster/fixcheck_site.py scenario 22
+scripts/cluster/fixcheck_site.py scenario 23
+scripts/cluster/fixcheck_site.py scenario 24
+scripts/cluster/fixcheck_site.py scenario 25

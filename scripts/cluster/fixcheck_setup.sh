@@ -4,7 +4,8 @@
 #   bash scripts/cluster/fixcheck_setup.sh
 # Makes two copies of ~/ukdclca with its data caches (results and job folders left out), puts one
 # at the commit before the fixes and one at the fixes, and submits pieces/fixcheck_before.txt and
-# fixcheck_after.txt: the laptop run of 19 Nov (reference cases + scenario list) on the cluster.
+# fixcheck_after.txt: the laptop run of 19 Nov (reference cases + scenario list) on the cluster,
+# at East Grinstead (scripts/cluster/fixcheck_site.py).
 # Light work only on the login node: a copy and two checkouts; the solving is in the jobs.
 set -e
 BEFORE=c9cc1dc      # source-update just before the fixes
@@ -18,6 +19,8 @@ for t in before after; do
           --exclude '*.o[0-9]*' "$HOME/ukdclca/" "$HOME/fix-$t/"
 done
 git -C "$HOME/fix-before" checkout -q -f "$BEFORE"
+# the East Grinstead runner is newer than the before commit: the same file in both copies
+cp scripts/cluster/fixcheck_site.py "$HOME/fix-before/scripts/cluster/"
 git -C "$HOME/fix-after" checkout -q -f "$AFTER"
 echo "before: $(git -C "$HOME/fix-before" log --oneline -1)"
 echo "after:  $(git -C "$HOME/fix-after" log --oneline -1)"
