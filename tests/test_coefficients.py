@@ -141,12 +141,54 @@ def test_fuel_cell_bop_cost_increment_tracks_the_exact_annuity():
     for _, row in costs.iterrows():
         A, o = row.bop_GBP_per_MW, row.fixed_opex_frac
         for h in (100, 1000, H / L, 3000, 4000, 6000, 8760):
-            lp = row.annual_GBP_per_MW_year + A * max(1.0 / L, h / H)
+            lp = row.bop_annual_GBP_per_MW_year + A * max(1.0 / L, h / H)
             exact = A * (fin * hc.capital_recovery_factor(r, min(L, H / h)) + o)
             if h <= H / L:
                 assert lp == pytest.approx(exact, rel=1e-9)
             else:
                 assert lp == pytest.approx(exact, rel=0.02), f"{row.case} at {h} h"
+
+
+def test_fuel_cell_stack_cost_carries_its_interest():
+    """The stack, split the same way as the BoP: S·(finance·CRF(Ls) − 1/Ls) on
+    capacity plus S per replacement.
+
+    Exactly the annuity when calendar binds, and within 9 % of the exact
+    annuity on the shortened life when duty does (8.5 % low at 8,760 h with
+    the defaults). Until 19 Nov 2026 the stack was charged S per replacement
+    and nothing on capacity: S/Ls a year with no interest, about half the
+    annuity. docs/FUEL_CELL_STACK_AND_EQUATIONS_PLAN.md step 1.
+    """
+    from optimisation import h2_capex as hc
+    _cached(fuel_cell)
+    d = fuel_cell.decompose()
+    from optimisation import tech_costs as tc
+    r, L, H = hc.FC_DISCOUNT_RATE, fuel_cell.STACK_CALENDAR_LIFETIME_YEARS, d["stack_lifetime_hours"]
+    fin = tc.building_finance_factor(r, hc.FC_BUILD_YEARS)
+    costs = hc.fuel_cell_costs()
+    for _, row in costs.iterrows():
+        S = row.stack_GBP_per_MW
+        assert row.annual_GBP_per_MW_year == pytest.approx(
+            row.bop_annual_GBP_per_MW_year + row.stack_annual_GBP_per_MW_year, rel=1e-12)
+        # the old charge, S / L, is well short of the annuity
+        assert S * fin * hc.capital_recovery_factor(r, L) > 1.5 * S / L
+        for h in (100, 1000, H / L, 4000, 6000, 8760):
+            lp = row.stack_annual_GBP_per_MW_year + S * max(1.0 / L, h / H)
+            exact = S * fin * hc.capital_recovery_factor(r, min(L, H / h))
+            if h <= H / L:
+                assert lp == pytest.approx(exact, rel=1e-9)
+            else:
+                assert lp == pytest.approx(exact, rel=0.09), f"{row.case} at {h} h"
+
+
+def test_fuel_cell_stack_life_moves_the_cost():
+    """A sweep of the stack's calendar life moves the cost as well as the carbon."""
+    from optimisation import h2_capex as hc
+    short = hc.fuel_cell_costs(stack_calendar_years=5.0).set_index("case")
+    long_ = hc.fuel_cell_costs(stack_calendar_years=15.0).set_index("case")
+    for case in short.index:
+        assert short.loc[case, "stack_lifetime_years"] == 5.0
+        assert short.loc[case, "stack_annual_GBP_per_MW_year"] != long_.loc[case, "stack_annual_GBP_per_MW_year"]
 
 
 def test_fuel_cell_burden_is_monotonic_in_duty():

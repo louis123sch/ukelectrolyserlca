@@ -999,7 +999,8 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
                         f"{fc_kw_box:g} kW per container",
                         uses=["fuel_cell.bop_per_MW", "fuel_cell.bop_container_per_MW"],
                         inputs={"kW_per_container": fc_kw_box}, grade="assumed")
-    fcr = pd.Series(hc.fuel_cell_cost(cost_case, bop_calendar_years=fc_bop_years))
+    fcr = pd.Series(hc.fuel_cell_cost(cost_case, bop_calendar_years=fc_bop_years,
+                                      stack_calendar_years=fc_stack_years))
 
     # gas engines (gas_engine.py, docs/GAS_ENGINE_PLAN.md)
     from optimisation import gas_engine as ge
@@ -1342,7 +1343,7 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
                                          "GBP per year", "Major-hazard compliance, at upper tier, on a build allowed a tank",
                                          ["cost.major_hazard.annual_per_site", *k26]),
         cost_fc=cstep("cost_fc", float(fcr.annual_GBP_per_MW_year) * to26, "GBP per MW per year",
-                      "Fuel cell balance of plant, per MW, net of its calendar replacement",
+                      "Fuel cell balance of plant and stack, per MW, net of their calendar replacements",
                       ["cost.fuel_cell.annual_per_MW", *k26]),
         cost_fc_stack_per_mw=cstep("cost_fc_stack_per_mw", float(fcr.stack_GBP_per_MW) * to26, "GBP per MW replaced",
                                    "Fuel cell stack, per replacement", ["cost.fuel_cell.stack_per_MW", *k26]),

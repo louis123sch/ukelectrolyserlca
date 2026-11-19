@@ -436,6 +436,10 @@ def check_lifetime_agreement():
     pairs.append(("fuel_cell_bop",
                   float(hc.fuel_cell_costs().iloc[0].lifetime_years),
                   float(fc.decompose()["bop_calendar_lifetime_years"])))
+    # Since 19 Nov 2026 the stack's annuity runs over its own calendar life too.
+    pairs.append(("fuel_cell_stack",
+                  float(hc.fuel_cell_costs().iloc[0].stack_lifetime_years),
+                  float(fc.decompose()["stack_calendar_lifetime_years"])))
     pairs.append(("battery", float(batt.ASSET_LIFE_YEARS),
                   float(batt.ASSET_LIFE_YEARS)))
     from optimisation import gas_engine as ge

@@ -48,6 +48,9 @@ Work where a number the study reports is not currently defensible.
 - [ ] **Gas engines, once the user says to test** (13 Nov 2026, docs/GAS_ENGINE_PLAN.md): a run with the engines
       offered and built (not London); the input screen with them on; the cut-off rule's design test (rule 3); rebuild
       both maps and the workbooks; the sign-off; the 26-site study with `gas_engine` in `scripts/uk_sites.py`'s flags.
+- [ ] **Fuel-cell stack interest + equations-page wording** (19 Nov 2026): `docs/FUEL_CELL_STACK_AND_EQUATIONS_PLAN.md`.
+      The stack is charged price ÷ life with no interest (about half its yearly cost); fix, then the review's page
+      wording, then a before/after on the cluster at East Grinstead. Waits for the user's word.
 
 ## Cheap wins
 

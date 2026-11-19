@@ -241,7 +241,8 @@ def fc_stack_cost_fraction() -> float:
     return FC_STACK_COST_FRACTION
 
 
-def fuel_cell_cost(case: str, bop_calendar_years: float | None = None) -> dict:
+def fuel_cell_cost(case: str, bop_calendar_years: float | None = None,
+                   stack_calendar_years: float | None = None) -> dict:
     """One case of ``fuel_cell_costs``, each number recorded for the cost map."""
     from optimisation import fuel_cell as fc
     # From the constant, not the decomposition cache: an assumption edited in
@@ -249,6 +250,10 @@ def fuel_cell_cost(case: str, bop_calendar_years: float | None = None) -> dict:
     life = T.cost("cost.fuel_cell.bop_life_years", float(bop_calendar_years or fc.BOP_CALENDAR_LIFETIME_YEARS),
                   "years", "Balance-of-plant calendar life, the same life the carbon side replaces it on",
                   grade="assumed", note="fuel_cell.BOP_CALENDAR_LIFETIME_YEARS")
+    stack_life = T.cost("cost.fuel_cell.stack_life_years",
+                        float(stack_calendar_years or fc.STACK_CALENDAR_LIFETIME_YEARS), "years",
+                        "Stack calendar life, the same life the carbon side replaces it on",
+                        grade="assumed", note="fuel_cell.STACK_CALENDAR_LIFETIME_YEARS")
     rate = T.cost("cost.h2_assets.discount_rate", FC_DISCOUNT_RATE, "fraction per year",
                   "Discount rate for the fuel cell and tank: CEPA's hydrogen-to-power and novel storage rate",
                   grade="transcribed", cites=[("cepa_hurdle_rates_2025", "Table E.1, hydrogen CCHT/OCHT emerging and "
@@ -257,6 +262,9 @@ def fuel_cell_cost(case: str, bop_calendar_years: float | None = None) -> dict:
     crf = T.cost("cost.fuel_cell.crf", capital_recovery_factor(rate, life), "per year",
                  "Capital recovery factor over the balance-of-plant life",
                  uses=["cost.h2_assets.discount_rate", "cost.fuel_cell.bop_life_years"])
+    stack_crf = T.cost("cost.fuel_cell.stack_crf", capital_recovery_factor(rate, stack_life), "per year",
+                       "Capital recovery factor over the stack life",
+                       uses=["cost.h2_assets.discount_rate", "cost.fuel_cell.stack_life_years"])
     if case == "low":
         T.cost("cost.fuel_cell.nlr_overnight_USD_per_kW", NLR_TOTAL_OVERNIGHT_USD_PER_KW, "US $ per kW",
                "Total overnight cost of a modelled 100 MW PEM plant, 2022 dollars", grade="transcribed",
@@ -314,31 +322,45 @@ def fuel_cell_cost(case: str, bop_calendar_years: float | None = None) -> dict:
                   uses=["cost.fuel_cell.maintenance_per_kW_year", f"price_base.{ELEMENT_ENERGY_PRICE_YEAR}_to_2025",
                         "cost.fuel_cell.insurance_frac", "cost.hydrogen_plant.rates_frac",
                         "cost.fuel_cell.capex_per_kW", "cost.fuel_cell.stack_cost_fraction"])
-    # BoP, split the same way as the stack so that duty reaches the
-    # cost objective as it reaches carbon. The LP charges
-    #   A_bop * (CRF + o - 1/L) * cap_fc  +  A_bop * fc_bop_units
-    # and fc_bop_units >= max(cap_fc/L, MWh/duty_hours). When calendar
-    # binds that is A_bop * (CRF + o) * cap_fc, exactly the old
-    # annuity; when duty binds it stays within about 2 % of the exact
-    # CRF on the shortened life. Charging the annuity alone made BoP
-    # replacements free in cost above 2,400 h/yr — up to 39 % low on
-    # the fuel cell line at 8,760 h. REVIEW_RESPONSE_PLAN.md §1.
-    annual = T.cost("cost.fuel_cell.annual_per_MW",
-                    capex * 1000.0 * (1.0 - stack_frac) * (finance * crf + opex - 1.0 / life),
-                    "GBP per MW per year", "Balance of plant: capital recovery (the first build carrying its "
-                    "finance) and opex, less the calendar replacement the LP charges per replacement",
-                    uses=["cost.fuel_cell.capex_per_kW", "cost.fuel_cell.stack_cost_fraction", "cost.fuel_cell.crf",
-                          "cost.fuel_cell.building_finance_factor", "cost.fuel_cell.fixed_opex_frac",
-                          "cost.fuel_cell.bop_life_years"])
+    # BoP and stack are each split the same way, so that duty reaches the
+    # cost objective as it reaches carbon. For a part of capital A with
+    # calendar life L the LP charges
+    #   A * (finance*CRF(L) + o - 1/L) * cap_fc  +  A * units
+    # with units >= max(cap_fc/L, MWh/duty_hours). When calendar binds
+    # that is A * (finance*CRF(L) + o) * cap_fc, exactly the annuity; when
+    # duty binds the extra replacements are charged at their price, which
+    # stays within about 2 % of the exact annuity on the shortened life for
+    # the BoP and about 9 % for the stack run flat out
+    # (tests/test_coefficients.py). Charging the BoP annuity alone made its
+    # replacements free in cost above 2,400 h/yr (REVIEW_RESPONSE_PLAN.md §1).
+    # The stack carries no o: opex is stated on the BoP share below.
+    #
+    # Until 19 Nov 2026 the stack was charged its price per replacement
+    # and nothing on capacity: price / life a year at the calendar rate,
+    # no interest and no build finance, about half its annuity
+    # (docs/FUEL_CELL_STACK_AND_EQUATIONS_PLAN.md).
+    bop_annual = T.cost("cost.fuel_cell.bop_annual_per_MW",
+                        capex * 1000.0 * (1.0 - stack_frac) * (finance * crf + opex - 1.0 / life),
+                        "GBP per MW per year", "Balance of plant: capital recovery (the first build carrying its "
+                        "finance) and opex, less the calendar replacement the LP charges per replacement",
+                        uses=["cost.fuel_cell.capex_per_kW", "cost.fuel_cell.stack_cost_fraction", "cost.fuel_cell.crf",
+                              "cost.fuel_cell.building_finance_factor", "cost.fuel_cell.fixed_opex_frac",
+                              "cost.fuel_cell.bop_life_years"])
+    stack_annual = T.cost("cost.fuel_cell.stack_annual_per_MW",
+                          capex * 1000.0 * stack_frac * (finance * stack_crf - 1.0 / stack_life),
+                          "GBP per MW per year", "Stack: capital recovery (the first build carrying its finance), "
+                          "less the calendar replacement the LP charges per replacement",
+                          uses=["cost.fuel_cell.capex_per_kW", "cost.fuel_cell.stack_cost_fraction",
+                                "cost.fuel_cell.stack_crf", "cost.fuel_cell.building_finance_factor",
+                                "cost.fuel_cell.stack_life_years"])
+    annual = T.cost("cost.fuel_cell.annual_per_MW", bop_annual + stack_annual, "GBP per MW per year",
+                    "Charged on capacity: the balance-of-plant and stack terms",
+                    uses=["cost.fuel_cell.bop_annual_per_MW", "cost.fuel_cell.stack_annual_per_MW"])
     bop = T.cost("cost.fuel_cell.bop_per_MW", capex * 1000.0 * (1.0 - stack_frac), "GBP per MW replaced",
                  "Balance of plant capital, charged per replacement",
                  uses=["cost.fuel_cell.capex_per_kW", "cost.fuel_cell.stack_cost_fraction"])
-    # Stack capital, charged per replacement. Undiscounted, matching the
-    # carbon side, because the LP abstracts away *when* a replacement
-    # falls and a discount factor would need that schedule. This
-    # overstates a distant replacement slightly.
     stack = T.cost("cost.fuel_cell.stack_per_MW", capex * 1000.0 * stack_frac, "GBP per MW replaced",
-                   "Stack capital, charged per replacement (undiscounted, as the carbon side)",
+                   "Stack capital, charged per replacement; its interest is in the capacity term",
                    uses=["cost.fuel_cell.capex_per_kW", "cost.fuel_cell.stack_cost_fraction"])
     return {
         "asset": "fuel_cell", "case": case,
@@ -346,8 +368,11 @@ def fuel_cell_cost(case: str, bop_calendar_years: float | None = None) -> dict:
         "capex_GBP_per_MW": capex * 1000.0,
         "fixed_opex_frac": opex,
         "lifetime_years": life,
+        "stack_lifetime_years": stack_life,
         "stack_cost_fraction": stack_frac,
         "annual_GBP_per_MW_year": annual,
+        "bop_annual_GBP_per_MW_year": bop_annual,
+        "stack_annual_GBP_per_MW_year": stack_annual,
         "bop_GBP_per_MW": bop,
         "stack_GBP_per_MW": stack,
         "grade": GRADE,
@@ -355,15 +380,17 @@ def fuel_cell_cost(case: str, bop_calendar_years: float | None = None) -> dict:
     }
 
 
-def fuel_cell_costs(bop_calendar_years: float | None = None):
+def fuel_cell_costs(bop_calendar_years: float | None = None,
+                    stack_calendar_years: float | None = None):
     """£/kW installed, and the annualised £/kW/year that follows.
 
-    ``bop_calendar_years`` overrides ``fuel_cell.BOP_CALENDAR_LIFETIME_YEARS``
-    for a sweep, so the cost annuity moves with the life the carbon side's
-    replacement count uses.
+    ``bop_calendar_years`` and ``stack_calendar_years`` override
+    ``fuel_cell.BOP_CALENDAR_LIFETIME_YEARS`` and
+    ``STACK_CALENDAR_LIFETIME_YEARS`` for a sweep, so the cost annuity moves
+    with the lives the carbon side's replacement counts use.
     """
     with T.quiet():
-        return pd.DataFrame([fuel_cell_cost(case, bop_calendar_years) for case in CASES])
+        return pd.DataFrame([fuel_cell_cost(case, bop_calendar_years, stack_calendar_years) for case in CASES])
 
 
 def tank_capex_gbp_per_kg(case: str) -> float:
