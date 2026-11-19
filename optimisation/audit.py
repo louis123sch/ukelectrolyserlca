@@ -451,12 +451,20 @@ def check_lifetime_agreement():
     # charges, so this fails if anything amortises the box over another life
     # (solar's did: 35 y against a 38-y annuity, until 14 Oct).
     from optimisation import transformers as tx
+    # Solar's coefficient also carries a fixed yearly charge for part
+    # replacements (Smith A15's 30-year fraction), which no life divides. It is
+    # taken out before the life is read back; left in, it read the unit's 38-y
+    # life as 28.8 y (19 Nov 2026), a false failure of this check, not the model.
+    txd = tx.decompose()
+    solar_repl = (txd["solar"]["replacement_kgco2e_per_MWp_30y"] / txd["solar"]["replacement_reference_years"]
+                  if tx.SOLAR_BASIS == "iea_pvps_2026" else 0.0)
     for asset in ("onshore_wind", "solar_pv"):
         cost_life = float(ann[(ann.asset == asset) & (ann.case == "central")]
                           .iloc[0].lifetime_years)
         gen_life = float(emb.loc[asset].study_lifetime_years)
-        charged = tx.kgco2e_per_mw_year(asset, life_years=gen_life)
-        per_mw = tx.kgco2e_per_mw_year(asset, life_years=1.0)
+        repl = solar_repl if asset == "solar_pv" else 0.0
+        charged = tx.kgco2e_per_mw_year(asset, life_years=gen_life) - repl
+        per_mw = tx.kgco2e_per_mw_year(asset, life_years=1.0) - repl
         pairs.append((f"{asset} step-up transformer", cost_life, per_mw / charged))
     # The battery's and fuel cell's container step-ups are amortised over the
     # asset's own life, which is what each asset's cost annuity runs over too.
