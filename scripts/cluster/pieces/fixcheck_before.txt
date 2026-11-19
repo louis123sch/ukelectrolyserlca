@@ -1,0 +1,28 @@
+# Before/after check (docs/CODE_CHECK_FIX_PLAN.md step 5, 19 Nov 2026), the code BEFORE the fixes (c9cc1dc):
+# the two North Norfolk reference cases (hourly), then the scenario list one configuration per piece (25).
+scripts/solver_compare.py solve
+scripts/run_dc_scenarios.py --workers 1 --only 1
+scripts/run_dc_scenarios.py --workers 1 --only 2
+scripts/run_dc_scenarios.py --workers 1 --only 3
+scripts/run_dc_scenarios.py --workers 1 --only 4
+scripts/run_dc_scenarios.py --workers 1 --only 5
+scripts/run_dc_scenarios.py --workers 1 --only 6
+scripts/run_dc_scenarios.py --workers 1 --only 7
+scripts/run_dc_scenarios.py --workers 1 --only 8
+scripts/run_dc_scenarios.py --workers 1 --only 9
+scripts/run_dc_scenarios.py --workers 1 --only 10
+scripts/run_dc_scenarios.py --workers 1 --only 11
+scripts/run_dc_scenarios.py --workers 1 --only 12
+scripts/run_dc_scenarios.py --workers 1 --only 13
+scripts/run_dc_scenarios.py --workers 1 --only 14
+scripts/run_dc_scenarios.py --workers 1 --only 15
+scripts/run_dc_scenarios.py --workers 1 --only 16
+scripts/run_dc_scenarios.py --workers 1 --only 17
+scripts/run_dc_scenarios.py --workers 1 --only 18
+scripts/run_dc_scenarios.py --workers 1 --only 19
+scripts/run_dc_scenarios.py --workers 1 --only 20
+scripts/run_dc_scenarios.py --workers 1 --only 21
+scripts/run_dc_scenarios.py --workers 1 --only 22
+scripts/run_dc_scenarios.py --workers 1 --only 23
+scripts/run_dc_scenarios.py --workers 1 --only 24
+scripts/run_dc_scenarios.py --workers 1 --only 25

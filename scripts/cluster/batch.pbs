@@ -18,7 +18,7 @@
 set -e
 : "${PIECES:?pass PIECES=<file in scripts/cluster/pieces/> with qsub -v}"
 # REPO: which copy of the code runs (default ~/ukdclca). A before/after check passes a second
-# copy checked out at the older commit, e.g. -v PIECES=fixcheck.txt,REPO=$HOME/fix-before; the
+# copy checked out at the older commit, e.g. -v PIECES=fixcheck_before.txt,REPO=$HOME/fix-before; the
 # piece list itself is always read from ~/ukdclca, so an older copy needs no list of its own.
 REPO="${REPO:-$HOME/ukdclca}"
 I=${PBS_ARRAY_INDEX:?submit as an array job with -J 1-N}
