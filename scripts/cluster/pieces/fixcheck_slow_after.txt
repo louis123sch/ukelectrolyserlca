@@ -1,0 +1,4 @@
+# The slow configurations of fixcheck_after.txt (2, 3, 21: battery + grid price-list choice), resubmitted with 8 cores (fixcheck_more_cores.sh).
+scripts/cluster/fixcheck_site.py scenario 2
+scripts/cluster/fixcheck_site.py scenario 3
+scripts/cluster/fixcheck_site.py scenario 21
