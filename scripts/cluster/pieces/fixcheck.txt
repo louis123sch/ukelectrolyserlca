@@ -1,0 +1,18 @@
+# Before/after check for the code-check fixes (docs/CODE_CHECK_FIX_PLAN.md step 5, 19 Nov 2026).
+# Run twice with the same list: REPO=$HOME/fix-before (commit c9cc1dc, before the fixes) and
+# REPO=$HOME/fix-after (the fixes). The four robustness sites (2 Isle of Lewis, 15 Lichfield,
+# 18 Essex coast, 23 East Grinstead) x off-grid / 25 MW / full grid, --set present, plus the two
+# North Norfolk reference cases (solver_compare.py solve: islanded_h2 and norfolk_grid, hourly).
+scripts/solver_compare.py solve
+scripts/uk_sites.py --set present --no-summary --levels offgrid --sites 2
+scripts/uk_sites.py --set present --no-summary --levels offgrid --sites 15
+scripts/uk_sites.py --set present --no-summary --levels offgrid --sites 18
+scripts/uk_sites.py --set present --no-summary --levels offgrid --sites 23
+scripts/uk_sites.py --set present --no-summary --levels limited --sites 2
+scripts/uk_sites.py --set present --no-summary --levels limited --sites 15
+scripts/uk_sites.py --set present --no-summary --levels limited --sites 18
+scripts/uk_sites.py --set present --no-summary --levels limited --sites 23
+scripts/uk_sites.py --set present --no-summary --levels full --sites 2
+scripts/uk_sites.py --set present --no-summary --levels full --sites 15
+scripts/uk_sites.py --set present --no-summary --levels full --sites 18
+scripts/uk_sites.py --set present --no-summary --levels full --sites 23
