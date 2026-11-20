@@ -3,7 +3,7 @@
 # copy home. On a login node, after `git pull` in ~/ukdclca, with every batch number to report:
 #   bash scripts/cluster/fixcheck_pack.sh 3033334 3033335                       # the code check
 #   bash scripts/cluster/fixcheck_pack.sh 3033335 3034468 3034818 3034819 3034820   # + the stack fix
-# It packs the results of every code copy that exists (~/fix-before, ~/fix-after, ~/fix-fc) and
+# It packs the results of every code copy that exists (~/fix-before, -after, -fc, -cmp, -rbefore, -reopt) and
 # the job logs of the batches named. Then from the laptop:
 #   scp -O ls1524@login.cx3.hpc.imperial.ac.uk:fixcheck_results.tgz <dest>
 # and, after unpacking, python scripts/fixcheck_compare.py <dest> [--before after --after fc --fc-check].
@@ -11,7 +11,7 @@
 for b in "$@"; do bash "$HOME/ukdclca/scripts/cluster/progress.sh" "$b"; done
 cd "$HOME" || exit 1
 FILES=()
-for t in before after fc; do
+for t in before after fc cmp rbefore reopt; do
     for f in "fix-$t/optimisation_outputs/dc_runs/fixcheck_east_grinstead" fix-"$t"/optimisation_outputs/sensitivity_fixcheck_*.csv; do
         [ -e "$f" ] && FILES+=("$f")
     done
