@@ -136,6 +136,8 @@ The sides agree around 68 % utilisation and part company below it. For the islan
    - Hydrogen rows: small cost changes from step 3.
    - Everything else: identical to the last digit. If not, something else changed. Investigate before going on.
 5. **Negative-price check (item 8).** Print the minimum of `grid_price_per_mwh` for every site and window in the sweep. If none is below zero, item 8 is a sentence (step 6). If any is, look in those solved dispatches for half-hours with both battery charging and discharging above zero, and report what you find before choosing a fix.
+
+   **Result (20 Nov 2026, no solving):** the delivered price goes below zero in 3 half-hours of 2025 (6 Sep, 12:30-13:30) at every site and price list read: 47 price lists over 22 of the 26 sites plus East Grinstead, lowest -£35.79/MWh (Stroud, 11 kV). Four sites had no room in full-grid mode; two hit the Renewables.ninja hourly limit. In the saved 26-site runs (231 point-runs) the battery charges and discharges in the same step only when nothing is imported: surplus renewable output burned through the battery's losses instead of curtailed, which is equally optimal. 2 such steps fall at a below-zero price, none with an import, so no price-driven cycling was seen. The overlap is 2.3-2.5 % of discharge at the lowest-cost and knee points and 9.7 % at the lowest-carbon point: cost and carbon are unaffected, but reported battery throughput and cycles are inflated by that share. Fix not chosen: user's decision (state it; or a tiny penalty on charging so surplus is curtailed instead).
 6. Commit with the before/after table in the message or in `docs/SOURCE_DIFF.md`.
 
 ---

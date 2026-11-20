@@ -63,7 +63,8 @@ cycling), which no held source gives.
   hard-run design pays for its extra stacks, and the LP sees it. Needs the unit split
   into plant + one stack (reopens the 23 Oct closure of the stack/BoP split), new `Tech`
   fields, two constraints, and map and test updates. Source: Gerloff's stated 50,000 h.
-  Carbon only: NESO gives no stack cost to mirror on the cost side.
+  Carbon only: NESO gives no stack cost to mirror on the cost side. *(Superseded 20 Nov 2026: stacks are
+  charged in cost too, below.)*
 - **C. Fully running-hours, with a calendar floor.** Stack units ≥ capacity ÷ calendar
   stack life, and ≥ running MWh ÷ 50,000 h. The most physical, and it would also lower
   the charge on lightly run electrolysers, but it needs a calendar stack life that is
@@ -103,7 +104,8 @@ The calendar floor is now **one stack per 25-year plant life**
 **Why.** The 8.33-year floor (25 y / 3 stacks) had no source of its own: it was
 chosen so low-use electrolysers kept the charge they had before the split. The
 cost side has no such floor. NESO's capex holds the first stack, and its variable
-opex per kg ("stack replacement and water") scales replacements with output only.
+opex per kg (then read as "stack replacement and water"; since 20 Nov 2026 read as water and
+consumables, below) scales replacements with output only.
 So the two sides disagreed below about 68 % utilisation. Under option B both
 sides mean the same thing: the first stack is always built, and replacements
 follow running hours (Gerloff's 50,000 h on carbon, NESO per kg on cost). Every
@@ -119,3 +121,29 @@ min-carbon electrolyser may grow. Not yet re-solved: that is step 5 of the plan.
 quantifies it. The three-stack rule is kept as a named sensitivity,
 `electrolysers.STACK_CALENDAR_YEARS_THREE_STACKS`, passed as
 `build_tech(ely_stack_calendar_years=...)`, so the paper can report both.
+
+## Change of 20 Nov 2026: stacks charged in cost
+
+Decided 20 Nov 2026 (user; docs/COMPARISON_FIXES_PLAN.md, from the Rozzi 2024 cost comparison,
+`Claude outputs/rozzi_cost_comparison.md` item 1).
+
+**What was wrong.** This document said in one place that NESO gives no stack cost and in another
+that NESO's per-kg figure is "stack replacement and water". The first was right. NESO's variable
+opex is 0.9 % of capital a year over 7,884 h (FES 2025 Economics Inputs v2, H.01 row 13), the same
+0.9 % it uses for gas reforming, which has no stacks. The Danish Energy Agency, one of NESO's named
+sources, prices no stack replacement in its fixed O&M (note P) and no water (note Q). So the cost
+side paid for the first stack inside the capital and for no replacement at all.
+
+**What it is now.** The stack's share of the installed price is the Danish sheets' (2025 central):
+membrane 17.7 %, alkaline 14.1 %, solid oxide 13.1 % (`h2_capex.ely_stack_cost_fraction`;
+Rozzi's 35 % of equipment is about 21 % installed; tested at x0.5 / x1.5). The cost is split like the
+fuel cell's: the plant's annuity, plus the stack's annuity less its calendar replacement, on
+capacity (`cost_ely`); each stack at its price on the carbon side's `ely_stack_units`
+(`cost_ely_stack_per_mw`). With the stack on its calendar life (one per plant life) this is exactly
+the old annuity. NESO's per-kg figure stays, relabelled water and consumables; solid oxide's per-kg
+figure is NESO's 0.9 % rule on its own price, no longer the BEIS annex's annuitised stack.
+
+**Effect, before any solve.** Membrane at 6,185 h a year: about +£29k per MW a year (+9 %); nothing
+changes below 2,000 h. **Stated limitation:** every type's stack is replaced at the carbon side's
+50,000 h; the Danish lives are 60,000 (membrane), 70,000 (alkaline) and 25,000 h (solid oxide), so
+solid oxide's stacks are replaced about half as often as they should be.

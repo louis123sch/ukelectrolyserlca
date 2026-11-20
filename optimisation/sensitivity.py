@@ -570,7 +570,15 @@ SHAKY_KNOBS = {
                                   "battery.capacity_fade_at_end_of_life",
                                   # since 13 Nov 2026: the gas engine plant's carbon (ecoinvent v2 set,
                                   # the hall a stand-in)
-                                  "coefficient.gwp_ge_per_mw")
+                                  "coefficient.gwp_ge_per_mw",
+                                  # since 20 Nov 2026 (docs/COMPARISON_FIXES_PLAN.md): the electrolyser
+                                  # stack's share of the price (Danish; Rozzi's ~21 % inside the range),
+                                  # the tank's capital (Rozzi's large low-pressure tanks near x0.5) and
+                                  # the fuel cell's maintenance (about three times Rozzi's; covers the
+                                  # low case's cheap plant on a dearer unit's maintenance, stated)
+                                  "cost.electrolyser.stack_cost_fraction",
+                                  "cost.h2_tank.capex_per_kg",
+                                  "cost.fuel_cell.maintenance_per_kW_year")
              for f in (0.5, 1.5)],
     "green_h2_grid_share": [0.0, 1.0],          # the electricity the seller runs on
     # since 13 Nov 2026: DESNZ's published gas range (low / high over central), now that the

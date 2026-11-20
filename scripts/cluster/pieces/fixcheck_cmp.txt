@@ -1,0 +1,26 @@
+# Comparison fixes before/after (docs/COMPARISON_FIXES_PLAN.md stage 2, 20 Nov 2026), the code WITH
+# electrolyser stacks in cost, the 2026 build and solar ageing, at East Grinstead. Same pieces as
+# fixcheck_fc.txt; the slow configurations 2, 3 and 21 go with 8 cores from fixcheck_slow_after.txt.
+# Compare with ~/fix-fc: configurations with no electrolyser and no solar must match exactly.
+scripts/cluster/fixcheck_site.py refcases
+scripts/cluster/fixcheck_site.py scenario 1
+scripts/cluster/fixcheck_site.py scenario 4
+scripts/cluster/fixcheck_site.py scenario 6
+scripts/cluster/fixcheck_site.py scenario 7
+scripts/cluster/fixcheck_site.py scenario 8
+scripts/cluster/fixcheck_site.py scenario 9
+scripts/cluster/fixcheck_site.py scenario 10
+scripts/cluster/fixcheck_site.py scenario 11
+scripts/cluster/fixcheck_site.py scenario 12
+scripts/cluster/fixcheck_site.py scenario 13
+scripts/cluster/fixcheck_site.py scenario 14
+scripts/cluster/fixcheck_site.py scenario 15
+scripts/cluster/fixcheck_site.py scenario 16
+scripts/cluster/fixcheck_site.py scenario 17
+scripts/cluster/fixcheck_site.py scenario 18
+scripts/cluster/fixcheck_site.py scenario 19
+scripts/cluster/fixcheck_site.py scenario 20
+scripts/cluster/fixcheck_site.py scenario 22
+scripts/cluster/fixcheck_site.py scenario 23
+scripts/cluster/fixcheck_site.py scenario 24
+scripts/cluster/fixcheck_site.py scenario 25

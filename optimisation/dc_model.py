@@ -268,10 +268,13 @@ class Tech:
     # max(cap_ely / calendar years, running MWh / duty hours). Defaulted to zero so a
     # Tech written before the split, whose gwp_ely is the whole unit, is unchanged.
     gwp_ely_stack_per_mw: float = 0.0
-    # Their cost: NESO's variable opex (stack replacement and water) per kg made,
-    # so running the electrolyser hard costs something in cost as in carbon.
-    # Defaulted to zero, which is the model before 28 Oct 2026.
+    # NESO's variable opex per kg made: water and consumables since 20 Nov 2026, when
+    # it was read as not covering stacks. Defaulted to zero, the model before 28 Oct 2026.
     cost_ely_variable_per_kg: float = 0.0
+    # Their cost (20 Nov 2026): one stack per MW, charged on the same ely_stack_units as
+    # gwp_ely_stack_per_mw; cost_ely is then net of the stack's calendar replacement.
+    # Defaulted to zero, the model before 20 Nov 2026, whose cost_ely is the whole unit.
+    cost_ely_stack_per_mw: float = 0.0
     # Major-hazard compliance, GBP per site per year, on any build allowed a tank
     # (objective_constants). Defaulted to zero, the model before 5 Nov 2026.
     cost_major_hazard_per_year: float = 0.0
@@ -857,7 +860,9 @@ def objective_terms(q, series: Series, tech: Tech, *, price, ci, group_series=No
         "wind": tech.cost_wind * q["cap_wind"],
         "solar": tech.cost_solar * q["cap_solar"],
         "battery": tech.cost_batt_p * q["cap_batt_p"] + tech.cost_batt_e * q["cap_batt_e"],
-        "electrolyser": tech.cost_ely * q["cap_ely"],
+        # Stack replacements on the carbon side's ely_stack_units (20 Nov 2026).
+        "electrolyser": (tech.cost_ely * q["cap_ely"]
+                         + tech.cost_ely_stack_per_mw * q.get("ely_stack_units", 0.0)),
         "H2 tank": tech.cost_tank * q["cap_tank"],
         # Stack and BoP replacements, on the same convex max(calendar, duty)
         # counts the carbon side uses. Without them, running the fuel cell hard
@@ -881,8 +886,8 @@ def objective_terms(q, series: Series, tech: Tech, *, price, ci, group_series=No
                                        for g in sorted({o.group for o in opts}))),
         buy_1: scale * (tech.bought_h2_gbp_per_kg * q["h2_buy"]).sum(),
         buy_2: scale * (tech.bought_h2_2_gbp_per_kg * q["h2_buy_2"]).sum(),
-        "electrolyser stacks and water": scale * (tech.cost_ely_variable_per_kg
-                                                  * kg_per_mwh_in * q["p_ely"] * dt).sum(),
+        "electrolyser water and consumables": scale * (tech.cost_ely_variable_per_kg
+                                                       * kg_per_mwh_in * q["p_ely"] * dt).sum(),
         "gas": scale * (tech.cost_ge_gas_per_mwh * q["p_ge"] * dt).sum(),
         "gas carbon price": scale * (tech.cost_ge_carbon_per_mwh * q["p_ge"] * dt).sum(),
         "gas engine running maintenance": scale * (tech.cost_ge_maint_per_mwh * q["p_ge"] * dt).sum(),
@@ -908,8 +913,10 @@ CHAINS = {
              "export credit"},
     "battery": {"battery", "battery cells and container", "battery power conversion",
                 "battery step-up transformers"},
+    # "electrolyser stacks and water" is the running-cost term's name before 20 Nov 2026,
+    # kept so saved runs still read.
     "electrolyser": {"electrolyser", "electrolyser stack replacements", "electrolyser consumables",
-                     "electrolyser stacks and water"},
+                     "electrolyser water and consumables", "electrolyser stacks and water"},
     "hydrogen tank": {"H2 tank", "H2 leaked from tank", "major-hazard compliance"},
     "fuel cell": {"fuel cell", "fuel cell stack replacements", "fuel cell BoP replacements",
                   "fuel cell maintenance", "fuel cell step-up transformers"},

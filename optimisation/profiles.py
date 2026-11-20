@@ -106,6 +106,20 @@ for _v in WIND_NET_COMPONENTS.values():
     WIND_NET_FACTOR *= _v
 WIND_NET_FACTOR_IS_ASSUMED = True
 
+# --- solar panel ageing (added 20 Nov 2026, user) --------------------------------
+# Renewables.ninja gives a year-one panel; solar's cost and carbon are spread over
+# its 38-year life (DESNZ/Arup 2024, central, tech_costs.py), so without ageing the
+# optimiser saw every year at year-one output. Smith et al. 2024, the study's solar
+# inventory, designs for 0.7 %/yr linear degradation (Table 3; ledger smith_2024.md).
+# Over L years the mean output is 1 - d (L - 1) / 2 of year one: 0.870 at 38 years.
+# Undiscounted, as the carbon side divides by life. Taken at the central life for
+# every cost case (35 and 40 years give 0.881 and 0.864). Wind is not aged (user,
+# 20 Nov 2026): a stated limitation in DATA_GAPS.md. Found by both the Terlouw and
+# the Viole comparisons.
+SOLAR_DEGRADATION_PER_YEAR = 0.007
+SOLAR_AGEING_LIFE_YEARS = 38.0
+SOLAR_LIFE_AVERAGE_FACTOR = 1.0 - SOLAR_DEGRADATION_PER_YEAR * (SOLAR_AGEING_LIFE_YEARS - 1.0) / 2.0
+
 
 def fetch_ninja_wind(session, lat, lon, date_from, date_to, capacity_kw, height_m,
                      turbine, dataset="merra2", api_base=NINJA_BASE):

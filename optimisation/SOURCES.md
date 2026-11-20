@@ -1459,6 +1459,36 @@ and previously dropped: PEM £0.003114/kWh HHV × 39.4 kWh/kg = **£0.123/kg**, 
 £0.104/kg; SOEC's is BEIS's since 4 Nov 2026 (below). Charged per kg made — the
 cost counterpart of the carbon side's duty-driven `ely_stack_units`.
 
+### Electrolyser stacks, build year and solar ageing (20 Nov 2026)
+From the Rozzi, Viole and Terlouw comparisons (`docs/COMPARISON_FIXES_PLAN.md`; user's decisions of
+20 Nov 2026).
+
+- **NESO's per-kg figure is not a stack cost.** It is 0.9 % of capital a year over 7,884 h (FES 2025
+  Economics Inputs v2, H.01 row 13; the portal's £0.003114/kWh is exactly £2,728 × 0.009 ÷ 7,884), the
+  same 0.9 % NESO uses for gas reforming. Relabelled water and consumables; the section above is
+  superseded on what it covers.
+- **Stack share of the price** (`h2_capex.ely_stack_cost_fraction`, `cost.electrolyser.stack_cost_fraction`,
+  derived): Danish Energy Agency, *Renewable Fuels* data sheets, Aug 2026, 2025 central, " - hereof
+  electrolyser stack" over "Specific investment" (installed, NESO's scope): 80 PEMEC 100 MW €311.96 /
+  €1,765.27 = **17.7 %**; 80 AEC 100 MW €177.31 / €1,254.04 = **14.1 %**; 80 SOEC 10 MW €387.73 / €2,959.14
+  = **13.1 %**. Note P: stack replacement not in the fixed O&M. Cross-check: Rozzi et al. 2024 (Data in
+  Brief 56, 110795), 35 % of equipment ≈ 21 % installed at the Danish 61 % equipment share. BEIS 2021's
+  60 % not used (2018 evidence, the whole unit counted as the stack). Tested x0.5 / x1.5.
+- **Charged per replacement** on `ely_stack_units` (`cost_ely_stack_per_mw`), the plant and the stack's
+  annuity less its calendar replacement on capacity (`cost_ely`): exactly the old annuity at one stack
+  per plant life. Stack life 50,000 h for every type, the carbon side's; the Danish 60,000 / 70,000 /
+  25,000 h are a stated limitation.
+- **SOEC per kg**: NESO's 0.9 % rule on its own price (£0.22/kg central, 2025 £), replacing the BEIS
+  annex's annuitised stack (£0.51/kg), now that its stacks are charged per replacement.
+- **Build year 2026** for membrane and alkaline: the straight line between NESO's 2025 and 2030 portal
+  rows (its workbook H.02 steps the same way), £1,924 and £1,682 per kWe, 2025 pounds. Derived.
+- **Solar ageing**: `profiles.SOLAR_LIFE_AVERAGE_FACTOR` = 0.8705 on the solar profile, Smith et al. 2024
+  Table 3's 0.7 %/yr over the DESNZ/Arup 38-year life, linear and undiscounted. Wind not aged (user).
+- **New screened inputs** (x0.5 / x1.5, `sensitivity.SHAKY_KNOBS`): the stack share, the tank's capital
+  (`cost.h2_tank.capex_per_kg`; Rozzi's large low-pressure tanks, IEA Task 38, £186-260/kg, sit near
+  x0.5) and the fuel cell's maintenance (`cost.fuel_cell.maintenance_per_kW_year`; about three times
+  Rozzi's 1.46 % of capital).
+
 ---
 
 ## Hydrogen-chain asset costs

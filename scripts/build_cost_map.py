@@ -83,7 +83,8 @@ TERM_NAMES = {
     "major-hazard compliance": "Major-hazard compliance, per site per year",
     "grid winter-peak charge": "National grid locational charge, on winter-peak demand",
     "grid energy + network": "Grid imports (half-hourly price, every part)",
-    "electrolyser stacks and water": "Electrolyser stacks and water", "unserved (VoLL)": "Unserved load (penalty)",
+    "electrolyser water and consumables": "Electrolyser water and consumables",
+    "electrolyser stacks and water": "Electrolyser stacks and water (before 20 Nov 2026)", "unserved (VoLL)": "Unserved load (penalty)",
     "export credit": "Export credit",
 }
 TERM_STEPS = {"unserved (VoLL)": ["cost.unserved.voll_per_MWh"]}

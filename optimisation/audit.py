@@ -170,12 +170,12 @@ ACCEPTED: dict[str, str] = {
         "No UK inventory exists; see DATA_GAPS.md. Pass solar_basis='ecoinvent' "
         "to get the old figure back.",
     "coverage:ely_stack_units moves carbon but not cost (cap_ely)":
-        "Electrolyser stacks are charged by replacement in carbon only (user, 26 Oct "
-        "2026; docs/ELECTROLYSER_STACKS.md, option B). NESO publishes one capex, a "
-        "fixed opex fraction and a 25-year life, with no stack-replacement line to "
-        "charge on ely_stack_units, so the cost side stays calendar-only. The carbon "
-        "floor is the old charge; the duty term only bites above ~68 % utilisation, "
-        "which the baseload strategy forces.",
+        "Closed 20 Nov 2026: cost_ely_stack_per_mw charges each stack on "
+        "ely_stack_units at the Danish Energy Agency's stack share of the price "
+        "(docs/COMPARISON_FIXES_PLAN.md), so this should no longer fire. Kept for "
+        "history: until then stacks were charged by replacement in carbon only (user, "
+        "26 Oct 2026; docs/ELECTROLYSER_STACKS.md, option B), on the reading that NESO "
+        "publishes no stack-replacement line.",
     "coverage:p_ely's own term moves carbon but not cost (cap_ely)":
         "The electrolyser consumables, water and heat, as in the pooled finding "
         "above: carbon only, because no price for either is sourced.",
@@ -401,6 +401,46 @@ def check_degeneracy_and_slack(series, assets, tech, objective="gwp"):
                    "the excess store is not required by any constraint")
     if clean:
         report("degeneracy", "ok", f"every sized capacity is pinned under {objective!r}")
+    if "cap_batt_e" in V and float(V["cap_batt_e"].solution) > 1e-6:
+        hours = float(len(d)) * float(series.dt_hours)
+        check_battery_cycles(battery_cycles_per_year(float((d["dis"] * series.dt_hours).sum()),
+                                                     float(V["cap_batt_e"].solution), hours))
+
+
+# Battery wear follows the calendar plus a fixed number of cycles a year from one
+# saved run (battery.CYCLES_PER_YEAR_IN_USE). Fine while designs cycle near it
+# (Viole comparison, 19 Nov 2026); this says when one does not.
+BATTERY_CYCLES_WARN_RATIO = 1.5
+
+
+def battery_cycles_per_year(discharged_mwh: float, cap_batt_e_mwh: float, hours: float) -> float:
+    """Full cycles a year: MWh discharged over the window per MWh of energy rating,
+    scaled from the window's hours to a year."""
+    if cap_batt_e_mwh <= 0 or hours <= 0:
+        return 0.0
+    return discharged_mwh / cap_batt_e_mwh * 8_760.0 / hours
+
+
+def check_battery_cycles(cycles_per_year: float):
+    """Warn when a design's battery cycles well above the assumption its end-of-life
+    fade is built on, or would reach Modo's 10,000 warranted cycles within its
+    15-year life. Nothing in the optimiser charges extra wear for either."""
+    from optimisation import battery as batt
+    assumed = batt.CYCLES_PER_YEAR_IN_USE
+    life_cycles = cycles_per_year * batt.ASSET_LIFE_YEARS
+    if life_cycles >= batt.WARRANTED_CYCLES:
+        report("battery cycles", "warn",
+               f"the battery does {cycles_per_year:,.0f} cycles a year, {life_cycles:,.0f} over its life",
+               f"reaches Modo's {batt.WARRANTED_CYCLES:,} warranted cycles before the "
+               f"{batt.ASSET_LIFE_YEARS}-year life ends; the model charges no extra replacement")
+    elif cycles_per_year > BATTERY_CYCLES_WARN_RATIO * assumed:
+        report("battery cycles", "warn",
+               f"the battery does {cycles_per_year:,.0f} cycles a year against the {assumed:g} assumed",
+               "the end-of-life oversizing (battery.capacity_fade_at_end_of_life) assumes "
+               f"{assumed:g}; re-set battery.CYCLES_PER_YEAR_IN_USE from this run")
+    else:
+        report("battery cycles", "ok",
+               f"the battery does {cycles_per_year:,.0f} cycles a year, near the {assumed:g} assumed")
 
 
 def check_lifetime_agreement():

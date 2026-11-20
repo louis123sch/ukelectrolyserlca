@@ -169,12 +169,15 @@ _FIXED = [
            note="Table E.1: solar PV and onshore wind 7.60 %, offshore wind 8.90 %, lithium batteries 8.90 %, hydrogen "
                 "electrolyser 10.10 %, hydrogen to power (emerging) and novel long-duration storage 10.10 %. No fuel cell "
                 "or hydrogen storage row: they take 10.10 %"),
-    Source("dea_renewable_fuels_2026", "Technology Data for Renewable Fuels, data sheet 80 SOEC 10 MW (workbook 'Version 0015', August 2026, DNV)",
+    Source("dea_renewable_fuels_2026", "Technology Data for Renewable Fuels, data sheets 80 PEMEC 100 MW, 80 AEC 100 MW and 80 SOEC 10 MW (workbook 'Version 0015', August 2026, DNV)",
            "Danish Energy Agency and Energinet", "August 2026", "workbook",
            link="https://ens.dk/media/6444/download", basis="2025 € for the electrolysis chapters (Intro sheet)",
            note="Solid-oxide 10 MW, 2025 column: specific investment €2,959/kW of input electricity (range 2,851–3,067), "
                 "fixed O&M 7 % (4–10) excluding stacks, stack replacement every 25,000 h, 20 y. A government agency NESO "
-                "itself cites"),
+                "itself cites. Since 20 Nov 2026 also the stack's share of the specific investment, 2025 central: membrane "
+                "€311.96 of €1,765.27 (17.7 %), alkaline €177.31 of €1,254.04 (14.1 %), solid oxide €387.73 of €2,959.14 "
+                "(13.1 %); note P on every electrolyser sheet: stack replacement not in the fixed O&M; note Q: no water "
+                "or electricity priced. Stack lives 60,000 / 70,000 / 25,000 h"),
     Source("dea_energy_storage_2025", "Technology Data for Energy Storage, chapter 151 hydrogen storage tanks",
            "Danish Energy Agency and Energinet", "chapter 2019–2020; catalogue updated to July 2026", "document",
            link="https://ens.dk/media/6588/download", basis="2020 €",

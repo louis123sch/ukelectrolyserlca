@@ -220,8 +220,41 @@ SOE_KWH_IN_PER_KWH_H2 = 0.95885
 PEM_CAPEX_GBP_PER_KW_H2 = 730.29        # the same sheet's PEM, medium
 PEM_KWH_IN_PER_KWH_H2 = 1.3208
 SOE_FIXED_GBP_PER_KW_H2_YEAR = {"low": 49.5, "central": 53.02, "high": 54.77}
-# Annuitised stack replacement (report, §3): no water in it.
+# Annuitised stack replacement (report, §3): no water in it. Not charged since 20 Nov
+# 2026: solid oxide's stacks are now charged per replacement like the others, and its
+# per-kg figure is NESO's 0.9 % rule (below). Kept for the record and the cost map's history.
 SOE_VARIABLE_GBP_PER_KWH_H2 = {"low": 0.0070, "central": 0.0104, "high": 0.0178}
+
+# -----------------------------------------------------------------------------
+# Electrolyser stacks and the per-kg running cost (20 Nov 2026, user)
+# -----------------------------------------------------------------------------
+# The stack's share of the installed price: the Danish Energy Agency's Renewable
+# Fuels data sheets (Aug 2026), 2025 central column, " - hereof electrolyser stack"
+# over "Specific investment", both EUR per kW of total electrical input. The specific
+# investment is installed, the same scope as NESO's capital. Rozzi et al. 2024 is the
+# cross-check: 35 % of equipment cost, about 21 % of an installed price at the Danish
+# 61 % equipment share. BEIS 2021's 60 % is not used: it rests on 2018 evidence and
+# counts the whole electrolyser unit as the stack. Tested at x0.5 / x1.5
+# (sensitivity.SHAKY_KNOBS). Claude outputs/rozzi_cost_comparison.md, item 1.
+DEA_STACK_EUR_PER_KWE = {"pem": 311.9603763540285, "ae": 177.31003870444542, "soec": 387.73452676931026}
+DEA_INVESTMENT_EUR_PER_KWE = {"pem": 1_765.26543998952, "ae": 1_254.04085660402, "soec": DEA_SOEC_EUR_PER_KWE}
+DEA_STACK_SHEET = {"pem": "80 PEMEC 100 MW", "ae": "80 AEC 100 MW", "soec": "80 SOEC 10 MW"}
+# The Danish stack lives, for the record only: the model replaces every type's stack
+# at the carbon side's 50,000 h (electrolysers.STACK_DUTY_HOURS), a stated limitation.
+DEA_STACK_LIFE_HOURS = {"pem": 60_000.0, "ae": 70_000.0, "soec": 25_000.0}
+# NESO's variable opex is 0.9 % of capital a year (FES 2025 Economics Inputs v2, sheet
+# H.01, row 13), per kWh of hydrogen at 90 % running: the portal's per-kWh figure is
+# exactly that over 7,884 h. NESO applies the same 0.9 % to gas reforming, which has no
+# stacks, and the Danish sheets price neither stack replacement (note P) nor water
+# (note Q) in their running costs: read as water and consumables, not stacks.
+NESO_VARIABLE_OPEX_FRAC = 0.009
+NESO_VARIABLE_OPEX_HOURS = 7_884.0
+
+# The build year the membrane and alkaline electrolysers are priced at (20 Nov 2026,
+# user): 2026, as the battery and solid oxide's central case. The NESO portal table
+# steps 2025, 2030, ...: 2026 is the straight line between them, as NESO's own
+# workbook (FES 2025 Economics Inputs v2, sheet H.02) steps between 2025 and 2030.
+ELECTROLYSER_BUILD_YEAR = 2026
 
 GRADE = "derived"
 
@@ -522,10 +555,55 @@ def tank_costs():
         return pd.DataFrame([tank_cost(case) for case in CASES])
 
 
-def _neso_pem_capex(build_year=2025):
-    """PEM capex from the NESO table the repo already has."""
+_NESO_NUMERIC = ("capex_GBP_per_kWe", "efficiency_pct", "capex_GBP_per_kW_H2_HHV", "fixed_opex_pct_capex",
+                 "fixed_opex_GBP_per_kW_H2_HHV_year", "variable_opex_GBP_per_kWh_H2_HHV", "plant_lifetime_years")
+
+
+def neso_table(build_year=ELECTROLYSER_BUILD_YEAR) -> pd.DataFrame:
+    """NESO's PEM and alkaline rows for ``build_year``: the portal's own rows where it
+    has the year, else the straight line between the years either side, column by
+    column (NESO's workbook steps 2025 to 2030 the same way). ``build_year`` and an
+    ``interpolated`` flag say which."""
     df = pd.read_csv(PRICE_DIR / "electrolyser_costs_clean.csv")
-    df = df[(df.technology == "PEM") & (df.build_year == build_year)]
+    years = sorted(df.build_year.unique())
+    if build_year in years:
+        return df[df.build_year == build_year].assign(interpolated=False)
+    lo = max(y for y in years if y < build_year)
+    hi = min(y for y in years if y > build_year)
+    w = (build_year - lo) / (hi - lo)
+    a = df[df.build_year == lo].set_index(["technology", "scenario"])
+    b = df[df.build_year == hi].set_index(["technology", "scenario"])
+    out = a.copy()
+    for c in _NESO_NUMERIC:
+        out[c] = a[c] + w * (b[c] - a[c])
+    out["build_year"] = build_year
+    return out.reset_index().assign(interpolated=True)
+
+
+def neso_variable_per_kg(capex_gbp_per_kw_h2: float) -> float:
+    """NESO's variable opex per kg made: 0.9 % of the capital per kW of hydrogen a
+    year, over 7,884 h, times the higher heating value. The portal's own per-kWh
+    figure is this rule on its own capital; solid oxide gets it on its own price."""
+    return capex_gbp_per_kw_h2 * NESO_VARIABLE_OPEX_FRAC / NESO_VARIABLE_OPEX_HOURS * H2_HHV_KWH_PER_KG
+
+
+def ely_stack_cost_fraction(tech: str) -> float:
+    """The stack's share of the installed electrolyser price, from the Danish Energy
+    Agency's sheet for ``tech`` ("pem", "ae" or "soec"), each number recorded."""
+    sheet = [("dea_renewable_fuels_2026", f"sheet {DEA_STACK_SHEET[tech]}, 2025 central column")]
+    k = f"cost.electrolyser_{tech}"
+    stack = T.cost(f"{k}.dea_stack_EUR_per_kWe", DEA_STACK_EUR_PER_KWE[tech], "€ per kW of input electricity",
+                   "Electrolyser stack, 2025", grade="transcribed", cites=sheet,
+                   note="' - hereof electrolyser stack'; balance of stack not included")
+    whole = T.cost(f"{k}.dea_investment_EUR_per_kWe", DEA_INVESTMENT_EUR_PER_KWE[tech], "€ per kW of input electricity",
+                   "Specific investment, installed, 2025", grade="transcribed", cites=sheet)
+    return stack / whole
+
+
+def _neso_pem_capex(build_year=ELECTROLYSER_BUILD_YEAR):
+    """PEM capex from the NESO table the repo already has."""
+    df = neso_table(build_year)
+    df = df[df.technology == "PEM"]
     if df.empty:
         raise ValueError(f"No NESO PEM capex for build year {build_year}")
     return {"low": float(df[df.scenario == "Low"].iloc[0].capex_GBP_per_kWe),
@@ -535,16 +613,18 @@ def _neso_pem_capex(build_year=2025):
 
 
 
-def electrolyser_cost(tech: str, case: str, build_year=2025) -> dict:
-    """One electrolyser's NESO (or, for SOEC, PEM-scaled) cost row, each number
-    recorded for the cost map. ``tech`` is "ae", "pem" or "soec"."""
+def electrolyser_cost(tech: str, case: str, build_year=ELECTROLYSER_BUILD_YEAR) -> dict:
+    """One electrolyser's NESO (or, for SOEC, NESO H.02 / Danish) cost row, each
+    number recorded for the cost map. ``tech`` is "ae", "pem" or "soec"."""
     with T.quiet():
         df = electrolyser_costs(build_year)
     r = df[(df.asset == f"electrolyser_{tech}") & (df.case == case)].iloc[0]
     k = f"cost.electrolyser_{tech}"
     scen = {"low": "Low", "central": "Central", "high": "High"}[case]
+    between = (" (straight line between the 2025 and 2030 build years)"
+               if bool(r.get("interpolated", False)) else "")
     neso = lambda what: [("neso_green_h2_portal_costs", f"{'PEM' if tech != 'ae' else 'Alkaline'}, "   # noqa: E731
-                                                        f"{scen}, build year {build_year}, {what}")]
+                                                        f"{scen}, build year {build_year}{between}, {what}")]
     if tech == "soec":
         annex = lambda what: [("beis_h2_costs_2021", f"Technical and cost assumptions, commissioning 2025, {what}")]  # noqa: E731
         P.to_2025(SOE_PRICE_YEAR)
@@ -578,11 +658,15 @@ def electrolyser_cost(tech: str, case: str, build_year=2025) -> dict:
         T.cost(f"{k}.capex_per_kWe", float(r.capex_GBP_per_kWe), "GBP per kWe", "SOEC capital", uses=uses, note=why)
         T.cost(f"{k}.fixed_opex_frac", float(r.fixed_opex_frac), "fraction of capital per year", "Fixed operating cost",
                uses=fixed_uses)
-        T.cost(f"{k}.annex_variable_per_kWh_H2", SOE_VARIABLE_GBP_PER_KWH_H2[case], "GBP per kWh H2 (HHV)",
-               "Solid-oxide stack replacement, annuitised, real 2020", grade="transcribed",
-               cites=annex(f"SOE variable OPEX, {case}"))
+        T.cost("cost.electrolyser.neso_variable_opex_frac", NESO_VARIABLE_OPEX_FRAC, "fraction of capital per year",
+               "NESO's variable opex for electrolysis", grade="transcribed",
+               cites=[("neso_fes2025_economics_inputs", "sheet H.01, row 13, variable OpEx from electrolysis, 0.9 %")],
+               inputs={"hours_per_year": NESO_VARIABLE_OPEX_HOURS},
+               note="Read as water and consumables: NESO uses the same 0.9 % for gas reforming, which has no stacks")
         T.cost(f"{k}.variable_opex_per_kg", float(r.variable_opex_GBP_per_kg), "GBP per kg H2",
-               "Stack replacement per kg made", uses=[f"{k}.annex_variable_per_kWh_H2", f"price_base.{SOE_PRICE_YEAR}_to_2025"],
+               "Water and consumables per kg made: NESO's 0.9 % rule on solid oxide's own price (since 20 Nov 2026; "
+               "the stacks are charged per replacement)",
+               uses=["cost.electrolyser.neso_variable_opex_frac", f"{k}.capex_per_kWe", f"{k}.annex_kWh_in_per_kWh_H2"],
                inputs={"kWh_per_kg_HHV": H2_HHV_KWH_PER_KG})
         T.cost(f"{k}.lifetime_years", float(r.lifetime_years), "years", "Plant life", grade="assumed",
                note="PEM's 25 years, kept to match the carbon side; the annex says 30")
@@ -594,9 +678,11 @@ def electrolyser_cost(tech: str, case: str, build_year=2025) -> dict:
         hhv = T.cost("h2.hhv_kwh_per_kg", H2_HHV_KWH_PER_KG, "kWh per kg", "Hydrogen's higher heating value",
                      grade="transcribed", source="the standard figure, 141.8 MJ/kg")
         T.cost(f"{k}.variable_opex_per_kg", float(r.variable_opex_GBP_per_kg), "GBP per kg H2",
-               "Stack replacement and water per kg made (NESO charges stack wear on output)",
+               "Water and consumables per kg made: NESO's variable opex, 0.9 % of capital a year over 7,884 h",
                uses=["h2.hhv_kwh_per_kg"], cites=neso("variable_opex_GBP_per_kWh_H2_HHV"),
-               inputs={"GBP_per_kWh_HHV": float(r.variable_opex_GBP_per_kg) / hhv})
+               inputs={"GBP_per_kWh_HHV": float(r.variable_opex_GBP_per_kg) / hhv},
+               note="Not stacks (since 20 Nov 2026): NESO uses the same 0.9 % for gas reforming, which has none. "
+                    "Stacks are charged per replacement (coefficient.cost_ely_stack_per_mw)")
         T.cost(f"{k}.lifetime_years", float(r.lifetime_years), "years", "Plant life", grade="transcribed",
                cites=neso("plant_lifetime_years"))
     return {**r.to_dict(), "trace_prefix": k}
@@ -626,16 +712,17 @@ def _soec_fixed_gbp_per_kwe_year(case: str) -> float:
     return NESO_SOE_FIXED_GBP_PER_KW_H2_YEAR[yr] / SOE_KWH_IN_PER_KWH_H2 * P.factor(NESO_SOE_PRICE_YEAR)
 
 
-def electrolyser_costs(build_year=2025):
-    """AE and PEM from NESO; SOEC from the BEIS 2021 annex, on NESO's PEM.
+def electrolyser_costs(build_year=ELECTROLYSER_BUILD_YEAR):
+    """AE and PEM from NESO (built 2026: the straight line between its 2025 and 2030
+    rows); SOEC from NESO's H.02 (central, high) and the Danish Energy Agency (low).
 
-    ``variable_opex_GBP_per_kg`` is NESO's variable opex — stack replacement and
-    water — per kg made. NESO charges stack wear on output, so it is the cost
-    counterpart of the carbon side's duty-driven ``ely_stack_units``. SOEC's is
-    the annex's annuitised stack replacement, per kg.
+    ``variable_opex_GBP_per_kg`` is NESO's variable opex, 0.9 % of capital a year
+    over 7,884 h, per kg made: water and consumables, not stacks (20 Nov 2026).
+    SOEC's is the same rule on its own price. The stacks are charged per
+    replacement on ``ely_stack_units``, at ``ely_stack_cost_fraction`` of capital
+    (dc_inputs.build_tech, ``cost_ely_stack_per_mw``).
     """
-    df = pd.read_csv(PRICE_DIR / "electrolyser_costs_clean.csv")
-    df = df[df.build_year == build_year]
+    df = neso_table(build_year)
     scen = {"low": "Low", "central": "Central", "high": "High"}
     rows = []
     for tech, label in (("Alkaline", "electrolyser_ae"), ("PEM", "electrolyser_pem")):
@@ -652,17 +739,18 @@ def electrolyser_costs(build_year=2025):
                 "variable_opex_GBP_per_kg": float(r.variable_opex_GBP_per_kWh_H2_HHV)
                                             * H2_HHV_KWH_PER_KG,
                 "lifetime_years": float(r.plant_lifetime_years),
-                "grade": "transcribed",
-                "note": "NESO Green Hydrogen Data Portal",
+                "grade": "derived" if bool(r.interpolated) else "transcribed",
+                "note": "NESO Green Hydrogen Data Portal"
+                        + (f", build year {build_year} on the straight line" if bool(r.interpolated) else ""),
+                "interpolated": bool(r.interpolated),
             })
-    inflate = P.factor(SOE_PRICE_YEAR)
     for case in CASES:
         capex = _soec_capex_gbp_per_kwe(case, build_year)
         rows.append({
             "asset": "electrolyser_soec", "case": case,
             "capex_GBP_per_kWe": capex,
             "fixed_opex_frac": _soec_fixed_gbp_per_kwe_year(case) / capex,
-            "variable_opex_GBP_per_kg": SOE_VARIABLE_GBP_PER_KWH_H2[case] * H2_HHV_KWH_PER_KG * inflate,
+            "variable_opex_GBP_per_kg": neso_variable_per_kg(capex * SOE_KWH_IN_PER_KWH_H2),
             "lifetime_years": 25.0,
             "grade": GRADE,
             "note": {"low": "Danish Energy Agency, 10 MW, 2025",

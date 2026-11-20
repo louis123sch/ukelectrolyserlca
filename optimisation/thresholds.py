@@ -156,7 +156,8 @@ KNOBS: dict[str, Knob] = {k.name: k for k in (
               "bought hydrogen has to cost, and leaving one colour pinned "
               "would only measure how fast the LP switches to it."),
     Knob("ely_capex", "Electrolyser annualised cost", "x today",
-         ("cost_ely",), "multiplier", "down", 0.01, 1.0, ("electrolyser",)),
+         ("cost_ely", "cost_ely_stack_per_mw"), "multiplier", "down", 0.01, 1.0, ("electrolyser",),
+         note="Moves the stack replacement price with the unit (since 20 Nov 2026), as the fuel cell's."),
     Knob("fc_capex", "Fuel cell annualised cost", "x today",
          ("cost_fc", "cost_fc_stack_per_mw", "cost_fc_bop_per_mw"), "multiplier",
          "down", 0.01, 1.0, ("fuel_cell",),
@@ -166,7 +167,7 @@ KNOBS: dict[str, Knob] = {k.name: k for k in (
     Knob("tank_capex", "Hydrogen store annualised cost", "x today",
          ("cost_tank",), "multiplier", "down", 0.01, 1.0, ("tank",)),
     Knob("h2_chain", "Whole H2 chain annualised cost", "x today",
-         ("cost_ely", "cost_tank", "cost_fc", "cost_fc_stack_per_mw",
+         ("cost_ely", "cost_ely_stack_per_mw", "cost_tank", "cost_fc", "cost_fc_stack_per_mw",
           "cost_fc_bop_per_mw"),
          "multiplier", "down", 0.01, 1.0, ("electrolyser", "fuel_cell"),
          note="The headline knob: how much cheaper the make-store-burn chain has "

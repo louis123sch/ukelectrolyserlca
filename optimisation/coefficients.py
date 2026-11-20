@@ -123,15 +123,26 @@ def build(cost_case: str = "central") -> pd.DataFrame:
                            else "LFP EV pack; no container/racking/HVAC")))
 
     # --- electrolysers --------------------------------------------------
-    e_src = "Hermesmann et al. capital good, decomposed; NESO 25 y plant life"
+    # Two rows each since 20 Nov 2026, as the optimiser charges them: the balance of
+    # plant once over the plant's life, and one stack per replacement on
+    # max(calendar, duty). The old single row read "three stacks per unit life",
+    # the 26 Oct - 19 Nov rule, and overstated what is charged 2-2.4x.
+    e_src = "Gerloff 2021 capital good (optimiser_lca/hydrogen.py), decomposed; NESO 25 y plant life"
     for r in ely.decompose_all():
+        name = "electrolyser_" + r["technology"].split()[0].lower()
         rows.append(_row(
-            "electrolyser_" + r["technology"].split()[0].lower(), "MW",
-            r["capital_kgco2e_per_MW"], calendar=ely.PLANT_LIFETIME_YEARS,
+            name, "MW", r["plant_kgco2e_per_MW"], calendar=ely.PLANT_LIFETIME_YEARS,
             variable=r["variable_kgco2e_per_kg"], variable_unit="kg H2",
             source=e_src, grade="derived",
-            note=f"{r['kwh_per_kg']:.1f} kWh/kg; capital was amortised at "
-                 f"{r['implied_capacity_factor']:.0%} CF in the foreground; three stacks per unit life"))
+            note=f"balance of plant only, once per plant life; {r['kwh_per_kg']:.1f} kWh/kg. "
+                 f"The stacks are the {name}_stack row"))
+        rows.append(_row(
+            f"{name}_stack", "MW", r["stack_kgco2e_per_MW"],
+            calendar=ely.STACK_CALENDAR_YEARS, duty=ely.STACK_DUTY_HOURS,
+            source="Gerloff 2021 stack, decomposed; stack life Gerloff §2.1.2 (50,000 h)",
+            grade="derived",
+            note="one stack per replacement on max(calendar, duty): at least one per plant life, more by running "
+                 "hours. Per MW of stack input; the optimiser scales it by the stack's share of cap_ely"))
 
     # --- fuel cell ------------------------------------------------------
     d = fc.decompose()

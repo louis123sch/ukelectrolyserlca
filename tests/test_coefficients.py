@@ -239,6 +239,7 @@ def test_coefficient_table_covers_every_optimiser_asset():
         "onshore_wind", "solar_pv",
         "battery_power", "battery_energy",
         "electrolyser_ae", "electrolyser_pem", "electrolyser_soec",
+        "electrolyser_ae_stack", "electrolyser_pem_stack", "electrolyser_soec_stack",
         "fuel_cell_bop", "fuel_cell_stack", "gas_engine",
         "h2_tank_gandiglio_28bar", "h2_tank_type1_200bar",
     }
@@ -335,7 +336,10 @@ def test_soec_cost_is_danish_between_the_beis_annex_level_and_ratio():
     assert soec.loc["central", "capex_GBP_per_kWe"] == pytest.approx(4923.845 / 0.95885, rel=1e-3)
     assert soec.loc["high", "capex_GBP_per_kWe"] == pytest.approx(5234.367 / 0.95885, rel=1e-3)
     assert soec.loc["low", "capex_GBP_per_kWe"] == pytest.approx(2959.14 / 1.17, rel=1e-3)
-    assert soec.loc["central", "variable_opex_GBP_per_kg"] == pytest.approx(0.50, rel=1e-2)
+    # since 20 Nov 2026: NESO's 0.9 % rule on its own price (water and consumables); the
+    # stacks are charged per replacement (docs/COMPARISON_FIXES_PLAN.md)
+    assert soec.loc["central", "variable_opex_GBP_per_kg"] == pytest.approx(
+        4923.845 * 0.009 / 7884.0 * 39.4, rel=1e-3)
     assert soec.loc["central", "fixed_opex_frac"] * soec.loc["central", "capex_GBP_per_kWe"] == pytest.approx(
         123.096 / 0.95885, rel=1e-3)
 

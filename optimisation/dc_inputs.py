@@ -142,6 +142,7 @@ def build_series(site, start: str, end: str, size_mw_it: float,
                  connection_headroom: float | None = None,
                  auto_build: bool = True, on_progress=None,
                  wind_net_factor: float | None = None,
+                 solar_ageing_factor: float | None = None,
                  ccl_under_cca: bool | None = None,
                  shortfall_route: str = "upgrade",
                  connection_mode: str | None = None,
@@ -162,6 +163,10 @@ def build_series(site, start: str, end: str, size_mw_it: float,
     ``wind_net_factor`` turns ninja's single-turbine capacity factor into a
     farm's net one; defaults to ``profiles.WIND_NET_FACTOR`` (0.851). Pass 1.0
     to reproduce runs before 14 Oct 2026.
+
+    ``solar_ageing_factor`` scales ninja's year-one solar output to its mean over
+    the panel's life; defaults to ``profiles.SOLAR_LIFE_AVERAGE_FACTOR`` (0.870,
+    0.7 %/yr over 38 years). Pass 1.0 to reproduce runs before 20 Nov 2026.
 
     ``ccl_under_cca`` says whether the site holds a Climate Change Agreement
     (92 % off the CCL); defaults to ``levies.CCL_UNDER_CCA``.
@@ -373,12 +378,22 @@ def build_series(site, start: str, end: str, size_mw_it: float,
     net = profiles.WIND_NET_FACTOR if wind_net_factor is None else float(wind_net_factor)
     if not 0.5 <= net <= 1.0:
         raise ValueError(f"wind_net_factor must be in [0.5, 1.0], got {net!r}")
+    solar_age = T.step("solar.life_average_output_factor",
+                       profiles.SOLAR_LIFE_AVERAGE_FACTOR if solar_ageing_factor is None else float(solar_ageing_factor),
+                       "fraction of year-one output", "Solar output averaged over the panel's life: 1 - d (L - 1) / 2",
+                       grade="derived",
+                       inputs={"degradation_per_year": profiles.SOLAR_DEGRADATION_PER_YEAR,
+                               "life_years": profiles.SOLAR_AGEING_LIFE_YEARS},
+                       source="Smith et al. 2024 Table 3, 0.7 %/yr degradation; DESNZ/Arup 2024 38-year life",
+                       note="Undiscounted, at the central life for every cost case. Wind is not aged (user, 20 Nov 2026)")
+    if not 0.5 <= solar_age <= 1.0:
+        raise ValueError(f"solar_ageing_factor must be in [0.5, 1.0], got {solar_age!r}")
     series = dc_model.Series(
         index=index,
         dt_hours=float(meta["slice_hours"]),
         demand_mw=np.full(len(index), size_mw_it * pue),
         cf_wind=df["wind_cf"].to_numpy() * net,
-        cf_solar=df["solar_cf"].to_numpy(),
+        cf_solar=df["solar_cf"].to_numpy() * solar_age,
         grid_gwp_per_mwh=grid_gwp * 1000.0,
         grid_price_per_mwh=price,
         triad_window=nc.triad_window(index),
@@ -434,6 +449,8 @@ def build_series(site, start: str, end: str, size_mw_it: float,
     meta["grid_delivery_voltage"] = voltage
     meta["wind_net_factor"] = net
     meta["mean_wind_cf_net"] = float(np.mean(series.cf_wind))
+    meta["solar_ageing_factor"] = float(solar_age)
+    meta["mean_solar_cf_aged"] = float(np.mean(series.cf_solar))
     meta["mean_grid_delivered_kgco2e_per_kwh"] = float(grid_gwp.mean())
     meta["site"] = site.key
     meta["site_name"] = site.name
@@ -951,6 +968,14 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
     finance_e = T.cost(f"{ek}.building_finance_factor", tc.building_finance_factor(rate_e, build_e), "multiplier",
                        "Capital carried at the rate over the build",
                        uses=["cost.electrolyser.discount_rate", "cost.electrolyser.construction_years"])
+    # Stacks charged per replacement in cost as in carbon (20 Nov 2026, user): the
+    # stack's share of the installed price from the Danish Energy Agency's sheets,
+    # bought on ely_stack_units = max(calendar, running hours). Named stack_cost_frac:
+    # stack_share below is the stack's share of the electrolyser's electricity.
+    stack_cost_frac = T.cost("cost.electrolyser.stack_cost_fraction", hc.ely_stack_cost_fraction(ely_key),
+                             "fraction of capital", "Stack share of the installed electrolyser price",
+                             grade="derived", uses=[f"{ek}.dea_stack_EUR_per_kWe", f"{ek}.dea_investment_EUR_per_kWe"],
+                             note="Rozzi et al. 2024's 35 % of equipment is about 21 % installed; tested at x0.5/x1.5")
     # SOEC's heat in the gas_boiler scenario is bought fuel. In electric_boiler it
     # is already in kwh_per_kg, paid at the hour's price; other types pass neither.
     heat_gbp_per_kg, heat_uses = 0.0, []
@@ -991,6 +1016,12 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
     fc_bop_years = float(fc_bop_calendar_years or d["bop_calendar_lifetime_years"])
     fc_stack_years = float(fc_stack_calendar_years or d["stack_calendar_lifetime_years"])
     ely_stack_years = float(ely_stack_calendar_years or ely.STACK_CALENDAR_YEARS)
+    ely_stack_life = T.cost("cost.electrolyser.stack_life_years", ely_stack_years, "years",
+                            "Stack calendar life, the same the carbon side replaces it on: the floor of one "
+                            "stack per plant life", grade="derived", note="electrolysers.STACK_CALENDAR_YEARS")
+    crf_es = T.cost(f"{ek}.stack_crf", batt.capital_recovery_factor(rate_e, ely_stack_life), "per year",
+                    "Capital recovery factor over the stack's calendar life",
+                    uses=["cost.electrolyser.discount_rate", "cost.electrolyser.stack_life_years"])
     fc_kw_box = float(fc_kw_per_container or d["bop_kw_per_container"])
     gwp_fc_bop = T.step("fuel_cell.bop_per_MW_charged",
                         (d["bop_kgco2e_per_MW"] - d["bop_container_kgco2e_per_MW"]
@@ -1318,19 +1349,33 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
                           "Battery energy capacity, per MWh needed at end of life",
                           ["cost.battery.energy_per_kWh", "cost.battery.crf",
                            "cost.battery.fixed_opex_per_kWh_year", "battery.end_of_life_oversize", *k26]),
+        # Split like the fuel cell (20 Nov 2026): the plant's annuity, the stack's annuity
+        # less its calendar replacement, fixed opex, insurance and rates on capacity;
+        # cost_ely_stack_per_mw then buys each stack on ely_stack_units. With the stack
+        # replaced on its calendar life this is exactly the old whole-unit annuity.
         cost_ely=cstep("cost_ely", (float(ec.capex_GBP_per_kWe) * 1000.0
-                                    * (finance_e * crf_e + float(ec.fixed_opex_frac) + ely_ins)
+                                    * ((1.0 - stack_cost_frac) * finance_e * crf_e
+                                       + stack_cost_frac * (finance_e * crf_es - 1.0 / ely_stack_life)
+                                       + float(ec.fixed_opex_frac) + ely_ins)
                                     * stack_share) * to26, "GBP per MW per year",
                        f"{ely_tech.split()[0]} electrolyser, per MW of cap_ely: capital recovery (carrying the build's "
-                       "finance), fixed opex and insurance on the stack's share of the input",
-                       [f"{ek}.capex_per_kWe", f"{ek}.crf", f"{ek}.building_finance_factor", f"{ek}.fixed_opex_frac",
-                        "cost.electrolyser.insurance_frac", "cost.hydrogen_plant.rates_frac",
+                       "finance), less the stack's calendar replacement, fixed opex and insurance, on the stack's "
+                       "share of the input",
+                       [f"{ek}.capex_per_kWe", f"{ek}.crf", f"{ek}.stack_crf", f"{ek}.building_finance_factor",
+                        "cost.electrolyser.stack_cost_fraction", "cost.electrolyser.stack_life_years",
+                        f"{ek}.fixed_opex_frac", "cost.electrolyser.insurance_frac", "cost.hydrogen_plant.rates_frac",
                         "electrolyser.stack_share", *k26]),
-        # Stack replacement and water per kg made, and SOEC's gas-raised heat
-        # The stacks and water in 2026 pounds; the heat is already (heat_gbp_per_kg)
+        cost_ely_stack_per_mw=cstep("cost_ely_stack_per_mw", float(ec.capex_GBP_per_kWe) * 1000.0 * stack_cost_frac
+                                    * stack_share * to26, "GBP per MW replaced",
+                                    f"One {ely_tech.split()[0]} stack per MW of cap_ely, charged per replacement "
+                                    "(max of calendar and duty), as the carbon side",
+                                    [f"{ek}.capex_per_kWe", "cost.electrolyser.stack_cost_fraction",
+                                     "electrolyser.stack_share", *k26]),
+        # Water and consumables per kg made, and SOEC's gas-raised heat. The water and
+        # consumables in 2026 pounds; the heat is already (heat_gbp_per_kg)
         cost_ely_variable_per_kg=cstep("cost_ely_variable_per_kg",
                                        float(ec.variable_opex_GBP_per_kg) * to26 + heat_gbp_per_kg,
-                                       "GBP per kg H2", "Electrolyser stacks, water and bought heat, per kg made",
+                                       "GBP per kg H2", "Electrolyser water, consumables and bought heat, per kg made",
                                        [f"{ek}.variable_opex_per_kg", *k26, *heat_uses]),
         cost_tank=cstep("cost_tank", (float(tkc.annual_GBP_per_kg_year)
                                       + float(tkc.capex_GBP_per_kg_capacity) * tank_ins) * to26,
