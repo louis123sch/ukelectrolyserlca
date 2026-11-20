@@ -195,3 +195,23 @@ and the LCA map are stale until the reference cases are re-run.
 - **The genset** is not a decision: Zhang's 8.6e6 MJ is scored and reported by
   `data_centre.py` and excluded from every objective (ASSUMPTIONS §7), which is
   what boundary (c) means.
+
+## Before/after at East Grinstead — cluster, 19-20 Nov 2026
+
+Site 23 (51.2, 0.0), all configurations, lowest-cost / knee / lowest-carbon points. Full tables: `docs/fixcheck_tables_2026-11-20.md`. All 82 solve pieces finished with no errors.
+
+**Code check** (`CODE_CHECK_FIX_PLAN.md` step 5; offshore wind removed, NumPy fix, electrolyser stack floor, grid + `flexible` rows dropped). 25 configurations before, 24 after (configuration 5, grid + PEM `flexible`, dropped as a duplicate of 20, as planned). 18 identical. Configuration 2 moved only by a 0.01 MWh battery at the lowest-cost point. The ones that changed are the islanded hydrogen designs that run the electrolyser flexibly (11, 13, 15, 25) and "everything available" (21):
+- lowest-cost points: same cost, carbon 0.1-0.8 % lower;
+- knee: cost +1.5 to +2.8 %, carbon -0.8 to -1.5 %, more wind and electrolyser, smaller tank;
+- lowest-carbon: cost +7.7 to +12.2 %, carbon -1.1 to -1.8 %; the electrolyser roughly doubles (e.g. PEM 94 → 184 MW) and the tank shrinks. This is the flat end of the frontier, where a little carbon costs a lot.
+
+**Fuel-cell stack fix** (`FUEL_CELL_STACK_AND_EQUATIONS_PLAN.md` step 6). Expected: no change without a fuel cell; where the design holds, the bill rises by fuel-cell MW × £42,925 a year (2026 pounds) and carbon is unchanged.
+- All 11 configurations that never build a fuel cell: identical.
+- Fuel-cell points: the bill rises by £6.03-6.07m a year for the ~141 MW fuel cells (+1.1 to +1.6 %), £4.66m in "everything available" (108 MW), matching cap_fc × the term in every row. Carbon unchanged.
+- 12 points "changed design", all by under 0.1 % of a size except the bought blue and turquoise hydrogen knees (fuel cell 72.6 → 72.4 MW, 71.8 → 71.7 MW).
+- 3 rows flagged "look" (10 lowest-cost and knee, 24 lowest-cost): the rise matches the expected figure; carbon moved by 0.001 % with no size change, i.e. the same plant run in a slightly different, equally cheap pattern. Not a problem.
+- Reference case `islanded_h2`, lowest cost: re-optimised (more solar and battery, fuel cell 94.4 → 92.8 MW), cost +1.05 %, carbon +0.94 %. `eastgrinstead_grid`: lowest cost unchanged, lowest carbon +1.6 % cost, same design.
+
+**Test suite on the fixed code** (job 3034820): 739 passed, 5 failed, 6 skipped. Three failures are the stale LCA and cost maps (they still show offshore wind and the old code; rebuilt in plan step 7). The other two are site-connection tests that pick a substation by name from the register; they fail on the cluster's older register copy and pass on the laptop (16 passed, 20 Nov).
+
+**Verdict:** both fixes behave exactly as designed. Still to do: rebuild maps and workbooks from a new run (step 7); the sign-off, 26-site and four-site results carry the old code.
