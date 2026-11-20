@@ -134,7 +134,13 @@ def architecture(name: str, *, grid_limit_mw=None, grid_floor_mw=0.0,
 
 
 # How bought hydrogen may arrive (Scenario.h2_supply); the first is the default.
-H2_SUPPLIES = ("jit", "steady")
+#   "none"   - no hydrogen is bought, whatever colour is priced: the default since 20 Nov
+#              2026 (user: "turn off delivered hydrogen", keep it as an option);
+#   "jit"    - just in time, any amount in any hour: a stand-in for a pipeline to the
+#              site (the default from 12 Nov to 20 Nov 2026);
+#   "steady" - one contract rate, the same every hour, into the tank: a stand-in for
+#              trucked deliveries (dc_model.Assets.h2_buy_steady).
+H2_SUPPLIES = ("none", "jit", "steady")
 
 
 @dataclass(frozen=True)
@@ -155,11 +161,10 @@ class Scenario:
     # How SOEC's external heat is raised; None is the inventoried gas boiler.
     # See electrolysers.SOEC_HEAT_SOURCES. Meaningless for AE and PEM.
     soec_heat: str | None = None
-    # How bought hydrogen is supplied (dc_model.Assets.h2_buy_steady): "jit", any
-    # amount in any hour - the default (back to it 19 Nov 2026, user, after one night
-    # on steady) - or "steady", one rate the same every hour, chosen by the optimiser,
-    # an optional setting. See H2_SUPPLIES.
-    h2_supply: str = "jit"
+    # How bought hydrogen is supplied: "none" (the default since 20 Nov 2026: nothing
+    # bought), "jit" (pipeline stand-in, any amount in any hour) or "steady" (trucked
+    # stand-in, one rate every hour into the tank). See H2_SUPPLIES.
+    h2_supply: str = "none"
 
     def __post_init__(self):
         # Grid + flexible is run, and labelled, as free (strategy_for).
@@ -189,9 +194,13 @@ class Scenario:
             bits.append(self.h2_colour_2)
         if self.strategy != "free" or not self.h2_colour:
             bits.append(self.strategy)
-        # Only the non-default supply changes the key, as with soec_heat.
-        if self.h2_supply != "jit":
-            bits.append(f"{self.h2_supply}h2")
+        # "jit" adds nothing, so runs saved while it was the default keep their keys.
+        # "none" is marked only where a colour is priced (where buying was possible),
+        # so a scenario that could never buy keeps its key too.
+        if self.h2_supply == "steady":
+            bits.append("steadyh2")
+        elif self.h2_supply == "none" and (self.h2_colour or self.h2_colour_2):
+            bits.append("nobuyh2")
         return "_".join(bits)
 
 
@@ -232,7 +241,7 @@ def core_matrix() -> list[Scenario]:
                      "degenerate without a grid" if strat == "baseload" else "")
     for colour in BOUGHT_COLOURS:
         add(architecture="grid_h2_bought", label=f"Grid + bought H2 ({colour})",
-            h2_colour=colour, note="just-in-time, no storage")
+            h2_colour=colour, h2_supply="jit", note="just-in-time (pipeline stand-in), no storage")
 
     add(architecture="grid_h2", label="Grid + H2 (PEM) — control",
         ely_tech="PEM operation", strategy="free", note="control: what the LP would do")

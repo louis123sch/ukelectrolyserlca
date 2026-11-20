@@ -374,6 +374,8 @@ def build_inputs(scenario: A.Scenario, *, site, start: str, end: str, size_mw_it
         assets = _replace(assets, buy_h2_2=False)
     if scenario.h2_supply not in A.H2_SUPPLIES:
         raise ValueError(f"h2_supply must be one of {A.H2_SUPPLIES}, got {scenario.h2_supply!r}")
+    if scenario.h2_supply == "none":           # the default since 20 Nov 2026: nothing bought
+        assets = _replace(assets, buy_h2=False, buy_h2_2=False)
     if scenario.h2_supply == "steady":
         assets = _replace(assets, h2_buy_steady=True)
     return series, meta, tech, assets

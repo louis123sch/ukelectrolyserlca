@@ -102,8 +102,9 @@ class Case:
     # Fields to set on the site once resolved: a picked substation, say.
     site_kwargs: dict = field(default_factory=dict)
     # How bought hydrogen arrives where the case buys it (dc_architectures.H2_SUPPLIES):
-    # just in time by default; "steady" is the optional contract (user, 19 Nov 2026).
-    h2_supply: str = "jit"
+    # "none" by default since 20 Nov 2026 (nothing bought); "jit" (pipeline stand-in)
+    # and "steady" (trucked stand-in) are the options.
+    h2_supply: str = "none"
 
 
 _EVERY_ASSET = dict(grid=True, wind=True, solar=True, battery=True, electrolyser=True,
@@ -187,6 +188,8 @@ def prepare(case: Case, **series_kwargs):
         assets = replace(assets, buy_h2=False)
     if case.h2_supply not in A.H2_SUPPLIES:
         raise ValueError(f"h2_supply must be one of {A.H2_SUPPLIES}, got {case.h2_supply!r}")
+    if case.h2_supply == "none":
+        assets = replace(assets, buy_h2=False, buy_h2_2=False)
     if case.h2_supply == "steady" and assets.buy_h2:
         assets = replace(assets, h2_buy_steady=True)
     return site, series, meta, assets
@@ -600,7 +603,7 @@ def shaky_variants(case: Case) -> list[dict]:
     """SHAKY_KNOBS one at a time for ``case``, without the bought-hydrogen ones
     where the case buys none."""
     knobs = {k: list(v) for k, v in SHAKY_KNOBS.items()}
-    if case.h2_colour is None:
+    if case.h2_colour is None or case.h2_supply == "none":
         knobs.pop("green_h2_grid_share", None)
         knobs["push"] = [p for p in knobs["push"] if not p.startswith(_BOUGHT_H2_ONLY)]
     return one_at_a_time(knobs)

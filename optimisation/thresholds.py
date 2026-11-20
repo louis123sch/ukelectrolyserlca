@@ -495,6 +495,8 @@ def prepare(scenario, *, site, start, end, size_mw_it, pue, resample_hours,
         assets = replace(assets, buy_h2=False)
     if scenario.h2_colour_2 is None and assets.buy_h2_2:
         assets = replace(assets, buy_h2_2=False)
+    if scenario.h2_supply == "none":           # the default since 20 Nov 2026
+        assets = replace(assets, buy_h2=False, buy_h2_2=False)
     return series, assets, tech, meta
 
 
@@ -597,7 +599,7 @@ def applicable_knobs(scenario) -> list[str]:
     # Buying needs a priced colour, exactly as prepare() enforces.
     can = {f: bool(getattr(assets, f)) for f in
            ("battery", "electrolyser", "tank", "fuel_cell")}
-    can["buy_h2"] = bool(assets.buy_h2 and scenario.h2_colour)
+    can["buy_h2"] = bool(assets.buy_h2 and scenario.h2_colour and scenario.h2_supply != "none")
     return [name for name, k in KNOBS.items()
             if all(can.get(f, False) for f in k.needs)]
 
