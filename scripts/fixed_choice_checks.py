@@ -16,10 +16,14 @@ This changes each one alone, at four sites and two grid levels, and solves the f
     python scripts/fixed_choice_checks.py
     python scripts/fixed_choice_checks.py --summary
 
-These checks buy hydrogen on the steady contract (``dc_architectures.Scenario.h2_supply="steady"``,
-the default for one night, 18-19 Nov 2026, and an optional setting since), run off-grid too, and
-write ``uk_sites_2025_checks_steady`` (East Grinstead, batch of 18 Nov). The just-in-time checks of
-13 Nov stay in ``uk_sites_2025_checks``.
+``--supply`` (20 Nov 2026) sets how hydrogen may be bought: ``none``, the model's central case and
+the default here since 20 Nov; ``jit`` (pipeline stand-in) or ``steady`` (truck contract). Each
+writes ``uk_sites_2025_checks_<supply>``: the steady checks of 18 Nov (East Grinstead) are in
+``uk_sites_2025_checks_steady``; the just-in-time checks of 13 Nov stay in ``uk_sites_2025_checks``.
+With ``none`` the two variants that only act on bought hydrogen (its price, the seller's grid
+share) are skipped. Since 20 Nov the pushes also cover the electrolyser stack's price share, the
+fuel cell's maintenance and the off-grid spare-power shares (load, wind), as sensitivity.SHAKY_KNOBS
+does; the spare-power ones only act off grid. The bundles are as on 18 Nov.
 Bundles (``BUNDLES``) push several screened inputs at once, all against hydrogen or all for it, at
 30 % and 50 % (the user's option B): pushes through ``trace.pushed``, the same as a sweep's.
 
@@ -45,7 +49,8 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import uk_sites as U  # noqa: E402
 from optimisation import dc_architectures as A, dc_runner, trace as T  # noqa: E402
 
-OUT = ROOT / "optimisation_outputs" / "uk_sites_2025_checks_steady"
+SUPPLY = "none"      # set by --supply
+OUT = ROOT / "optimisation_outputs" / f"uk_sites_2025_checks_{SUPPLY}"
 SITES = (2, 15, 18, 23)
 LEVELS = ("offgrid", "limited", "full")
 CHECK_FRACS = (0.02, 0.06, 0.13, 0.25, 0.5)
@@ -79,7 +84,17 @@ PUSHED = {            # short name -> recorded step key
     "stack_carbon": "coefficient.gwp_fc_stack_per_mw",
     "batt_fade":    "battery.capacity_fade_at_end_of_life",
     "ge_carbon":    "coefficient.gwp_ge_per_mw",
+    # since 20 Nov 2026 (sensitivity.SHAKY_KNOBS): comparison fixes and REopt fixes
+    "stack_share":  "cost.electrolyser.stack_cost_fraction",
+    "fc_maint":     "cost.fuel_cell.maintenance_per_kW_year",
+    "reserve_load": "reserve.load_fraction",          # off grid only
+    "reserve_wind": "reserve.wind_fraction",          # off grid only
 }
+# Variants that act only on bought hydrogen: skipped when none is bought.
+BUYING_ONLY = {"h2_price_x0.5", "h2_price_x1.5",
+               "green_h2_grid_share_against_h2", "green_h2_grid_share_for_h2"}
+# Variants that act only with no grid: the piece lists run them off grid only.
+OFF_GRID_ONLY = {f"{n}_x{f:g}" for n in ("reserve_load", "reserve_wind") for f in (0.5, 1.5)}
 for _name, _key in PUSHED.items():
     for _f in (0.5, 1.5):
         VARIANTS[f"{_name}_x{_f:g}"] = ({}, {"pushes": [(_key, _f)]})
@@ -152,7 +167,7 @@ def run_args(kwargs: dict) -> tuple[dict, dict, list]:
 def scenario(level: str, fields: dict) -> A.Scenario:
     flags = dict(grid=level != "offgrid", wind=True, solar=True, battery=True,
                  electrolyser=True, tank=True, fuel_cell=True, buy_h2=True, buy_h2_2=False, gas_engine=True)
-    base = dict(ely_tech="PEM operation", h2_colour="green", strategy="free", h2_supply="steady")
+    base = dict(ely_tech="PEM operation", h2_colour="green", strategy="free", h2_supply=SUPPLY)
     return A.Scenario(n=0, architecture="custom", label=f"fixed-choice check, {level}", assets=flags,
                       **{**base, **fields})
 
@@ -216,10 +231,18 @@ def main(argv=None):
     ap.add_argument("--sites", nargs="*", type=int, default=list(SITES), choices=list(SITES))
     ap.add_argument("--levels", nargs="*", default=list(LEVELS), choices=list(LEVELS))
     ap.add_argument("--no-summary", action="store_true", help="run only; leave summary.csv alone")
+    ap.add_argument("--supply", default="none", choices=A.H2_SUPPLIES,
+                    help="how hydrogen may be bought (default none, the model's central case)")
     a = ap.parse_args(argv)
+    global SUPPLY, OUT
+    SUPPLY = a.supply
+    OUT = ROOT / "optimisation_outputs" / f"uk_sites_2025_checks_{SUPPLY}"
     if not a.summary:
         rows = [r for r in U.SITES if r[0] in a.sites]
         for variant in a.variants:
+            if SUPPLY == "none" and variant in BUYING_ONLY:
+                print(f"{variant}: skipped, no hydrogen is bought", flush=True)
+                continue
             for level in a.levels:
                 for row in rows:
                     try:

@@ -16,6 +16,14 @@ used at today's price already: the search only looks downward, so no price is re
 ``not_found`` (not used even at the bracket's floor, £0.05/kg). Each search writes its own folder
 under ``optimisation_outputs/uk_sites_2025_breakeven/<rig|hourly>/``; a finished one is kept, so the
 script resumes. The price swept is the price only: the hydrogen's carbon stays green's.
+
+Since 20 Nov 2026 the model buys no hydrogen by default, so the question becomes how much cheaper
+the hydrogen chain itself must get: ``--knob h2_chain`` (the default now) scales the whole make-
+store-burn chain's yearly cost (electrolyser, its stacks, tank, fuel cell, its stacks and plant)
+with ``--supply none`` (the default), and reports the multiplier at which the cheapest design first
+serves 1 % of supply from the fuel cell (``threshold``; ``already_viable`` where it does today).
+Each knob writes its own folder: ``uk_sites_2025_breakeven`` for ``h2_price`` (as on 17 Nov, which
+needs ``--supply jit`` or ``steady``), ``uk_sites_2025_breakeven_<knob>`` otherwise.
 """
 from __future__ import annotations
 
@@ -33,7 +41,8 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import uk_sites as U  # noqa: E402
 from optimisation import dc_architectures as A, thresholds as TH  # noqa: E402
 
-OUT = ROOT / "optimisation_outputs" / "uk_sites_2025_breakeven"
+KNOB, SUPPLY = "h2_chain", "none"      # set by --knob and --supply
+OUT = ROOT / "optimisation_outputs" / f"uk_sites_2025_breakeven_{KNOB}"
 GAS = (True, False)
 
 
@@ -41,7 +50,8 @@ def scenario(level: str, gas: bool) -> A.Scenario:
     flags = dict(grid=level != "offgrid", wind=True, solar=True, battery=True,
                  electrolyser=True, tank=True, fuel_cell=True, buy_h2=True, buy_h2_2=False, gas_engine=gas)
     return A.Scenario(n=0, architecture="custom", label=f"break-even, {level}, {'gas' if gas else 'no gas'}",
-                      assets=flags, ely_tech="PEM operation", h2_colour="green", strategy="free")
+                      assets=flags, ely_tech="PEM operation", h2_colour="green", strategy="free",
+                      h2_supply=SUPPLY)
 
 
 def folder(kind: str, level: str, n: int, gas: bool) -> Path:
@@ -58,11 +68,12 @@ def run(kind: str, level: str, row, gas: bool) -> dict:
     site = U.site_for(n, label, lat, lon, region, level)
     t0 = time.time()
     print(f"[{time.strftime('%a %H:%M')}] site {n} {label} {level} {'gas' if gas else 'no gas'} ({kind})", flush=True)
-    r = TH.find(scenario(level, gas), "h2_price", site=site, start=U.START, end=U.END, size_mw_it=100.0,
+    r = TH.find(scenario(level, gas), KNOB, site=site, start=U.START, end=U.END, size_mw_it=100.0,
                 resample_hours=4.0 if kind == "rig" else 1.0,
                 connection_mode=None if level == "offgrid" else "cap", out_root=out, refresh=False)
     rec = {"site": n, "place": label, "region": region, "why": why, "level": level, "gas_engines": gas,
-           "status": r.get("status"), "threshold_GBP_per_kg": r.get("threshold"),
+           "status": r.get("status"), "knob": KNOB, "supply": SUPPLY, "threshold": r.get("threshold"),
+           **({"threshold_GBP_per_kg": r.get("threshold")} if KNOB == "h2_price" else {}),
            "solves": r.get("solves"), "minutes": round((time.time() - t0) / 60.0, 1), "kind": kind}
     out.mkdir(parents=True, exist_ok=True)
     done.write_text(json.dumps(rec, indent=1, default=str), encoding="utf-8")
@@ -89,7 +100,17 @@ def main(argv=None):
     ap.add_argument("--gas", choices=("both", "with", "without"), default="both",
                     help="gas engines on offer: both runs (default), only with, or only without")
     ap.add_argument("--no-summary", action="store_true", help="run only; leave summary.csv alone")
+    ap.add_argument("--knob", default="h2_chain", choices=list(TH.KNOBS),
+                    help="what the search moves (default: the whole hydrogen chain's cost)")
+    ap.add_argument("--supply", default="none", choices=A.H2_SUPPLIES,
+                    help="how hydrogen may be bought (default none, the model's central case)")
     a = ap.parse_args(argv)
+    global KNOB, SUPPLY, OUT
+    KNOB, SUPPLY = a.knob, a.supply
+    if KNOB == "h2_price" and SUPPLY == "none":
+        raise SystemExit("--knob h2_price needs hydrogen on sale: pass --supply jit or steady")
+    OUT = ROOT / "optimisation_outputs" / ("uk_sites_2025_breakeven" if KNOB == "h2_price"
+                                           else f"uk_sites_2025_breakeven_{KNOB}")
     kind = "rig" if a.rig else "hourly"
     gases = {"both": GAS, "with": (True,), "without": (False,)}[a.gas]
     if not a.summary:

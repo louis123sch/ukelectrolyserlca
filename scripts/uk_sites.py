@@ -23,6 +23,7 @@ picked from the 2025 Renewables.ninja map of 76 wind and 19 solar points (gb_lay
     python scripts/uk_sites.py --set present        # 13 Nov: everything on the table, green only
     python scripts/uk_sites.py --set blue           # 13 Nov: the same with blue on offer too (a what-if)
     python scripts/uk_sites.py --set steady         # 18 Nov: present, bought hydrogen on a steady contract
+    python scripts/uk_sites.py --set central        # 20 Nov: present with no hydrogen bought (the model's central case)
 
 Sets (13 Nov 2026). ``base`` is the 12 Nov study as run (no gas engines, green, 5 even points).
 ``present`` puts everything on the table that can be bought today: the gas engines added,
@@ -66,6 +67,9 @@ SETS = {
     # rate every hour into the tank (dc_model.Assets.h2_buy_steady). Default for one night
     # (18-19 Nov); an optional setting since 19 Nov (user), so this is the what-if set.
     "steady":  {"gas": True,  "blue": False, "supply": "steady", "out": "uk_sites_2025_present_steady"},
+    # 20 Nov 2026 (user): the model's central case buys no hydrogen (dc_architectures default
+    # "none"); ``present`` (pipeline stand-in) and ``steady`` (truck contract) are its what-ifs.
+    "central": {"gas": True,  "blue": False, "supply": "none",   "out": "uk_sites_2025_central"},
 }
 OUT = ROOT / "optimisation_outputs" / SETS["base"]["out"]
 SET = "base"

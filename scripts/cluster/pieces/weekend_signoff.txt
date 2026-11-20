@@ -1,0 +1,5 @@
+# Weekend run, 20-23 Nov 2026: sign-off steps 4 and 5 (docs/TESTING.md) at East Grinstead, hourly.
+scripts/cluster/signoff_site.py cost islanded_h2
+scripts/cluster/signoff_site.py cost norfolk_grid
+scripts/cluster/signoff_site.py carbon islanded_h2
+scripts/cluster/signoff_site.py carbon norfolk_grid_green
