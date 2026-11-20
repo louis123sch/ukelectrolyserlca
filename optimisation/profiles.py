@@ -121,6 +121,28 @@ SOLAR_AGEING_LIFE_YEARS = 38.0
 SOLAR_LIFE_AVERAGE_FACTOR = 1.0 - SOLAR_DEGRADATION_PER_YEAR * (SOLAR_AGEING_LIFE_YEARS - 1.0) / 2.0
 
 
+def solar_discounted_ageing_factor(plain_factor: float, rate: float,
+                                   life_years: float = SOLAR_AGEING_LIFE_YEARS) -> float:
+    """The discount-weighted mean of solar output over its life, for the cost side.
+
+    Added 20 Nov 2026 (REopt comparison, ``Claude outputs/reopt_cost_comparison.md``
+    #1). ``plain_factor`` is the undiscounted mean the dispatch uses (right for
+    carbon, which divides by life). Solar's yearly cost is a capital repayment at
+    ``rate``, which weighs early years more, so the matching output is
+    sum_t w_t (1 - d (t - 1)) / sum_t w_t with w_t = (1 + rate)^-t: REopt's
+    ``levelization_factor`` (src/core/utils.jl:54-80) with flat real prices.
+    The straight-line fade d is backed out of ``plain_factor`` over the same life,
+    so an override (1.0 = no ageing) carries through. 0.925 at 7.6 % and 0.7 %/yr
+    over 38 years, against the plain 0.870."""
+    plain_factor, rate = float(plain_factor), float(rate)
+    years = int(round(float(life_years)))
+    if plain_factor >= 1.0 or years <= 1:
+        return 1.0
+    fade = 2.0 * (1.0 - plain_factor) / (years - 1)
+    weights = [(1.0 + rate) ** -t for t in range(1, years + 1)]
+    return sum(w * (1.0 - fade * (t - 1)) for t, w in enumerate(weights, start=1)) / sum(weights)
+
+
 def fetch_ninja_wind(session, lat, lon, date_from, date_to, capacity_kw, height_m,
                      turbine, dataset="merra2", api_base=NINJA_BASE):
     """Fetch hourly wind power from the Renewables.ninja API (official-style)."""

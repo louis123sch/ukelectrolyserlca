@@ -48,6 +48,15 @@ from optimisation import trace as T
 DISCOUNT_RATE = 0.101
 ELECTROLYSER_BUILD_YEARS = 3    # BEIS Hydrogen Production Costs 2021 annex: construction period 3 years
 
+# Spare power an islanded site holds in every step (20 Nov 2026, REopt comparison
+# #2; dc_model build_model (10b)): NREL REopt.jl's off-grid defaults, as shares of
+# load and of the wind and solar delivered. No UK figure found. The battery's
+# share must last an hour, REopt's own step. Applied only with no grid.
+RESERVE_LOAD_FRACTION = 0.10     # src/core/electric_load.jl:20
+RESERVE_WIND_FRACTION = 0.50     # src/core/wind.jl:36
+RESERVE_SOLAR_FRACTION = 0.25    # src/core/pv.jl:46
+RESERVE_BATTERY_HOURS = 1.0
+
 
 def data_centre_coefficients(refresh: bool = False) -> dict:
     """The facility's own burden, split by what each part actually scales with.
@@ -147,7 +156,8 @@ def build_series(site, start: str, end: str, size_mw_it: float,
                  shortfall_route: str = "upgrade",
                  connection_mode: str | None = None,
                  grid: bool = True,
-                 network_charges_scale: float | None = None) -> dc_model.Series:
+                 network_charges_scale: float | None = None,
+                 pv_system_loss: float | None = None) -> dc_model.Series:
     """Aligned half-hourly inputs for one site and window.
 
     ``site`` is anything ``sites.get`` accepts — a ``Site``, a ``(lat, lon)``
@@ -167,6 +177,13 @@ def build_series(site, start: str, end: str, size_mw_it: float,
     ``solar_ageing_factor`` scales ninja's year-one solar output to its mean over
     the panel's life; defaults to ``profiles.SOLAR_LIFE_AVERAGE_FACTOR`` (0.870,
     0.7 %/yr over 38 years). Pass 1.0 to reproduce runs before 20 Nov 2026.
+
+    ``pv_system_loss`` (20 Nov 2026, REopt comparison #3) is the solar array's
+    "other" losses, ninja's ``system_loss``, for a sweep: the cached series was
+    fetched at ``dc_config.PV_SYSTEM_LOSS`` (10 %, assumed). Ninja applies the loss
+    as a multiplier, with a separate inverter step whose efficiency moves only a
+    little with loading, so the series is rescaled by (1 - value) /
+    (1 - PV_SYSTEM_LOSS) rather than fetched again: close, not exact. None keeps it.
 
     ``ccl_under_cca`` says whether the site holds a Climate Change Agreement
     (92 % off the CCL); defaults to ``levies.CCL_UNDER_CCA``.
@@ -388,12 +405,16 @@ def build_series(site, start: str, end: str, size_mw_it: float,
                        note="Undiscounted, at the central life for every cost case. Wind is not aged (user, 20 Nov 2026)")
     if not 0.5 <= solar_age <= 1.0:
         raise ValueError(f"solar_ageing_factor must be in [0.5, 1.0], got {solar_age!r}")
+    pv_loss = float(cfg.PV_SYSTEM_LOSS) if pv_system_loss is None else float(pv_system_loss)
+    if not 0.0 <= pv_loss < 0.5:
+        raise ValueError(f"pv_system_loss must be in [0, 0.5), got {pv_system_loss!r}")
+    pv_loss_scale = (1.0 - pv_loss) / (1.0 - float(cfg.PV_SYSTEM_LOSS))
     series = dc_model.Series(
         index=index,
         dt_hours=float(meta["slice_hours"]),
         demand_mw=np.full(len(index), size_mw_it * pue),
         cf_wind=df["wind_cf"].to_numpy() * net,
-        cf_solar=df["solar_cf"].to_numpy() * solar_age,
+        cf_solar=df["solar_cf"].to_numpy() * solar_age * pv_loss_scale,
         grid_gwp_per_mwh=grid_gwp * 1000.0,
         grid_price_per_mwh=price,
         triad_window=nc.triad_window(index),
@@ -450,6 +471,7 @@ def build_series(site, start: str, end: str, size_mw_it: float,
     meta["wind_net_factor"] = net
     meta["mean_wind_cf_net"] = float(np.mean(series.cf_wind))
     meta["solar_ageing_factor"] = float(solar_age)
+    meta["pv_system_loss"] = pv_loss
     meta["mean_solar_cf_aged"] = float(np.mean(series.cf_solar))
     meta["mean_grid_delivered_kgco2e_per_kwh"] = float(grid_gwp.mean())
     meta["site"] = site.key
@@ -923,6 +945,26 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
         out = tc.GENERATOR_CONNECTION_SHARE.get(asset, 0.0) if generator_connection_out else 0.0
         return float(c["total_annual_cost_GBP_per_MW_year"] - out * c["annualised_capex_2025_GBP_per_MW_year"])
 
+    # Solar's cost per MWh on the cost side (20 Nov 2026, REopt comparison #1): the
+    # dispatch sees the plain mean of an ageing panel's output (right for carbon),
+    # but the capital is repaid at a discount rate, so the cost per MWh should see
+    # the discount-weighted mean. Scaling the yearly cost by plain / discounted gives
+    # exactly that, with carbon and dispatch untouched.
+    from optimisation import profiles as _prof
+    solar_cost = gen_cost("solar_pv")
+    _plain = float(meta.get("solar_ageing_factor", _prof.SOLAR_LIFE_AVERAGE_FACTOR))
+    _rate_s = (tc.DISCOUNT_RATE_OVERRIDE if tc.DISCOUNT_RATE_OVERRIDE is not None
+               else tc.CEPA_HURDLE_RATE["solar_pv"])
+    _disc = _prof.solar_discounted_ageing_factor(_plain, _rate_s)
+    solar_age_corr = T.cost("cost.solar_pv.ageing_discount_correction", _plain / _disc, "multiplier",
+                            "Solar's yearly cost scaled by its plain over its discounted life-average output, so the "
+                            "cost per MWh sees the discount-weighted ageing", grade="derived",
+                            uses=["cost.solar_pv.discount_rate"],
+                            inputs={"plain_life_average": _plain, "discounted_life_average": _disc,
+                                    "discount_rate": _rate_s, "life_years": _prof.SOLAR_AGEING_LIFE_YEARS},
+                            note="REopt's levelization factor (src/core/utils.jl:54-80) with flat real prices; "
+                                 "1.0 when the series carries no ageing")
+
     def gen_gwp(asset):
         r = emb.loc[asset]
         # Capital annuity plus, for wind, the non-capital residual
@@ -1337,10 +1379,29 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
         fc_stack_calendar_years=fc_stack_years,
         fc_stack_duty_hours=float(fc_stack_duty_hours or d["stack_lifetime_hours"]),
         batt_max_duration_hours=float(batt_max_duration_hours or np.inf),
+        # Spare power off grid (20 Nov 2026, REopt comparison #2): REopt's off-grid
+        # defaults, no UK figure found; pushed x0.5/x1.5 (sensitivity.SHAKY_KNOBS).
+        reserve_load_fraction=T.step("reserve.load_fraction", RESERVE_LOAD_FRACTION, "fraction of load",
+                                     "Spare power held off grid, as a share of load", grade="transcribed",
+                                     source="NREL REopt.jl v1.0.1, src/core/electric_load.jl:20, "
+                                            "operating_reserve_required_fraction off grid 0.1",
+                                     note="A US tool's default for small off-grid sites; no UK figure found"),
+        reserve_wind_fraction=T.step("reserve.wind_fraction", RESERVE_WIND_FRACTION, "fraction of wind delivered",
+                                     "Spare power held off grid against a fall in wind", grade="transcribed",
+                                     source="NREL REopt.jl v1.0.1, src/core/wind.jl:36, "
+                                            "operating_reserve_required_fraction off grid 0.5"),
+        reserve_solar_fraction=T.step("reserve.solar_fraction", RESERVE_SOLAR_FRACTION, "fraction of solar delivered",
+                                      "Spare power held off grid against a fall in sun", grade="transcribed",
+                                      source="NREL REopt.jl v1.0.1, src/core/pv.jl:46, "
+                                             "operating_reserve_required_fraction off grid 0.25"),
+        reserve_battery_hours=T.step("reserve.battery_hours", RESERVE_BATTERY_HOURS, "hours",
+                                     "How long the battery's share of the spare power must last", grade="assumed",
+                                     note="REopt's own step: one hour (operating_reserve_constraints.jl:24)"),
         cost_wind=cstep("cost_wind", gen_cost("onshore_wind") * to26, "GBP per MW per year", "Onshore wind, per MW built",
                         ["cost.onshore_wind.annual_per_MW", *k26]),
-        cost_solar=cstep("cost_solar", gen_cost("solar_pv") * to26, "GBP per MWp per year", "Solar PV, per MWp built",
-                         ["cost.solar_pv.annual_per_MWp", *k26]),
+        cost_solar=cstep("cost_solar", solar_cost * to26 * solar_age_corr, "GBP per MWp per year",
+                         "Solar PV, per MWp built, scaled so its cost per MWh sees the discounted ageing",
+                         ["cost.solar_pv.annual_per_MWp", "cost.solar_pv.ageing_discount_correction", *k26]),
         cost_batt_p=cstep("cost_batt_p", bcost["power_GBP_per_MW_year"] * to26, "GBP per MW per year",
                           "Battery power conversion, per MW", ["cost.battery.power_per_kW", "cost.battery.crf",
                                                                "cost.battery.fixed_opex_per_kW_year", *k26]),

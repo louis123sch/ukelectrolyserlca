@@ -134,7 +134,27 @@ def _extract(V, obj, series, tag):
         "export_MWh_per_year": _energy(V, series, "exp"),
         "unserved_MWh_per_year": unserved,
     })
+    row.update(_battery_cycles(row))
+    row["ge_co2_carbon_priced_kg_per_year"] = row["cap_ge_MWh_per_year"] * _ge_co2_t_per_mwh() * 1000.0
     return row
+
+
+def _battery_cycles(row: dict) -> dict:
+    """Full cycles a year the solved battery does, beside the figure its end-of-life
+    oversizing assumes (battery.CYCLES_PER_YEAR_IN_USE). Added 20 Nov 2026 (REopt
+    comparison #4): the oversize is fixed, not solved for, so each design shows how
+    far its own use is from it. Blank where no battery is built."""
+    from optimisation import battery
+    e = row.get("cap_batt_e", 0.0)
+    cycles = row["cap_batt_p_MWh_per_year"] / e if e > 1e-6 else float("nan")
+    return {"batt_cycles_per_year": cycles, "batt_cycles_assumed": battery.CYCLES_PER_YEAR_IN_USE}
+
+
+def _ge_co2_t_per_mwh() -> float:
+    """CO2 the gas engines pay the carbon price on, t per MWh made: the figure
+    build_tech prices (``cost.gas_engine.co2_t_per_MWh``)."""
+    from optimiser_lca import gas_engine as ge_inv
+    return ge_inv.GE_GAS_C_KG_PER_KWH * ge_inv.CO2_PER_KG_C
 
 
 _LIMIT = {"cost": "cost_limit", "gwp": "gwp_limit"}
@@ -383,7 +403,13 @@ def special_points(df: pd.DataFrame, degenerate: bool) -> dict:
     knee_i = int(np.argmin(np.hypot(cn, gn)))
 
     lam = _carbon_price_gbp_per_kg()
-    cp_i = int(np.argmin(c + lam * g))
+    # The engines already pay this price on the CO2 they burn (build_tech's
+    # cost_ge_carbon_per_mwh, the same NESO figure), so it comes off the carbon
+    # the price is added on, or those tonnes are priced twice (20 Nov 2026, REopt
+    # comparison #5). A front saved before the column existed prices it all.
+    priced = (df["ge_co2_carbon_priced_kg_per_year"].fillna(0.0).to_numpy()
+              if "ge_co2_carbon_priced_kg_per_year" in df else np.zeros(len(df)))
+    cp_i = int(np.argmin(c + lam * (g - priced)))
 
     # discrete curvature on the normalised front
     curv = np.full(len(df), -np.inf)
@@ -424,4 +450,13 @@ def summarise(result: dict) -> str:
             f"{hi.gwp_kgco2e_per_year / 1000:,.0f} t | cleanest "
             f"£{lo.cost_GBP_per_year / 1e6:.2f} m at {lo.gwp_kgco2e_per_year / 1000:,.0f} t "
             f"| knee £{knee['cost_GBP_per_year'] / 1e6:.2f} m at "
-            f"{knee['gwp_kgco2e_per_year'] / 1000:,.0f} t")
+            f"{knee['gwp_kgco2e_per_year'] / 1000:,.0f} t"
+            + _cycles_note(knee))
+
+
+def _cycles_note(point: dict) -> str:
+    """The knee battery's own cycles beside the oversizing's assumed figure."""
+    cyc, assumed = point.get("batt_cycles_per_year"), point.get("batt_cycles_assumed")
+    if cyc is None or assumed is None or not np.isfinite(cyc):
+        return ""
+    return f" | knee battery {cyc:.0f} cycles/yr (oversizing assumes {assumed:.0f})"

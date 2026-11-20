@@ -166,7 +166,7 @@ CASES = {
 
 # Knobs that change the series rather than the coefficients. A variant moving
 # one of these rebuilds the series for itself.
-SERIES_KNOBS = ("wind_net_factor", "network_charges_scale")
+SERIES_KNOBS = ("wind_net_factor", "network_charges_scale", "pv_system_loss")
 
 
 def prepare(case: Case, **series_kwargs):
@@ -581,8 +581,16 @@ SHAKY_KNOBS = {
                                   # low case's cheap plant on a dearer unit's maintenance, stated)
                                   "cost.electrolyser.stack_cost_fraction",
                                   "cost.h2_tank.capex_per_kg",
-                                  "cost.fuel_cell.maintenance_per_kW_year")
+                                  "cost.fuel_cell.maintenance_per_kW_year",
+                                  # since 20 Nov 2026 (REopt comparison #2): the spare power an
+                                  # islanded site holds, shares of load and of wind (REopt's
+                                  # defaults; no UK figure). They bite only off grid.
+                                  "reserve.load_fraction",
+                                  "reserve.wind_fraction")
              for f in (0.5, 1.5)],
+    # since 20 Nov 2026 (REopt comparison #3): the solar array's other losses, ninja's
+    # 10 % default (assumed) at x0.5 and x1.5; REopt's own total is about 17 %
+    "pv_system_loss": [0.05, 0.15],
     "green_h2_grid_share": [0.0, 1.0],          # the electricity the seller runs on
     # since 13 Nov 2026: DESNZ's published gas range (low / high over central), now that the
     # engines make gas a fuel the optimiser chooses
@@ -597,6 +605,8 @@ SHAKY_KNOBS = {
 }
 # Knobs that only bite where hydrogen is bought.
 _BOUGHT_H2_ONLY = ("green_h2_grid_share", "cost.bought_h2.green.delivered")
+# Knobs that only bite with no grid: the spare-power rule (dc_model (10b)).
+_OFF_GRID_ONLY = ("reserve.",)
 
 
 def shaky_variants(case: Case) -> list[dict]:
@@ -606,6 +616,8 @@ def shaky_variants(case: Case) -> list[dict]:
     if case.h2_colour is None or case.h2_supply == "none":
         knobs.pop("green_h2_grid_share", None)
         knobs["push"] = [p for p in knobs["push"] if not p.startswith(_BOUGHT_H2_ONLY)]
+    if A.architecture(case.architecture, flags=case.flags).grid:
+        knobs["push"] = [p for p in knobs["push"] if not p.startswith(_OFF_GRID_ONLY)]
     return one_at_a_time(knobs)
 
 

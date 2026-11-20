@@ -295,6 +295,16 @@ class Tech:
     # One stack per 25-year plant life (19 Nov 2026, electrolysers.STACK_CALENDAR_YEARS).
     ely_stack_calendar_years: float = 25.0
     ely_stack_duty_hours: float = 50_000.0
+    # Spare power held off grid (20 Nov 2026, REopt comparison #2; build_model (10b)).
+    # In every step of an islanded build, the unused output the site could call on
+    # within the step must cover these shares of load and of the wind and solar
+    # serving the node: REopt's off-grid defaults (electric_load.jl:20, wind.jl:36,
+    # pv.jl:46). The battery's part must be holdable for reserve_battery_hours.
+    # Zero is the model before 20 Nov 2026: no spare power held.
+    reserve_load_fraction: float = 0.0
+    reserve_wind_fraction: float = 0.0
+    reserve_solar_fraction: float = 0.0
+    reserve_battery_hours: float = 1.0
     # Transformer conversion losses (conversion_losses.py). No-load: MW drawn
     # at the node per MW installed, every step. Load: share of delivered power
     # at full loading, scaled by the profile's energy-weighted loading — see
@@ -625,6 +635,37 @@ def build_model(series: Series, assets: Assets, tech: Tech, *,
     total_demand_mwh = float(series.demand_mw.sum() * dt)
     m.add_constraints((V["unserved"] * dt).sum() <= unserved_fraction * total_demand_mwh,
                       name="reliability")
+
+    # --- (10b) spare power off grid (20 Nov 2026) ------------------------
+    # An islanded site has no network to catch a sudden fall in wind or solar, a
+    # unit tripping or a jump in load, so in every step it keeps unused output it
+    # could call on: REopt's off-grid operating reserve
+    # (src/constraints/operating_reserve_constraints.jl). Required: shares of load
+    # and of the wind and solar delivered. Provided, all at the node: the fuel
+    # cells' and engines' unused capacity; the electrolyser's draw, which can be
+    # cut at once; wind and solar being spilled, less their own share, as REopt
+    # counts it; and the battery: stopping its charge, plus more discharge, up to
+    # both its unused power and what it holds, after this step, to keep that
+    # extra going for reserve_battery_hours on top of the discharge already running. The
+    # battery's two limits are two constraints, so no new variable is needed.
+    # A grid-connected build leaves this to the network (REopt applies it off
+    # grid only). The fuel cell's reserve assumes the tank holds an hour's worth.
+    f_l, f_w, f_s = tech.reserve_load_fraction, tech.reserve_wind_fraction, tech.reserve_solar_fraction
+    if not assets.grid and (f_l > 0 or f_w > 0 or f_s > 0):
+        if tech.reserve_battery_hours <= 0:
+            raise ValueError(f"reserve_battery_hours must be positive, got {tech.reserve_battery_hours!r}")
+        others = ((1.0 - lf["fc"]) * (V["cap_fc"] - V["p_fc"])
+                  + (V["cap_ge"] - V["p_ge"])
+                  + V["p_ely"]
+                  + (1.0 - f_w) * ((1.0 - lf["wind"]) * cf_w * V["cap_wind"] - V["p_wind"])
+                  + (1.0 - f_s) * ((1.0 - lf["solar"]) * cf_s * V["cap_solar"] - V["p_solar"])
+                  + V["ch"] / (1.0 - lf["battery"])
+                  - f_w * V["p_wind"] - f_s * V["p_solar"])
+        keep = 1.0 - lf["battery"]
+        m.add_constraints(others + keep * (V["cap_batt_p"] - V["dis"]) >= f_l * demand,
+                          name="reserve_battery_power")
+        m.add_constraints(others + keep * (eta * V["soc"] / tech.reserve_battery_hours - V["dis"]) >= f_l * demand,
+                          name="reserve_battery_energy")
 
     # --- fuel cell replacements: max(calendar, duty), exactly ------------
     fc_mwh = (V["p_fc"] * dt).sum() * series.annual_scale
