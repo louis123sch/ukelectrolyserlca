@@ -42,14 +42,17 @@ everything by a silent factor.
 
 Stacks
 ------
-Gerloff's unit carries **three stacks** over its 20-year life (§2.1.3; the
-module carries the stack's rows x3 since 22 Oct 2026, as the SI's stack
-manufacturing energy always was). The capital good is still one activity per
-unit, amortised here on calendar life: a duty-driven stack count, as
-``fuel_cell.py`` does for the fuel cell, would need the stack rows split out
-as their own activity — possible from the SI's Stack/BoP labels, not done.
-For an electrolyser run harder than Gerloff's 160,000 full-load hours this
-understates the stack burden. Registered in ``DATA_GAPS.md``.
+Gerloff's unit carries **three stacks** over its 20-year life (§2.1.3). Since
+26 Oct 2026 the foreground holds the balance of plant and one stack as separate
+activities, and this module reports both per MW. The optimiser charges the
+plant once over ``PLANT_LIFETIME_YEARS`` and the stacks on
+max(calendar, running hours), the fuel cell's rule: at least one stack per
+plant life (``STACK_CALENDAR_YEARS``, since 19 Nov 2026), more at Gerloff's
+50,000 h each (``STACK_DUTY_HOURS``). See ``dc_model`` (``ely_stack_units``)
+and ``DATA_GAPS.md``.
+
+The plant is Gerloff's 20-year unit spread over NESO's 25 years with no parts
+added: the 25 years is taken as its physical life (ASSUMPTIONS.md §5a).
 
 Sources
 -------

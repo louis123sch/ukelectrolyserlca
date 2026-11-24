@@ -434,8 +434,12 @@ def test_buying_needs_a_priced_colour_before_the_price_knob_appears():
     flags.update(grid=True, fuel_cell=True, buy_h2=True)
     unpriced = A.Scenario(n=0, architecture="custom", label="t", assets=flags)
     priced = A.Scenario(n=0, architecture="custom", label="t", assets=flags,
-                        h2_colour="grey")
+                        h2_colour="grey", h2_supply="jit")
+    # A priced colour on the default supply (nothing bought since 20 Nov 2026) buys nothing.
+    not_bought = A.Scenario(n=0, architecture="custom", label="t", assets=flags,
+                            h2_colour="grey")
     assert "h2_price" not in T.applicable_knobs(unpriced)
+    assert "h2_price" not in T.applicable_knobs(not_bought)
     assert "h2_price" in T.applicable_knobs(priced)
 
 

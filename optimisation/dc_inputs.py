@@ -1850,7 +1850,7 @@ def _bought_h2_gwp(activity_code: str, green_basis: str | None = None, *,
     import hashlib
     fp = hashlib.sha256(b"".join(
         (ROOT / "optimiser_lca" / f).read_bytes()
-        for f in ("hydrogen.py", "gb_grid.py", "grid.py"))).hexdigest()[:12]
+        for f in ("hydrogen.py", "gb_grid.py", "grid.py", "gb_gas_fleet.py"))).hexdigest()[:12]
     cache = {}
     if _H2_GWP_CACHE.exists():
         try:

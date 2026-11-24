@@ -95,6 +95,10 @@ def _coefficient_identity() -> dict:
                  "conversion_losses.py"):
         out[name] = digest(ROOT / "optimisation" / name)
     out["dc_config.py"] = digest(ROOT / "dc_config.py")
+    # What scored the grid series (23 Nov 2026): a re-scored grid keeps its file names and every
+    # file above, so without this a saved run would be reused on the old grid carbon.
+    from optimiser_lca import grid as _grid_lca
+    out["grid_sources"] = _grid_lca.sources_id()
     return out
 
 

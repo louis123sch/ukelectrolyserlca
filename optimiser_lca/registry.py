@@ -21,6 +21,7 @@ H2_STORAGE_DB   = "hydrogen storage foreground"  # Gandiglio et al. 2022 vessel
 TRANSFORMER_DB  = "transformer foreground"       # Leng 2026 wind + grid intake, IEA PVPS 2026 solar
 SOLAR_DB        = "solar foreground"             # Smith et al. 2024 utility PV, on apos
 BESS_DB         = "battery foreground"           # Jasper 2026 container, Voß 2025 cell
+GAS_FLEET_DB    = "gas fleet foreground"         # GB gas fleet 2025: ecoinvent CCGT at DUKES efficiency
 GRID_DB         = "grid foreground"              # the study's own GB grid, one kWh
 GAS_ENGINE_DB   = "gas engine foreground"        # ecoinvent lean-burn 1 MW gas engines, British gas
 
@@ -28,7 +29,7 @@ GAS_ENGINE_DB   = "gas engine foreground"        # ecoinvent lean-burn 1 MW gas 
 # hydrogen from HYDROGEN_DB, and sits in BESS_DB's container; the fossil
 # hydrogen routes take GRID_DB's electricity, whose solar share is SOLAR_DB's
 # plant), so this is a dependency order, not a preference.
-DATABASES = [SOLAR_DB, GRID_DB, HYDROGEN_DB, DATA_CENTRE_DB, BESS_DB, FUEL_CELL_DB,
+DATABASES = [SOLAR_DB, GAS_FLEET_DB, GRID_DB, HYDROGEN_DB, DATA_CENTRE_DB, BESS_DB, FUEL_CELL_DB,
              H2_STORAGE_DB, TRANSFORMER_DB, GAS_ENGINE_DB]
 
 # --- hydrogen: Hermesmann & Müller 2022 (fossil routes), Gerloff 2021 (electrolysers) ---
@@ -69,6 +70,7 @@ ELECTROLYSER_CODES = {
 }
 
 # --- GB grid ---------------------------------------------------------------------
+GAS_FLEET_CCGT_2025 = "gb_gas_fleet_ccgt_2025_1kwh"   # 1 kWh from the 2025 gas fleet, high voltage
 GB_GRID_HV_2025 = "gb_grid_2025_hv_delivered"     # 1 kWh, 2025 mean, at high voltage
 
 # --- data centre ---------------------------------------------------------------
@@ -137,6 +139,7 @@ BESS_PARTS = {                                    # the sub-assemblies, by role
 CODES_BY_DATABASE = {
     SOLAR_DB:       list(UPV_TABLES.values()) + [UPV_MOUNT, UPV_CAPITAL, UPV_OM30,
                                                  UPV_GRID_KWH],
+    GAS_FLEET_DB:   [GAS_FLEET_CCGT_2025],
     GRID_DB:        [GB_GRID_HV_2025],
     HYDROGEN_DB:    [SMR, SMR_CCS, CCS, MP_E, AE_UNIT, AE_PLANT, AE_STACK, AE_OP,
                      PEM_UNIT, PEM_PLANT, PEM_STACK, PEM_OP, SOEC_UNIT, SOEC_PLANT, SOEC_STACK, SOEC_OP],

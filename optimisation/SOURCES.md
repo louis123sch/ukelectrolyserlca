@@ -25,8 +25,8 @@ Emissions are IPCC 2021 GWP100 on ecoinvent 3.9.1 apos throughout.
 |---|---|---|---|
 | Data centre inventory | 1.60e9 kWh over 25 y; 24,896 t CO₂e non-electricity over the life, genset included (14 Oct 2026, with refrigerant leakage: was 24,207) | transcribed | Zhang, M., Carbajales-Dale, M., Ma, X., Guo, L., Fan, C. (2025), hyperscale Virginia data centre. Built into `data centre foreground` by `optimiser_lca/data_centre.py` |
 | Continuous load | 7,306 kW | derived | 1.60e9 kWh ÷ 25 y ÷ 8760 h — the inventory's own figure, not an added assumption |
-| Grid carbon intensity | half-hourly, mean 0.1585 kg CO₂e/kWh delivered at high voltage. History: 0.2369 on the conventional gas plant; 0.1882 after the gas fix; 0.1585 after the import split, delivery terms and grid solar (all 13 Oct 2026) | derived | NESO Carbon Intensity API, regional (region 13, London), with Elexon FUELHH interconnector flows, via `optimisation/grid_build.py` |
-| Per-fuel life-cycle scores | gas CCGT 387, coal 1,061, nuclear 7.4, solar 30.9; imports FR/BE/NL/NO/DK/IE 74/178/479/22/207/352 g CO₂e/kWh | transcribed | Activities named by exact identity in `optimiser_lca.grid.SOURCES`, resolved by `lca_helpers.resolve_exact`, which refuses zero or several matches; IPCC 2021 GWP100 with long-term emissions, as every asset is. Gas was the conventional plant (558) until 13 Oct 2026. Nuclear is BWR, as ecoinvent's own GB market proxies the AGR fleet. Solar is the Smith 2024 plant (`optimiser_lca/upv.py`) at ecoinvent's GB yield, replacing the 2008 El Tesoro plant (79.8). NO and DK are those countries' own HV markets — ecoinvent has no GB import activity for them, and its FR/BE/NL/IE ones are the exporter's HV market under another name |
+| Grid carbon intensity | half-hourly, mean 0.1794 kg CO₂e/kWh delivered at high voltage (London, 2025). History: 0.2369 on the conventional gas plant; 0.1882 after the gas fix; 0.1585 after the import split, delivery terms and grid solar (all 13 Oct 2026); 0.1794 with gas on the 2025 fleet's efficiency (23 Nov 2026) | derived | NESO Carbon Intensity API, regional (region 13, London), with Elexon FUELHH interconnector flows, via `optimisation/grid_build.py` |
+| Per-fuel life-cycle scores | gas 460 (ecoinvent's GB CCGT at the 2025 fleet efficiency, `optimiser_lca/gb_gas_fleet.py`; the plant alone is 387), coal 1,061, nuclear 7.4, solar 30.9; imports FR/BE/NL/NO/DK/IE 74/178/479/22/207/352 g CO₂e/kWh | transcribed | Activities named by exact identity in `optimiser_lca.grid.SOURCES`, resolved by `lca_helpers.resolve_exact`, which refuses zero or several matches; IPCC 2021 GWP100 with long-term emissions, as every asset is. Gas was the conventional plant (558) until 13 Oct 2026. Nuclear is BWR, as ecoinvent's own GB market proxies the AGR fleet. Solar is the Smith 2024 plant (`optimiser_lca/upv.py`) at ecoinvent's GB yield, replacing the 2008 El Tesoro plant (79.8). NO and DK are those countries' own HV markets — ecoinvent has no GB import activity for them, and its FR/BE/NL/IE ones are the exporter's HV market under another name |
 | Import split | per half-hour: Elexon FUELHH flow on each link × a per-region attribution. London FR 74 / BE 16 / NL 8 / NO 2 % over 2025 | derived | `optimiser_lca.grid.IMPORT_ATTRIBUTION`, fitted by `grid_build.fit_import_attribution` (non-negative least squares of the region's API import share on the ten links' flows, 2025; London R² 0.70). Replaced ecoinvent's GB-market split, FR 63 / NL 30 / IE 7 % on every region: −29 g/kWh on London 2025 |
 | Delivery to the facility | ×1.0338 on generation + 1.93 g CO₂e/kWh network (high voltage) | derived | ecoinvent 3.9.1 GB voltage chain, `optimiser_lca.grid.derive_delivery`: the HV market's 3.27 % self-loss, and the market without its electricity input — lines, cables, maintenance and the N₂O its lines emit. At 7.3 MW the facility is banded EHV2, which `network_charges.delivery_voltage` puts at high voltage. Replaced a flat 3.16 % with no network carbon: +2.3 g/kWh |
 | Wholesale electricity price | half-hourly, mean £79.83/MWh | transcribed | Elexon BMRS Market Index Data, provider APXMIDP, via `optimisation/grid_build.py` (originally notebook 5) |
@@ -1720,6 +1720,34 @@ passes (upper 125 kg/MW/yr, 0.5 % of wind); the register now prints the
 switchyard civils the coefficient charges (98.6), not Leng's own score (539).
 Unchanged: wind, solar, the battery power term, the fuel cell, the tank, grey
 and blue hydrogen.
+
+## Grid gas at the 2025 fleet's efficiency (23 Nov 2026)
+`optimiser_lca/gb_gas_fleet.py`, `optimiser_lca/grid.py` (`SOURCES["GAS"]`)
+
+Found by the UK headline check of the validation write-up: our life-cycle gas
+score (387 g CO₂e/kWh) was below NESO's combustion-only factor (394). The
+ecoinvent dataset is one new 400 MW plant (UK, 2012), about 57 % efficient on a
+gross basis; Britain's fleet ran at 48 %.
+
+| Input | Value | Grade | Source |
+|---|---|---|---|
+| CCGT fleet efficiency, 2025 | 47.99 % gross, per kWh generated | transcribed | DESNZ, *DUKES 2026*, table 5.10.C, combined cycle gas turbine stations, major power producers, 30 Jul 2026 |
+| CO₂ per kWh of gas burned | 0.18405 kg/kWh (gross) | transcribed | DESNZ, *GHG conversion factors 2026* (11 Jun 2026), "Fuels", natural gas (100% mineral blend), kWh (Gross CV), kg CO₂ |
+| ecoinvent plant's CO₂ | 0.32309 kg/kWh | transcribed | ecoinvent 3.9.1 apos, 'electricity production, natural gas, combined cycle power plant' [GB] |
+| Fuel factor | 1.1870 = (0.18405 / 0.4799) / 0.32309 | derived | scales the dataset's fuel, supply chain, stack emissions and cooling water |
+| Gas score | 459.7 g CO₂e/kWh (plant 383.5 CO₂ + supply chain 72.8 + construction 1.2 + other gases) | derived | was 387.3 |
+
+Cross-checks: NESO's 394 g CO₂/kWh is direct-only per kWh supplied (*Carbon
+Intensity Forecast Methodology*, January 2021, Table 1), against 383.5 here per
+kWh generated; DESNZ's well-to-tank factor for natural gas over the same
+efficiency gives 63.0 g/kWh for the supply chain, against ecoinvent's 72.8.
+Errs low: station own use (about 2 %) and open-cycle gas are not added.
+
+Effect on the 2025 grid series, delivered at high voltage: GB 141.9 → 163.0,
+London 158.5 → 179.4, South East 172.3 → 196.2 g CO₂e/kWh. Every grid file was
+re-scored (`python -m optimisation.grid_build --rescore`, basis id
+`dacb11a3b07c`); saved optimiser runs now carry the grid basis id in their
+cache key, so none is reused on the old grid.
 
 ## Scope decisions
 

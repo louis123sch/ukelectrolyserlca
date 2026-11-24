@@ -51,7 +51,7 @@ def test_codes_are_unique_across_databases():
 
 
 def test_grid_sources_id_is_the_one_every_series_carries():
-    assert grid.sources_id() == "055e53f4b11b"   # = test_grid_build.GRID_BASIS_ID
+    assert grid.sources_id() == "dacb11a3b07c"   # = test_grid_build.GRID_BASIS_ID (23 Nov 2026: gas fleet)
     assert set(grid.GRID_SOURCES) == set(grid.TECH_SPECS)
     assert abs(sum(grid.WIND_GROUP_WEIGHTS.values()) - 1) < 1e-9
     for fit in grid.IMPORT_ATTRIBUTION.values():

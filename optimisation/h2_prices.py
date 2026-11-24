@@ -169,8 +169,9 @@ INVENTORY = {
 #
 # 76 % of that 311 g/kWh comes from a single dataset, "electricity production,
 # natural gas, conventional power plant", which ``optimiser_lca/grid.py`` does
-# not use for this study's own grid: it scores gas on the combined-cycle plant
-# (387 against 558 g/kWh). This is that judgement propagated, not a new one.
+# not use for this study's own grid: it scores gas on the combined-cycle plant at
+# the 2025 fleet's efficiency (460 against 558 g/kWh; ecoinvent's plant alone is
+# 387; optimiser_lca/gb_gas_fleet.py). This is that judgement propagated, not a new one.
 #
 # The default is ecoinvent's own GB onshore wind activity, unmodified — same
 # database, version and method as every other coefficient in the study, and

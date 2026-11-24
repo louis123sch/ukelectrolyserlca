@@ -67,7 +67,8 @@ HV_MARKET_OZONE_KG = 4.15772755242894e-06   # TRANSCRIBED
 # so h2_prices can charge fossil sellers' compression on it without Brightway;
 # optimiser_lca.validate re-scores the activity and fails if it has moved. It
 # equals the series' own mean delivered intensity, as it should.
-GB_GRID_2025_HV_GCO2E_PER_KWH = 141.88016958029795   # DERIVED - the series mean, re-scored 22 Oct 2026 (validate re-scores the activity)
+# DERIVED - the series mean, re-scored 23 Nov 2026 with gas on the 2025 fleet (gb_gas_fleet.py); was 141.88.
+GB_GRID_2025_HV_GCO2E_PER_KWH = 162.96836713010657
 
 GROSS_UP = G.DELIVERY["high"]["gross_up"]
 # The market's exchanges are per kWh it delivers; a kWh delivered here has

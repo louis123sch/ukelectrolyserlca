@@ -65,13 +65,19 @@ def test_parse_push():
 
 
 def test_the_screened_sweep_drops_the_bought_hydrogen_knobs_where_none_is_bought():
-    islanded, green = S.CASES["islanded_h2"], S.CASES["norfolk_grid_green"]
-    assert islanded.h2_colour is None and green.h2_colour == "green"
-    iv, gv = S.shaky_variants(islanded), S.shaky_variants(green)
-    assert iv[0] == {} and gv[0] == {}                   # central first
+    import dataclasses
+    islanded, priced = S.CASES["islanded_h2"], S.CASES["norfolk_grid_green"]
+    assert islanded.h2_colour is None and priced.h2_colour == "green"
+    # The sweep case prices green hydrogen but, on the default supply since 20 Nov 2026,
+    # buys none; just in time is where its knobs come back.
+    assert priced.h2_supply == "none"
+    green = dataclasses.replace(priced, h2_supply="jit")
+    iv, pv, gv = S.shaky_variants(islanded), S.shaky_variants(priced), S.shaky_variants(green)
+    assert iv[0] == {} and pv[0] == {} and gv[0] == {}    # central first
     pushes = lambda vs: {v["push"] for v in vs if "push" in v}
-    assert not any(p.startswith("cost.bought_h2") for p in pushes(iv))
-    assert not any("green_h2_grid_share" in v for v in iv)
+    for vs in (iv, pv):
+        assert not any(p.startswith("cost.bought_h2") for p in pushes(vs))
+        assert not any("green_h2_grid_share" in v for v in vs)
     assert {p for p in pushes(gv) if p.startswith("cost.bought_h2")} == {
         "cost.bought_h2.green.delivered*0.5", "cost.bought_h2.green.delivered*1.5"}
     assert any("green_h2_grid_share" in v for v in gv)

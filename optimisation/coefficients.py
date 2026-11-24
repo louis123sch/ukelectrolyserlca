@@ -14,11 +14,20 @@ prints its own cross-checks:
 | assets | module | shape |
 |---|---|---|
 | onshore wind, solar PV | ``renewables.py`` | per MW installed |
-| battery power and energy | ``battery.py`` | per MW and per MWh |
-| AE / PEM / SOEC electrolysers | ``electrolysers.py`` | per MW installed |
+| battery power and energy | ``battery.py`` | per MW and per MWh (energy with its end-of-life oversize) |
+| AE / PEM / SOEC electrolysers | ``electrolysers.py`` | plant per MW over its life; stack per MW replaced |
 | PEM fuel cell stack and BoP | ``fuel_cell.py`` | per MW, replaced on max(calendar, duty) |
 | Gas engines | ``gas_engine.py`` | per MW, replaced on max(calendar, duty); running per MWh |
-| H2 storage, both designs | ``h2_storage.py`` | per kg of capacity |
+| H2 storage, every design | ``h2_storage.py`` | per kg of capacity |
+| step-up transformers (wind, solar, battery, fuel cell) | ``transformers.py`` | per MW over the asset's life |
+| grid connection and its line | ``grid_connection.py`` | per MW, and per km of route per circuit |
+
+``cutoff_estimate_kgco2e_per_capacity_unit`` is what the cut-off register
+carries on top of the row in the default model (``dc_inputs.with_cutoff``), in
+the row's own unit. Capital plus that, over the calendar life, is what
+``dc_inputs.build_tech`` charges per year (20 Nov 2026: the table used to leave
+out the battery oversize, the transformers, the connection and these estimates).
+The optimiser does not read this table; ``dc_runner`` and the maps fingerprint it.
 
 Reading the table
 -----------------
@@ -60,8 +69,28 @@ COLUMNS = [
     "asset", "capacity_unit", "capital_kgco2e_per_capacity_unit",
     "calendar_lifetime_years", "duty_lifetime_hours",
     "variable_kgco2e_per_unit", "variable_output_unit",
-    "throughput_kgco2e_per_MWh", "source", "grade", "note",
+    "throughput_kgco2e_per_MWh", "cutoff_estimate_kgco2e_per_capacity_unit",
+    "source", "grade", "note",
 ]
+
+# Which table rows each coefficient's cut-off estimates land on
+# (dc_inputs.CUTOFF_FIELD names the coefficient; dc_inputs.with_cutoff adds them).
+# Prefixes match every row that starts with them (all electrolyser plant rows,
+# all tank designs). The facility's estimate has no row: the facility is not here.
+CUTOFF_ROWS = {
+    "gwp_tx_wind_per_mw": ("wind_stepup_transformer",),
+    "gwp_tx_solar_per_mwp": ("solar_stepup_transformer",),
+    "gwp_tx_batt_per_mw": ("battery_stepup_transformer",),
+    "gwp_batt_e": ("battery_energy",),
+    "gwp_ely": ("electrolyser_ae", "electrolyser_pem", "electrolyser_soec"),
+    "gwp_tank": ("h2_tank_",),
+    "gwp_tx_fc_per_mw": ("fuel_cell_stepup_transformer",),
+    "gwp_grid_per_mw": ("grid_connection",),
+    "gwp_ge_per_mw": ("gas_engine",),
+}
+# Coefficients the LP charges per unit replaced rather than per year: their
+# estimate is already per capacity unit.
+_PER_REPLACEMENT = {"gwp_ge_per_mw"}
 
 
 def _row(asset, capacity_unit, capital, calendar=None, duty=None,
@@ -73,8 +102,26 @@ def _row(asset, capacity_unit, capital, calendar=None, duty=None,
         "calendar_lifetime_years": calendar, "duty_lifetime_hours": duty,
         "variable_kgco2e_per_unit": variable, "variable_output_unit": variable_unit,
         "throughput_kgco2e_per_MWh": throughput,
+        "cutoff_estimate_kgco2e_per_capacity_unit": 0.0,
         "source": source, "grade": grade, "note": note,
     }
+
+
+def cutoff_central() -> dict[str, float]:
+    """The cut-off register's central estimates, summed per LP coefficient, as
+    ``dc_inputs.with_cutoff`` adds them in the default (central) model."""
+    from optimiser_lca import exclusions as X
+    from optimisation.dc_inputs import CUTOFF_FIELD
+    added: dict[str, float] = {}
+    for e in X.REGISTER:
+        if e.kind == "boundary" or e.status != "included_estimate":
+            continue
+        est = e.estimate("central")
+        if est is None:
+            continue
+        field = CUTOFF_FIELD[(e.technology, e.side)]
+        added[field] = added.get(field, 0.0) + float(est)
+    return added
 
 
 def build(cost_case: str = "central") -> pd.DataFrame:
@@ -115,12 +162,50 @@ def build(cost_case: str = "central") -> pd.DataFrame:
     rows.append(_row("battery_power", "MW", be["power_kgco2e_per_kW"] * 1000.0,
                      calendar=batt.ASSET_LIFE_YEARS, source=b_src, grade="derived",
                      note="power conversion system"))
-    rows.append(_row("battery_energy", "MWh", be["energy_kgco2e_per_kWh"] * 1000.0,
+    oversize = batt.end_of_life_oversize()
+    rows.append(_row("battery_energy", "MWh", be["energy_kgco2e_per_kWh"] * 1000.0 * oversize,
                      calendar=batt.ASSET_LIFE_YEARS, source=e_src, grade="derived",
-                     note=(f"per usable MWh: nameplate / USABLE_FRACTION {batt.USABLE_FRACTION:g}; "
-                           "cells made in China; PCS and transformer charged on the power term"
+                     note=(f"per usable MWh needed at end of life: nameplate / USABLE_FRACTION "
+                           f"{batt.USABLE_FRACTION:g}, x {oversize:.3f} for fade by year 15 "
+                           "(battery.end_of_life_oversize); cells made in China; power conversion and "
+                           "transformer charged on the power side"
                            if batt.EMBODIED_BASIS == "jasper_voss_2026"
-                           else "LFP EV pack; no container/racking/HVAC")))
+                           else f"LFP EV pack, x {oversize:.3f} for fade; no container/racking/HVAC")))
+
+    # --- transformers and the grid connection ---------------------------
+    # Charged by the LP per MW per year (dc_inputs.build_tech); shown here as the
+    # whole amount per unit of capacity over the life it is spread over, so that
+    # capital / calendar life is exactly what the LP charges. Solar's carries
+    # Smith A15's transformer replacements over that life too.
+    from optimisation import connection_cost
+    from optimisation import fuel_cell as fc_mod
+    from optimisation import grid_connection as gc
+    from optimisation import transformers as tx
+    lives = {r["technology"]: float(r["study_lifetime_years"]) for _, r in ren_df.iterrows()}
+    fc_bop_life = float(fc_mod.decompose()["bop_calendar_lifetime_years"])
+    tx_src = "transformers.py (optimiser_lca/stepup_transformers.py foreground)"
+    for asset, tech, unit, life, note in (
+            ("wind_stepup_transformer", "onshore_wind", "MW", lives["onshore_wind"],
+             "Leng 2026 per-turbine units, per MW of wind, over wind's life"),
+            ("solar_stepup_transformer", "solar_pv", "MWp", lives["solar_pv"],
+             "IEA PVPS T12-33:2026 inverter-station units plus Smith A15's replacements, per MWp, "
+             "over solar's life"),
+            ("battery_stepup_transformer", "battery", "MW", float(batt.ASSET_LIFE_YEARS),
+             "Jasper 2026 container unit, per MW of power conversion, over the battery's life"),
+            ("fuel_cell_stepup_transformer", "fuel_cell", "MW", fc_bop_life,
+             "Jasper 2026 container unit, per MW of fuel cell, over the plant's calendar life")):
+        rows.append(_row(asset, unit, tx.kgco2e_per_mw_year(tech, life_years=life) * life,
+                         calendar=life, source=tx_src, grade="derived", note=note))
+    rows.append(_row("grid_connection", "MW", gc.kgco2e_per_mw_year() * gc.ASSET_LIFE_YEARS,
+                     calendar=gc.ASSET_LIFE_YEARS,
+                     source="grid_connection.py: Leng 2026 100 MVA intake transformer x2 and switchyard civils",
+                     grade="derived", note="per MW of connection (cap_grid); 40-year life ASSUMED"))
+    rows.append(_row("grid_connection_line", "km", gc.line_kgco2e_per_km_year() * gc.ASSET_LIFE_YEARS,
+                     calendar=gc.ASSET_LIFE_YEARS,
+                     source="ecoinvent 3.9.1 apos high-voltage transmission network, per km (a proxy)",
+                     grade="assumed",
+                     note=f"per km of route per circuit; the LP charges {connection_cost.CIRCUITS} circuits x the "
+                          "route length, as a fixed yearly term while the connection is on"))
 
     # --- electrolysers --------------------------------------------------
     # Two rows each since 20 Nov 2026, as the optimiser charges them: the balance of
@@ -176,18 +261,34 @@ def build(cost_case: str = "central") -> pd.DataFrame:
                           "throughput is running plus maintenance; docs/GAS_ENGINE_PLAN.md"))
 
     # --- hydrogen storage -----------------------------------------------
+    # Source and grade from each design's own description (optimiser_lca.h2_tank.TANK_DESIGNS):
+    # until 20 Nov 2026 they were keyed on is_as_built, which labelled the
+    # default bulk vessel "Gandiglio Table 5" and Gandiglio's "a Type I cylinder".
     for r in h2s.decompose():
+        desc = str(r.get("note", ""))
+        grade = ("transcribed" if desc.startswith("Gandiglio")
+                 else "derived" if desc.startswith("DERIVED") else "assumed")
         rows.append(_row(
             "h2_tank_" + r["design"], "kg H2", r["kgco2e_per_kg_capacity"],
             calendar=r["lifetime_years"],
-            source="Gandiglio et al. 2022 Table 5" if r["is_as_built"]
-                   else "derived from a ~1 wt% Type I cylinder",
-            grade="transcribed" if r["is_as_built"] else "assumed",
-            note=f"{r['compression_kwh_per_kg']:.1f} kWh/kg charging compression; "
+            source=desc or "h2_storage.py",
+            grade=grade,
+            note=("the default design; " if r["is_as_built"] else "")
+                 + f"{r['compression_kwh_per_kg']:.1f} kWh/kg charging compression; "
                  f"standing loss {r['leakage_frac_per_hour']:.4g}/h"
                  + (" ASSUMED" if r["leakage_is_assumed"] else "")))
 
-    return pd.DataFrame(rows, columns=COLUMNS)
+    df = pd.DataFrame(rows, columns=COLUMNS)
+
+    # --- cut-off register estimates, on the rows the LP adds them to -----
+    for field, add in cutoff_central().items():
+        targets = CUTOFF_ROWS.get(field, ())
+        for i, asset in df["asset"].items():
+            if not any(asset == t or (t.endswith("_") and asset.startswith(t)) for t in targets):
+                continue
+            life = 1.0 if field in _PER_REPLACEMENT else float(df.at[i, "calendar_lifetime_years"])
+            df.at[i, "cutoff_estimate_kgco2e_per_capacity_unit"] += add * life
+    return df
 
 
 def check(df: pd.DataFrame):

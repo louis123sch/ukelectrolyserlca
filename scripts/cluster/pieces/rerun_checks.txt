@@ -1,0 +1,7 @@
+# Re-run, 24 Nov 2026, on the code with grid gas at the 2025 fleet's efficiency (gb_gas_fleet.py):
+# - the one sign-off check that reads grid carbon (cut-off rule 3, carbon, grid with green hydrogen
+#   priced); the cost checks and the islanded carbon check are unchanged by the gas fix;
+# - two off-grid pieces, to show off-grid results are unchanged by it (compare with ~/wk's).
+scripts/cluster/signoff_site.py carbon norfolk_grid_green
+scripts/uk_sites.py --set central --no-summary --levels offgrid --sites 23
+scripts/uk_sites.py --set central --no-summary --levels offgrid --sites 13

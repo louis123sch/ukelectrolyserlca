@@ -61,6 +61,7 @@ EVIDENCE_DIRS = {"sources"}
 # --- §3–4: the words that mark a source in a module's text ----------------------
 MODULE_SOURCES = {
     "upv": ("Smith", "IEA PVPS", "Z-PV", "Renewables.ninja", "grid"),
+    "gb_gas_fleet": ("ecoinvent", "DUKES", "DESNZ"),
     "gb_grid": ("grid", "series", "NESO", "Carbon Intensity"),
     "hydrogen": ("Hermesmann", "Gerloff"),
     "data_centre": ("Zhang",),

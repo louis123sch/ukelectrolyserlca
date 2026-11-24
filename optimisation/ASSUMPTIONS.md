@@ -177,6 +177,18 @@ fit is a calibration to NESO's regional model, not a physical flow trace;
 every exporter is scored on its own country's average HV market, not on the
 plant at its margin.
 
+**The grid's wind and solar are the fleet that exists.** Grid wind is scored on
+ecoinvent's own per-kWh datasets, at their own 20-year life and fleet yield
+(`optimiser_lca.grid.SOURCES`), and grid solar on Smith's plant at 30 years and
+ecoinvent's GB fleet yield (`optimiser_lca.upv.UPV_GRID_FLEET_*`). The wind and
+solar the site builds are new plant on the government's longer lives (§5a). The
+difference is deliberate: much of the grid fleet is older kit built for about
+20 years, while the site's would be modern machines. Put on the site's lives
+instead, grid wind would be 11.5 rather than 15.8 g/kWh and grid solar 24.6
+rather than 31.0, which lowers grid carbon by 0.65 % in South East England
+(the East Grinstead test site), 1.3 % for GB as a whole and 6–8 % in the two
+Scottish regions (comparison against mescal, 20 Nov 2026).
+
 ## 3a. The site is a coordinate, and everything follows from it
 
 `sites.resolve(lat, lon)` derives the Carbon Intensity region and the TNUoS
@@ -422,6 +434,23 @@ burden sits on the hydrogen. Electrolysis oxygen is likewise an unallocated
 co-product. This keeps the study attributional throughout, at the cost of
 making turquoise hydrogen look worse than its source reports.
 
+## 5a. Asset lives: the cost source's life, and what the inventory needs to reach it
+
+Every asset's carbon is spread over the same life as its cost (`audit.py`
+checks that the two agree). Where the inventory describes kit built for a
+shorter life than that, this table says how the gap is closed:
+
+| Asset | Inventory's own life | Life charged | How the gap is treated |
+|---|---|---|---|
+| Onshore wind | 20 y (ecoinvent turbine) | 35 y (DESNZ/Arup, central) | Servicing and an overhaul added as parts, +27.5 % at 35 y (`renewables.wind_parts_fraction`) |
+| Solar | 30 y (Smith 2024) | 38 y (DESNZ/Arup, central) | Smith's own upkeep (panel and inverter replacements) scaled to 38 y; output aged by ×0.8705 |
+| Electrolyser balance of plant | 20 y (Gerloff 2021) | 25 y (NESO data portal) | **None.** NESO's 25 years is taken as the plant's physical life; no parts are added. Charged over 20 years instead, the PEM plant term would be +815 kg CO2e/MW/yr (+25 % on the plant, about +9 % on the electrolyser at the one-stack floor) |
+| Electrolyser and fuel-cell stacks, fuel-cell balance of plant, gas engines | as sourced | max(calendar, running hours) | Replaced on whichever comes first (`dc_model`) |
+| Battery | 20 y container, 15 y cells and inverter (Jasper 2026) | 15 y (Modo) | Errs high by 1–4 % (DATA_GAPS.md, battery component lives) |
+
+The grid's wind and solar are on their inventories' own lives, as existing
+plant (§2b).
+
 ## 6. No end-of-life, anywhere
 
 The study is **cradle-to-gate on every input**, with the functional unit being
@@ -455,12 +484,24 @@ is the capture and storage leg of a production route, inside the gate.
 *Residual, and it cannot be declared away*: coefficients scored on **ecoinvent
 3.9.1 apos** carry end-of-life inside their background datasets, because the
 APOS system model allocates waste-treatment burdens back into the product
-system. This affects the wind, offshore, battery pack, inverter, transformer
-and tank-steel terms, and cannot be stripped exchange-by-exchange from outside.
-The cut-off system model is the one that corresponds to a strict cradle-to-gate
-rule; moving to it would break the "3.9.1 apos throughout" consistency claim and
-every pinned constant, so the embedded share is declared here rather than
-removed.
+system. This affects the wind, battery pack, inverter, transformer and
+tank-steel terms. Inside the background it cannot be stripped
+exchange-by-exchange from outside. The cut-off system model is the one that
+corresponds to a strict cradle-to-gate rule; moving to it would break the
+"3.9.1 apos throughout" consistency claim and every pinned constant, so the
+embedded share is declared here rather than removed.
+
+*Wind's own end-of-life rows are kept.* ecoinvent's 2 MW turbine and its
+network connection, which the wind coefficient uses whole
+(`renewables.decompose`), list their disposal as their **own** first-tier
+waste exchanges: 35.0 t CO2e of the turbine's 1,305 t (2.7 %) and 4.5 t of the
+connection's 11.4 t (39 %), together 19.7 t per MW, 3.0 % of wind's capital
+and about 2.9 % of its yearly coefficient (checked 20 Nov 2026). Unlike the
+background share these could be removed row by row, as the gas engine's car
+trips to site are. They are kept: the effect is small, and removing them would
+take ecoinvent's turbine apart for one technology only. The cable to the
+substation (ecoinvent's high-voltage line, `grid_connection.py`) carries 7.2 %
+of its own the same way.
 
 ## 7. The facility's standby generator is excluded
 

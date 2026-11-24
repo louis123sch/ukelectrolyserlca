@@ -1,5 +1,5 @@
 {
-  "grid_sources_id": "055e53f4b11b",
+  "grid_sources_id": "dacb11a3b07c",
   "basis": {
     "sources": {
       "BIOMASS": [
@@ -13,9 +13,10 @@
         "electricity, high voltage"
       ],
       "GAS": [
-        "electricity production, natural gas, combined cycle power plant",
+        "electricity production, natural gas, GB combined-cycle fleet 2025",
         "GB",
-        "electricity, high voltage"
+        "electricity, high voltage",
+        "gas fleet foreground"
       ],
       "HYDRO": [
         "electricity production, hydro, run-of-river",
@@ -347,6 +348,11 @@
       28842.0,
       30.0
     ],
+    "gas_fleet": [
+      0.4799,
+      0.18405,
+      0.32309243697479
+    ],
     "delivery": {
       "high": {
         "gross_up": 1.03379915593905,
@@ -365,11 +371,11 @@
   },
   "sources": {
     "GAS": {
-      "name": "electricity production, natural gas, combined cycle power plant",
+      "name": "electricity production, natural gas, GB combined-cycle fleet 2025",
       "location": "GB",
       "product": "electricity, high voltage",
-      "database": "ecoinvent-3.9.1-apos",
-      "kgco2e_per_kwh": 0.3872941871213688
+      "database": "gas fleet foreground",
+      "kgco2e_per_kwh": 0.45972620139668713
     },
     "COAL": {
       "name": "electricity production, hard coal",
@@ -488,7 +494,7 @@
       "location": "GB",
       "product": "electricity, high voltage",
       "database": "ecoinvent-3.9.1-apos",
-      "kgco2e_per_kwh": 0.05052909853726058
+      "kgco2e_per_kwh": 0.05052909853726059
     }
   }
 }

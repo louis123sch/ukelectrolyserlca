@@ -18,7 +18,7 @@ from optimisation import grid_build as G
 
 # The basis id every grid series on disk carries. Changes whenever anything in
 # optimiser_lca.grid that moves a score does — then rescore and update this.
-GRID_BASIS_ID = "055e53f4b11b"
+GRID_BASIS_ID = "dacb11a3b07c"      # 23 Nov 2026: gas on the 2025 fleet (gb_gas_fleet.py)
 
 
 # -----------------------------------------------------------------------------
@@ -277,8 +277,12 @@ def test_grid_sources_resolve_exactly_and_gas_is_combined_cycle():
         pytest.skip("Brightway project not present on this machine")
     from optimiser_lca import grid
     table = G.source_table()
-    assert table["GAS"]["name"] == "electricity production, natural gas, combined cycle power plant"
-    assert 0.35 < table["GAS"]["kgco2e_per_kwh"] < 0.42
+    # The fleet's kWh (DUKES 2025 efficiency) on the ecoinvent combined-cycle plant, 23 Nov 2026.
+    from optimiser_lca import gb_gas_fleet
+    assert table["GAS"]["name"] == gb_gas_fleet.FLEET.name
+    assert table["GAS"]["kgco2e_per_kwh"] == pytest.approx(
+        0.3873 * gb_gas_fleet.GAS_FLEET_FUEL_FACTOR, rel=0.01)
+    assert 0.44 < table["GAS"]["kgco2e_per_kwh"] < 0.48
     for key, ident in grid.GRID_SOURCES.items():
         assert (table[key]["name"], table[key]["location"], table[key]["product"]) == tuple(ident[:3])
     # The grid's solar is the Smith plant now, not the 2008 El Tesoro one.

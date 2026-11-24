@@ -69,11 +69,12 @@ METHOD_LABEL = "IPCC 2021, climate change, GWP100 (with long-term emissions)"
 SOURCES = {
     # Conventional generation
     "GAS": Process(
-        identity=("electricity production, natural gas, combined cycle power plant",
+        identity=("electricity production, natural gas, GB combined-cycle fleet 2025",
                   "GB", "electricity, high voltage"),
-        query="electricity production natural gas combined cycle GB",
-        why="GB's gas fleet is CCGT; the conventional plant dataset is 558 g/kWh "
-            "against 387 here, and a search rank once picked it by mistake"),
+        database=R.GAS_FLEET_DB,
+        why="GB's gas fleet is CCGT: ecoinvent's GB combined-cycle plant (387 g/kWh, about 57 % "
+            "efficient) scaled to DUKES 2025's 47.99 % fleet efficiency (optimiser_lca/gb_gas_fleet.py, "
+            "23 Nov 2026). The conventional plant dataset (558 g/kWh) is not GB's fleet"),
     "COAL": Process(
         identity=("electricity production, hard coal", "GB", "electricity, high voltage"),
         query="electricity production hard coal GB"),
@@ -589,7 +590,7 @@ def check_delivery(tol_frac: float = 0.01) -> dict:
 # =============================================================================
 def basis() -> dict:
     """Everything that moves a grid score, in the shape the id hashes."""
-    from optimiser_lca import upv
+    from optimiser_lca import gb_gas_fleet, upv
     return {
         "sources": {k: list(v) for k, v in sorted(GRID_SOURCES.items())},
         "method": METHOD_LABEL,
@@ -599,6 +600,8 @@ def basis() -> dict:
         "import_attribution": {str(k): v for k, v in sorted(IMPORT_ATTRIBUTION.items())},
         "storage_kwh_in": STORAGE_KWH_IN,
         "solar_fleet": [upv.UPV_GRID_FLEET_KWH_PER_KWP, upv.UPV_GRID_FLEET_YEARS],
+        "gas_fleet": [gb_gas_fleet.GAS_FLEET_EFFICIENCY_GROSS, gb_gas_fleet.GAS_CO2_KG_PER_KWH_GROSS,
+                      gb_gas_fleet.GAS_ECOINVENT_CO2_KG_PER_KWH],
         "delivery": DELIVERY,
         "reference_voltage": REFERENCE_VOLTAGE,
     }

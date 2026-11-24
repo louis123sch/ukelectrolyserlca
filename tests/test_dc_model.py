@@ -1109,7 +1109,15 @@ def test_myopic_steady_contract_takes_the_rate_and_loses_what_will_not_fit(serie
 
 def test_supply_changes_the_scenario_key_only_off_the_default():
     from optimisation import dc_architectures as A
-    base = A.Scenario(n=0, architecture="custom", label="x", assets={"buy_h2": True}, h2_colour="green")
     import dataclasses
-    assert base.h2_supply == "jit" and "h2" not in base.key.split("_")[-1]
-    assert dataclasses.replace(base, h2_supply="steady").key == base.key + "_steadyh2"
+    # Nothing bought is the default since 20 Nov 2026; just in time (the default
+    # before it) adds nothing to the key, so runs saved while it was the default keep theirs.
+    default = A.Scenario(n=0, architecture="custom", label="x", assets={"buy_h2": True}, h2_colour="green")
+    jit = dataclasses.replace(default, h2_supply="jit")
+    assert default.h2_supply == "none"
+    assert "h2" not in jit.key.split("_")[-1]
+    assert default.key == jit.key + "_nobuyh2"
+    assert dataclasses.replace(jit, h2_supply="steady").key == jit.key + "_steadyh2"
+    # A scenario with no colour priced could never buy, so "none" leaves its key alone.
+    unpriced = A.Scenario(n=0, architecture="custom", label="x", assets={"buy_h2": True})
+    assert unpriced.key == dataclasses.replace(unpriced, h2_supply="jit").key

@@ -196,6 +196,46 @@ def test_coefficient_table_rows_add_up_to_what_the_optimiser_charges():
     assert stack.calendar_lifetime_years == t.ely_stack_calendar_years
 
 
+def test_coefficient_table_carries_every_per_capacity_term_the_optimiser_charges():
+    """mescal comparison (20 Nov 2026): the table left out the battery's fade oversize,
+    the step-up transformers, the grid connection and the cut-off estimates. Each row's
+    (capital + cut-off estimate) over its calendar life must now be the LP's figure."""
+    _cached()
+    from optimisation import coefficients
+    df = coefficients.build().set_index("asset")
+    t = _tech()
+
+    def per_year(asset):
+        r = df.loc[asset]
+        return ((r.capital_kgco2e_per_capacity_unit + r.cutoff_estimate_kgco2e_per_capacity_unit)
+                / r.calendar_lifetime_years)
+
+    assert per_year("battery_energy") == pytest.approx(t.gwp_batt_e, rel=1e-9)
+    assert per_year("battery_power") == pytest.approx(t.gwp_batt_p, rel=1e-9)
+    assert per_year("wind_stepup_transformer") == pytest.approx(t.gwp_tx_wind_per_mw, rel=1e-9)
+    assert per_year("solar_stepup_transformer") == pytest.approx(t.gwp_tx_solar_per_mwp, rel=1e-9)
+    assert per_year("battery_stepup_transformer") == pytest.approx(t.gwp_tx_batt_per_mw, rel=1e-9)
+    assert per_year("fuel_cell_stepup_transformer") == pytest.approx(t.gwp_tx_fc_per_mw, rel=1e-9)
+    assert per_year("grid_connection") == pytest.approx(t.gwp_grid_per_mw, rel=1e-9)
+    assert per_year(f"h2_tank_{t.labels['tank_design']}") == pytest.approx(t.gwp_tank, rel=1e-9)
+    ge = df.loc["gas_engine"]
+    assert (ge.capital_kgco2e_per_capacity_unit + ge.cutoff_estimate_kgco2e_per_capacity_unit
+            == pytest.approx(t.gwp_ge_per_mw, rel=1e-9))
+    added = {k: v for k, v in t.labels["cutoff_added"].items() if k != "dc_fixed_gwp_per_year"}
+    assert added == pytest.approx({k: round(v, 6) for k, v in coefficients.cutoff_central().items()
+                                   if k != "dc_fixed_gwp_per_year"}, abs=1e-6)
+
+
+def test_tank_rows_name_their_own_source():
+    _cached()
+    from optimisation import coefficients
+    df = coefficients.build().set_index("asset")
+    assert df.loc["h2_tank_gandiglio_28bar", "source"].startswith("Gandiglio")
+    assert df.loc["h2_tank_gandiglio_28bar", "grade"] == "transcribed"
+    assert df.loc["h2_tank_bulk_carbon_steel_28bar", "grade"] == "derived"
+    assert "Gandiglio" not in df.loc["h2_tank_bulk_carbon_steel_28bar", "source"]
+
+
 def test_battery_cycles_per_year():
     from optimisation import audit
     assert audit.battery_cycles_per_year(100.0, 10.0, 8_760.0) == pytest.approx(10.0)

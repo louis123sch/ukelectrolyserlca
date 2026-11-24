@@ -242,6 +242,9 @@ def test_coefficient_table_covers_every_optimiser_asset():
         "electrolyser_ae_stack", "electrolyser_pem_stack", "electrolyser_soec_stack",
         "fuel_cell_bop", "fuel_cell_stack", "gas_engine",
         "h2_tank_gandiglio_28bar", "h2_tank_type1_200bar",
+        "wind_stepup_transformer", "solar_stepup_transformer",
+        "battery_stepup_transformer", "fuel_cell_stepup_transformer",
+        "grid_connection", "grid_connection_line",
     }
     assert required <= assets, f"missing: {sorted(required - assets)}"
 
