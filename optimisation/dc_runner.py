@@ -119,6 +119,7 @@ def run_one(scenario: A.Scenario, *, site, start: str, end: str,
             ccl_under_cca: bool | None = None,
             gas_price_case: str | None = None,
             tech_overrides: dict | None = None,
+            grid_price_scale: float | None = None,
             save_dispatch: bool = False, refresh: bool = False,
             progress=None, notice=None, eps_fracs=None) -> dict:
     """Solve one configuration's Pareto front and write it to disk.
@@ -179,6 +180,10 @@ def run_one(scenario: A.Scenario, *, site, start: str, end: str,
         # 18 Nov 2026: any other build_tech argument a robustness check moves (a stack
         # life, a transformer loading). Hashed only when given, so earlier keys stand.
         **({"tech_overrides": dict(sorted(tech_overrides.items()))} if tech_overrides else {}),
+        # 24 Nov 2026: the whole import price scaled (the +25 % grid price case). Hashed only
+        # when it moves the price, so every earlier key stands.
+        **({"grid_price_scale": float(grid_price_scale)}
+           if grid_price_scale is not None and float(grid_price_scale) != 1.0 else {}),
         "coefficients": _coefficient_identity(),
     }
     h = config_hash(cfg)
@@ -205,7 +210,8 @@ def run_one(scenario: A.Scenario, *, site, start: str, end: str,
         connection_mode=connection_mode, cost_case=cost_case, horizon_years=horizon_years,
         green_h2_grid_share=green_h2_grid_share, batt_standing_loss_per_hour=batt_standing_loss_per_hour,
         tank_leakage_per_hour=tank_leakage_per_hour, ccl_under_cca=ccl_under_cca,
-        gas_price_case=gas_price_case, tech_overrides=tech_overrides, notice=notice)
+        gas_price_case=gas_price_case, tech_overrides=tech_overrides,
+        grid_price_scale=grid_price_scale, notice=notice)
     # Record what was *used*, not what was asked for. site.tdr_band is None
     # whenever the band is derived from the load, so writing it straight into
     # the config would leave the run with no record of the band it was actually
@@ -335,7 +341,8 @@ def build_inputs(scenario: A.Scenario, *, site, start: str, end: str, size_mw_it
                  batt_standing_loss_per_hour: float | None = None,
                  tank_leakage_per_hour: float | None = None,
                  ccl_under_cca: bool | None = None, gas_price_case: str | None = None,
-                 tech_overrides: dict | None = None, notice=None):
+                 tech_overrides: dict | None = None, grid_price_scale: float | None = None,
+                 notice=None):
     """A run's inputs, ``(series, meta, tech, assets)``: what ``run_one`` solves.
 
     One function for the run and for the maps and workbooks that describe it
@@ -352,6 +359,7 @@ def build_inputs(scenario: A.Scenario, *, site, start: str, end: str, size_mw_it
                                   connection_mode=connection_mode,
                                   grid=A.architecture(scenario.architecture, flags=scenario.assets).grid,
                                   ccl_under_cca=ccl_under_cca,
+                                  grid_price_scale=grid_price_scale,
                                   on_progress=notice)
     if resample_hours:
         series = I.resample(series, resample_hours)
@@ -438,7 +446,7 @@ def load_inputs(folder: Path):
         scenario, site=site, start=cfg["start"], end=cfg["end"], size_mw_it=cfg["size_mw_it"],
         pue=cfg.get("pue"), resample_hours=cfg.get("resample_hours"),
         connection_headroom=cfg.get("connection_headroom"), connection_mode=cfg.get("connection_mode"),
-        **settings)
+        grid_price_scale=cfg.get("grid_price_scale"), **settings)
     solved = summary.get("connection_options_solved")
     opts = M.connection_options_of(tech)
     if opts and solved and len(solved) < len(opts):

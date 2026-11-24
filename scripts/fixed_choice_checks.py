@@ -64,6 +64,10 @@ VARIANTS = {          # name -> (Scenario fields, run_one keyword arguments)
     "gas_low":       ({}, {"gas_price_case": "low"}),
     "gas_high":      ({}, {"gas_price_case": "high"}),
     "tank_200bar":   ({"tank_design": "type1_200bar"}, {}),
+    # 24 Nov 2026: the whole import price +25 %, about the gap to DESNZ's survey of what
+    # suppliers charge users over 150 GWh a year (validation write-up, "Grid bill").
+    # Grid-connected levels only: an islanded site buys no grid power.
+    "grid_price_x1.25": ({}, {"grid_price_scale": 1.25}),
 }
 
 # --- the screened inputs, one at a time (user, 18 Nov 2026: robustness at four sites) ----------
@@ -143,7 +147,7 @@ for _share in (0.3, 0.5):
 def run_args(kwargs: dict) -> tuple[dict, dict, list]:
     """A variant's (run_one arguments, build_tech overrides, pushes), ranges resolved."""
     run, tech, pushes = {}, dict(kwargs.get("tech", {})), list(kwargs.get("pushes", []))
-    for k in ("cost_case", "gas_price_case"):
+    for k in ("cost_case", "gas_price_case", "grid_price_scale"):
         if k in kwargs:
             run[k] = kwargs[k]
     picks = []
@@ -196,7 +200,8 @@ def run(variant: str, level: str, row):
             tank_leakage_per_hour=run_kw.get("tank_leakage_per_hour"),
             green_h2_grid_share=run_kw.get("green_h2_grid_share"),
             batt_standing_loss_per_hour=run_kw.get("batt_standing_loss_per_hour"),
-            tech_overrides=tech or None, out_root=folder(variant, level, n),
+            tech_overrides=tech or None, grid_price_scale=run_kw.get("grid_price_scale"),
+            out_root=folder(variant, level, n),
             save_dispatch=False, refresh=False, progress=lambda t: None, eps_fracs=CHECK_FRACS)
     missed = [key for key, h in hits if not any(h)]
     if missed:

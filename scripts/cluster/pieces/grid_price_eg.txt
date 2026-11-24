@@ -1,0 +1,6 @@
+# 24 Nov 2026: the +25 % grid price case at East Grinstead (site 23), 25 MW and full grid, on the
+# central setting (none bought). Compare each with the central pieces of rerun_grid_robustness_eg.txt:
+# does the design change when the import price is about the suppliers' survey (validation write-up)?
+# Run with REPO=~/ukdclca at the commit that adds grid_price_scale.
+scripts/fixed_choice_checks.py --no-summary --supply none --variants grid_price_x1.25 --sites 23 --levels limited
+scripts/fixed_choice_checks.py --no-summary --supply none --variants grid_price_x1.25 --sites 23 --levels full

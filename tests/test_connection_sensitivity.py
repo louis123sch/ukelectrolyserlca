@@ -160,3 +160,39 @@ def test_a_sweep_defaults_to_the_rig_s_step_and_never_writes_on_the_hourly_file(
     assert (df.step_hours == 4.0).all() and (tmp_path / "sensitivity_t_4h.csv").exists()
     assert hourly.read_text() == "the hourly verdict's rows\n"
     assert S._out_path("t", replace(case, resample_hours=1.0)) == hourly
+
+
+# --- the +25 % grid price case (24 Nov 2026) -------------------------------------------------------
+def test_the_grid_price_knob_scales_every_import_price_and_nothing_else():
+    series, meta = _series(mode="cap")
+    tech = _tech(meta)
+    s1, m1 = _series(mode="cap", grid_price_scale=1.25)
+    t1 = _tech(m1)
+    assert np.allclose(s1.grid_price_per_mwh, 1.25 * np.asarray(series.grid_price_per_mwh))
+    for g in series.grid_groups:
+        assert np.allclose(s1.grid_groups[g]["price_per_mwh"], 1.25 * np.asarray(series.grid_groups[g]["price_per_mwh"]))
+        assert np.array_equal(s1.grid_groups[g]["gwp_per_mwh"], series.grid_groups[g]["gwp_per_mwh"])
+    assert np.array_equal(s1.grid_gwp_per_mwh, series.grid_gwp_per_mwh)
+    assert t1.cost_grid_triad_per_mw_year == tech.cost_grid_triad_per_mw_year
+    for o0, o1 in zip(tech.connection_options, t1.connection_options):
+        assert (o1.cost_per_mw_year, o1.cost_fixed_per_year) == (o0.cost_per_mw_year, o0.cost_fixed_per_year)
+    assert tech.labels["grid_price_scale"] == 1.0 and t1.labels["grid_price_scale"] == 1.25
+
+
+def test_the_grid_price_knob_on_one_price_list():
+    s0, m0 = _series()
+    s1, m1 = _series(grid_price_scale=1.25)
+    assert np.allclose(s1.grid_price_per_mwh, 1.25 * np.asarray(s0.grid_price_per_mwh))
+
+
+@pytest.mark.parametrize("bad", [0.0, -1.0, float("nan")])
+def test_a_bad_grid_price_scale_fails_at_once(bad):
+    with pytest.raises(ValueError, match="grid_price_scale"):
+        _series(grid_price_scale=bad)
+
+
+def test_the_grid_price_variant_passes_only_the_scale():
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "scripts"))
+    import fixed_choice_checks as F
+    run_kw, tech, pushes = F.run_args(F.VARIANTS["grid_price_x1.25"][1])
+    assert run_kw == {"grid_price_scale": 1.25} and not tech and not pushes

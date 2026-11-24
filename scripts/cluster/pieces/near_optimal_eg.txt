@@ -1,0 +1,20 @@
+# 24 Nov 2026: the range of battery and hydrogen sizes within 1 % of the lowest carbon (supervisor,
+# 23 Nov), at East Grinstead (site 23), each grid level, on the robustness checks' central setting.
+# One size a piece, for short jobs that start sooner (5 solves each: the lowest carbon, its cheapest,
+# the cheapest within 1 %, the size's min and max). scripts/near_optimal_range.py;
+# -> optimisation_outputs/near_optimal_2025/<level>/23/range_<size>.json; --summary merges them.
+scripts/near_optimal_range.py --sites 23 --levels offgrid --vars cap_batt_e
+scripts/near_optimal_range.py --sites 23 --levels offgrid --vars cap_batt_p
+scripts/near_optimal_range.py --sites 23 --levels offgrid --vars cap_ely
+scripts/near_optimal_range.py --sites 23 --levels offgrid --vars cap_tank
+scripts/near_optimal_range.py --sites 23 --levels offgrid --vars cap_fc
+scripts/near_optimal_range.py --sites 23 --levels limited --vars cap_batt_e
+scripts/near_optimal_range.py --sites 23 --levels limited --vars cap_batt_p
+scripts/near_optimal_range.py --sites 23 --levels limited --vars cap_ely
+scripts/near_optimal_range.py --sites 23 --levels limited --vars cap_tank
+scripts/near_optimal_range.py --sites 23 --levels limited --vars cap_fc
+scripts/near_optimal_range.py --sites 23 --levels full --vars cap_batt_e
+scripts/near_optimal_range.py --sites 23 --levels full --vars cap_batt_p
+scripts/near_optimal_range.py --sites 23 --levels full --vars cap_ely
+scripts/near_optimal_range.py --sites 23 --levels full --vars cap_tank
+scripts/near_optimal_range.py --sites 23 --levels full --vars cap_fc

@@ -157,7 +157,8 @@ def build_series(site, start: str, end: str, size_mw_it: float,
                  connection_mode: str | None = None,
                  grid: bool = True,
                  network_charges_scale: float | None = None,
-                 pv_system_loss: float | None = None) -> dc_model.Series:
+                 pv_system_loss: float | None = None,
+                 grid_price_scale: float | None = None) -> dc_model.Series:
     """Aligned half-hourly inputs for one site and window.
 
     ``site`` is anything ``sites.get`` accepts — a ``Site``, a ``(lat, lon)``
@@ -212,6 +213,12 @@ def build_series(site, start: str, end: str, size_mw_it: float,
     and levies are not scaled. It sits here, not in ``build_tech``, because the
     per-MWh part is in the series; the meta then carries every scaled figure,
     so ``build_tech`` cannot apply half of it. None keeps the published charges.
+
+    ``grid_price_scale`` multiplies the whole import price per MWh (energy, balancing,
+    losses, unit rates and levies) in every voltage group: the +25 % grid price case
+    (24 Nov 2026), which brackets the gap between the bill built from published parts
+    and DESNZ's survey of what suppliers charge the largest users. The per-MW and fixed
+    network charges are left as they are. None keeps the price as built.
     """
     from optimisation import connection_options as CO
     from optimisation import network_charges as nc
@@ -225,6 +232,9 @@ def build_series(site, start: str, end: str, size_mw_it: float,
     ncs = 1.0 if network_charges_scale is None else float(network_charges_scale)
     if not (np.isfinite(ncs) and ncs >= 0.0):
         raise ValueError(f"network_charges_scale must be a non-negative number, got {network_charges_scale!r}")
+    gps = 1.0 if grid_price_scale is None else float(grid_price_scale)
+    if not (np.isfinite(gps) and gps > 0.0):
+        raise ValueError(f"grid_price_scale must be a positive number, got {grid_price_scale!r}")
 
     # One default PUE for every entry point that does not choose its own:
     # Zhang's, the facility the inventory describes. It used to be 1.15 here,
@@ -409,6 +419,11 @@ def build_series(site, start: str, end: str, size_mw_it: float,
     if not 0.0 <= pv_loss < 0.5:
         raise ValueError(f"pv_system_loss must be in [0, 0.5), got {pv_system_loss!r}")
     pv_loss_scale = (1.0 - pv_loss) / (1.0 - float(cfg.PV_SYSTEM_LOSS))
+    if gps != 1.0:
+        # New arrays, not in place: the reference price may be one group's own array.
+        price = np.asarray(price, dtype=float) * gps
+        for d in (groups or {}).values():
+            d["price_per_mwh"] = np.asarray(d["price_per_mwh"], dtype=float) * gps
     series = dc_model.Series(
         index=index,
         dt_hours=float(meta["slice_hours"]),
@@ -427,6 +442,7 @@ def build_series(site, start: str, end: str, size_mw_it: float,
     meta["ccl_under_cca"] = lev["components"]["ccl_under_cca"]
     meta["network_charges"] = _scaled_network_charges(charges["components"], ncs)
     meta["network_charges_scale"] = ncs
+    meta["grid_price_scale"] = gps
     meta["levies"] = {**lev["components"], "loss_gross_up_mean": float(np.mean(loss)),
                       "connection_voltage": conn_voltage}
     meta["capacity_GBP_per_MW_year"] = charges["capacity_GBP_per_MW_year"] * ncs
@@ -1550,6 +1566,7 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
                 "batt_cell_basis": batt_cell_basis or batt.CELL_BASIS,
                 "connection_build_scale": build_scale,
                 "network_charges_scale": float(meta.get("network_charges_scale", 1.0)),
+                "grid_price_scale": float(meta.get("grid_price_scale", 1.0)),
                 "gas_price_case": gas_case,
                 "ccl_under_cca_gas": (levies_mod.CCL_UNDER_CCA if ccl_under_cca is None else bool(ccl_under_cca)),
                 "price_base": f"real {P.TARGET_YEAR} pounds",
