@@ -145,6 +145,20 @@ the estimates were accepted as final on 23 Oct.
 
 ## Parked
 
+- **Asset lives and future years** (user, 25 Nov 2026: parked, beyond the article's scope). Two linked pieces:
+  (a) assets that outlive the data centre (wind, solar, grid connection only; nothing else changes):
+  user chose 25 Nov Terlouw's 75 % sell-off at year 25, cited, tested ×0.5/×1.5. Implemented 25 Nov
+  (`optimisation/lives.py`, `docs/SELL_OFF_PLAN.md`); every headline run is now stale. Runs on the
+  user's word: `bash scripts/cluster/sell_off_setup.sh` (steps A, B; `signoff` adds C), then step D;
+  (b) future years, left as future work: re-scoring the cheapest / knee / greenest builds against future grids
+  (no new optimisation). Sources saved in OneDrive `cost sources/12 prices`: DESNZ appraisal tables Oct 2026
+  (Table 1 grid carbon, burning-only; Table 3 carbon values £317-455/t; Table 4 industrial prices to 2050) and
+  NESO FES 2025 ES1 (generation mix + carbon per pathway, incl. "Falling Behind"). Rough East Grinstead result:
+  life-cycle grid averages 41-46 % of 2025 on the net-zero pathways, 70 % on Falling Behind; break-even for the
+  greenest build over the knee is about 32 %, so it stays greenest but its saving drops from 31 to 4-7 kt/yr
+  (£24-38k per tonne). Terlouw's Crete paper does neither: one typical year, 2022 grid and prices, 30-year
+  project life on cost only, future years named as a limitation. If raised in review, state it the same way.
+
 - Gas engines' connection to the gas network (user, 13 Nov 2026: left out, "record for later"): DESNZ 2026's
   infrastructure line is gas and power together (£1.1/2.1/4.2 m per 20 MW); a gas network's connection charges
   would give the gas pipe alone. `cost_exclusions.py`, `exclusions.py`, docs/GAS_ENGINE_PLAN.md.

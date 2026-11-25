@@ -45,6 +45,8 @@ sys.path.insert(0, str(ROOT))
 
 from optimisation import price_base as P  # noqa: E402
 from optimisation import trace as T  # noqa: E402
+from optimisation import lives as L  # noqa: E402
+import dc_config as cfg  # noqa: E402
 PRICE_DIR = ROOT / "price_outputs"
 OUT_DIR = ROOT / "optimisation_outputs"
 
@@ -215,6 +217,12 @@ def annual_cost(tech: str, case: str) -> dict:
     crf = T.cost(f"cost.{tech}.crf", capital_recovery_factor(rate, life), "per year",
                  "Capital recovery factor: the yearly repayment of £1 over the life at the rate",
                  uses=[f"cost.{tech}.discount_rate", f"cost.{tech}.lifetime_years"])
+    # Since 25 Nov 2026 (optimisation/lives.py): an asset that outlives the data
+    # centre is repaid over its 25 years and sold at the end, Terlouw's rule. The
+    # LCOE cross-check below keeps the own-life repayment: it checks the source.
+    repay, repay_key = L.repayment(f"cost.{tech}", rate, life, crf, f"cost.{tech}.crf",
+                                   f"cost.{tech}.discount_rate", f"cost.{tech}.lifetime_years",
+                                   "Onshore wind" if tech == "onshore_wind" else "Solar PV")
     # It brings onshore wind and solar within 1 % of the report's LCOE.
     finance = 1.0
     finance_uses = []
@@ -226,7 +234,7 @@ def annual_cost(tech: str, case: str) -> dict:
                          "Capital carried at the rate over the build",
                          uses=[f"cost.{tech}.discount_rate", f"cost.{tech}.construction_years"])
         finance_uses = [f"cost.{tech}.building_finance_factor"]
-    ann_capex = capex_per_mw * finance * crf
+    ann_capex = capex_per_mw * finance * repay
     # The report's own basis, at its own rate, kept for its LCOE cross-check
     report_finance = building_finance_factor(report_rate, build_years) if tech in BEHIND_THE_METER else 1.0
     published_annual = capex_per_mw * report_finance * capital_recovery_factor(report_rate, life) + opex_per_mw
@@ -266,11 +274,13 @@ def annual_cost(tech: str, case: str) -> dict:
     total_annual = T.cost(f"cost.{tech}.annual_per_{per}", (ann_capex + opex_per_mw + site_kgbp * 1000.0) * inflate,
                           f"GBP per {per} per year",
                           "Capital repaid yearly plus the operating cost, on this site's scope, in 2025 pounds",
-                          uses=[f"cost.{tech}.capex_per_kW", *finance_uses, f"cost.{tech}.crf",
+                          uses=[f"cost.{tech}.capex_per_kW", *finance_uses, repay_key,
                                 f"cost.{tech}.opex_per_MW_year", f"price_base.{PRICE_YEAR}_to_2025", *site_uses])
     mwh_per_mw_yr = 8760.0 * _value(params, "net_load_factor", inv)
     return {"capex_GBP_per_MW": capex_per_mw, "opex_GBP_per_MW_year": opex_per_mw, "lifetime_years": life,
-            "discount_rate": rate, "crf": crf, "annualised_capex_GBP_per_MW_year": ann_capex,
+            "discount_rate": rate, "crf": crf, "repayment_factor": repay,
+            "project_years": float(cfg.DC_OPERATION_YEARS) if repay_key != f"cost.{tech}.crf" else life,
+            "annualised_capex_GBP_per_MW_year": ann_capex,
             "annualised_capex_2025_GBP_per_MW_year": ann_capex * inflate,
             "published_basis_annual_GBP_per_MW_year": published_annual,
             "total_annual_cost_GBP_per_MW_year": total_annual,
@@ -307,7 +317,8 @@ def annualised_table():
                     "asset": tech, "case": case,
                     "technical_case": INVERSE_CASE[case],
                     **{k: a[k] for k in ("capex_GBP_per_MW", "opex_GBP_per_MW_year", "lifetime_years",
-                                         "discount_rate", "crf", "annualised_capex_GBP_per_MW_year",
+                                         "discount_rate", "crf", "repayment_factor", "project_years",
+                                         "annualised_capex_GBP_per_MW_year",
                                          "total_annual_cost_GBP_per_MW_year", "net_load_factor",
                                          "MWh_per_MW_year")},
                     "lcoe_GBP_per_MWh": lcoe,

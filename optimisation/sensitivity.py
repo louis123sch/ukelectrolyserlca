@@ -586,7 +586,11 @@ SHAKY_KNOBS = {
                                   # islanded site holds, shares of load and of wind (REopt's
                                   # defaults; no UK figure). They bite only off grid.
                                   "reserve.load_fraction",
-                                  "reserve.wind_fraction")
+                                  "reserve.wind_fraction",
+                                  # since 25 Nov 2026 (docs/SELL_OFF_PLAN.md): Terlouw's 75 % resale
+                                  # share for wind, solar and the grid connection at the data
+                                  # centre's end, his assumption with no source of its own
+                                  "cost.sell_off.resale_share")
              for f in (0.5, 1.5)],
     # since 20 Nov 2026 (REopt comparison #3): the solar array's other losses, ninja's
     # 10 % default (assumed) at x0.5 and x1.5; REopt's own total is about 17 %

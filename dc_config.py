@@ -48,8 +48,18 @@ DC_REFERENCE_PUE = 1.4
 # =============================================================================
 # Amortisation — how long a scored asset is charged over (optimisation/)
 # =============================================================================
-TANK_LIFETIME_YEARS = 25     # the data centre's own life, so the tank is never replaced (no tank-specific source)
+TANK_LIFETIME_YEARS = DC_OPERATION_YEARS   # the data centre's own life, so the tank is never replaced (no tank-specific source)
 TX_ASSET_LIFE_YEARS = 35.0   # this study's own generation life; see renewables.py
+
+# Assets that outlive the data centre (25 Nov 2026, user; optimisation/lives.py). Wind (35 y),
+# solar (38 y) and the grid connection (40 y) are repaid over the data centre's DC_OPERATION_YEARS
+# and sold at the end for RESALE_SHARE of their remaining straight-line value, discounted to today:
+# the outlives-the-project branch of Terlouw et al.'s OPTIMES (2025), rep_annual_int, rep_factor
+# 0.75. Cost only; carbon stays spread over each asset's own life, as in Terlouw et al. SELL_OFF =
+# False gives the rule before 25 Nov 2026 (repaid over the asset's own life). Nothing shorter-lived
+# is touched.
+SELL_OFF = True
+RESALE_SHARE = 0.75
 
 # =============================================================================
 # PV array geometry (optimisation/profiles.py)

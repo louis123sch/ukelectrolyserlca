@@ -42,6 +42,7 @@ from optimisation import dc_model, sites
 from optimisation import h2_leakage as h2_leak
 from optimisation import price_base as P
 from optimisation import trace as T
+from optimisation import lives as _lives
 
 # CEPA for DESNZ (2025), Table E.1: hydrogen electrolyser 10.10 % pre-tax real.
 # Was an unsourced 6 % until 4 Nov 2026 (evening).
@@ -758,7 +759,23 @@ def _bought_gas_adjustment(colour: str, gas_price_case: str, h2_prices) -> tuple
     return adj, [key]
 
 
-def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
+def build_tech(site, meta: dict, *, sell_off: bool | None = None, resale_share: float | None = None,
+               **kwargs) -> dc_model.Tech:
+    """Resolve every coefficient the LP needs: ``_build_tech`` (its docstring lists
+    every argument), with the sell-off setting held while it builds.
+
+    ``sell_off`` and ``resale_share`` (25 Nov 2026, ``optimisation/lives.py``): an
+    asset that outlives the data centre (wind, solar, the grid connection) is
+    repaid over the data centre's ``dc_config.DC_OPERATION_YEARS`` and sold at the
+    end for ``resale_share`` of its remaining straight-line value, Terlouw et al.'s
+    rule. None keeps ``dc_config.SELL_OFF`` (on) and ``RESALE_SHARE`` (0.75);
+    ``sell_off=False`` repays each over its own life, as before 25 Nov 2026. Cost
+    only; both are written into ``labels``."""
+    with _lives.setting(sell_off=sell_off, resale_share=resale_share):
+        return _build_tech(site, meta, **kwargs)
+
+
+def _build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
                tank_design: str | None = None, h2_colour: str | None = None,
                cost_case: str = "central", horizon_years: float = 25.0,
                size_mw_it: float = 100.0, pue: float | None = None,
@@ -1570,6 +1587,7 @@ def build_tech(site, meta: dict, *, ely_tech: str = "PEM operation",
                 "gas_price_case": gas_case,
                 "ccl_under_cca_gas": (levies_mod.CCL_UNDER_CCA if ccl_under_cca is None else bool(ccl_under_cca)),
                 "price_base": f"real {P.TARGET_YEAR} pounds",
+                **_lives.labels(),
                 "green_h2_grid_share": (
                     h2_prices._resolve_grid_share(green_h2_grid_share)
                     if "green" in (h2_colour, h2_colour_2) else None)},

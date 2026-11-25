@@ -451,6 +451,23 @@ shorter life than that, this table says how the gap is closed:
 The grid's wind and solar are on their inventories' own lives, as existing
 plant (§2b).
 
+**Assets that outlive the data centre (cost; 25 Nov 2026).** Wind (35 y),
+solar (38 y, with their step-up transformers, which sit inside both prices) and
+the grid connection (40 y) outlast the 25-year facility. Following the
+treatment in Terlouw et al.'s model (2025, OPTIMES `rep_annual_int`), each is
+repaid over the facility's 25 years and sold at year 25 for 75 % of its
+remaining straight-line value, (L − 25)/L of its build cost, discounted to
+today at its own rate (`optimisation/lives.py`):
+yearly factor = CRF(r, 25) × (1 − 0.75 × (L − 25)/L × (1 + r)^−25), in place of
+CRF(r, L). Central build cost: wind +6.1 %, solar +7.1 %, grid connection +11.6 %
+(England's rate). The 75 % is Terlouw et al.'s own assumption, with no source
+given, and is screened at ×0.5 and ×1.5 (`cost.sell_off.resale_share`); their
+Crete results never use this branch, since nothing there outlives their 30-year
+project. Carbon is spread over each asset's own life, as in Terlouw et al.
+Nothing that lasts 25 years or less, and no replacement, is touched.
+`dc_config.SELL_OFF = False` (or `build_tech(sell_off=False)`) gives the rule
+before 25 Nov 2026, each asset repaid over its own life.
+
 ## 6. No end-of-life, anywhere
 
 The study is **cradle-to-gate on every input**, with the functional unit being

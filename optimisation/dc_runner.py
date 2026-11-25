@@ -92,7 +92,7 @@ def _coefficient_identity() -> dict:
                  "battery.py", "tech_costs.py", "renewables.py", "transformers.py",
                  "h2_prices.py", "h2_capex.py", "h2_storage.py", "fuel_cell.py", "gas_engine.py",
                  "electrolysers.py", "grid_connection.py", "sites.py",
-                 "conversion_losses.py"):
+                 "conversion_losses.py", "lives.py", "connection_cost.py"):
         out[name] = digest(ROOT / "optimisation" / name)
     out["dc_config.py"] = digest(ROOT / "dc_config.py")
     # What scored the grid series (23 Nov 2026): a re-scored grid keeps its file names and every
@@ -325,6 +325,9 @@ def run_one(scenario: A.Scenario, *, site, start: str, end: str,
         # so sitting on it means the band below was dearer or too small.
         "grid_floor_binding": _floor_binding(result, assets),
         "perfect_foresight": True,
+        # 25 Nov 2026 (optimisation/lives.py): whether wind, solar and the grid connection were
+        # repaid over the data centre's life and sold at its end, and at what share.
+        "sell_off": {k: tech.labels.get(k) for k in ("sell_off", "resale_share", "sell_off_project_years")},
         "solve_seconds": time.time() - t0,
         "config_hash": h, "cached": False,
         "note": scenario.note,

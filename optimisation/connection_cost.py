@@ -118,6 +118,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from optimisation import trace as T  # noqa: E402
+from optimisation import lives as L  # noqa: E402
 
 CASES = ("low", "central", "high")
 PRICE_YEAR = 2026
@@ -302,11 +303,23 @@ def crf(rate: float, years: float) -> float:
     return rate / (1.0 - (1.0 + rate) ** -years)
 
 
-def annual_factor(region: int, transmission_connected: bool) -> float:
-    """Annual charge per £ of capital: recovery at the TO's rate over 40 years,
-    plus maintenance, plus TRC on the transmission tier."""
+def repayment(region: int) -> tuple[float, str]:
+    """Yearly repayment per £ of connection capital, and its trace key ("" for the
+    plain 40-year recovery). The connection outlives the 25-year data centre, so
+    since 25 Nov 2026 it is repaid over the data centre's life and sold at the end
+    (optimisation/lives.py, Terlouw's rule); with the sell-off off, the owner's
+    40-year recovery as before."""
     r = RATE_OF_RETURN.get(region, RATE_OF_RETURN_DEFAULT)
-    return (crf(r, ASSET_LIFE_YEARS) + MAINTENANCE_FRAC
+    return L.repayment(f"cost.connection.r{region}", r, ASSET_LIFE_YEARS, crf(r, ASSET_LIFE_YEARS), "",
+                       f"cost.connection.rate_of_return.r{region}", "cost.connection.life_years",
+                       "Grid connection")
+
+
+def annual_factor(region: int, transmission_connected: bool) -> float:
+    """Annual charge per £ of capital: the repayment (``repayment``: over the data
+    centre's 25 years less the sale at its end, or recovery at the TO's rate over
+    40 years with the sell-off off), plus maintenance, plus TRC on the transmission tier."""
+    return (repayment(region)[0] + MAINTENANCE_FRAC
             + (TRC_FRAC if transmission_connected else 0.0))
 
 
@@ -413,9 +426,14 @@ def _record(region: int, transmission: bool, case: str, power_factor: float, cap
         T.cost("cost.connection.trc_frac", TRC_FRAC, "fraction of capital per year", "Transmission running cost",
                grade="transcribed", cites=[("neso_use_of_system_statement", "Appendix A, TRC 0.90 %")])
         fu.append("cost.connection.trc_frac")
-    T.cost(fk, f, "per year", "Yearly charge per £ of connection capital: recovery at the owner's rate over "
-           "40 years, plus maintenance" + (", plus running cost" if transmission else ""), uses=fu,
-           inputs={"crf": crf(rate, ASSET_LIFE_YEARS)},
+    rep, rep_key = repayment(region)
+    if rep_key:
+        fu.append(rep_key)
+    T.cost(fk, f, "per year", "Yearly charge per £ of connection capital: "
+           + ("repaid over the data centre's life less the sale at its end (Terlouw et al. 2025)" if rep_key
+              else "recovery at the owner's rate over 40 years")
+           + ", plus maintenance" + (", plus running cost" if transmission else ""), uses=fu,
+           inputs={} if rep_key else {"crf": crf(rate, ASSET_LIFE_YEARS)},
            note="Section 14's annuity, used for both tiers (a distribution site pays up front: COST_PLAN §4.1)"
            if not transmission else "")
     k_mw, k_fx = f"{base}.{tier}.per_MW_year", f"{rk}.{tier}.fixed_per_year"

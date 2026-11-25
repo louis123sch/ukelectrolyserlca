@@ -1749,6 +1749,25 @@ re-scored (`python -m optimisation.grid_build --rescore`, basis id
 `dacb11a3b07c`); saved optimiser runs now carry the grid basis id in their
 cache key, so none is reused on the old grid.
 
+## Assets that outlive the data centre: Terlouw's sell-off (25 Nov 2026)
+`optimisation/lives.py`, used by `tech_costs.annual_cost` (wind, solar) and
+`connection_cost.annual_factor` (grid connection); `dc_config.SELL_OFF`, `RESALE_SHARE`.
+
+- **Method** (`terlouw_2025_optimes`): Terlouw et al. (2025, Applied Energy 377), OPTIMES code,
+  `opt_lca_functions.rep_annual_int`, the branch where a component's life exceeds the project's:
+  credit `CRF(r, lt) x rep_factor x cost x (1 - lt / ry) / (1 + r)^lt`, with `lt` the project life and
+  `ry` the component's. Here `lt` = 25 (the facility's operating life, `dc_config.DC_OPERATION_YEARS`)
+  and `r` is each asset's own rate (CEPA hurdle rates for wind and solar, the network's rate of return
+  for the connection); Terlouw uses one 7 % rate. `tests/test_sell_off.py` runs his function beside ours.
+- **Resale share 0.75** (`cost.sell_off.resale_share`): TRANSCRIBED from his code (`rep_factor=0.75`,
+  "75% of initial costs for replacement, assuming some components can be used and due to technological
+  improvement"). His own assumption with no source; it is applied to the residual value by the same
+  line. Screened at x0.5 / x1.5 (`sensitivity.SHAKY_KNOBS`, `fixed_choice_checks` `resale_share_x0.5`
+  and `_x1.5`). Not applied to any replacement here: nothing of 25 years or less is touched.
+- **Effect, central** (build cost per year): wind +6.1 %, solar +7.1 %, grid connection +11.6 % at
+  NGET's 5.02 %; wind's whole yearly cost +4.4 %, solar's +5.7 %. Low case (40-year lives) +7.6 %;
+  wind's high case (25 years) unchanged. Carbon unchanged.
+
 ## Scope decisions
 
 These are choices, not data. They are recorded in `ASSUMPTIONS.md` with their

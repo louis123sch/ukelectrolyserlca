@@ -1,0 +1,13 @@
+# 25 Nov 2026 (docs/SELL_OFF_PLAN.md, step A): Terlouw's sell-off for wind, solar and the grid
+# connection, before/after at East Grinstead (site 23), hourly, nothing bought. "central" is the new
+# rule (the default); "old_lives" is the same code with each asset repaid over its own life, the rule
+# before 25 Nov 2026, so no second code copy is needed. Written to a fresh folder,
+# optimisation_outputs/sell_off_checks_2025, so no older central run is taken as already done.
+# One variant and level a piece, for queue speed. Off grid there is no connection: only wind and
+# solar move. Carbon of any design that does not change must be identical.
+scripts/fixed_choice_checks.py --no-summary --supply none --out sell_off_checks_2025 --variants central --sites 23 --levels offgrid
+scripts/fixed_choice_checks.py --no-summary --supply none --out sell_off_checks_2025 --variants central --sites 23 --levels limited
+scripts/fixed_choice_checks.py --no-summary --supply none --out sell_off_checks_2025 --variants central --sites 23 --levels full
+scripts/fixed_choice_checks.py --no-summary --supply none --out sell_off_checks_2025 --variants old_lives --sites 23 --levels offgrid
+scripts/fixed_choice_checks.py --no-summary --supply none --out sell_off_checks_2025 --variants old_lives --sites 23 --levels limited
+scripts/fixed_choice_checks.py --no-summary --supply none --out sell_off_checks_2025 --variants old_lives --sites 23 --levels full

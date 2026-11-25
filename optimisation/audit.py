@@ -515,11 +515,21 @@ def check_lifetime_agreement():
         charged = tx.kgco2e_per_mw_year(asset, life_years=carbon_life)
         per_mw = tx.kgco2e_per_mw_year(asset, life_years=1.0)
         pairs.append((f"{asset} step-up transformer", cost_life, per_mw / charged))
-    # The grid connection has no pair: its cost is an annual tariff, with no
-    # capital and so no life. Its carbon is amortised over
-    # grid_connection.py's own asset life.
+    # The grid connection: its capital is repaid in cost (connection_cost.annual_factor) and its
+    # carbon spread over grid_connection.py's life; the two lives must be the same asset life.
+    from optimisation import connection_cost as cc, grid_connection as gcn
+    pairs.append(("grid_connection", float(cc.ASSET_LIFE_YEARS), float(gcn.ASSET_LIFE_YEARS)))
 
     t = pd.DataFrame(pairs, columns=["asset", "cost_life_yr", "carbon_life_yr"])
+    # Since 25 Nov 2026 (optimisation/lives.py) the cost side repays wind, solar and the grid
+    # connection over the data centre's life and sells them at its end, keyed on these same own
+    # lives; carbon stays spread over the own life, as in Terlouw et al. Printed, not compared.
+    from optimisation import lives as L
+    on, share = L.active()
+    import dc_config as _cfg
+    print(f"   sell-off: {'on' if on else 'off'}; assets over {_cfg.DC_OPERATION_YEARS} y repaid over "
+          f"{_cfg.DC_OPERATION_YEARS} y and sold at {share:.0%} of remaining value" if on else
+          "   sell-off: off; every asset repaid over its own life")
     t["agree"] = np.isclose(t.cost_life_yr, t.carbon_life_yr)
     print(t.to_string(index=False))
     bad = t[~t.agree]

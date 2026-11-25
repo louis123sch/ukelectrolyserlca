@@ -1,0 +1,11 @@
+# 25 Nov 2026 (docs/SELL_OFF_PLAN.md, step B): Terlouw's 75 % resale share is his own assumption,
+# with no source, so it is pushed x0.5 and x1.5 (37.5 % and 112.5 %) like every screened input, at
+# East Grinstead (site 23) x off grid / 25 MW / full grid, hourly, nothing bought. Compare each with
+# its level's "central" in sell_off_eg.txt (same folder): kit over 1 MW added or dropped, or a size
+# moved over 5 %, is stated with the result. One variant and level a piece, for queue speed.
+scripts/fixed_choice_checks.py --no-summary --supply none --out sell_off_checks_2025 --variants resale_share_x0.5 --sites 23 --levels offgrid
+scripts/fixed_choice_checks.py --no-summary --supply none --out sell_off_checks_2025 --variants resale_share_x0.5 --sites 23 --levels limited
+scripts/fixed_choice_checks.py --no-summary --supply none --out sell_off_checks_2025 --variants resale_share_x0.5 --sites 23 --levels full
+scripts/fixed_choice_checks.py --no-summary --supply none --out sell_off_checks_2025 --variants resale_share_x1.5 --sites 23 --levels offgrid
+scripts/fixed_choice_checks.py --no-summary --supply none --out sell_off_checks_2025 --variants resale_share_x1.5 --sites 23 --levels limited
+scripts/fixed_choice_checks.py --no-summary --supply none --out sell_off_checks_2025 --variants resale_share_x1.5 --sites 23 --levels full

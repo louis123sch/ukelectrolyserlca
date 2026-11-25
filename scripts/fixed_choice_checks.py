@@ -68,6 +68,9 @@ VARIANTS = {          # name -> (Scenario fields, run_one keyword arguments)
     # suppliers charge users over 150 GWh a year (validation write-up, "Grid bill").
     # Grid-connected levels only: an islanded site buys no grid power.
     "grid_price_x1.25": ({}, {"grid_price_scale": 1.25}),
+    # 25 Nov 2026 (docs/SELL_OFF_PLAN.md): the "before" of Terlouw's sell-off for assets that
+    # outlive the data centre: wind, solar and the grid connection repaid over their own lives.
+    "old_lives": ({}, {"tech": {"sell_off": False}}),
 }
 
 # --- the screened inputs, one at a time (user, 18 Nov 2026: robustness at four sites) ----------
@@ -93,6 +96,8 @@ PUSHED = {            # short name -> recorded step key
     "fc_maint":     "cost.fuel_cell.maintenance_per_kW_year",
     "reserve_load": "reserve.load_fraction",          # off grid only
     "reserve_wind": "reserve.wind_fraction",          # off grid only
+    # 25 Nov 2026: Terlouw's 75 % resale share for assets that outlive the data centre (unsourced)
+    "resale_share": "cost.sell_off.resale_share",
 }
 # Variants that act only on bought hydrogen: skipped when none is bought.
 BUYING_ONLY = {"h2_price_x0.5", "h2_price_x1.5",
@@ -238,10 +243,13 @@ def main(argv=None):
     ap.add_argument("--no-summary", action="store_true", help="run only; leave summary.csv alone")
     ap.add_argument("--supply", default="none", choices=A.H2_SUPPLIES,
                     help="how hydrogen may be bought (default none, the model's central case)")
+    # 25 Nov 2026: a fresh folder for a before/after on new code (the sell-off check), so a
+    # central run made on older code in the default folder is never taken as "already done".
+    ap.add_argument("--out", help="folder under optimisation_outputs (default uk_sites_2025_checks_<supply>)")
     a = ap.parse_args(argv)
     global SUPPLY, OUT
     SUPPLY = a.supply
-    OUT = ROOT / "optimisation_outputs" / f"uk_sites_2025_checks_{SUPPLY}"
+    OUT = ROOT / "optimisation_outputs" / (a.out or f"uk_sites_2025_checks_{SUPPLY}")
     if not a.summary:
         rows = [r for r in U.SITES if r[0] in a.sites]
         for variant in a.variants:

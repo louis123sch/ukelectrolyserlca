@@ -60,7 +60,7 @@ def test_discounted_ageing_factor():
 
 def test_build_tech_scales_solar_cost_by_plain_over_discounted():
     from optimisation import dc_inputs as I
-    src = inspect.getsource(I.build_tech)
+    src = inspect.getsource(I._build_tech)      # build_tech wraps it in the sell-off setting (25 Nov 2026)
     assert "solar_discounted_ageing_factor" in src
     assert "solar_cost * to26 * solar_age_corr" in src
 

@@ -355,6 +355,17 @@ _FIXED = [
            "see optimisation_outputs/substation_register/freshness.json", "register",
            held="optimisation_outputs/substation_register/",
            note="The connection voltage, the nearest substation with room and the cable route to it"),
+    # --- asset lives -------------------------------------------------------
+    Source("terlouw_2025_optimes",
+           "Terlouw et al. (2025), Applied Energy 377: OPTIMES, a multi-objective optimisation of a multi-energy "
+           "system (Crete case), and its code", "T. Terlouw et al.; code github.com/tomterlouw/optimes (BSD-3)",
+           "2025 (code last commit Sep 2024)", "document", link="https://github.com/tomterlouw/optimes",
+           held="Desktop/optimes-validation/optimes (the copy reproduced in the validation, 23 Nov 2026)",
+           note="opt_lca_functions.rep_annual_int: a component that outlives the project is credited "
+                "rep_factor (0.75) x (1 - project life / component life) of its cost, discounted from the "
+                "project's end and annualised over it. The 75 % is the authors' own assumption, no source "
+                "given; their Crete inputs never use this branch (nothing outlives the 30-year project). "
+                "Confirm the exact reference with the supervisor"),
 ]
 
 
