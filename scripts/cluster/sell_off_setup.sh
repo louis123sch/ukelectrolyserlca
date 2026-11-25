@@ -8,6 +8,10 @@
 # On a login node, after `git pull` in ~/ukdclca:
 #   bash scripts/cluster/sell_off_setup.sh            # step A (before/after) and B (resale x0.5/x1.5): 12 pieces
 #   bash scripts/cluster/sell_off_setup.sh signoff    # the same, plus step C: sign-off steps 4-5 at East Grinstead
+#   bash scripts/cluster/sell_off_setup.sh robustness # the robustness set on the new rule (136 pieces), on its own
+# The "before" is the old central runs at site 23 (uk_sites_2025_checks_none/central, made on 9893e62
+# off grid and e469668 on the grid; nothing but the sell-off changed since), so the old_lives pieces
+# of sell_off_eg.txt (lines 4-6, sub-jobs [4]-[6] of batch 26510) were cancelled as duplicates.
 # Step D (re-running the 26 sites, robustness, near-optimal, +25 % grid price on the new rule) is the
 # user's choice and needs fresh output folders; it is not submitted here.
 # Progress: bash scripts/cluster/progress.sh <batch>. Collect: bash scripts/cluster/sell_off_pack.sh <batches>.
@@ -21,9 +25,6 @@ fi
 if ! git diff --quiet HEAD -- optimisation optimiser_lca dc_config.py scripts; then
     echo "~/ukdclca has uncommitted changes to the model or scripts. Nothing submitted."; exit 1
 fi
-if [ -d optimisation_outputs/sell_off_checks_2025 ]; then
-    echo "optimisation_outputs/sell_off_checks_2025 already exists: move it aside first. Nothing submitted."; exit 1
-fi
 sub() {  # name, pieces file, cores, memory, hours
     local n
     n=$(grep -v '^\s*#' "scripts/cluster/pieces/$2" | grep -c .)
@@ -32,6 +33,15 @@ sub() {  # name, pieces file, cores, memory, hours
         -v PIECES="$2",REPO="$HOME"/ukdclca scripts/cluster/batch.pbs)"
 }
 # Limits from the 24 Nov logs: East Grinstead checks at most 138 min (full grid), 72 min off grid.
+if [ "${1:-}" = robustness ]; then
+    # Added 25 Nov 2026, after A-C were submitted: the robustness set on the new rule, into the
+    # same folder, without A's central or B's resale pieces (those run already).
+    sub "robustness on the sell-off, East Grinstead" sell_off_robustness_eg.txt 1 6gb 4
+    exit 0
+fi
+if [ -d optimisation_outputs/sell_off_checks_2025 ]; then
+    echo "optimisation_outputs/sell_off_checks_2025 already exists: move it aside first. Nothing submitted."; exit 1
+fi
 sub "A: sell-off before/after, East Grinstead"      sell_off_eg.txt         1 6gb 4
 sub "B: resale share x0.5 / x1.5, East Grinstead"   sell_off_resale_eg.txt  1 6gb 4
 if [ "${1:-}" = signoff ]; then

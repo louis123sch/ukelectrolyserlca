@@ -2,8 +2,12 @@
 
 Written 25 Nov 2026. **Implemented 25 Nov 2026** (sections 1, 2 "while working" and "before
 committing", 3 and 4's `ASSUMPTIONS.md` text); the equations page has a new "Assets that outlive the
-data centre" section under building costs. **No runs yet:** steps A–D wait for the user's word
-(`scripts/cluster/sell_off_setup.sh`). The methodology doc paragraphs wait for the results.
+data centre" section under building costs. **On the cluster (25 Nov, 04face6):** A = 26510, B = 26511,
+C = 26512. A's three `old_lives` pieces were cancelled: the old central runs at site 23
+(`uk_sites_2025_checks_none/central`, 9893e62 off grid, e469668 on the grid) are the "before", since
+nothing but the sell-off changed since. The robustness set on the new rule was added at the user's request
+(`sell_off_robustness_eg.txt`, 136 pieces, `sell_off_setup.sh robustness`). The rest of step D (26 sites,
+near-optimal, +25 % grid price) waits. The methodology doc paragraphs wait for the results.
 
 ## Scope
 
