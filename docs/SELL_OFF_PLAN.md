@@ -9,6 +9,30 @@ nothing but the sell-off changed since. The robustness set on the new rule was a
 (`sell_off_robustness_eg.txt`, 136 pieces, `sell_off_setup.sh robustness`). The rest of step D (26 sites,
 near-optimal, +25 % grid price) waits. The methodology doc paragraphs wait for the results.
 
+## Results (collected 26 Nov 2026; East Grinstead, site 23, hourly, nothing bought)
+
+All 145 runs and 4 sign-off pieces finished without errors, on 04face6/8baed7a, sell-off at 75 %
+(`optimisation_outputs/sell_off_checks_2025`, summary.csv; sign-off CSVs in `optimisation_outputs/`;
+the previous sign-off CSVs kept in `Desktop/cluster_transfer/sell_off_26nov/old_signoff_csvs`).
+
+- **Before/after** (old central `uk_sites_2025_checks_none/central` against the new central, all 7
+  points x 3 levels): no kit added or dropped anywhere; the whole yearly bill +2.1 to +2.7 %.
+  Lowest-carbon designs identical (same sizes and carbon at every level), cost +2.5 to +2.6 %.
+  Lowest-cost designs: wind 214 -> 207 MW, solar 171 -> 163 MWp (177 -> 169 off grid), gas engines
+  unchanged, carbon +3.5 % (242.7 -> 251.3 g/kWh). Middle points: sizes within a few per cent (off-grid
+  battery 862 -> 817 MWh). Grid connection sizes unchanged. The in-between points sit at carbon caps
+  set from each curve's own ends, so they are not exactly like for like.
+- **The 75 % at x0.5 / x1.5:** no kit added or dropped at any of 42 points; bill +0.6 to +0.8 % /
+  -0.6 to -0.8 %; sizes within 5.4 %, except one small 25 MW-level grid connection (20 %).
+- **Robustness:** 885 of 952 verdicts hold (no kit over 1 MW / 1 t added or dropped against the
+  variant's own central), against 879 of 952 on the old rule. 6 verdicts changed, all from "moves" to
+  "holds"; none the other way.
+- **Sign-off steps 4-5:** cost cut-off passes (nothing added or dropped, no size over 5 %); carbon
+  cut-off gives the same moves as 25 Nov (lowest-carbon battery and solar, which do not depend on
+  cost), which passed rule 3 with the 1 % size floor. Judged with a scratch script, as on 25 Nov.
+- **Maps and workbooks** still describe the old-rule run: the check runs do not save hour-by-hour
+  operation, which the maps need. One run with it saved is needed (user's call).
+
 ## Scope
 
 **Only three assets change: wind, solar and the grid connection.** They are the only ones that
