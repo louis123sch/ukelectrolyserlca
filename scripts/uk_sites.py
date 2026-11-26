@@ -229,9 +229,12 @@ def main(argv=None):
     ap.add_argument("--summary", action="store_true")
     ap.add_argument("--no-summary", action="store_true", help="run only; leave summary.csv alone")
     ap.add_argument("--set", default="base", choices=list(SETS))
+    ap.add_argument("--out", default=None,
+                    help="folder under optimisation_outputs instead of the set's own (26 Nov 2026: a "
+                         "fresh folder for a run on changed code, so old results are not mixed in)")
     a = ap.parse_args(argv)
     global OUT, SET
-    SET, OUT = a.set, ROOT / "optimisation_outputs" / SETS[a.set]["out"]
+    SET, OUT = a.set, ROOT / "optimisation_outputs" / (a.out or SETS[a.set]["out"])
     if not a.summary:
         for level in a.levels:
             for row in SITES:

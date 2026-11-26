@@ -1,0 +1,6 @@
+# 26 Nov 2026: one East Grinstead full-grid central run on the sell-off WITH the hour-by-hour
+# operation saved (fixed_choice_checks saves none), for the cost and carbon maps, the workbooks and
+# the model explainer. Fresh folder, so the old-rule 26-site results are untouched.
+# The --help line is only there because a job array needs two entries.
+scripts/uk_sites.py --set central --no-summary --levels full --sites 23 --out uk_sites_2025_sell_off
+scripts/uk_sites.py --help

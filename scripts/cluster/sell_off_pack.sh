@@ -9,7 +9,7 @@
 for b in "$@"; do bash "$HOME/ukdclca/scripts/cluster/progress.sh" "$b"; done
 cd "$HOME/ukdclca" || exit 1
 FILES=()
-for f in optimisation_outputs/sell_off_checks_2025 optimisation_outputs/sensitivity_cost_cutoff_eastgrinstead_*.csv \
+for f in optimisation_outputs/sell_off_checks_2025 optimisation_outputs/uk_sites_2025_sell_off optimisation_outputs/sensitivity_cost_cutoff_eastgrinstead_*.csv \
          optimisation_outputs/sensitivity_cutoff_eastgrinstead_*.csv; do
     [ -e "$f" ] && FILES+=("$f")
 done

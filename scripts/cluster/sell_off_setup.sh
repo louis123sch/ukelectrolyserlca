@@ -9,6 +9,8 @@
 #   bash scripts/cluster/sell_off_setup.sh            # step A (before/after) and B (resale x0.5/x1.5): 12 pieces
 #   bash scripts/cluster/sell_off_setup.sh signoff    # the same, plus step C: sign-off steps 4-5 at East Grinstead
 #   bash scripts/cluster/sell_off_setup.sh robustness # the robustness set on the new rule (136 pieces), on its own
+#   bash scripts/cluster/sell_off_setup.sh maprun     # one East Grinstead full-grid run with the hourly operation
+#                                                     # saved, for the maps, workbooks and explainer (26 Nov)
 # The "before" is the old central runs at site 23 (uk_sites_2025_checks_none/central, made on 9893e62
 # off grid and e469668 on the grid; nothing but the sell-off changed since), so the old_lives pieces
 # of sell_off_eg.txt (lines 4-6, sub-jobs [4]-[6] of batch 26510) were cancelled as duplicates.
@@ -37,6 +39,15 @@ if [ "${1:-}" = robustness ]; then
     # Added 25 Nov 2026, after A-C were submitted: the robustness set on the new rule, into the
     # same folder, without A's central or B's resale pieces (those run already).
     sub "robustness on the sell-off, East Grinstead" sell_off_robustness_eg.txt 1 6gb 4
+    exit 0
+fi
+if [ "${1:-}" = maprun ]; then
+    # Added 26 Nov 2026: the check runs above save no hourly operation, which the maps need.
+    # Full-grid site runs took up to ~3 h on one core on 24 Nov; 8 h leaves room.
+    if [ -d optimisation_outputs/uk_sites_2025_sell_off ]; then
+        echo "optimisation_outputs/uk_sites_2025_sell_off already exists: move it aside first. Nothing submitted."; exit 1
+    fi
+    sub "East Grinstead full grid, hourly operation saved" sell_off_maprun_eg.txt 1 6gb 8
     exit 0
 fi
 if [ -d optimisation_outputs/sell_off_checks_2025 ]; then
