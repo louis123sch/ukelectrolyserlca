@@ -38,6 +38,16 @@ the previous sign-off CSVs kept in `Desktop/cluster_transfer/sell_off_26nov/old_
   pass again. The Excel check found that the workbooks had left the gas engines out of every total
   since 13 Nov (the layout listed technologies by hand); fixed in `scripts/workbook_layout.py`, with
   a test, and every cell now recalculates to the model's value. Explainer copied to OneDrive.
+- **26-site central set on the sell-off (27 Nov, user: "optimise for queue time"):** submitted at
+  31222d3 as batches **42354** (off grid, 26 pieces, 3 h), **42355** (25 MW, 26, 5 h) and **42356**
+  (full grid, 25, 5 h), one site and level per piece, one core, 6 GB, into `uk_sites_2025_sell_off`
+  (site 23 full already there). Collect: `Desktop/cluster_transfer/sell_off_sites_collect.bat`, then
+  `uk_sites.py --set central --summary --out uk_sites_2025_sell_off`, compare with
+  `uk_sites_2025_central`, and update the methodology doc's author note. Not re-run (user agreed 27 Nov):
+  near-optimal (lowest-carbon designs did not move), the other two buying settings, the four-site
+  robustness checks and the +25 % grid price case; the doc states them as on the old rule.
+- **Methodology doc updated 27 Nov:** Section 4 "Assets that outlive the facility" with the equation,
+  Section 5.7 (cost credit only), Table 3 (75 % at x0.5/x1.5), and an author note with these results.
 - **Cluster queue tidied 26 Nov:** leftover arrays 16880, 16881, 16883, 16884 (every piece already
   gone, resubmitted 24 Nov or superseded) cancelled; 3054377 was already out of the queue.
 
