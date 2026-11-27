@@ -11,6 +11,7 @@
 #   bash scripts/cluster/sell_off_setup.sh robustness # the robustness set on the new rule (136 pieces), on its own
 #   bash scripts/cluster/sell_off_setup.sh maprun     # one East Grinstead full-grid run with the hourly operation
 #                                                     # saved, for the maps, workbooks and explainer (26 Nov)
+#   bash scripts/cluster/sell_off_setup.sh sites      # the 26-site central set on the sell-off (77 pieces, 27 Nov)
 # The "before" is the old central runs at site 23 (uk_sites_2025_checks_none/central, made on 9893e62
 # off grid and e469668 on the grid; nothing but the sell-off changed since), so the old_lives pieces
 # of sell_off_eg.txt (lines 4-6, sub-jobs [4]-[6] of batch 26510) were cancelled as duplicates.
@@ -48,6 +49,15 @@ if [ "${1:-}" = maprun ]; then
         echo "optimisation_outputs/uk_sites_2025_sell_off already exists: move it aside first. Nothing submitted."; exit 1
     fi
     sub "East Grinstead full grid, hourly operation saved" sell_off_maprun_eg.txt 1 6gb 8
+    exit 0
+fi
+if [ "${1:-}" = sites ]; then
+    # Added 27 Nov 2026 (user: "optimise for queue time"): one site and level per piece, one core,
+    # 6 GB, limits just above the 24 Nov times (off grid <= 1 h 48, 25 MW <= 3 h 06, full <= 3 h 39;
+    # under 5 GB). Into uk_sites_2025_sell_off, which already holds site 23 full (batch 32858).
+    sub "26 sites on the sell-off, off grid"   sell_off_sites_offgrid.txt 1 6gb 3
+    sub "26 sites on the sell-off, 25 MW"      sell_off_sites_limited.txt 1 6gb 5
+    sub "26 sites on the sell-off, full grid"  sell_off_sites_full.txt    1 6gb 5
     exit 0
 fi
 if [ -d optimisation_outputs/sell_off_checks_2025 ]; then

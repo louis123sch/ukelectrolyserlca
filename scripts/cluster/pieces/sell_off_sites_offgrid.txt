@@ -1,0 +1,29 @@
+# 27 Nov 2026: the 26-site study's central set (nothing bought) on the sell-off, offgrid, one site per piece
+# for queue speed (one core, 6 GB, a limit just above the 24 Nov times). Fresh folder uk_sites_2025_sell_off;
+# a site already there (23 full, from batch 32858) skips itself.
+scripts/uk_sites.py --set central --no-summary --levels offgrid --sites 1 --out uk_sites_2025_sell_off
+scripts/uk_sites.py --set central --no-summary --levels offgrid --sites 2 --out uk_sites_2025_sell_off
+scripts/uk_sites.py --set central --no-summary --levels offgrid --sites 3 --out uk_sites_2025_sell_off
+scripts/uk_sites.py --set central --no-summary --levels offgrid --sites 4 --out uk_sites_2025_sell_off
+scripts/uk_sites.py --set central --no-summary --levels offgrid --sites 5 --out uk_sites_2025_sell_off
+scripts/uk_sites.py --set central --no-summary --levels offgrid --sites 6 --out uk_sites_2025_sell_off
+scripts/uk_sites.py --set central --no-summary --levels offgrid --sites 7 --out uk_sites_2025_sell_off
+scripts/uk_sites.py --set central --no-summary --levels offgrid --sites 8 --out uk_sites_2025_sell_off
+scripts/uk_sites.py --set central --no-summary --levels offgrid --sites 9 --out uk_sites_2025_sell_off
+scripts/uk_sites.py --set central --no-summary --levels offgrid --sites 10 --out uk_sites_2025_sell_off
+scripts/uk_sites.py --set central --no-summary --levels offgrid --sites 11 --out uk_sites_2025_sell_off
+scripts/uk_sites.py --set central --no-summary --levels offgrid --sites 12 --out uk_sites_2025_sell_off
+scripts/uk_sites.py --set central --no-summary --levels offgrid --sites 13 --out uk_sites_2025_sell_off
+scripts/uk_sites.py --set central --no-summary --levels offgrid --sites 14 --out uk_sites_2025_sell_off
+scripts/uk_sites.py --set central --no-summary --levels offgrid --sites 15 --out uk_sites_2025_sell_off
+scripts/uk_sites.py --set central --no-summary --levels offgrid --sites 16 --out uk_sites_2025_sell_off
+scripts/uk_sites.py --set central --no-summary --levels offgrid --sites 17 --out uk_sites_2025_sell_off
+scripts/uk_sites.py --set central --no-summary --levels offgrid --sites 18 --out uk_sites_2025_sell_off
+scripts/uk_sites.py --set central --no-summary --levels offgrid --sites 19 --out uk_sites_2025_sell_off
+scripts/uk_sites.py --set central --no-summary --levels offgrid --sites 20 --out uk_sites_2025_sell_off
+scripts/uk_sites.py --set central --no-summary --levels offgrid --sites 21 --out uk_sites_2025_sell_off
+scripts/uk_sites.py --set central --no-summary --levels offgrid --sites 22 --out uk_sites_2025_sell_off
+scripts/uk_sites.py --set central --no-summary --levels offgrid --sites 23 --out uk_sites_2025_sell_off
+scripts/uk_sites.py --set central --no-summary --levels offgrid --sites 24 --out uk_sites_2025_sell_off
+scripts/uk_sites.py --set central --no-summary --levels offgrid --sites 25 --out uk_sites_2025_sell_off
+scripts/uk_sites.py --set central --no-summary --levels offgrid --sites 26 --out uk_sites_2025_sell_off
