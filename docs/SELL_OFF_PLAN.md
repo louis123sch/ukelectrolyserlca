@@ -30,13 +30,14 @@ the previous sign-off CSVs kept in `Desktop/cluster_transfer/sell_off_26nov/old_
 - **Sign-off steps 4-5:** cost cut-off passes (nothing added or dropped, no size over 5 %); carbon
   cut-off gives the same moves as 25 Nov (lowest-carbon battery and solar, which do not depend on
   cost), which passed rule 3 with the 1 % size floor. Judged with a scratch script, as on 25 Nov.
-- **Maps and workbooks** still describe the old-rule run: the check runs do not save hour-by-hour
-  operation, which the maps need. One East Grinstead full-grid central run with it saved was
-  submitted 26 Nov as batch **32858** (6402a36, `uk_sites.py --out uk_sites_2025_sell_off`, 1 core,
-  6 GB, 8 h). Collect with `Desktop/cluster_transfer/sell_off_maprun_collect.bat`, unpack, then rebuild
-  the cost and carbon maps, workbooks and explainer from
-  `optimisation_outputs/uk_sites_2025_sell_off/full/23/...`, copy the explainer to OneDrive, re-run the
-  two map tests, commit.
+- **Maps, workbooks and explainer rebuilt 27 Nov** from batch 32858 (6402a36): East Grinstead, full
+  grid, central, on the sell-off, hourly operation saved (1 h 31 min on one core, 4.4 GB), in
+  `optimisation_outputs/uk_sites_2025_sell_off/full/23/` and copied to
+  `dc_runs/eastgrinstead_full_2025/` (the old-rule copy kept in
+  `Desktop/cluster_transfer/sell_off_26nov/old_dc_run_eastgrinstead_full_2025`). The two map tests
+  pass again. The Excel check found that the workbooks had left the gas engines out of every total
+  since 13 Nov (the layout listed technologies by hand); fixed in `scripts/workbook_layout.py`, with
+  a test, and every cell now recalculates to the model's value. Explainer copied to OneDrive.
 - **Cluster queue tidied 26 Nov:** leftover arrays 16880, 16881, 16883, 16884 (every piece already
   gone, resubmitted 24 Nov or superseded) cancelled; 3054377 was already out of the queue.
 

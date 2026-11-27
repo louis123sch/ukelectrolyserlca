@@ -32,7 +32,8 @@ import re
 import time
 
 CHAIN_NAMES = {"wind": "Wind", "solar": "Solar", "battery": "Battery", "electrolyser": "Electrolyser",
-               "hydrogen tank": "Hydrogen tank", "fuel cell": "Fuel cell", "bought hydrogen": "Bought hydrogen",
+               "hydrogen tank": "Hydrogen tank", "fuel cell": "Fuel cell", "gas engines": "Gas engines",
+               "bought hydrogen": "Bought hydrogen",
                "grid": "Grid", "data centre": "Data centre", "unserved load": "Unserved load", "other": "Other parts"}
 CHAIN_ORDER = list(CHAIN_NAMES)
 SHARED, OTHER, HOURLY, SUMMARY = "Shared figures", "Other figures", "Hourly", "Summary"
@@ -148,7 +149,9 @@ def write_book(path, wb, side, run, cfg, summary, pts, series, problems, SR, inv
             c = chain_of(k)
             term_chain[k] = (g, c)
             chains.setdefault(c, []).append(k)
-    chain_list = [c for c in CHAIN_ORDER if c in chains]
+    # Every chain the run has gets its sheet: one missing from CHAIN_ORDER goes last rather than
+    # being dropped (27 Nov 2026: gas engines were left out of the totals since 13 Nov).
+    chain_list = [c for c in CHAIN_ORDER if c in chains] + sorted(c for c in chains if c not in CHAIN_ORDER)
 
     # ---- the optimiser's figures: a figure that only points at its step is that step
     alias = {}

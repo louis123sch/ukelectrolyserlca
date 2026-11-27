@@ -65,3 +65,12 @@ def test_workbook_layout(book):
                     if words:
                         leftover.append(f"{ws.title}!{c.coordinate}: {words[:3]}")
     assert not leftover, f"{book}: formulas still written with names: {leftover[:5]}"
+
+
+def test_every_model_chain_has_a_workbook_sheet_name():
+    """27 Nov 2026: gas engines were a chain in dc_model but not in the layout, so the workbooks
+    left them out of every total. Every chain the model can report must have a sheet name."""
+    import workbook_layout as WL
+    from optimisation import dc_model as M
+    missing = [c for c in list(M.CHAINS) + list(M.CHAIN_PREFIXES) if c not in WL.CHAIN_NAMES]
+    assert not missing, f"add these to workbook_layout.CHAIN_NAMES: {missing}"
